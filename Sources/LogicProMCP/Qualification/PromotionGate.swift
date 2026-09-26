@@ -55,17 +55,34 @@ struct PromotionGate {
     /// Every conjunct is load-bearing and none is redundant:
     ///   * `status == .passed` — the case's own verdict.
     ///   * `verified` — the case asserts it verified something rather than merely not failing.
-    ///   * `verificationKind == .semanticReadback` — a protocol smoke test also reaches `.passed`;
-    ///     #373 asks for semantic evidence specifically, so the KIND is checked, not just the
-    ///     verdict.
     ///   * `readback?.verified == true` — the readback is present AND says it verified. `?? false`
     ///     is deliberate here (an absent readback does not credit); written as `== true` so a nil
     ///     cannot read as a pass.
+    ///   * the KIND, with the evidence that kind rests on — a protocol smoke test also reaches
+    ///     `.passed`, so the verdict alone is not enough. Two kinds credit:
+    ///       - `.semanticReadback`: a read whose response agreed with an independent readback.
+    ///       - `.verifiedWriteCycle` (#984, decided yes): a mutating operation whose cycle ran
+    ///         write → independent readback → restore → restore read back. It credits only when
+    ///         `restore?.verified == true`, i.e. the restore was re-read and MATCHED the original.
+    ///         A restore record that is merely present is not that: before this, every Phase-B
+    ///         pass was excluded from credit however many cycles passed, and the fix must not
+    ///         swing to crediting a cycle nobody showed was undone.
+    ///     Every other kind credits nothing.
+    ///
+    /// This is the ONE place the rule lives. `evaluate` (release) and `liveCreditedOperationIDs`
+    /// (the R-SEM debt board) both call it, so widening it here moves both together.
     static func operationIsLiveCredited(_ operationCase: QualificationCase) -> Bool {
-        operationCase.status == .passed
-            && operationCase.verified
-            && operationCase.verificationKind == .semanticReadback
-            && operationCase.readback?.verified == true
+        guard operationCase.status == .passed,
+              operationCase.verified,
+              operationCase.readback?.verified == true else { return false }
+        switch operationCase.verificationKind {
+        case .semanticReadback:
+            return true
+        case .verifiedWriteCycle:
+            return operationCase.restore?.verified == true
+        case .readResponse, .independentReadback, .protocolSmoke, .typedDeferral:
+            return false
+        }
     }
 
     /// The operations a live attestation credits — the ONLY supported way to build the set

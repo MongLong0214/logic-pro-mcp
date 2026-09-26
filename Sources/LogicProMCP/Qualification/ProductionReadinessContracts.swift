@@ -536,9 +536,10 @@ enum ProductionReadinessContractEvaluator {
             ))
         }
         // #409: a registered semantic-readback validator is inventory, not
-        // coverage. Only live qualification (a case with status .passed and
-        // verificationKind .semanticReadback, per PromotionGate) or a governed
-        // release-visible waiver credits an operation.
+        // coverage. Only live qualification (a case
+        // `PromotionGate.operationIsLiveCredited` credits -- a semantic readback, or since #984 a
+        // write cycle whose restore verified) or a governed release-visible waiver credits an
+        // operation. The rule is not restated here; it is that function.
         //
         // #373: this evaluator used to stop there and say so -- it had no live `.passed` data, so
         // it counted EVERY registered operation as missing. That made R-SEM structurally unable to

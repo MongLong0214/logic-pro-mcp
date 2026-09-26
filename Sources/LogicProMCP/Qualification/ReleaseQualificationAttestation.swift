@@ -99,6 +99,24 @@ struct QualificationReadbackEvidence: Codable, Equatable, Sendable {
     }
 }
 
+/// The restore half of a write cycle, as the case states it (#984).
+///
+/// `verified` is the fact the credit rule reads, and it is a separate field from the digest on
+/// purpose: a record being PRESENT says a cycle was written down, not that the restore was read
+/// back and matched the original. Only the transport sets it, from the record it holds -- see
+/// `QualificationOperationResult.restore`.
+struct QualificationRestoreEvidence: Codable, Equatable, Sendable {
+    /// `QualificationRunner.recordDigest` of the record, the same value the case evidence binds
+    /// as `mutation_restore_record_sha256`.
+    let recordSHA256: String
+    let verified: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case recordSHA256 = "record_sha256"
+        case verified
+    }
+}
+
 struct QualificationOperationResponseArtifact: Codable, Equatable, Sendable {
     let operationID: String
     let tool: String
@@ -179,6 +197,9 @@ struct QualificationCase: Codable, Equatable, Sendable {
     let verificationKind: QualificationVerificationKind
     let deferral: QualificationDeferral?
     let readback: QualificationReadbackEvidence?
+    /// The write cycle's restore, or nil for a case that rests on no cycle. Read by
+    /// `PromotionGate.operationIsLiveCredited` for a `.verifiedWriteCycle` case (#984).
+    let restore: QualificationRestoreEvidence?
     let availabilityReason: QualificationAvailabilityReason?
     let availabilityObservation: QualificationAvailabilityObservation?
 
@@ -198,6 +219,7 @@ struct QualificationCase: Codable, Equatable, Sendable {
         verificationKind: QualificationVerificationKind = .typedDeferral,
         deferral: QualificationDeferral? = nil,
         readback: QualificationReadbackEvidence? = nil,
+        restore: QualificationRestoreEvidence? = nil,
         availabilityReason: QualificationAvailabilityReason? = nil,
         availabilityObservation: QualificationAvailabilityObservation? = nil
     ) {
@@ -216,6 +238,7 @@ struct QualificationCase: Codable, Equatable, Sendable {
         self.verificationKind = verificationKind
         self.deferral = deferral
         self.readback = readback
+        self.restore = restore
         self.availabilityReason = availabilityReason
         self.availabilityObservation = availabilityObservation
     }
@@ -236,6 +259,7 @@ struct QualificationCase: Codable, Equatable, Sendable {
         case verificationKind = "verification_kind"
         case deferral
         case readback
+        case restore
         case availabilityReason = "availability_reason"
         case availabilityObservation = "availability_observation"
     }
