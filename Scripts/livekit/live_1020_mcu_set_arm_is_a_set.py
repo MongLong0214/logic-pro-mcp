@@ -172,13 +172,14 @@ d.close()
 # ---- Restore through a server that does not depend on the code under test ---------------------------
 os.environ.pop(ARM_KEYCODE_ENV, None)
 if chosen is not None:
-    r = E.Driver()
+    restorer = E.Driver()
     time.sleep(5)
-    final = armed_of(r, chosen)
+    final = armed_of(restorer, chosen)
     if final is True:
-        ev.note("1020/restore-disarm", r.tool("logic_tracks", "arm", {"index": chosen, "enabled": False}) or {})
-        final = armed_of(r, chosen)
-    r.close()
+        ev.note("1020/restore-disarm",
+                restorer.tool("logic_tracks", "arm", {"index": chosen, "enabled": False}) or {})
+        final = armed_of(restorer, chosen)
+    restorer.close()
     ev.restored("1020/track-disarmed-again", final is False,
                 json.dumps({"track": chosen, "armed_in_track_list": final}))
 

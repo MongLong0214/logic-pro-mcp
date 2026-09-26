@@ -1821,8 +1821,10 @@ enum AXLocalePolicy {
     /// the original `desc == "녹음 활성화" || ...` locator semantics.
     static let trackRecordEnableCheckbox = LabelSet(
         canonical: "녹음 활성화",
-        variants: ["Record Enable", "Record"],
+        variants: ["Record Enable", "Record", "録音を可能にする", "Aufnahme aktivieren", "Activar grabación", "Enregistrement activé", "Abilita registrazione", "Ativar Gravação", "录音启用", "錄音啟用"],
         rationale: "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator."
+            + " Extended on 2026-09-27 (#1020) to every locale Logic ships by reading the plain `Record Enable` row, not its `#acc` sibling: the two differ only in Japanese, and the ja-JP track-header census of 2026-09-05 read `録音を可能にする`, the plain row's value, where `#acc` has `録音可能`. The ko-KR census of that day read `녹음 활성화`, which both rows carry. Before this the set matched in Korean and English only, so the record-enable checkbox was not found in the other eight languages and every arm through it refused. `Record` stays as the tolerance it was. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Record%20Enable#value"
     )
 
     // --- Track-header automation-mode read (WS3 AC2, value-only honesty fix) ---

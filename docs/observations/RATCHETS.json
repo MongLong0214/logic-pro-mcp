@@ -341,7 +341,6 @@
         "showMixerMenuItem",
         "sliderZoomHint",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "transportRecordArmExclusion"
       ],
@@ -366,7 +365,6 @@
         "sliderSendHint",
         "tickSliderLabel",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "transportRecordArmExclusion",
         "undoMenuItemPrefix"
@@ -389,7 +387,6 @@
         "sliderZoomHint",
         "tickSliderLabel",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "undoMenuItemPrefix"
       ],
@@ -413,7 +410,6 @@
         "settingPopupValue",
         "showMixerMenuItem",
         "sliderZoomHint",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "transportRecordArmExclusion",
         "undoMenuItemPrefix"
@@ -455,7 +451,6 @@
         "sliderSendHint",
         "sliderZoomHint",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeAux",
         "trackTypeDrummer",
         "trackTypeGMDevice",
