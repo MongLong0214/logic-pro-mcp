@@ -3163,9 +3163,10 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
     }
 
     /// Runs the route on one site's menu refusal with a READY snapshot on the ledger, so a pass
-    /// handed the snapshot path would carry it in its script.
+    /// handed the snapshot path would carry it in its script. With `executionFailureStage` the
+    /// child instead dies after writing that stage to the ledger, which runs the snapshot pass.
     static func runMenuRefusal(
-        _ site: Site, reconcilerAnswer: String, result: String? = nil
+        _ site: Site, reconcilerAnswer: String, result: String? = nil, executionFailureStage: String? = nil
     ) async throws -> (envelope: [String: Any], calls: Int, script: String?, snapshotPath: String, sliderWrites: Int) {
         let sliderWrites = Issue529Counter()
         let calls = Issue529Counter()
@@ -3188,7 +3189,11 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
             isFrontmost: { true },
             activateLogic: { true },
             sleepMicros: { _ in },
-            executeDialogScript: { _ in .success(output) },
+            executeDialogScript: { _ in
+                guard let executionFailureStage else { return .success(output) }
+                try? executionFailureStage.write(to: ledger.url, atomically: true, encoding: .utf8)
+                return .error("osascript timedOut")
+            },
             createDialogIssuanceLedger: { ledger }
         )
         let envelope = try #require(issue529Envelope(routed))

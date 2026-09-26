@@ -1113,13 +1113,16 @@ extension AccessibilityChannel {
             // A normal global-input result or a dead child after a durable UI/input boundary leaves
             // the target indeterminate, so another position actuator remains unsafe. The boundary
             // does not prove a Return was sent: only a normal script result can claim a submission.
-            let dialogState = classification.cleanupObservedClosed ? "closed" : "unobserved"
+            let dialogState = classification.dialogCleanupObservedClosed ? "closed" : "unobserved"
             var extras = baseExtras.merging([
                 "operation": "transport.goto_position",
                 "method": "dialog",
                 "dialog_route_outcome": classification.diagnosticLabel,
                 "dialog_actuation_attempted": classification.dialogActuationMayHaveOccurred,
                 "dialog_cleanup": dialogState,
+                // The menu half, which this receipt did not carry: a menu the reconciliation pass
+                // closed after a post-leaf menu refusal went unreported here (#999).
+                "menu_state": classification.menuObservation.rawValue,
                 "safe_to_retry": false,
                 "fallback_unsafe": true,
             ]) { _, new in new }
@@ -1186,7 +1189,7 @@ extension AccessibilityChannel {
                     // "we typed and cannot confirm". A field that appears on one refusal and is
                     // absent on the neighbouring one is not a contract.
                     "dialog_submission_attempted": false,
-                    "dialog_cleanup": classification.cleanupObservedClosed ? "closed" : "unobserved",
+                    "dialog_cleanup": classification.dialogCleanupObservedClosed ? "closed" : "unobserved",
                     "write_attempted": false,
                     "safe_to_retry": false,
                     "fallback_unsafe": true,
@@ -2404,8 +2407,13 @@ extension AccessibilityChannel {
             }
         }
 
-        var cleanupObservedClosed: Bool {
-            if let postLeafCleanup { return postLeafCleanup == .observedClosed }
+        /// Whether this run observed the Go To Position DIALOG closed, which is what the receipt's
+        /// `dialog_cleanup` reports. The menu half is `menuObservation`. A post-leaf menu refusal
+        /// (#942) is returned only after the dialog cleanup answered CLOSED, so it reports the
+        /// dialog closed; folding the two halves made that receipt say the dialog cleanup was
+        /// unobserved right after the script observed it (#999).
+        var dialogCleanupObservedClosed: Bool {
+            if let postLeafCleanup { return postLeafCleanup != .dialogNotObservedClosed }
             if case let .failure(.executionFailed(issuance: _, cleanupObservedClosed)) = self {
                 return cleanupObservedClosed
             }
@@ -2484,6 +2492,17 @@ extension AccessibilityChannel {
         }
 
         var menuObservation: MenuObservation {
+            if postLeafCleanup == .observedClosed {
+                // Every post-leaf site runs the menu cleanup after the dialog cleanup and returns
+                // its own result only when both answered CLOSED (#999).
+                return .closed
+            }
+            if case .failure(.executionFailed(issuance: _, cleanupObservedClosed: true)) = self {
+                // An execution failure is reconciled with `.snapshot` or `.unknown`, never
+                // `.menuOnly`, so the pass reads the dialog half first and answers closed only
+                // after it has also read the menus closed.
+                return .closed
+            }
             if case let .menuNotObservedClosed(reconciledMenuClosed)? = postLeafCleanup {
                 // #942. The script observed the dialog closed and then ran the menu cleanup, which
                 // did not observe the menu closed: the case `couldNotBeClosed` names. The same
@@ -2525,6 +2544,16 @@ extension AccessibilityChannel {
                 return menuActuationAttempted
             case let .failure(.menuCouldNotBeClosed(menuActuationAttempted, _)):
                 return menuActuationAttempted
+            case .failure(.dialogUnidentifiedNewWindow),
+                 .failure(.dialogAppearanceUnreadable),
+                 .failure(.dialogActuationIssued),
+                 .failure(.dialogSubmissionNotIssued):
+                // The post-leaf outcomes `requiresUnsafeUIRefusal` refuses. Each is returned only
+                // after `click menu item positionName`, the leaf, and the script sets
+                // `menuActuationAttempted` true before that click. A receipt saying
+                // `menu_actuation_attempted: false` beside `dialog_actuation_attempted: true` was
+                // two answers for one click (#999).
+                return true
             default:
                 return false
             }
