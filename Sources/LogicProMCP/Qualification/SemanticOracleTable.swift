@@ -1605,14 +1605,16 @@ enum SemanticOracleTable {
     // `previous:before` + `observed:after` from TWO independent AX reads — so
     // `observed == !previous` (`.booleanFlipped`) is the GENUINE "the toggle
     // changed state" invariant, not a same-source echo. Plus the hardcoded
-    // `button:"Cycle"` / `control:"사이클"` identity and the click-strategy `action`.
+    // `button:"Cycle"` / `control:"Cycle"` identity and the click-strategy `action`: both fields
+    // carry the operation's `reportAs` token in every language (b61bda6b), not Logic's label.
+    // `semanticOracleAcceptsTheControlBarToggleReceipt` feeds it the receipt the channel emits.
     // Single State-A branch (the dispatcher does a bare `toolTextResult`, no
     // finalize), so the flip pair is universal here.
     static let transportToggleCycle = SafeMutationOracle.oracle(
         .transportToggleCycle,
         semantics: [
             .valueEquals(key: "button", expected: .string("Cycle")),
-            .valueEquals(key: "control", expected: .string("사이클")),
+            .valueEquals(key: "control", expected: .string("Cycle")),
             .booleanFlipped(keyA: "observed", keyB: "previous"),
             .enumMember(key: "action", allowed: controlBarClickActions),
         ]
@@ -1620,12 +1622,12 @@ enum SemanticOracleTable {
 
     // AccessibilityChannel+Transport `clickControlBarCheckbox` (Count In) — same
     // single-branch flip shape as toggle_cycle; `button:"Count In"`,
-    // `control:"카운트 인"`.
+    // `control:"Count In"`.
     static let transportToggleCountIn = SafeMutationOracle.oracle(
         .transportToggleCountIn,
         semantics: [
             .valueEquals(key: "button", expected: .string("Count In")),
-            .valueEquals(key: "control", expected: .string("카운트 인")),
+            .valueEquals(key: "control", expected: .string("Count In")),
             .booleanFlipped(keyA: "observed", keyB: "previous"),
             .enumMember(key: "action", allowed: controlBarClickActions),
         ]
