@@ -1061,6 +1061,127 @@ class ANibLabelIsPairedByClassNotByGuess(unittest.TestCase):
         self.assertEqual(nibarchive.strings_by_object(archive), {})
 
 
+def _labels(archive):
+    return [(key, text) for key, text, reason in canon._nib_labels(archive) if reason is None]
+
+
+class ANonBaseNibIsReadByWhatItsClassMeans(unittest.TestCase):
+    """`niblabels` (#902): the 1,007 nibs with no `NSLocalizableString` in them.
+
+    The sites that are not labels hold strings that look exactly like labels, so each case puts a
+    label and a look-alike side by side and requires the reader to tell them apart by class.
+    """
+
+    def test_a_column_header_is_a_label_and_the_column_identifier_is_not(self):
+        """`Rec` is `NSTableColumn.NSIdentifier` in MainMenu_.nib: a name the code uses."""
+        archive = _archive([("NSObject", {"header": 1, "column": 3}),
+                            ("NSTableHeaderCell", {"NSContents": 2}),
+                            ("NSString", {"NS.bytes": b"Name"}),
+                            ("NSTableColumn", {"NSIdentifier": 4}),
+                            ("NSString", {"NS.bytes": b"Rec"})])
+        self.assertEqual(_labels(archive), [("/header[0]/NSContents[0]", "Name")])
+
+    def test_a_swapped_custom_cell_is_read_as_the_appkit_class_it_replaces(self):
+        """The Compressor's circuit buttons are `MAButtonCell`s recorded as `NSClassSwapper`, and a
+        German Logic shows their English titles (2026-09-25 de-DE plug-in editor record)."""
+        archive = _archive([("NSObject", {"cell": 1}),
+                            ("NSClassSwapper", {"NSClassName": 2, "NSOriginalClassName": 3,
+                                                "NSContents": 4}),
+                            ("NSString", {"NS.bytes": b"MAButtonCell"}),
+                            ("NSString", {"NS.bytes": b"NSButtonCell"}),
+                            ("NSString", {"NS.bytes": "Vintage Opto".encode()})])
+        self.assertEqual(_labels(archive), [("/cell[0]/NSContents[0]", "Vintage Opto")])
+
+    def test_a_help_connector_is_a_tool_tip_only_when_it_says_so(self):
+        archive = _archive([("NSObject", {"tip": 1, "anchor": 4}),
+                            ("NSIBHelpConnector", {"NSFile": 2, "NSMarker": 3}),
+                            ("NSString", {"NS.bytes": b"NSToolTipHelpKey"}),
+                            ("NSString", {"NS.bytes": b"Update statistics window"}),
+                            ("NSIBHelpConnector", {"NSFile": 5, "NSMarker": 6}),
+                            ("NSString", {"NS.bytes": b"logic.help"}),
+                            ("NSString", {"NS.bytes": b"lgcpaf1e4c2"})])
+        self.assertEqual(_labels(archive), [("/tip[0]/NSMarker[0]", "Update statistics window")])
+
+    def test_an_interface_builder_default_is_not_a_label_at_its_own_site_only(self):
+        """`Window` is the default title of a window template and the real title of a menu."""
+        archive = _archive([("NSObject", {"window": 1, "item": 3}),
+                            ("NSWindowTemplate", {"NSWindowTitle": 2}),
+                            ("NSString", {"NS.bytes": b"Window"}),
+                            ("NSMenuItem", {"NSTitle": 4}),
+                            ("NSString", {"NS.bytes": b"Window"})])
+        self.assertEqual(_labels(archive), [("/item[0]/NSTitle[0]", "Window")])
+
+
+    def test_a_readout_placeholder_and_apples_own_marker_are_not_labels(self):
+        """`-12 dB` is a label on the Compressor; `-12` is a readout the code overwrites."""
+        site = ("NSTextFieldCell", "NSContents")
+        self.assertIsNone(canon._nib_label_exclusion(site, "-12 dB"))
+        self.assertEqual(canon._nib_label_exclusion(site, "-12"), "no_letter")
+        self.assertEqual(canon._nib_label_exclusion(
+            site, "INTERNAL USE ONLY  DON'T LOCALIZE THIS WINDOW !"), "do_not_localize")
+        self.assertEqual(canon._nib_label_exclusion(site, "Style: - DO NOT LOCALIZE"),
+                         "do_not_localize")
+
+
+class AnOldStyleNibMeetsItsEnglishTwin(unittest.TestCase):
+    """Over a bundle-shaped directory, with the parser seamed: the join is between FILES."""
+
+    def setUp(self):
+        self.bundle = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.bundle, True)
+        resources = os.path.join(self.bundle, "Contents", "Frameworks", "Logic.framework",
+                                 "Resources")
+        for locale in ("en", "de"):
+            os.makedirs(os.path.join(resources, f"{locale}.lproj"))
+            with open(os.path.join(resources, f"{locale}.lproj", "Pane.nib"), "wb") as handle:
+                handle.write(locale.encode())
+        with open(os.path.join(resources, "Plug.nib"), "wb") as handle:
+            handle.write(b"plug")
+        def menu(first, second, padding):
+            # `padding` puts objects in FRONT of the menu items, which is what a localizer's edit
+            # does to 20 of Logic's 60 old-style nibs: same labels, different object indices.
+            return _archive([("NSObject", {"items": 1 + padding})]
+                            + [("NSNull", {})] * padding
+                            + [("NSMenu", {"a": 2 + padding, "b": 4 + padding}),
+                               ("NSMenuItem", {"NSTitle": 3 + padding}),
+                               ("NSString", {"NS.bytes": first.encode()}),
+                               ("NSMenuItem", {"NSTitle": 5 + padding}),
+                               ("NSString", {"NS.bytes": second.encode()})])
+        self.archives = {
+            b"en": menu("Item 2", "Settings…", 0),
+            b"de": menu("Objekt 2", "Einstellungen …", 3),
+            b"plug": _archive([("NSObject", {"cell": 1}),
+                               ("NSButtonCell", {"NSContents": 2}),
+                               ("NSString", {"NS.bytes": b"Meter"})]),
+        }
+
+    def _rows(self):
+        with mock.patch.object(nibarchive, "parse", side_effect=self.archives.__getitem__):
+            return sorted(canon.extract_niblabels(self.bundle))
+
+    def test_a_translation_lands_on_its_english_twin(self):
+        unit = os.path.join("Contents", "Frameworks", "Logic.framework", "Resources", "Pane.nib")
+        rows = [row for row in self._rows() if row[0] == unit]
+        self.assertEqual(rows, [(unit, "de", "/items[0]/b[0]/NSTitle[0]", "value",
+                                 "Einstellungen …"),
+                                (unit, "en", "/items[0]/b[0]/NSTitle[0]", "value",
+                                 "Settings…")])
+
+    def test_the_translation_of_an_excluded_english_default_is_excluded_too(self):
+        """`Objekt 2` is `Item 2` in German and nothing in the German says so."""
+        self.assertNotIn("Objekt 2", [row[4] for row in self._rows()])
+
+    def test_a_nib_in_no_lproj_is_one_copy_for_every_locale(self):
+        unit = os.path.join("Contents", "Frameworks", "Logic.framework", "Resources", "Plug.nib")
+        self.assertIn((unit, "-", "/cell[0]/NSContents[0]", "value", "Meter"), self._rows())
+
+    def test_the_join_is_what_tells_translated_english_from_untranslated(self):
+        with mock.patch.object(nibarchive, "parse", side_effect=self.archives.__getitem__):
+            digests = canon.derive_translated_english(
+                self.bundle, {"niblabels": canon.extract_niblabels})
+        self.assertIn(canon._u32(canon.normalize("Settings…")), digests)
+
+
 class ACorpusMustKnowWhichBytesItIsMadeOf(unittest.TestCase):
     """Over an EMPTY bundle, not over the installed Logic.
 

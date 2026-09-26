@@ -89,8 +89,35 @@
       "limits": [
         "The 28 keys the overlay has and the nib does not are Interface Builder's numeric placeholders (`255`, `100`, `30.0`, `1`) and two literal `<PLACEHOLDER STRING: DO NOT LOCALIZE>` -- text held for a field the running code fills in, not a label Apple shows.",
         "Three of the 162 nibs -- MAGraphPanel, NoteRepeater and PlugInManager, all in MAToolKitHighLevel.framework -- have no `.strings` overlay in any locale. Their unit names a table that does not exist on disk, which is the address the overlay WOULD use; the English is real and the screen is not translated.",
-        "Base.lproj ONLY. Logic also ships 60 nibs per locale in the old fully-localized style (including `en.lproj`) and 407 nibs in no `.lproj` at all, 312 of them MAPlugInGUI plug-in screens. `NSLocalizableString` is a base-internationalization construct and those 467 nibs have zero of them, so this extractor yields nothing from them. Their labels are plain `NSString` under cell titles, and reading THOSE would also sweep in Interface Builder's own defaults -- `Item 1`, `Header Text`, `DO NOT LOCALIZE`, `$LN` -- which would make the corpus claim Apple ships strings Apple does not show. Measured before deciding: those 467 nibs hold 3,374 distinct English values not already here and close ZERO of this repository's 102 uncitable literals, so they are named here as a gap rather than added on a filter nothing had measured. Issue #902.",
+        "Base.lproj ONLY. The other 1,007 nibs -- 60 per locale in the old fully-localized style, including `en.lproj`, and 407 in no `.lproj` at all, 312 of them MAPlugInGUI plug-in screens -- hold zero `NSLocalizableString` objects, so this extractor yields nothing from them. `niblabels` reads them, by the (class, key) sites AppKit draws as text. Issue #902.",
         "Presence is not use, the same as for `strings`: a label compiled into a nib may belong to a screen the running code never shows."
+      ]
+    },
+    "niblabels": {
+      "path": "**/*.nib outside Base.lproj",
+      "answers": "the text of a LABEL in a nib Apple does not base-internationalise: an old-style nib translated as a whole in each `.lproj`, or a nib in no `.lproj` that is one copy for every language",
+      "fields": [
+        "value"
+      ],
+      "files": 1007,
+      "entries": 8992,
+      "locale_names": 11,
+      "why": "Measured over the live reading `docs/observations/2026-09-25-977-de-DE-plugin-editor-is-not-a-blocking-modal.json`: a German Logic's Compressor editor shows nine AXButton titles -- `-12 dB`, `Meter` and the seven circuit names `Vintage\u2028Opto` through `Platinum\u2028Digital` -- that were absent from every one of the 24 corpora before this source and are present in `niblabels/-`. They are cells of `MAPlugInGUI.framework/.../GCompressorViewController.nib`, which sits in no `.lproj`. So an AX reading of a plug-in screen can now be cited to Apple's bytes. It closes 0 of the 85 policy literals classified `nowhere`: none of them is an exact value here.",
+      "how": "A string is read only at a (class, key) whose meaning AppKit defines as displayed text: NSTextFieldCell.NSContents and .NSPlaceholderString, NSButtonCell.NSContents and .NSAlternateContents, NSMenuItem.NSTitle, NSTableHeaderCell.NSContents, NSTableColumn.NSHeaderToolTip, NSWindowTemplate.NSWindowTitle, NSTabViewItem.NSLabel, NSSegmentItem.NSSegmentItemLabel, a tool-tip NSIBHelpConnector's NSMarker, an NSNibAXAttributeConnector's AXDescription or AXHelp value, and the `accessibilityLabel` runtime attribute. An NSClassSwapper is read as its NSOriginalClassName. `NIB_LABEL_SITES` in Scripts/logic_canon.py holds the list with each site's meaning.",
+      "joins_translations": "The unit is the nib with its `.lproj` taken out and the key is the object's path from the archive root -- which key of which parent, and which occurrence -- so a translated copy meets its `en.lproj` twin. The object INDEX cannot do this: 20 of the 60 old-style nibs have a different object sequence in at least one locale. Measured: 623 addresses carry a translated-locale row; 613 carry all ten locales, 7 English addresses miss one locale and 3 translated rows have no English twin. Of the 620 English addresses, 467 are translated and 153 ship the English in every locale. `translated.en.u32` grows from 68,417 to 68,548.",
+      "excluded": {
+        "identifiers_and_other_non_label_sites": "402,921 strings at 300 (class, key) sites that are not in the list are dropped, among them NSNibOutletConnector.NSLabel 17,313, NSTableColumn.NSIdentifier 1,266, NSPopUpButtonCell.NSContents 506 (the selected item's title, read at its NSMenuItem), NSTabViewItem.NSIdentifier 330, NSMenu.NSTitle 259 and NSTokenAttachmentCell.NSContents 102 (format tokens such as `$LN`)",
+        "runtime_attributes_other_than_accessibilityLabel": "42,305 values, among them `text` 862 and `labelString` 816. They are properties of `MA*` classes this repository has no definition of, so the class cannot say what they mean",
+        "ib_default": "810 strings equal to the title Interface Builder gives a new object at that site (`Item 1`, `Button`, `Text Cell`, `Window` on a window template)",
+        "translation_of_an_excluded_english_string": "2,493 translated rows whose `en.lproj` twin was excluded. `Item 2` is `Objekt 2` in de.lproj and nothing in the German says it is a default",
+        "no_letter": "333 strings with no letter in them (`0`, `-12`, `1234`): a readout's placeholder",
+        "do_not_localize": "43 strings carrying Apple's own DO NOT LOCALIZE marker"
+      },
+      "limits": [
+        "Only 69 of the 312 MAPlugInGUI nibs carry a label at these sites (1,116 rows). The other plug-in screens set their text through `text` and `labelString` runtime attributes, which are not read. So `THRESHOLD`, which a Korean Logic showed as a plug-in's text field (docs/observations/2026-09-04-native-view-sliders-are-anonymous-and-names-live-on-text-fields.json), is still absent from every corpus although a nib holds it as a `text` attribute. `OUTPUT GAIN` from the same reading is in no corpus and in no string of a non-base nib.",
+        "The Interface Builder default list is the object library's own titles and nothing more. Placeholders a designer typed -- `Header Text`, `LowNote Text`, `Text here` -- are in the corpus, because nothing in the class separates them from a label.",
+        "A nib in no `.lproj` is locale `-`. That it is shown untranslated on every locale is measured for the Compressor on de-DE only.",
+        "Presence is not use, the same as for `strings`: `Loop` is a segment label in MAContentTaggingUI's STORMMainWindow.nib in zh_CN, which makes `docs/locale/ui-labels.json` read two labels' zh-CN coverage as `derived` although nothing has shown that window is reachable."
       ]
     }
   },

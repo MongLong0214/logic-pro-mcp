@@ -4,6 +4,28 @@
     "absence/madsp.-.u32": "1402d0aea9a289b16bf15768528068f6a915bed279000dfbf650cf4fe1fd351f",
     "absence/nib.-.folded.u32": "f40a37598e4af1f2bcac78dc60028cd2e7e41860ea09c55198d0e7b7e5d05add",
     "absence/nib.-.u32": "7e2d01e8bc426022e74b705ccc72b0e7235125abe2cf6fe7681a27397fd47db9",
+    "absence/niblabels.-.folded.u32": "4bba07b73bd2c78e7bba534fed1b773fcf4dd2f35321be27ea174dd08c9dcdad",
+    "absence/niblabels.-.u32": "b8f2a4a7f64e3aeaa93dc4b6bc00f3708fa949f92b87b37a0b625c985c785e77",
+    "absence/niblabels.de.folded.u32": "3bb1604f12483f948470b3606c9bfb2f8c07b421d23bcf547e374cee8b066a8e",
+    "absence/niblabels.de.u32": "44626a30a7d5ebfc1f7b52f5f726733be4b403fe73053751e6d9b0a31ddb1986",
+    "absence/niblabels.en.folded.u32": "591afe7ae92149a10a0c7dc91bdd46706079ede06c6133e08fc75fe1550e0b86",
+    "absence/niblabels.en.u32": "22f56bca2fb763d7c962d866707e12a1c1f5674e3e514badc7510323dab17d71",
+    "absence/niblabels.es.folded.u32": "838056d763574477d8193470a8d0e85613b8210187bcc834f213755ef4aa14d0",
+    "absence/niblabels.es.u32": "30b32198b0a348d42200331cbfc80163f5ef28f8805eaeeed5f202c490adaf75",
+    "absence/niblabels.fr.folded.u32": "422f4e7dfd975f8636824cf1d49f0b9360adb498520163b8c5322e5462fcbe47",
+    "absence/niblabels.fr.u32": "cec544c771d3abfb8840a2d4c9b1ef6e5f3ec8b5c51f8fdc4c87e56438ce4de4",
+    "absence/niblabels.it.folded.u32": "a50af324f194e9962c82b82027a1cf4c8cfadc5d5db7382af07d5a03f51da088",
+    "absence/niblabels.it.u32": "2efd089f1b33db5d8e5f3a429c131baf6da22623c8184aa902a42382f50b2645",
+    "absence/niblabels.ja.folded.u32": "4eb9b2dd04b89af0bbb352b4bd1f7178c2ffaf95c487b512933436a608f30903",
+    "absence/niblabels.ja.u32": "b79f0aa4e7a80883e9e8fa94c5e1f2010c4c995e0541de3590026ac27e708cd6",
+    "absence/niblabels.ko.folded.u32": "5c737ac7e9289eb4d50245db04dab65ec2580ae9afc9a64884ae4ca4c66a4477",
+    "absence/niblabels.ko.u32": "e24efa3613a6853b4c1b62e8db21fa2900ac6a197e31f7aaf51a2563959c3bdb",
+    "absence/niblabels.pt.folded.u32": "b94f79737fefbf07fbad2aadce1308ea385ce89933153423dc2f9de758d7a286",
+    "absence/niblabels.pt.u32": "c17e32cbc17d4ffe015ac9d58b806a1efc9613ad173a8cf40cf20d509839588e",
+    "absence/niblabels.zh_CN.folded.u32": "1d3d7ae00619c7f5a5ca7eeabe1361307d4645049567ac6a42d974ef2d6d26e8",
+    "absence/niblabels.zh_CN.u32": "615007183ab93dbcf2c1bc1a76440f737837026d84ac36c12ff3df7549729bc4",
+    "absence/niblabels.zh_TW.folded.u32": "673024684e73fdbe20852960dc5a68af921fe5cdd091b139921d515010ed7c06",
+    "absence/niblabels.zh_TW.u32": "a11a2c8eccf54314e07a03c37e7c59ca2a5e700314212fb1500f0b64f027c4d1",
     "absence/nibstrings.en.folded.u32": "4126a61e469582b90578e149098ba1f1b9f98353530c3456295e7c720641420f",
     "absence/nibstrings.en.u32": "a417fdb909f57d7a44b43ed23ccdcd8521822c31ca55116f7e300797247b791e",
     "absence/quickhelp.de.folded.u32": "b31c23794ee49f1e61b9474bcbff555985890e7958e946022d612f35d28fb00d",
@@ -48,23 +70,38 @@
     "absence/strings.zh_CN.u32": "00411c6c92eb549954f8a9f025f0bbbff1318392cc6ec0a906f53c105eb607eb",
     "absence/strings.zh_TW.folded.u32": "3ac8f9d9bf1ad618500c13f453a4d977b056f3cd5702038a6784e3d8f3664519",
     "absence/strings.zh_TW.u32": "ef81ff10d762c8422eabdfa6a06770c5dc4db62922b7318742d778cee7e58bcb",
-    "absence/translated.en.u32": "76e168e6b66ad5d0149f4a89a31af2d7339b3709945cba1775184388f41040ee",
+    "absence/translated.en.u32": "68a2626a813876c46cc415d757a9ea3c8096eec280155f6e81ecb1341354e444",
     "index/madsp.tsv": "664b694f0bacce322cf8b15a4539594f2106d2d5b7c38b10b0e3e508b30d2320",
     "index/madsp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nib.tsv": "b93ad8637d21efa0dd4a376f66209b3a68e514707191d42c1fd27c4fd372d3d5",
     "index/nib.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
+    "index/niblabels.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
+    "index/niblabels.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nibstrings.tsv": "ac732bc853eb32faf7d61ad3665bcd1805dbb1e325fb12bfe9cceb3fa3ec2ef4",
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
     "index/quickhelp.tsv": "0568c660242037aca4b2205e9049e08d4049f18b434517badf7e94b88d435630",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "bc5ca31723a2455ef5334e36026b2f8432f6dd7184a226f01c39d9676dc068eb",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
-    "ledger/casefold.tsv": "e5e03c414bd03b04fbeb9f9bd0fa25b396ffcb916f45396750c4d4cd3e55547d"
+    "ledger/casefold.tsv": "0ef65014d7fcc2d4ac5536519e915ea96f000108c55f26db3d1720ebaaaf05be"
   },
   "extractor_version": 2,
   "ledger_casefold_entries": {
     "madsp": {
       "-": 16
+    },
+    "niblabels": {
+      "-": 37,
+      "de": 29,
+      "en": 35,
+      "es": 25,
+      "fr": 30,
+      "it": 29,
+      "ja": 35,
+      "ko": 43,
+      "pt": 30,
+      "zh_CN": 31,
+      "zh_TW": 32
     },
     "nibstrings": {
       "en": 96
@@ -138,6 +175,65 @@
       },
       "locales": [
         "-"
+      ]
+    },
+    "niblabels": {
+      "absence_entries": {
+        "-": 1478,
+        "de": 425,
+        "en": 425,
+        "es": 427,
+        "fr": 428,
+        "it": 420,
+        "ja": 418,
+        "ko": 423,
+        "pt": 420,
+        "zh_CN": 419,
+        "zh_TW": 418
+      },
+      "absence_false_positive": {
+        "-": 3.44124e-07,
+        "de": 9.8953e-08,
+        "en": 9.8953e-08,
+        "es": 9.9419e-08,
+        "fr": 9.9652e-08,
+        "it": 9.7789e-08,
+        "ja": 9.7323e-08,
+        "ko": 9.8487e-08,
+        "pt": 9.7789e-08,
+        "zh_CN": 9.7556e-08,
+        "zh_TW": 9.7323e-08
+      },
+      "cited_rows": 0,
+      "cited_values": 0,
+      "corpus_digest": "4b33113b014a85e773a4add45b605325f93dd38b56b9e13c3abfe5acb4fcaa1d",
+      "entries": 8992,
+      "files": 1007,
+      "folded_entries": {
+        "-": 1450,
+        "de": 413,
+        "en": 411,
+        "es": 416,
+        "fr": 418,
+        "it": 410,
+        "ja": 408,
+        "ko": 412,
+        "pt": 410,
+        "zh_CN": 408,
+        "zh_TW": 410
+      },
+      "locales": [
+        "-",
+        "de",
+        "en",
+        "es",
+        "fr",
+        "it",
+        "ja",
+        "ko",
+        "pt",
+        "zh_CN",
+        "zh_TW"
       ]
     },
     "nibstrings": {
@@ -434,5 +530,5 @@
       ]
     }
   },
-  "translated_en_values": 68417
+  "translated_en_values": 68548
 }
