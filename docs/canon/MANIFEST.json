@@ -59,7 +59,8 @@
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "bc5ca31723a2455ef5334e36026b2f8432f6dd7184a226f01c39d9676dc068eb",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
-    "ledger/casefold.tsv": "e5e03c414bd03b04fbeb9f9bd0fa25b396ffcb916f45396750c4d4cd3e55547d"
+    "ledger/casefold.tsv": "e5e03c414bd03b04fbeb9f9bd0fa25b396ffcb916f45396750c4d4cd3e55547d",
+    "ledger/presence.tsv": "d8921782f7b976a8cb4d74b7a205277e2904a18d89f66596e2791ffc7aa065a7"
   },
   "extractor_version": 2,
   "ledger_casefold_entries": {
@@ -93,6 +94,39 @@
       "pt": 154,
       "zh_CN": 133,
       "zh_TW": 133
+    }
+  },
+  "ledger_presence_entries": {
+    "madsp": {
+      "-": 7
+    },
+    "nibstrings": {
+      "en": 71
+    },
+    "quickhelp": {
+      "de": 33,
+      "en": 34,
+      "es": 32,
+      "fr": 36,
+      "it": 34,
+      "ja": 49,
+      "ko": 62,
+      "pt": 34,
+      "zh_CN": 42,
+      "zh_TW": 34
+    },
+    "strings": {
+      "-": 3,
+      "de": 135,
+      "en": 154,
+      "es": 139,
+      "fr": 134,
+      "it": 139,
+      "ja": 146,
+      "ko": 166,
+      "pt": 143,
+      "zh_CN": 132,
+      "zh_TW": 128
     }
   },
   "logic": {
