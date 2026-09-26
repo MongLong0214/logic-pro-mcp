@@ -65,7 +65,9 @@ def arguments():
     parser.add_argument("lprojs", nargs="*")
     if len(sys.argv) == 1:
         parser.error("worktree, head and binary are required")
-    args = parser.parse_args()
+    # Intermixed, because the usage puts lprojs after `--control`: plain parse_args binds the
+    # optional positional with the three before it and then refuses every lproj that follows.
+    args = parser.parse_intermixed_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.head):
         parser.error("head must be a full lowercase 40-character SHA")
     if not os.path.isdir(args.worktree):
