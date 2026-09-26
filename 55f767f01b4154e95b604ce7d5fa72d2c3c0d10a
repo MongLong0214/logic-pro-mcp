@@ -1,0 +1,4 @@
+Ruled-out: a closing keyword for issue 956 in this pull request | the merge would mark issue 956 done before the merged files are read, which it requires before track D is marked done
+Warn: a row that lists what is left undone goes stale the moment a later pass does it; rewrite the row whenever the native metadata changes
+Record-Id: r-da1d8252c246
+Provenance: inherited 6fd9dd53e2ce94a51e60d328acecbcae833bda9c
