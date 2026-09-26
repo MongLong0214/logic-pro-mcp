@@ -151,7 +151,9 @@ ev.note("1022/project-info", {
 })
 
 # The bundle's file name without the extension, when the reply carries a path. (a) needs it for a
-# project whose own name ends in a view label, and (b) compares against it.
+# project whose own name ends in a view label, and (b) compares against it. With no path, (a) refuses
+# such a name on purpose: nothing then tells it apart from a title that was never stripped. That is a
+# false failure, never a false pass, and the saved fixture always has a path.
 bundle_stem = None
 if isinstance(file_path, str) and file_path.strip():
     bundle = os.path.basename(file_path.rstrip("/"))
