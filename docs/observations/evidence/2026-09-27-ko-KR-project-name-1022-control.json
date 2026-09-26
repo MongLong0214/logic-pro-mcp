@@ -1,0 +1,153 @@
+{
+  "name": "live_1022_project_name_has_no_view_suffix",
+  "head": "3147d410740b16573f0690379c4053af3e9ede95",
+  "artifact": {
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin291/LogicProMCP-3147d410740b16573f0690379c4053af3e9ede95",
+    "sha256": "f12a5b6594ba925ae987d25920516c92182631579d99f2c4e21ec719bc797181",
+    "built_from": "874c6e411886e9a895ca28d7c10a1d399bae722b",
+    "worktree_clean": false,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": true
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "non_ui"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://project/info",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1022/project-info",
+      "payload": {
+        "name": "lpm-locale-campaign - 트랙",
+        "filePath": "~/Music/Logic/lpm-locale-campaign.logicx",
+        "source": "ax_live",
+        "project_ref": "prj_7F3EA44B-DD5F-401A-947A-3C265AF39786",
+        "envelope_keys": [
+          "ax_occluded",
+          "cache_age_sec",
+          "data",
+          "fetched_at",
+          "identity_fetched_at",
+          "identity_source",
+          "source"
+        ],
+        "standard_window_titles": [
+          "lpm-locale-campaign - 마커 목록",
+          "lpm-locale-campaign - 트랙"
+        ],
+        "suffixes": [
+          "Tracks",
+          "트랙",
+          "トラック",
+          "Spuren",
+          "Pistas",
+          "Pistes",
+          "Tracce",
+          "轨道",
+          "音軌"
+        ]
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "1022/name-carries-no-view-suffix",
+      "passed": false,
+      "expected": "logic://project/info's name is non-empty and does not end with ` - ` followed by any spelling of the arrange view the product knows. THE COUNTEREXAMPLE is the arrange window's raw title, which is what name read before #1022",
+      "observed": {
+        "observation": "{'name': 'lpm-locale-campaign - 트랙', 'suffixes': ['Tracks', '트랙', 'トラック', 'Spuren', 'Pistas', 'Pistes', 'Tracce', '轨道', '音軌']}",
+        "accepted_the_observation": false,
+        "counterexample": "{'name': 'lpm-locale-campaign - 트랙', 'suffixes': ['Tracks', '트랙', 'トラック', 'Spuren', 'Pistas', 'Pistes', 'Tracce', '轨道', '音軌']}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "assign the window title to info.name unchanged in defaultGetProjectInfo (the pre-#1022 line)",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1022/name-is-the-bundle-file-name",
+      "passed": false,
+      "expected": "name equals the bundle file name of the same reply's filePath without its .logicx extension. THE COUNTEREXAMPLE is the raw window title in place of the name",
+      "observed": {
+        "observation": "{'name': 'lpm-locale-campaign - 트랙', 'bundle_stem': 'lpm-locale-campaign', 'filePath': '~/Music/Logic/lpm-locale-campaign.logicx'}",
+        "accepted_the_observation": false,
+        "counterexample": "{'name': 'lpm-locale-campaign - 트랙', 'bundle_stem': 'lpm-locale-campaign', 'filePath': '~/Music/Logic/lpm-locale-campaign.logicx'}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "strip the suffix in defaultGetProjectInfo but leave the separator, `String(normalized.dropLast(label.count))`",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1022/the-arrange-window-title-is-the-name-plus-one-view-suffix",
+      "passed": false,
+      "expected": "one of Logic's standard windows, read through System Events, is titled exactly name + ` - ` + one known spelling of the arrange view: the title starts with the name and ends with the suffix, with nothing else between. THE COUNTEREXAMPLE is the raw title as the name, which would need a doubled suffix to match",
+      "observed": {
+        "observation": "{'name': 'lpm-locale-campaign - 트랙', 'standard_window_titles': ['lpm-locale-campaign - 마커 목록', 'lpm-locale-campaign - 트랙'], 'suffixes': ['Tracks', '트랙', 'トラック', 'Spuren', 'Pistas', 'Pistes', 'Tracce', '轨道', '音軌']}",
+        "accepted_the_observation": false,
+        "counterexample": "{'name': 'lpm-locale-campaign - 트랙', 'standard_window_titles': ['lpm-locale-campaign - 마커 목록', 'lpm-locale-campaign - 트랙'], 'suffixes': ['Tracks', '트랙', 'トラック', 'Spuren', 'Pistas', 'Pistes', 'Tracce', '轨道', '音軌']}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "drop every trailing ` - <label>` instead of exactly one, so a project named `Take 2 - Tracks` is reported as `Take 2`",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    },
+    {
+      "kind": "provenance",
+      "tag": "artifact/older-than-its-sources",
+      "source": "mtime(Sources/**) vs mtime(binary)",
+      "cache_age_sec": null,
+      "usable_as_live_evidence": false,
+      "newer_than_binary": [
+        "Sources/LogicProMCP/Accessibility/AXHelpers.swift",
+        "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+        "Sources/LogicProMCP/Accessibility/AXLocaleValues.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+Markers.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+Menu.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+PluginSlots.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+Tracks.swift"
+      ],
+      "newer_than_binary_count": 234
+    }
+  ]
+}

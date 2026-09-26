@@ -1,0 +1,64 @@
+{
+  "schema": 3,
+  "id": "2026-09-27-zh-TW-project-info-names-the-project-not-the-arrange-view",
+  "date": "2026-09-27",
+  "subject": "logic://project/info name: the project's name against the Arrange window title Logic shows, with its localized view suffix",
+  "question": "Does logic://project/info report the project's own name, the bundle's file name, rather than the Arrange window title with the view name Logic appends in this language?",
+  "verdict": "works",
+  "surface": "project.lifecycle",
+  "issues": [
+    1022
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "zh-TW",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_1022_project_name_has_no_view_suffix.py <worktree> <full-40-char-head> [binary]",
+    "expected": "all three checks pass: the name carries none of the arrangeWindowTitleSuffix labels, it equals the .logicx bundle's file name without the extension, and Logic's Arrange window title is that name plus ' - ' and exactly one of those labels",
+    "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository and a running Logic with a saved project open; starts one server; reads only"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Project.swift:arrangeWindowTitleComponents",
+    "Sources/LogicProMCP/State/ProjectReferenceIssuance.swift:ProjectReferenceIssuance"
+  ],
+  "evidence": [
+    "evidence/2026-09-27-zh-TW-project-name-1022.json"
+  ],
+  "method": "The release binary at 874c6e411886e9a895ca28d7c10a1d399bae722b was started against the open project with nothing else talking to Logic. The harness read logic://project/info and the standard windows System Events lists for Logic, and compared the reported name with the bundle's file name and with the Arrange window's title, using the arrangeWindowTitleSuffix labels from docs/locale/ui-labels.json. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
+  "observations": [
+    {
+      "binary": "874c6e411886e9a895ca28d7c10a1d399bae722b",
+      "project_info_name": "lpm-locale-campaign",
+      "project_info_source": "ax_live",
+      "bundle_file_name": "lpm-locale-campaign.logicx",
+      "logic_window_titles": [
+        "lpm-locale-campaign - 標記列表",
+        "lpm-locale-campaign - 音軌"
+      ],
+      "arrange_window_title": "lpm-locale-campaign - 音軌",
+      "checks_passed": [
+        "1022/name-carries-no-view-suffix",
+        "1022/name-is-the-bundle-file-name",
+        "1022/the-arrange-window-title-is-the-name-plus-one-view-suffix"
+      ],
+      "checks_passed_count": 3,
+      "checks_run": 3
+    }
+  ],
+  "conclusion": "logic://project/info named the project 'lpm-locale-campaign', the bundle's file name 'lpm-locale-campaign.logicx' without its extension, while Logic's Arrange window was titled 'lpm-locale-campaign - 音軌'. All 3 checks passed.",
+  "limits": [
+    "One saved project whose bundle name has no ' - ' in it, one run per language, one host. A project whose own name ends in ' - ' plus one of the ten view names would lose that part; nothing here measures such a name.",
+    "Only the Arrange window title is parsed. A project whose main window shows another view in its title keeps the whole title as its name, which is the behaviour before this change.",
+    "The window titles are the ones System Events listed during the run; Logic's Marker List window was open next to the Arrange window because the fixture reopens with it.",
+    "The binary without this change was run only in Korean; in this language there is only the reading of the fixed binary."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "The view names this record compares against are read from docs/locale/ui-labels.json (arrangeWindowTitleSuffix), not asserted here; the window titles are quoted as System Events listed them so the comparison can be re-read, and the project name is the fixture's own."
+  }
+}

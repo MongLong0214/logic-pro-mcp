@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   (`AccessibilityChannel.arrangeWindowTitleComponents`). Limits: a project whose own name ends in
   ` - Tracks` is titled `… - Tracks - Tracks` and only the last suffix is taken; the live
   harness (`Scripts/livekit/live_1022_project_name_has_no_view_suffix.py`) measures one language
-  per run.
+  per run and was run in all ten on one project whose own name has no ` - ` in it.
 - **`logic://mixer`'s `routing_graph` no longer depends on whether `logic://tracks` was read
   first (#291).** In a fresh server a mixer read published no track nodes at all until
   `logic://tracks` had been read, because only that resource issued `trk_` references; the same
