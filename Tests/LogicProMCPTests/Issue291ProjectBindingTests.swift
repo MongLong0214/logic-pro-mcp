@@ -73,6 +73,62 @@ struct Issue291ProjectBindingTests {
         }
     }
 
+    @Test("a bundle path only project/info's file read supplied issues no reference until the poller caches it, in either order")
+    func aPathOnlyTheProjectFileSuppliedIssuesNoReferenceUntilThePollerCachesIt() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("issue291-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bundle = directory.appendingPathComponent("Song.logicx", isDirectory: true)
+        let alternative = bundle.appendingPathComponent("Alternatives/000", isDirectory: true)
+        try FileManager.default.createDirectory(at: alternative, withIntermediateDirectories: true)
+        try Data().write(to: alternative.appendingPathComponent("MetaData.plist"))
+        let reader = LogicProjectFileReader.Runtime(
+            currentDocumentPath: { bundle.path },
+            now: { Date(timeIntervalSince1970: 1_700_000_500) },
+            readPlistData: { _ in
+                try? PropertyListSerialization.data(fromPropertyList: ["NumberOfTracks": 3], format: .binary, options: 0)
+            },
+            mtime: { _ in Date(timeIntervalSince1970: 1_700_000_000) },
+            sleep: { _ in }
+        )
+        let clause = "project identity not yet observed: the cache carries no project name and bundle path"
+
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            for projectInfoFirst in [false, true] {
+                let label = projectInfoFirst ? "project/info first" : "mixer first"
+                let server = await Server(project: ProjectInfo(name: "Song", filePath: nil), fileReader: reader)
+                var filledPath: String?
+                for readProjectInfo in projectInfoFirst ? [true, false] : [false, true] {
+                    if readProjectInfo {
+                        let data = try await server.readProjectInfoData()
+                        // The file read reached project/info: it shows the bundle's path.
+                        filledPath = try #require(data["filePath"] as? String, "\(label)")
+                        #expect(data["project_ref"] == nil, "\(label)")
+                    } else {
+                        let graph = try await server.readGraph()
+                        #expect(graph.projectReference == nil, "\(label)")
+                        let partialReason = try #require(graph.partialReason, "\(label)")
+                        #expect(partialReason.components(separatedBy: "; ").contains(clause), "\(label): \(partialReason)")
+                    }
+                }
+                #expect(await server.registry.currentProjectIdentity == nil, "\(label)")
+
+                // What the poller writes when its own read of the same file succeeds.
+                await server.cache.updateProject(ProjectInfo(name: "Song", filePath: try #require(filledPath)))
+                var references: [String] = []
+                for readProjectInfo in projectInfoFirst ? [true, false] : [false, true] {
+                    references.append(readProjectInfo
+                        ? try await server.readProjectInfoReference()
+                        : try await server.readMixerProjectReference())
+                }
+                #expect(Set(references).count == 1, "\(label): \(references)")
+                for reference in references {
+                    try await server.expectCurrent(reference)
+                }
+            }
+        }
+    }
+
     @Test("a snapshot that went stale during project issuance is thrown, never published as a missing reference")
     func aStaleSnapshotDuringProjectIssuanceFailsLoud() async throws {
         let registry = TargetRegistry()
@@ -80,8 +136,7 @@ struct Issue291ProjectBindingTests {
         await registry.bumpProjectEpoch()
 
         let issuance = await ProjectReferenceIssuance.issue(
-            name: "Song",
-            filePath: "/tmp/Song.logicx",
+            cached: ProjectInfo(name: "Song", filePath: "/tmp/Song.logicx"),
             registry: registry,
             snapshot: snapshot
         )
@@ -100,8 +155,10 @@ struct Issue291ProjectBindingTests {
         let cache = StateCache()
         let registry = TargetRegistry()
         let router = ChannelRouter()
+        let fileReader: LogicProjectFileReader.Runtime
 
-        init(project: ProjectInfo?) async {
+        init(project: ProjectInfo?, fileReader: LogicProjectFileReader.Runtime = .unavailable) async {
+            self.fileReader = fileReader
             if let project {
                 await cache.updateProject(project)
             }
@@ -113,7 +170,7 @@ struct Issue291ProjectBindingTests {
                 cache: cache,
                 router: router,
                 targetRegistry: registry,
-                fileReader: .unavailable
+                fileReader: fileReader
             )
             return try #require(sharedJSONObject(sharedResourceText(result))?["data"] as? [String: Any])
         }

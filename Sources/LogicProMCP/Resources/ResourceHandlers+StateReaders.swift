@@ -408,10 +408,8 @@ extension ResourceHandlers {
             stripsJSON = encodeJSONObject(payload)
             // From the cached name and poller-filled bundle path only: this read runs after every
             // poll, outside the #199 deadline, so it must not read the project file or AppleScript.
-            let cachedProject = await cache.getProject()
             project = try routingProjectBinding(for: await ProjectReferenceIssuance.issue(
-                name: cachedProject.name,
-                filePath: cachedProject.filePath,
+                cached: await cache.getProject(),
                 registry: targetRegistry,
                 snapshot: targetSnapshot
             ))
@@ -609,9 +607,10 @@ extension ResourceHandlers {
 
         var body = encodeJSON(info)
         if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
+            // `cached`, not `info`: `info.filePath` may be the fill from this read's project file,
+            // and the mixer cannot issue from that.
             let issuance = await ProjectReferenceIssuance.issue(
-                name: info.name,
-                filePath: info.filePath,
+                cached: cached,
                 registry: targetRegistry,
                 snapshot: targetSnapshot
             )

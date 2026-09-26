@@ -22,17 +22,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   is not live-identity-backed: no reference can be issued` and `duplicate mixer strip observations
   for track_index=N`. Two track rows sharing one id no longer crash the server. `mixer_strip_ref` is
   now emitted only for a strip whose track id is unique and eligible, and `logic://mixer` drops an
-  Inspector-contaminated track list the way `logic://tracks` already did. Limits: verified on
-  fixtures, not yet re-measured against Logic; a strip is still joined to a track by position.
+  Inspector-contaminated track list the way `logic://tracks` already did. Limits: measured live
+  on one 19-track project in ten Logic languages (`docs/observations/2026-09-27-*-a-mixer-read-
+  before-tracks-publishes-the-same-graph.json`); the binary's correspondence to its commit rests on
+  source mtimes, not on a measurement; a strip is still joined to a track by position.
 - **The mixer graph's `projectReference` no longer needs a prior `logic://project/info` read
-  (#291).** Both resources derive the project reference in one place from the same observed name
-  and bundle path, so either read order yields the same `prj_` reference. The mixer uses only the
-  cached name and the bundle path the poller filled — it reads neither the project file nor
-  AppleScript — and when the cache carries no bundle path `partialReason` says `project identity
-  not yet observed: the cache carries no project name and bundle path`. Limits: verified on
-  fixtures, not yet re-measured against Logic; before the poller's first project poll the mixer
-  reports the project as unobserved even though `logic://project/info` can issue a reference from
-  the project file.
+  (#291).** Both resources issue the project reference in one place from the poller's cached name
+  and bundle path, so either read order yields the same `prj_` reference. The mixer reads neither
+  the project file nor AppleScript, so when the cache carries no bundle path `partialReason` says
+  `project identity not yet observed: the cache carries no project name and bundle path`.
+  `logic://project/info` still shows a bundle path its own project-file read filled in that state,
+  but no longer issues a reference from it: both resources report the project as unobserved until
+  the poller caches the path. Limits: the ten-language live run had the path cached; the pathless
+  window rests on fixtures.
 
 ---
 
