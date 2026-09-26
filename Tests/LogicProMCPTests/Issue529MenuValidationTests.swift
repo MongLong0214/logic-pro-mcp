@@ -1127,7 +1127,7 @@ struct Issue529MenuValidationTests {
     /// must not carry the same "the leaf is disabled" meaning, or the refusal message reverts to
     /// the exact ambiguity #921 reported.
     @Test("JSON-wrapped menu-validation-unreadable result refuses the dialog route without claiming disabled")
-    func jsonWrappedMenuValidationUnreadableRefusesDialogRoute() {
+    func jsonWrappedMenuValidationUnreadableRefusesDialogRoute() throws {
         let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
             #"{"result":"MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=true"}"#
         )
@@ -1142,7 +1142,8 @@ struct Issue529MenuValidationTests {
         // may already have opened.
         #expect(classification.requiresUnsafeUIRefusal)
         #expect(classification.menuObservation == .closed)
-        #expect(classification.menuActuationAttempted == .some(true))
+        let attempted = try #require(classification.menuActuationAttempted)
+        #expect(attempted)
         #expect(script.contains(
             "return \"MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=\" & (menuActuationAttempted as text)"
         ))
@@ -1175,7 +1176,8 @@ struct Issue529MenuValidationTests {
             )
             #expect(classification.diagnosticLabel == "menu_validation_unreadable")
             #expect(classification.requiresUnsafeUIRefusal)
-            #expect(classification.menuActuationAttempted == .some(true))
+            let attempted = try #require(classification.menuActuationAttempted)
+            #expect(attempted)
 
             let sliderWrites = Issue529Counter()
             let result = await AccessibilityChannel.gotoPositionViaBarSlider(
