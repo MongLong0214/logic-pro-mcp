@@ -624,3 +624,92 @@ private func messySnapshot(
     #expect(workflow.allowedResources.contains("logic://project/audit"))
     #expect(workflow.allowedResources.contains("logic://project/cleanup-plan"))
 }
+
+// MARK: - #966 P1 compatibility: #28's wire contract is pinned before the intent extension
+
+private let legacyAuditTopLevelKeys: Set<String> = [
+    "schema", "status", "generated_at", "read_only", "project", "evidence", "findings", "cleanup_plan",
+]
+private let legacyFindingKeys: Set<String> = ["id", "severity", "category", "summary", "evidence", "provenance"]
+private let legacyFindingEvidenceKeys: Set<String> = ["resource", "target", "values"]
+private let legacyCleanupPlanReportKeys: Set<String> = [
+    "schema", "source_audit_schema", "status", "generated_at", "read_only", "requires_plan_confirmation", "steps",
+]
+private let legacySeverityWireValues: Set<String> = ["info", "warn", "blocker"]
+
+/// The legacy cleanup-plan report built the way `buildCleanupPlan(cache:)` builds it, from the pure
+/// audit, so the wire shape is pinned without a StateCache.
+private func legacyCleanupPlanReport(from report: ProjectSessionAudit.AuditReport) -> ProjectSessionAudit.CleanupPlanReport {
+    ProjectSessionAudit.CleanupPlanReport(
+        schema: ProjectSessionAudit.cleanupPlanSchema,
+        sourceAuditSchema: report.schema,
+        status: report.status,
+        generatedAt: report.generatedAt,
+        readOnly: true,
+        requiresPlanConfirmation: true,
+        steps: report.cleanupPlan
+    )
+}
+
+@Test func testProjectAuditLegacyWireKeysAreUnchangedByIntentExtension() throws {
+    // ADR-021 §1: the intent extension adds a new type beside #28's audit; it never widens the
+    // legacy Finding (no basis/status/coverage key here) nor the audit or cleanup-plan reports.
+    // Exact Set equality on every level a #28 client reads, so a leaked field fails this test.
+    let report = ProjectSessionAudit.buildAudit(snapshot: messySnapshot())
+    let auditText = try encodeJSONStrict(report, compact: true)
+    let auditJSON = try #require(sharedJSONObject(auditText))
+    #expect(Set(auditJSON.keys) == legacyAuditTopLevelKeys)
+    #expect(auditJSON["schema"] as? String == "logic_pro_mcp_project_audit.v1")
+
+    let findings = try #require(auditJSON["findings"] as? [[String: Any]])
+    #expect(!findings.isEmpty)
+    for finding in findings {
+        #expect(Set(finding.keys) == legacyFindingKeys)
+    }
+    let severities = Set(findings.compactMap { $0["severity"] as? String })
+    #expect(severities.isSubset(of: legacySeverityWireValues))
+
+    // The duplicate-name finding carries a non-nil target, so its evidence shows all three keys
+    // (synthesised Codable omits nil optionals, which would hide `target` on another finding).
+    let duplicate = try #require(findings.first { $0["id"] as? String == "duplicate_track_names_kick_0_1" })
+    let evidence = try #require(duplicate["evidence"] as? [String: Any])
+    #expect(Set(evidence.keys) == legacyFindingEvidenceKeys)
+
+    let planText = try encodeJSONStrict(legacyCleanupPlanReport(from: report), compact: true)
+    let planJSON = try #require(sharedJSONObject(planText))
+    #expect(Set(planJSON.keys) == legacyCleanupPlanReportKeys)
+    #expect(planJSON["schema"] as? String == "logic_pro_mcp_project_cleanup_plan.v1")
+    #expect(planJSON["source_audit_schema"] as? String == "logic_pro_mcp_project_audit.v1")
+    #expect(try #require(planJSON["read_only"] as? Bool))
+    #expect(try #require(planJSON["requires_plan_confirmation"] as? Bool))
+}
+
+@Test func testProjectAuditMessySessionExampleIsPinnedExactly() throws {
+    // #28's supported example, pinned as exact ORDERED id arrays (the determinism test above only
+    // uses `contains`). A later rule that adds, drops or reorders a legacy finding or step fails
+    // here, which is the compatibility ADR-021 §1 requires of the extension.
+    let report = ProjectSessionAudit.buildAudit(snapshot: messySnapshot())
+
+    #expect(report.findings.map(\.id) == [
+        "armed_tracks_present",
+        "duplicate_track_names_kick_0_1",
+        "empty_tracks_detected",
+        "marker_structure_missing",
+        "muted_and_soloed_tracks",
+        "occupied_plugin_slots_present",
+        "soloed_tracks_present",
+        "unnamed_or_placeholder_tracks",
+    ])
+    #expect(report.cleanupPlan.map(\.id) == [
+        "read_audit_snapshot",
+        "rename_duplicate_kick_0_1",
+        "rename_unnamed_or_placeholder_tracks",
+        "review_empty_tracks_no_delete",
+        "clear_solo_states",
+        "clear_arm_states",
+        "plan_marker_structure",
+    ])
+    #expect(report.status == .degraded)
+    #expect(report.readOnly)
+    #expect(report.cleanupPlan.allSatisfy { ($0.command ?? "") != "delete" })
+}
