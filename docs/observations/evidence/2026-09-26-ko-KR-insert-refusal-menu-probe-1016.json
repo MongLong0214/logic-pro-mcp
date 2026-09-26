@@ -1,872 +1,1457 @@
 {
- "name": "probe_1016_refusal_leaves_no_menu",
- "head": "b6f90f7a2d8d6d5a571b9636248dd089ac302ce3",
- "artifact": {
-  "path": "<candidate-binary>",
-  "sha256": "34bd13ab1f0f03bbb3dd02a3b590b5680bccf6c7e786b9c17afb2ec397269f58",
-  "built_from": "b6f90f7a2d8d6d5a571b9636248dd089ac302ce3",
-  "worktree_clean": true,
-  "built_from_is_measured": false,
-  "artifact_older_than_sources": false
- },
- "records": [
-  {
-   "kind": "declaration",
-   "surface": "ui"
+  "name": "probe_1016_refusal_leaves_no_menu",
+  "head": "0b945912f1f8b46e8d24f784946031b6cf6e0ae0",
+  "artifact": {
+    "path": "<candidate-binary>",
+    "sha256": "216304b8e3d3515281a3f56d6cc6faaa352458017828cb21d6a42decf6c51ffd",
+    "built_from": "0b945912f1f8b46e8d24f784946031b6cf6e0ae0",
+    "worktree_clean": true,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": false
   },
-  {
-   "kind": "observation",
-   "tag": "1016/menus-open-at-start-after-cleanup",
-   "payload": []
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "observation",
-   "tag": "1016/free-slot-zero-tracks",
-   "payload": [
-    1,
-    19,
-    20
-   ]
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_mixer",
-   "command": "insert_plugin",
-   "params": {
-    "track": 1,
-    "slot": 0,
-    "plugin_name": "Gain",
-    "configuration": "lpm-1016-no-such-layout",
-    "confirmed": true
-   },
-   "response": {
-    "state": "C",
-    "success": false,
-    "error": "ax_write_failed",
-    "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "observation",
-   "tag": "1016/control-sample-0",
-   "payload": {
-    "response": {
-     "error": "ax_write_failed",
-     "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-     "menu_failure": "leaf_not_offered_by_this_strip",
-     "menu_leaf_offered": [
-      "\ubaa8\ub178",
-      "\ubaa8\ub178->\uc2a4\ud14c\ub808\uc624"
-     ],
-     "menu_paths_tried": [
-      "Utility > Gain > Stereo",
-      "Utility > Gain > \uc2a4\ud14c\ub808\uc624",
-      "Utility > Gain > \u30b9\u30c6\u30ec\u30aa",
-      "Utility > Gain > Est\u00e9reo",
-      "Utility > Gain > St\u00e9r\u00e9o",
-      "Utility > Gain > \u7acb\u4f53\u58f0",
-      "Utility > Gain > \u7acb\u9ad4\u8072"
-     ],
-     "plugin_name": "Gain",
-     "requested_configuration": "lpm-1016-no-such-layout",
-     "slot": 0,
-     "state": "C",
-     "success": false,
-     "track": 1
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "ui"
     },
-    "menus_open_after_response": [
-     {
-      "layer": 101,
-      "bounds": {
-       "X": 738,
-       "Height": 527,
-       "Y": 547,
-       "Width": 230
+    {
+      "kind": "observation",
+      "tag": "1016/menus-open-at-start-after-cleanup",
+      "payload": []
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
       }
-     }
-    ],
-    "menus_open_after_cleanup": [],
-    "slot_zero_still_free": true
-   }
-  },
-  {
-   "kind": "restoration",
-   "tag": "1016/control-sample-0-slot-zero-still-free",
-   "restored": true,
-   "detail": "track=1 slot=0"
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_mixer",
-   "command": "insert_plugin",
-   "params": {
-    "track": 1,
-    "slot": 0,
-    "plugin_name": "Gain",
-    "configuration": "lpm-1016-no-such-layout",
-    "confirmed": true
-   },
-   "response": {
-    "state": "C",
-    "success": false,
-    "error": "ax_write_failed",
-    "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "observation",
-   "tag": "1016/candidate-sample-0",
-   "payload": {
-    "response": {
-     "error": "ax_write_failed",
-     "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-     "menu_failure": "leaf_not_offered_by_this_strip",
-     "menu_leaf_offered": [
-      "\ubaa8\ub178",
-      "\ubaa8\ub178->\uc2a4\ud14c\ub808\uc624"
-     ],
-     "menu_paths_tried": [
-      "Utility > Gain > Stereo",
-      "Utility > Gain > \uc2a4\ud14c\ub808\uc624",
-      "Utility > Gain > \u30b9\u30c6\u30ec\u30aa",
-      "Utility > Gain > Est\u00e9reo",
-      "Utility > Gain > St\u00e9r\u00e9o",
-      "Utility > Gain > \u7acb\u4f53\u58f0",
-      "Utility > Gain > \u7acb\u9ad4\u8072"
-     ],
-     "plugin_name": "Gain",
-     "plugin_popup_menu_state": "dismissed",
-     "requested_configuration": "lpm-1016-no-such-layout",
-     "slot": 0,
-     "state": "C",
-     "success": false,
-     "track": 1
     },
-    "menus_open_after_response": [],
-    "menus_open_after_cleanup": [],
-    "slot_zero_still_free": true
-   }
-  },
-  {
-   "kind": "restoration",
-   "tag": "1016/candidate-sample-0-slot-zero-still-free",
-   "restored": true,
-   "detail": "track=1 slot=0"
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_mixer",
-   "command": "insert_plugin",
-   "params": {
-    "track": 1,
-    "slot": 0,
-    "plugin_name": "Gain",
-    "configuration": "lpm-1016-no-such-layout",
-    "confirmed": true
-   },
-   "response": {
-    "state": "C",
-    "success": false,
-    "error": "ax_write_failed",
-    "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "observation",
-   "tag": "1016/control-sample-1",
-   "payload": {
-    "response": {
-     "error": "ax_write_failed",
-     "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-     "menu_failure": "leaf_not_offered_by_this_strip",
-     "menu_leaf_offered": [
-      "\ubaa8\ub178",
-      "\ubaa8\ub178->\uc2a4\ud14c\ub808\uc624"
-     ],
-     "menu_paths_tried": [
-      "Utility > Gain > Stereo",
-      "Utility > Gain > \uc2a4\ud14c\ub808\uc624",
-      "Utility > Gain > \u30b9\u30c6\u30ec\u30aa",
-      "Utility > Gain > Est\u00e9reo",
-      "Utility > Gain > St\u00e9r\u00e9o",
-      "Utility > Gain > \u7acb\u4f53\u58f0",
-      "Utility > Gain > \u7acb\u9ad4\u8072"
-     ],
-     "plugin_name": "Gain",
-     "requested_configuration": "lpm-1016-no-such-layout",
-     "slot": 0,
-     "state": "C",
-     "success": false,
-     "track": 1
-    },
-    "menus_open_after_response": [
-     {
-      "layer": 101,
-      "bounds": {
-       "X": 738,
-       "Height": 527,
-       "Y": 547,
-       "Width": 230
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
       }
-     }
-    ],
-    "menus_open_after_cleanup": [],
-    "slot_zero_still_free": true
-   }
-  },
-  {
-   "kind": "restoration",
-   "tag": "1016/control-sample-1-slot-zero-still-free",
-   "restored": true,
-   "detail": "track=1 slot=0"
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_mixer",
-   "command": "insert_plugin",
-   "params": {
-    "track": 1,
-    "slot": 0,
-    "plugin_name": "Gain",
-    "configuration": "lpm-1016-no-such-layout",
-    "confirmed": true
-   },
-   "response": {
-    "state": "C",
-    "success": false,
-    "error": "ax_write_failed",
-    "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "observation",
-   "tag": "1016/candidate-sample-1",
-   "payload": {
-    "response": {
-     "error": "ax_write_failed",
-     "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-     "menu_failure": "leaf_not_offered_by_this_strip",
-     "menu_leaf_offered": [
-      "\ubaa8\ub178",
-      "\ubaa8\ub178->\uc2a4\ud14c\ub808\uc624"
-     ],
-     "menu_paths_tried": [
-      "Utility > Gain > Stereo",
-      "Utility > Gain > \uc2a4\ud14c\ub808\uc624",
-      "Utility > Gain > \u30b9\u30c6\u30ec\u30aa",
-      "Utility > Gain > Est\u00e9reo",
-      "Utility > Gain > St\u00e9r\u00e9o",
-      "Utility > Gain > \u7acb\u4f53\u58f0",
-      "Utility > Gain > \u7acb\u9ad4\u8072"
-     ],
-     "plugin_name": "Gain",
-     "plugin_popup_menu_state": "dismissed",
-     "requested_configuration": "lpm-1016-no-such-layout",
-     "slot": 0,
-     "state": "C",
-     "success": false,
-     "track": 1
     },
-    "menus_open_after_response": [],
-    "menus_open_after_cleanup": [],
-    "slot_zero_still_free": true
-   }
-  },
-  {
-   "kind": "restoration",
-   "tag": "1016/candidate-sample-1-slot-zero-still-free",
-   "restored": true,
-   "detail": "track=1 slot=0"
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_mixer",
-   "command": "insert_plugin",
-   "params": {
-    "track": 1,
-    "slot": 0,
-    "plugin_name": "Gain",
-    "configuration": "lpm-1016-no-such-layout",
-    "confirmed": true
-   },
-   "response": {
-    "state": "C",
-    "success": false,
-    "error": "ax_write_failed",
-    "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "observation",
-   "tag": "1016/control-sample-2",
-   "payload": {
-    "response": {
-     "error": "ax_write_failed",
-     "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-     "menu_failure": "leaf_not_offered_by_this_strip",
-     "menu_leaf_offered": [
-      "\ubaa8\ub178",
-      "\ubaa8\ub178->\uc2a4\ud14c\ub808\uc624"
-     ],
-     "menu_paths_tried": [
-      "Utility > Gain > Stereo",
-      "Utility > Gain > \uc2a4\ud14c\ub808\uc624",
-      "Utility > Gain > \u30b9\u30c6\u30ec\u30aa",
-      "Utility > Gain > Est\u00e9reo",
-      "Utility > Gain > St\u00e9r\u00e9o",
-      "Utility > Gain > \u7acb\u4f53\u58f0",
-      "Utility > Gain > \u7acb\u9ad4\u8072"
-     ],
-     "plugin_name": "Gain",
-     "requested_configuration": "lpm-1016-no-such-layout",
-     "slot": 0,
-     "state": "C",
-     "success": false,
-     "track": 1
+    {
+      "kind": "observation",
+      "tag": "1016/free-slot-zero-tracks",
+      "payload": [
+        1,
+        19,
+        20
+      ]
     },
-    "menus_open_after_response": [
-     {
-      "layer": 101,
-      "bounds": {
-       "X": 738,
-       "Height": 527,
-       "Y": 547,
-       "Width": 230
+    {
+      "kind": "observation",
+      "tag": "located_band/refused",
+      "payload": {
+        "selector": [
+          "mixer",
+          "--role",
+          "AXLayoutArea",
+          "--min-width",
+          "600"
+        ],
+        "why": "no element with that exact AXDescription",
+        "rc": 0,
+        "stdout": "{\"error\":\"no element with that exact AXDescription\",\"wanted\":\"mixer\",\"window\":\"lpm-locale-campaign - 마커 목록\"}\n",
+        "stderr": ""
       }
-     }
-    ],
-    "menus_open_after_cleanup": [],
-    "slot_zero_still_free": true
-   }
-  },
-  {
-   "kind": "restoration",
-   "tag": "1016/control-sample-2-slot-zero-still-free",
-   "restored": true,
-   "detail": "track=1 slot=0"
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_mixer",
-   "command": "insert_plugin",
-   "params": {
-    "track": 1,
-    "slot": 0,
-    "plugin_name": "Gain",
-    "configuration": "lpm-1016-no-such-layout",
-    "confirmed": true
-   },
-   "response": {
-    "state": "C",
-    "success": false,
-    "error": "ax_write_failed",
-    "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_system",
-   "command": "refresh_cache",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic://mixer",
-   "command": "resources/read",
-   "params": {},
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "observation",
-   "tag": "1016/candidate-sample-2",
-   "payload": {
-    "response": {
-     "error": "ax_write_failed",
-     "hint": "Gain was found, but this strip offers \ubaa8\ub178, \ubaa8\ub178->\uc2a4\ud14c\ub808\uc624 for it \u2014 the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
-     "menu_failure": "leaf_not_offered_by_this_strip",
-     "menu_leaf_offered": [
-      "\ubaa8\ub178",
-      "\ubaa8\ub178->\uc2a4\ud14c\ub808\uc624"
-     ],
-     "menu_paths_tried": [
-      "Utility > Gain > Stereo",
-      "Utility > Gain > \uc2a4\ud14c\ub808\uc624",
-      "Utility > Gain > \u30b9\u30c6\u30ec\u30aa",
-      "Utility > Gain > Est\u00e9reo",
-      "Utility > Gain > St\u00e9r\u00e9o",
-      "Utility > Gain > \u7acb\u4f53\u58f0",
-      "Utility > Gain > \u7acb\u9ad4\u8072"
-     ],
-     "plugin_name": "Gain",
-     "plugin_popup_menu_state": "dismissed",
-     "requested_configuration": "lpm-1016-no-such-layout",
-     "slot": 0,
-     "state": "C",
-     "success": false,
-     "track": 1
     },
-    "menus_open_after_response": [],
-    "menus_open_after_cleanup": [],
-    "slot_zero_still_free": true
-   }
-  },
-  {
-   "kind": "restoration",
-   "tag": "1016/candidate-sample-2-slot-zero-still-free",
-   "restored": true,
-   "detail": "track=1 slot=0"
-  },
-  {
-   "kind": "check",
-   "tag": "1016/control-refusal-leaves-a-menu-open",
-   "passed": true,
-   "expected": "the control's blind Escape leaves a Logic menu open after at least one refusal, so the reading can see one",
-   "observed": {
-    "track": 1,
-    "control": [
-     {
-      "menu_failure": "leaf_not_offered_by_this_strip",
-      "menus": [
-       {
-        "layer": 101,
-        "bounds": {
-         "X": 738,
-         "Height": 527,
-         "Y": 547,
-         "Width": 230
-        }
-       }
-      ]
-     },
-     {
-      "menu_failure": "leaf_not_offered_by_this_strip",
-      "menus": [
-       {
-        "layer": 101,
-        "bounds": {
-         "X": 738,
-         "Height": 527,
-         "Y": 547,
-         "Width": 230
-        }
-       }
-      ]
-     },
-     {
-      "menu_failure": "leaf_not_offered_by_this_strip",
-      "menus": [
-       {
-        "layer": 101,
-        "bounds": {
-         "X": 738,
-         "Height": 527,
-         "Y": 547,
-         "Width": 230
-        }
-       }
-      ]
-     }
-    ]
-   },
-   "mutation": "a window reading that cannot see a menu would pass the candidate check vacuously",
-   "mutation_claimed": true,
-   "blocking_modal": null
-  },
-  {
-   "kind": "check",
-   "tag": "1016/candidate-refusal-closes-its-menu",
-   "passed": true,
-   "expected": "every candidate refusal reports plugin_popup_menu_state dismissed and leaves no Logic window at or above the pop-up menu level",
-   "observed": {
-    "track": 1,
-    "candidate": [
-     {
-      "menu_failure": "leaf_not_offered_by_this_strip",
-      "plugin_popup_menu_state": "dismissed",
-      "menus": []
-     },
-     {
-      "menu_failure": "leaf_not_offered_by_this_strip",
-      "plugin_popup_menu_state": "dismissed",
-      "menus": []
-     },
-     {
-      "menu_failure": "leaf_not_offered_by_this_strip",
-      "plugin_popup_menu_state": "dismissed",
-      "menus": []
-     }
-    ]
-   },
-   "mutation": "restore the blind Escape in the refusal branch: the candidate then leaves the menu open as the control does, and reports no popup state",
-   "mutation_claimed": true,
-   "blocking_modal": null
-  },
-  {
-   "kind": "environment",
-   "screen_locked": false
-  }
- ]
+    {
+      "kind": "observation",
+      "tag": "located_band/candidates",
+      "payload": {
+        "selector": [
+          "믹서",
+          "--role",
+          "AXLayoutArea",
+          "--min-width",
+          "600"
+        ],
+        "subject": "믹서",
+        "candidates": 1,
+        "counted": true
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "insert_plugin",
+      "params": {
+        "track": 1,
+        "slot": 0,
+        "plugin_name": "Gain",
+        "configuration": "lpm-1016-no-such-layout",
+        "confirmed": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "ax_write_failed",
+        "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1016/warm-up",
+      "payload": {
+        "response": {
+          "error": "ax_write_failed",
+          "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+          "menu_failure": "leaf_not_offered_by_this_strip",
+          "menu_leaf_offered": [
+            "모노",
+            "모노->스테레오"
+          ],
+          "menu_paths_tried": [
+            "Utility > Gain > Stereo",
+            "Utility > Gain > 스테레오",
+            "Utility > Gain > ステレオ",
+            "Utility > Gain > Estéreo",
+            "Utility > Gain > Stéréo",
+            "Utility > Gain > 立体声",
+            "Utility > Gain > 立體聲"
+          ],
+          "plugin_name": "Gain",
+          "requested_configuration": "lpm-1016-no-such-layout",
+          "slot": 0,
+          "state": "C",
+          "success": false,
+          "track": 1
+        },
+        "menus_open_after_response": [
+          {
+            "id": 9167,
+            "layer": 101,
+            "bounds": {
+              "X": 738,
+              "Height": 527,
+              "Y": 547,
+              "Width": 230
+            }
+          }
+        ],
+        "menus_open_after_cleanup": [],
+        "slot_zero_still_free": true
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/control-0-mixer-before",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-before.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "insert_plugin",
+      "params": {
+        "track": 1,
+        "slot": 0,
+        "plugin_name": "Gain",
+        "configuration": "lpm-1016-no-such-layout",
+        "confirmed": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "ax_write_failed",
+        "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/control-0-mixer-after",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-after.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "visual",
+      "tag": "1016/control-0-mixer-unchanged",
+      "region": [
+        603,
+        361,
+        1317,
+        689
+      ],
+      "subject": "믹서",
+      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-after.png",
+      "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
+      "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
+      "passed": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1016/control-sample-0",
+      "payload": {
+        "response": {
+          "error": "ax_write_failed",
+          "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+          "menu_failure": "leaf_not_offered_by_this_strip",
+          "menu_leaf_offered": [
+            "모노",
+            "모노->스테레오"
+          ],
+          "menu_paths_tried": [
+            "Utility > Gain > Stereo",
+            "Utility > Gain > 스테레오",
+            "Utility > Gain > ステレオ",
+            "Utility > Gain > Estéreo",
+            "Utility > Gain > Stéréo",
+            "Utility > Gain > 立体声",
+            "Utility > Gain > 立體聲"
+          ],
+          "plugin_name": "Gain",
+          "requested_configuration": "lpm-1016-no-such-layout",
+          "slot": 0,
+          "state": "C",
+          "success": false,
+          "track": 1
+        },
+        "menus_open_after_response": [
+          {
+            "id": 9169,
+            "layer": 101,
+            "bounds": {
+              "X": 738,
+              "Height": 527,
+              "Y": 547,
+              "Width": 230
+            }
+          }
+        ],
+        "menus_open_after_cleanup": [],
+        "slot_zero_still_free": true
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1016/control-sample-0-slot-zero-still-free",
+      "restored": true,
+      "detail": "track=1 slot=0"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/candidate-0-mixer-before",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-before.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "insert_plugin",
+      "params": {
+        "track": 1,
+        "slot": 0,
+        "plugin_name": "Gain",
+        "configuration": "lpm-1016-no-such-layout",
+        "confirmed": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "ax_write_failed",
+        "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/candidate-0-mixer-after",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-after.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "visual",
+      "tag": "1016/candidate-0-mixer-unchanged",
+      "region": [
+        603,
+        361,
+        1317,
+        689
+      ],
+      "subject": "믹서",
+      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-after.png",
+      "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
+      "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
+      "passed": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1016/candidate-sample-0",
+      "payload": {
+        "response": {
+          "error": "ax_write_failed",
+          "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+          "menu_failure": "leaf_not_offered_by_this_strip",
+          "menu_leaf_offered": [
+            "모노",
+            "모노->스테레오"
+          ],
+          "menu_paths_tried": [
+            "Utility > Gain > Stereo",
+            "Utility > Gain > 스테레오",
+            "Utility > Gain > ステレオ",
+            "Utility > Gain > Estéreo",
+            "Utility > Gain > Stéréo",
+            "Utility > Gain > 立体声",
+            "Utility > Gain > 立體聲"
+          ],
+          "plugin_name": "Gain",
+          "plugin_popup_menu_state": "dismissed",
+          "requested_configuration": "lpm-1016-no-such-layout",
+          "slot": 0,
+          "state": "C",
+          "success": false,
+          "track": 1
+        },
+        "menus_open_after_response": [],
+        "menus_open_after_cleanup": [],
+        "slot_zero_still_free": true
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1016/candidate-sample-0-slot-zero-still-free",
+      "restored": true,
+      "detail": "track=1 slot=0"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/control-1-mixer-before",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-before.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "insert_plugin",
+      "params": {
+        "track": 1,
+        "slot": 0,
+        "plugin_name": "Gain",
+        "configuration": "lpm-1016-no-such-layout",
+        "confirmed": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "ax_write_failed",
+        "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/control-1-mixer-after",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-after.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "visual",
+      "tag": "1016/control-1-mixer-unchanged",
+      "region": [
+        603,
+        361,
+        1317,
+        689
+      ],
+      "subject": "믹서",
+      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-after.png",
+      "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
+      "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
+      "passed": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1016/control-sample-1",
+      "payload": {
+        "response": {
+          "error": "ax_write_failed",
+          "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+          "menu_failure": "leaf_not_offered_by_this_strip",
+          "menu_leaf_offered": [
+            "모노",
+            "모노->스테레오"
+          ],
+          "menu_paths_tried": [
+            "Utility > Gain > Stereo",
+            "Utility > Gain > 스테레오",
+            "Utility > Gain > ステレオ",
+            "Utility > Gain > Estéreo",
+            "Utility > Gain > Stéréo",
+            "Utility > Gain > 立体声",
+            "Utility > Gain > 立體聲"
+          ],
+          "plugin_name": "Gain",
+          "requested_configuration": "lpm-1016-no-such-layout",
+          "slot": 0,
+          "state": "C",
+          "success": false,
+          "track": 1
+        },
+        "menus_open_after_response": [
+          {
+            "id": 9173,
+            "layer": 101,
+            "bounds": {
+              "X": 738,
+              "Height": 527,
+              "Y": 547,
+              "Width": 230
+            }
+          }
+        ],
+        "menus_open_after_cleanup": [],
+        "slot_zero_still_free": true
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1016/control-sample-1-slot-zero-still-free",
+      "restored": true,
+      "detail": "track=1 slot=0"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/candidate-1-mixer-before",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-before.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "insert_plugin",
+      "params": {
+        "track": 1,
+        "slot": 0,
+        "plugin_name": "Gain",
+        "configuration": "lpm-1016-no-such-layout",
+        "confirmed": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "ax_write_failed",
+        "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/candidate-1-mixer-after",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-after.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "visual",
+      "tag": "1016/candidate-1-mixer-unchanged",
+      "region": [
+        603,
+        361,
+        1317,
+        689
+      ],
+      "subject": "믹서",
+      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-after.png",
+      "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
+      "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
+      "passed": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1016/candidate-sample-1",
+      "payload": {
+        "response": {
+          "error": "ax_write_failed",
+          "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+          "menu_failure": "leaf_not_offered_by_this_strip",
+          "menu_leaf_offered": [
+            "모노",
+            "모노->스테레오"
+          ],
+          "menu_paths_tried": [
+            "Utility > Gain > Stereo",
+            "Utility > Gain > 스테레오",
+            "Utility > Gain > ステレオ",
+            "Utility > Gain > Estéreo",
+            "Utility > Gain > Stéréo",
+            "Utility > Gain > 立体声",
+            "Utility > Gain > 立體聲"
+          ],
+          "plugin_name": "Gain",
+          "plugin_popup_menu_state": "dismissed",
+          "requested_configuration": "lpm-1016-no-such-layout",
+          "slot": 0,
+          "state": "C",
+          "success": false,
+          "track": 1
+        },
+        "menus_open_after_response": [],
+        "menus_open_after_cleanup": [],
+        "slot_zero_still_free": true
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1016/candidate-sample-1-slot-zero-still-free",
+      "restored": true,
+      "detail": "track=1 slot=0"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/control-2-mixer-before",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-before.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "insert_plugin",
+      "params": {
+        "track": 1,
+        "slot": 0,
+        "plugin_name": "Gain",
+        "configuration": "lpm-1016-no-such-layout",
+        "confirmed": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "ax_write_failed",
+        "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/control-2-mixer-after",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-after.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "visual",
+      "tag": "1016/control-2-mixer-unchanged",
+      "region": [
+        603,
+        361,
+        1317,
+        689
+      ],
+      "subject": "믹서",
+      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-after.png",
+      "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
+      "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
+      "passed": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1016/control-sample-2",
+      "payload": {
+        "response": {
+          "error": "ax_write_failed",
+          "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+          "menu_failure": "leaf_not_offered_by_this_strip",
+          "menu_leaf_offered": [
+            "모노",
+            "모노->스테레오"
+          ],
+          "menu_paths_tried": [
+            "Utility > Gain > Stereo",
+            "Utility > Gain > 스테레오",
+            "Utility > Gain > ステレオ",
+            "Utility > Gain > Estéreo",
+            "Utility > Gain > Stéréo",
+            "Utility > Gain > 立体声",
+            "Utility > Gain > 立體聲"
+          ],
+          "plugin_name": "Gain",
+          "requested_configuration": "lpm-1016-no-such-layout",
+          "slot": 0,
+          "state": "C",
+          "success": false,
+          "track": 1
+        },
+        "menus_open_after_response": [
+          {
+            "id": 9177,
+            "layer": 101,
+            "bounds": {
+              "X": 738,
+              "Height": 527,
+              "Y": 547,
+              "Width": 230
+            }
+          }
+        ],
+        "menus_open_after_cleanup": [],
+        "slot_zero_still_free": true
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1016/control-sample-2-slot-zero-still-free",
+      "restored": true,
+      "detail": "track=1 slot=0"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/candidate-2-mixer-before",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-before.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "insert_plugin",
+      "params": {
+        "track": 1,
+        "slot": 0,
+        "plugin_name": "Gain",
+        "configuration": "lpm-1016-no-such-layout",
+        "confirmed": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "ax_write_failed",
+        "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "1016/candidate-2-mixer-after",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-after.png",
+      "window": {
+        "id": 9142,
+        "title": "lpm-locale-campaign - 트랙",
+        "x": 0,
+        "y": 30,
+        "w": 1920,
+        "h": 1050
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "d0847d95441dc99377ae92f874b7e136e59335f655f2ed87bfa267d06044c681",
+      "region_hash": "fbef972ebc336d4c710b0c876332ef39eeb74035a1ef66fa521ee0e9fc08842f",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "visual",
+      "tag": "1016/candidate-2-mixer-unchanged",
+      "region": [
+        603,
+        361,
+        1317,
+        689
+      ],
+      "subject": "믹서",
+      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-after.png",
+      "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
+      "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
+      "passed": true
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1016/candidate-sample-2",
+      "payload": {
+        "response": {
+          "error": "ax_write_failed",
+          "hint": "Gain was found, but this strip offers 모노, 모노->스테레오 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+          "menu_failure": "leaf_not_offered_by_this_strip",
+          "menu_leaf_offered": [
+            "모노",
+            "모노->스테레오"
+          ],
+          "menu_paths_tried": [
+            "Utility > Gain > Stereo",
+            "Utility > Gain > 스테레오",
+            "Utility > Gain > ステレオ",
+            "Utility > Gain > Estéreo",
+            "Utility > Gain > Stéréo",
+            "Utility > Gain > 立体声",
+            "Utility > Gain > 立體聲"
+          ],
+          "plugin_name": "Gain",
+          "plugin_popup_menu_state": "dismissed",
+          "requested_configuration": "lpm-1016-no-such-layout",
+          "slot": 0,
+          "state": "C",
+          "success": false,
+          "track": 1
+        },
+        "menus_open_after_response": [],
+        "menus_open_after_cleanup": [],
+        "slot_zero_still_free": true
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1016/candidate-sample-2-slot-zero-still-free",
+      "restored": true,
+      "detail": "track=1 slot=0"
+    },
+    {
+      "kind": "recording",
+      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__run.mov",
+      "exists": true,
+      "bytes": 140630851
+    },
+    {
+      "kind": "check",
+      "tag": "1016/control-refusal-leaves-a-menu-open",
+      "passed": true,
+      "expected": "the control's blind Escape leaves a Logic menu open after at least one refusal, so the reading can see one",
+      "observed": {
+        "track": 1,
+        "control": [
+          {
+            "menu_failure": "leaf_not_offered_by_this_strip",
+            "menus": [
+              {
+                "id": 9169,
+                "layer": 101,
+                "bounds": {
+                  "X": 738,
+                  "Height": 527,
+                  "Y": 547,
+                  "Width": 230
+                }
+              }
+            ]
+          },
+          {
+            "menu_failure": "leaf_not_offered_by_this_strip",
+            "menus": [
+              {
+                "id": 9173,
+                "layer": 101,
+                "bounds": {
+                  "X": 738,
+                  "Height": 527,
+                  "Y": 547,
+                  "Width": 230
+                }
+              }
+            ]
+          },
+          {
+            "menu_failure": "leaf_not_offered_by_this_strip",
+            "menus": [
+              {
+                "id": 9177,
+                "layer": 101,
+                "bounds": {
+                  "X": 738,
+                  "Height": 527,
+                  "Y": 547,
+                  "Width": 230
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "mutation": "a window reading that cannot see a menu would pass the candidate check vacuously",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1016/candidate-refusal-closes-its-menu",
+      "passed": true,
+      "expected": "every candidate refusal reports plugin_popup_menu_state dismissed and leaves no Logic window at or above the pop-up menu level",
+      "observed": {
+        "track": 1,
+        "candidate": [
+          {
+            "menu_failure": "leaf_not_offered_by_this_strip",
+            "plugin_popup_menu_state": "dismissed",
+            "menus": []
+          },
+          {
+            "menu_failure": "leaf_not_offered_by_this_strip",
+            "plugin_popup_menu_state": "dismissed",
+            "menus": []
+          },
+          {
+            "menu_failure": "leaf_not_offered_by_this_strip",
+            "plugin_popup_menu_state": "dismissed",
+            "menus": []
+          }
+        ]
+      },
+      "mutation": "restore the blind Escape in the refusal branch: the candidate then leaves the menu open as the control does, and reports no popup state",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    }
+  ]
 }
