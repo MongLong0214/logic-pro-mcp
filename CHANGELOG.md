@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **`logic_project.inspect_session`: a cache-only session population report (#965, first
+  increment).** The `logic_pro_mcp_session_population.v1` report is read from the state cache
+  alone: no Accessibility call, no UI navigation, nothing restored. Every requested domain
+  (`tracks`, `strips`, `associations`, `hierarchy`, and `routing`/`color` on request) carries a
+  `coverage` of `complete`, `partial`, `unavailable` or `unstable` plus the reasons, and
+  `overall.complete` is true only when every requested domain is `complete`. A cold cache, an
+  inspector-contaminated walk, a collapsed stack, an unreadable stack state, and a project-file
+  count that does not match the rail are all reported as what they are instead of as an empty or
+  complete session; `associations` and `hierarchy` are `unavailable` because the cache holds no
+  evidence for either. `allow_ui_navigation=true` is refused with State C `not_implemented` until
+  the navigating increment lands. Registry censuses grow to 115 operations / 24 read-only.
+
 ### Fixed
 
 - **`logic://mixer`'s `routing_graph` no longer depends on whether `logic://tracks` was read

@@ -505,6 +505,7 @@ enum SemanticOracleTable {
         projectGetRegions,
         projectExportPlan,
         projectAudit,
+        projectInspectSession,
         projectCleanupPlan,
         audioAnalyzeFile,
         audioAnalyzeSpectrum,
@@ -934,6 +935,25 @@ enum SemanticOracleTable {
             .numericRange(key: "project.track_count", min: 0, max: 10_000),
             .typedField(key: "findings", type: .array),
             .typedField(key: "evidence", type: .object),
+        ]
+    )
+
+    // #965 SessionPopulationObservation `Report`. read_only:true is hardcoded
+    // and load-bearing: the cache-only report navigates nothing. `overall.complete`
+    // must be a real boolean and `tracks.coverage` one of the four coverage
+    // states — a report that omits either has stopped saying what it could not
+    // observe.
+    static let projectInspectSession = OperationOracle(
+        .projectInspectSession,
+        strength: .shapeAndDomain,
+        constraints: [
+            .valueEquals(key: "schema", expected: .string(SessionPopulationObservation.schema)),
+            .valueEquals(key: "read_only", expected: .bool(true)),
+            .typedField(key: "overall.complete", type: .bool),
+            .enumMember(
+                key: "tracks.coverage",
+                allowed: SessionPopulationObservation.Coverage.allCases.map(\.rawValue)
+            ),
         ]
     )
 

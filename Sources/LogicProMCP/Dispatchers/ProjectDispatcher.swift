@@ -18,7 +18,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_project",
-        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only. Stem is narrower than the generic projects shape: it refuses unless exactly one currently scanned project has a fresh complete region inventory proving its populated tracks, and output_root is an existing directory; the Export panel must also expose that folder in its browser at execution. Stem filenames and output format are late-bound and unpromised. fail_if_exists examines only top-level non-directory entries with suffix wav|wave|aif|aiff|aifc|m4a|mp3, and it refuses if enumeration fails; skip_existing is refused for stem. export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, drives the stem Export panel or bounces as appropriate, analyzes before/after-observed eligible stem outputs without guessing filename-to-track associations, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume for known-path artifacts; it refuses stem runs because Logic assigns filenames only after export; audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; cleanup_apply -> { step_id: String, confirmed: Bool, names?: \"newA,newB\" (CSV aligned to the step's target track indices) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
+        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, inspect_session, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only. Stem is narrower than the generic projects shape: it refuses unless exactly one currently scanned project has a fresh complete region inventory proving its populated tracks, and output_root is an existing directory; the Export panel must also expose that folder in its browser at execution. Stem filenames and output format are late-bound and unpromised. fail_if_exists examines only top-level non-directory entries with suffix wav|wave|aif|aiff|aifc|m4a|mp3, and it refuses if enumeration fails; skip_existing is refused for stem. export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, drives the stem Export panel or bounces as appropriate, analyzes before/after-observed eligible stem outputs without guessing filename-to-track associations, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume for known-path artifacts; it refuses stem runs because Logic assigns filenames only after export; audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; inspect_session -> { scope?: \"whole_project\"|\"selection\", domains?: [tracks|strips|associations|hierarchy|routing|color], allow_ui_navigation?: Bool, project_ref?: String } read-only logic_pro_mcp_session_population.v1 JSON built from the state cache alone: every requested domain carries coverage complete|partial|unavailable|unstable plus reasons, tracks/strips rows come with witnesses, and unread data is reported as unread rather than absent. allow_ui_navigation=true is refused (State C not_implemented) in this increment; cleanup_apply -> { step_id: String, confirmed: Bool, names?: \"newA,newB\" (CSV aligned to the step's target track indices) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
         commandDescription: "Project command to execute"
     )
 
@@ -434,6 +434,43 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 // as a success-shaped body. Fail loud with isError=true.
                 return toolTextResult(
                     "{\"error\":\"audit encode failed: \(jsonStringEscape(error.localizedDescription))\"}",
+                    isError: true
+                )
+            }
+
+        case "inspect_session":
+            // #965 O1 first increment: a population report read from the state
+            // cache alone. Stable references are issued under the same gate as
+            // `logic://tracks`; nothing here navigates Logic's UI, and the
+            // report says which domains it could not observe instead of
+            // leaving them absent.
+            let request: SessionPopulationObservation.Request
+            switch inspectSessionRequest(params) {
+            case .request(let parsed):
+                request = parsed
+            case .rejected(let failure):
+                return failure
+            }
+            if request.allowUINavigation {
+                return toolStateCResult(
+                    .notImplemented,
+                    hint: "inspect_session: allow_ui_navigation=true is a later increment of #965. This build reads the state cache only and performs no UI navigation; omit the flag or pass false for the cache-only report.",
+                    extras: ["write_attempted": false, "navigation_performed": false]
+                )
+            }
+            let capture = await SessionPopulationObservation.capture(
+                cache: cache,
+                targetRegistry: targetRegistry,
+                fileReader: cleanupAuditFileReader
+            )
+            let report = SessionPopulationObservation.build(request: request, capture: capture)
+            do {
+                return toolTextResult(try encodeJSONStrict(report, compact: true))
+            } catch {
+                // Honest Contract: a serialization failure must NOT be returned
+                // as a success-shaped body. Fail loud with isError=true.
+                return toolTextResult(
+                    "{\"error\":\"inspect_session encode failed: \(jsonStringEscape(error.localizedDescription))\"}",
                     isError: true
                 )
             }
@@ -863,6 +900,73 @@ struct ProjectDispatcher: OperationTraceDispatching {
             indices.append(value)
         }
         return Array(Set(indices)).sorted()
+    }
+
+    enum InspectSessionParse {
+        case request(SessionPopulationObservation.Request)
+        case rejected(CallTool.Result)
+    }
+
+    /// #965: `inspect_session` parameters. A missing key takes the Request
+    /// default; a wrong type, an unknown member, or an empty `domains` list is
+    /// State C `invalid_params` with nothing captured. `project_ref` has already
+    /// been validated against the registry at the top of `handle`.
+    static func inspectSessionRequest(_ params: [String: Value]) -> InspectSessionParse {
+        typealias Observation = SessionPopulationObservation
+        func reject(_ hint: String) -> InspectSessionParse {
+            .rejected(toolInvalidParamsResult(hint, extras: ["write_attempted": false]))
+        }
+
+        var scope: Observation.Scope = .wholeProject
+        if let raw = params["scope"] {
+            let allowed = Observation.Scope.allCases.map(\.rawValue).joined(separator: "|")
+            guard let text = raw.stringValue else {
+                return reject("'scope' must be a string: \(allowed)")
+            }
+            guard let parsed = Observation.Scope(rawValue: text) else {
+                return reject("'scope' must be one of \(allowed); got '\(text)'")
+            }
+            scope = parsed
+        }
+
+        var domains = Observation.Request.defaultDomains
+        if let raw = params["domains"] {
+            let allowed = Observation.Domain.allCases.map(\.rawValue).joined(separator: "|")
+            guard let array = raw.arrayValue else {
+                return reject("'domains' must be an array of \(allowed)")
+            }
+            var parsed: [Observation.Domain] = []
+            for element in array {
+                guard let text = element.stringValue else {
+                    return reject("'domains' must contain only strings: \(allowed)")
+                }
+                guard let domain = Observation.Domain(rawValue: text) else {
+                    return reject("'domains' member '\(text)' is not one of \(allowed)")
+                }
+                if !parsed.contains(domain) { parsed.append(domain) }
+            }
+            guard !parsed.isEmpty else {
+                return reject("'domains' must name at least one of \(allowed)")
+            }
+            domains = parsed
+        }
+
+        var allowUINavigation = false
+        switch strictBoolParam(params, "allow_ui_navigation") {
+        case .missing:
+            break
+        case .value(let value):
+            allowUINavigation = value
+        case .invalid(let hint):
+            return reject(hint)
+        }
+
+        return .request(Observation.Request(
+            scope: scope,
+            domains: domains,
+            allowUINavigation: allowUINavigation,
+            projectRef: params["project_ref"]?.stringValue
+        ))
     }
 
     /// Resolve the new names for a rename step. `names` (CSV) takes precedence;

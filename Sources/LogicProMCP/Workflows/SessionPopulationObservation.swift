@@ -20,12 +20,12 @@ enum SessionPopulationObservation {
         case color
     }
 
-    enum Scope: String, Sendable, Encodable {
+    enum Scope: String, CaseIterable, Sendable, Encodable {
         case wholeProject = "whole_project"
         case selection
     }
 
-    enum Coverage: String, Sendable, Encodable {
+    enum Coverage: String, CaseIterable, Sendable, Encodable {
         case complete
         case partial
         case unavailable
