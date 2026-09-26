@@ -15,8 +15,10 @@ strip does not have is refused, never substituted). Nothing is inserted; the mix
 every sample to show slot 0 is still free.
 
 Right after each response the window server's on-screen list is read for Logic windows at or above the
-pop-up menu level. That reading is the measurement. Anything found is then closed with System Events
-Escapes, outside the measured bracket, so the next sample starts with no menu open.
+pop-up menu level. That reading is the measurement, and a list the window server did not hand back is
+unknown, never empty. A menu found open is photographed, then closed with System Events Escapes,
+outside the measured bracket, so the next sample starts with no menu open. The Mixer is captured
+before and after every sample, and the two captures must match: the refusal inserts nothing.
 
 The control and the candidate alternate, control first, on the same strip.
 
@@ -24,7 +26,9 @@ PASS
 ----
 Every candidate refusal reports `plugin_popup_menu_state: dismissed` and leaves no such window, and at
 least one control refusal leaves one open. Without that control the reading could simply be unable to
-see a menu, and a clean candidate would prove nothing, so the run fails.
+see a menu, and a clean candidate would prove nothing, so the run fails. The exit code is also the
+evidence document's own `is_clean`, which requires the captures, the visual comparisons and the
+screen recording this surface calls for.
 
 WHAT IS NOT JUDGED
 ------------------
@@ -46,6 +50,9 @@ import evidence as E  # noqa: E402
 
 CONFIGURATION = "lpm-1016-no-such-layout"
 READ_TIMEOUT = 15.0
+# A hard duration: `screencapture -v` finalises its file only when this elapses. Three samples of
+# each binary took about two minutes on the first run.
+RECORDING_SECONDS = 240
 
 
 def arguments():
@@ -85,8 +92,13 @@ def open_logic_menus():
         import Quartz
         level = Quartz.CGWindowLevelForKey(Quartz.kCGPopUpMenuWindowLevelKey)
         windows = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly,
-                                                    Quartz.kCGNullWindowID) or []
-        return [{"layer": int(window.get(Quartz.kCGWindowLayer)),
+                                                    Quartz.kCGNullWindowID)
+        if windows is None:
+            # The window server did not answer. An empty list here would read as "no menu open",
+            # which is the one answer this probe exists to establish.
+            return None
+        return [{"id": int(window.get(Quartz.kCGWindowNumber)),
+                 "layer": int(window.get(Quartz.kCGWindowLayer)),
                  "bounds": {key: int(value) for key, value
                             in dict(window.get(Quartz.kCGWindowBounds) or {}).items()}}
                 for window in windows
@@ -126,17 +138,47 @@ def read_mixer(driver, predicate):
         time.sleep(0.5)
 
 
-def sample(binary, track):
+def mixer_band(ev):
+    """The Mixer's band and the description it was found by, read off the live tree."""
+    with open(os.path.join(HERE, "..", "..", "docs", "locale", "ui-labels.json"), encoding="utf-8") as h:
+        row = json.load(h)["labels"]["mixerNamedElement"]
+    for name in [row["canonical"], *row["variants"]]:
+        band, subject = ev.located_band(name, "--role", "AXLayoutArea")
+        if band:
+            return band, subject
+    return None, None
+
+
+def capture_menu(ev, tag, menu):
+    """Photograph a popup window by its window-server id; a title lookup cannot reach it."""
+    bounds = menu.get("bounds") or {}
+    ev.shot(tag, window={"id": menu["id"], "title": "",
+                         "x": bounds.get("X", 0), "y": bounds.get("Y", 0),
+                         "w": bounds.get("Width", 0), "h": bounds.get("Height", 0)})
+
+
+def sample(ev, binary, track, tag, band, subject, photographed=True):
+    """One refusal. `photographed=False` is the warm-up, which records no capture or comparison."""
     driver = E.Driver(binary=binary)
     try:
         before, fresh = read_mixer(driver, lambda mixer: track in free_slot_zero(mixer))
         if not fresh:
             return {"error": f"track {track} slot 0 was not read free before the request"}
+        before_shot = ev.shot(f"{tag}-mixer-before", settle_region=band) if photographed else None
         response = driver.tool("logic_mixer", "insert_plugin", {
             "track": track, "slot": 0, "plugin_name": "Gain",
             "configuration": CONFIGURATION, "confirmed": True}) or {}
         menus = open_logic_menus()
-        closed = close_menus() if menus else menus
+        for number, menu in enumerate((menus or []) if photographed else []):
+            capture_menu(ev, f"{tag}-menu-left-open-{number}", menu)
+        # Unknown is cleaned up too; only a reading of none skips it.
+        closed = [] if menus == [] else close_menus()
+        if photographed:
+            after_shot = ev.shot(f"{tag}-mixer-after", settle_region=band)
+            ev.visual(f"{tag}-mixer-unchanged", before_shot["file"], after_shot["file"], band,
+                      expect_change=False,
+                      why="the request is refused before any plug-in is chosen, so nothing is inserted",
+                      subject=subject)
         after, still_free = read_mixer(driver, lambda mixer: track in free_slot_zero(mixer))
         return {"response": response, "menus_open_after_response": menus,
                 "menus_open_after_cleanup": closed, "slot_zero_still_free": still_free}
@@ -174,10 +216,28 @@ def main():
         return 1
     track = tracks[0]
 
+    band, subject = mixer_band(ev)
+    if not band:
+        ev.check("1016/found-the-mixer-band", False, "the Mixer located on the live tree by its label",
+                 None, "without the band the no-insert comparison has nothing to look at")
+        print(json.dumps({"written": ev.write()}))
+        return 1
+
+    # Pressing a slot selects its strip, which recolours it. One unmeasured refusal first, so the
+    # sampled before/after captures compare a strip that is already selected.
+    warm_up = sample(ev, args.control, track, "1016/warm-up", band, subject, photographed=False)
+    ev.note("1016/warm-up", warm_up)
+    if warm_up.get("error") or warm_up.get("menus_open_after_cleanup") != []:
+        ev.check("1016/warm-up-left-a-clean-screen", False, "the warm-up refusal ends with no menu open",
+                 warm_up, "a menu left by the warm-up would be read as the first sample's")
+        print(json.dumps({"written": ev.write()}))
+        return 1
+
+    recording = ev.record_screen(seconds=RECORDING_SECONDS)
     runs = {"control": [], "candidate": []}
     for number in range(args.samples):
         for label, binary in (("control", args.control), ("candidate", args.candidate)):
-            result = sample(binary, track)
+            result = sample(ev, binary, track, f"1016/{label}-{number}", band, subject)
             runs[label].append(result)
             ev.note(f"1016/{label}-sample-{number}", result)
             ev.restored(f"1016/{label}-sample-{number}-slot-zero-still-free",
@@ -188,12 +248,17 @@ def main():
                                   (result.get("response") or {}).get("plugin_popup_menu_state"),
                               "menus_open_after_response": result.get("menus_open_after_response"),
                               "error": result.get("error")}, ensure_ascii=False), flush=True)
-            if result.get("menus_open_after_cleanup"):
+            # An unread list after cleanup is as disqualifying as an open menu: the next sample
+            # could start over one, and nothing here would know.
+            if result.get("error") or result.get("menus_open_after_cleanup") != []:
+                ev.stop_recording(recording)
                 ev.check("1016/harness-closed-what-it-found", False,
-                         "System Events Escapes close the menu before the next sample",
+                         "the sample ran and System Events Escapes left a readable list with no "
+                         "Logic menu before the next sample",
                          result, "a menu left by one sample would be read as the next one's")
                 print(json.dumps({"written": ev.write()}))
                 return 1
+    ev.stop_recording(recording)
 
     def refused(result):
         return (result.get("response") or {}).get("menu_failure") == "leaf_not_offered_by_this_strip"
@@ -221,8 +286,9 @@ def main():
              "restore the blind Escape in the refusal branch: the candidate then leaves the menu "
              "open as the control does, and reports no popup state")
     out = ev.write()
-    print(json.dumps({"written": out}))
-    return 0 if control_left and candidate_clean else 1
+    clean = E.is_clean(out)
+    print(json.dumps({"written": out, "is_clean": clean}))
+    return 0 if control_left and candidate_clean and clean else 1
 
 
 if __name__ == "__main__":
