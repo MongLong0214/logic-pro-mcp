@@ -1,0 +1,6 @@
+Limit: the qualification gate is not wired into release.yml; no live toggle_cycle or toggle_count_in was driven on a Korean Logic for this change
+Ruled-out: fixing only the fixtures | they were written from the oracle and echoed its Korean literal back, so the oracle was never checked against the channel
+Warn: button and control both carry reportAs in every language since b61bda6b; an oracle expecting a localized label refuses every honest receipt
+Warn: #expect(evaluate(...) == true) stayed green on Optional(false); unwrap the verdict with try #require before asserting it
+Record-Id: r-6a50e0b25779
+Provenance: inherited c23089c1d4093bc36265cf64f4a11b2824f9db60
