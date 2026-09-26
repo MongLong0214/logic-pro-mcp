@@ -108,17 +108,12 @@ run python3 Scripts/run-repo-guards.py
 run swiftc -typecheck Scripts/logic_key_event.swift
 run swiftc -typecheck Scripts/logic_ui_snapshot.swift
 run swiftc -typecheck Scripts/logic_ax_button_press.swift
-# Build release first, so the live qualification tests in the suite drive the binary being tagged rather than
-# whatever this tree built last (#985). Those tests are enabled only when .build/release/LogicProMCP exists and they
-# drive a running Logic, so a release cannot be cut without one.
-run swift build -c release
-if [ "$DRY_RUN" != "1" ] && ! pgrep -xq "Logic Pro"; then
-    echo "Error: Logic Pro is not running. The live qualification tests in the suite need it (#985)."
-    exit 1
-fi
-run swift test --no-parallel
+# Builds release, requires a running Logic, then runs the whole suite against that binary (#985).
+# Record the exact HEAD qualified here so the tag-triggered workflow can verify it (#985).
+QUALIFIED=$(git rev-parse HEAD)
+run Scripts/release-qualify.sh
 
-run git tag "$VERSION" -m "Release $VERSION"
+run git tag "$VERSION" -m "Release $VERSION" -m "Live-qualified: $QUALIFIED"
 run git push origin "$VERSION"
 
 echo ""
