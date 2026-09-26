@@ -13,6 +13,13 @@ enum AXLogicProElements {
         /// channel default. Test runtimes that only inject `executeAppleScript` automatically
         /// retain control of this seam.
         let executeAppleScriptWithTimeout: @Sendable (String, TimeInterval) async -> ChannelResult
+        /// #1016 — the raw on-screen CoreGraphics window list the popup-menu count is taken from.
+        /// A seam so a refusal path's menu cleanup can be driven by a fixture; nil means the window
+        /// server gave no list, which is unknown, not "no windows".
+        let onScreenWindowList: @Sendable () -> [[String: Any]]?
+        /// #1016 — the Escape key post the popup-menu cleanup falls back to. A seam so a unit test
+        /// reaching that fallback records it instead of typing into whatever app is frontmost.
+        let postPopupMenuEscape: @Sendable () -> Void
 
         init(
             logicProPID: @escaping @Sendable () -> pid_t?,
@@ -20,7 +27,9 @@ enum AXLogicProElements {
             executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
                 await AppleScriptChannel.executeAppleScript($0)
             },
-            executeAppleScriptWithTimeout: (@Sendable (String, TimeInterval) async -> ChannelResult)? = nil
+            executeAppleScriptWithTimeout: (@Sendable (String, TimeInterval) async -> ChannelResult)? = nil,
+            onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = Runtime.liveOnScreenWindowList,
+            postPopupMenuEscape: @escaping @Sendable () -> Void = Runtime.livePostPopupMenuEscape
         ) {
             self.logicProPID = logicProPID
             self.ax = ax
@@ -28,6 +37,22 @@ enum AXLogicProElements {
             self.executeAppleScriptWithTimeout = executeAppleScriptWithTimeout ?? { script, _ in
                 await executeAppleScript(script)
             }
+            self.onScreenWindowList = onScreenWindowList
+            self.postPopupMenuEscape = postPopupMenuEscape
+        }
+
+        static let liveOnScreenWindowList: @Sendable () -> [[String: Any]]? = {
+            CGWindowListCopyWindowInfo(
+                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+            ) as? [[String: Any]]
+        }
+
+        static let livePostPopupMenuEscape: @Sendable () -> Void = {
+            let source = CGEventSource(stateID: .hidSystemState)
+            let down = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: true)
+            let up = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: false)
+            down?.post(tap: .cghidEventTap)
+            up?.post(tap: .cghidEventTap)
         }
 
         static let production = Runtime(

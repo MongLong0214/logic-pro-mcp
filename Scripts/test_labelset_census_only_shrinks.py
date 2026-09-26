@@ -76,7 +76,12 @@ case("an unreadable base is a bootstrap note, not a silent pass",
 _r = run()
 case("and it accepts the repository as it stands", _r.returncode == 0,
      (_r.stdout + _r.stderr).strip()[:200])
-case("reporting how many of how many", "of 195" in _r.stdout, _r.stdout.strip()[:200])
+# The total is counted here with a reader of its own rather than typed: a literal went stale the
+# first time a LabelSet was added (#993), and it says nothing a count of the file does not.
+import re as _re
+_total = len(_re.findall(r"static let \w+ = LabelSet\(", open(POLICY, encoding="utf-8").read()))
+case("reporting how many of how many", f"of {_total}" in _r.stdout and _total > 0,
+     _r.stdout.strip()[:200])
 
 # (5) THE PARSER. A declaration that closes on the same line as its last argument was invisible to
 #     this guard's own regex reader: the span it examined ran on into a LATER declaration and found

@@ -1,0 +1,5117 @@
+{
+ "source": "live_993_plugin_root_menu_in_every_locale.evidence.json, the zh_TW run of 2026-09-26 (records filtered to the harness's own observations, checks, restorations and environment; captures and the screen recording are not copied)",
+ "name": "live_993_plugin_root_menu_in_every_locale",
+ "head": "b1e557211ebbed2b3ad5d1f4332c388d806c5b68",
+ "artifact": {
+  "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin993/LogicProMCP-candidate",
+  "sha256": "819ee0dac772b2325f44e99f98f08fd28f7171c10ca5d9e53786db5e3b3dd2f3",
+  "built_from": "b1e557211ebbed2b3ad5d1f4332c388d806c5b68",
+  "worktree_clean": true,
+  "built_from_is_measured": false,
+  "artifact_older_than_sources": false
+ },
+ "records": [
+  {
+   "kind": "observation",
+   "tag": "993/edit-menu-label-set",
+   "payload": [
+    "Edit",
+    "편집",
+    "編集",
+    "Bearbeiten",
+    "Edición",
+    "Édition",
+    "Modifica",
+    "Editar",
+    "编辑",
+    "編輯"
+   ]
+  },
+  {
+   "kind": "observation",
+   "tag": "993/korean-baseline",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - 트랙",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - 마커 목록",
+     "lpm-locale-campaign - 트랙"
+    ]
+   }
+  },
+  {
+   "kind": "restoration",
+   "tag": "993/zh_TW/candidate-attempt-0-undone",
+   "restored": true,
+   "detail": "track=1 slot=0"
+  },
+  {
+   "kind": "observation",
+   "tag": "993/zh_TW",
+   "payload": {
+    "language": {
+     "switched": true,
+     "arrange_window": "lpm-locale-campaign - 音軌",
+     "language_setting": [
+      "zh-TW"
+     ],
+     "window_names": [
+      "lpm-locale-campaign - 標記列表",
+      "lpm-locale-campaign - 音軌"
+     ]
+    },
+    "apple_edit_menu": "編輯",
+    "edit_menu_in_label_set": true,
+    "candidate": {
+     "mixer_before": {
+      "cache_age_sec": 0.002157926559448242,
+      "data_source": "ax_poll",
+      "fetched_at": "2026-09-26T04:59:08.729Z",
+      "ax_occluded": false,
+      "mcu_connected": true,
+      "mcu_registered": true,
+      "mcu_last_feedback_age_ms": 2763,
+      "registered": true,
+      "strips": [
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_14698FFC-E4C5-4FB7-BB1F-98340F051649",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "鼓機設計者"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 0,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "input": "輸入 1",
+        "mixer_strip_ref": "mix_4D07AEF8-F9C7-4A0A-942F-BC281BD4D1FD",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 1,
+        "volume": 0.7657894736842106
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_A37D3D8C-796A-4A45-972D-1062508AF046",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 2,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_3ABAE9B2-E06B-4CF3-9AA7-F0FAF1AAFAA5",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 3,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_7EBC75DD-610F-4BE4-BC68-6DDF1ECD6B62",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 4,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_2524B31D-A942-41CB-9B6B-7C5DC360CF33",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 5,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_63933966-5656-43AB-9652-E726C8ADCCAD",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 6,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_3B86AA3A-A70C-4ED9-BE60-F7C7E27CEA80",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 7,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_FF24BC3F-8FAE-411C-B4EA-94EEEEF2648E",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 8,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_3B68A84E-3154-49D6-A1B1-63053688795B",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 9,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_58E19BE2-D8A8-41AB-8507-761E755DDE28",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 10,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_974CC255-31E4-45BE-B5DC-BB158CD5F074",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 11,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_7B4859CB-CB03-4256-8147-EF130D7B3F63",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 12,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_3BAACA6D-4F93-498D-BF1A-CBE3FA9882E6",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 13,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_9B088FDE-00DD-4C85-AF59-3E16549AB5AC",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 14,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_1E3CC01A-88FA-442E-85F2-EC97C5D3EF68",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 15,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_15D81811-C90C-472B-9470-7A5DC2D42600",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 16,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_EFFD6FDE-3E50-4F64-B60B-E2675B3FED1A",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 17,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_0BB76F3E-EBE7-46C0-85BD-89C22E981D5A",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 18,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 19,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 20,
+        "volume": 0.7578947368421053
+       }
+      ],
+      "routing_graph": {
+       "complete": false,
+       "edges": [],
+       "nodes": [],
+       "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+       "projectEpoch": 0,
+       "provenance": [
+        "axMixerStrip"
+       ]
+      }
+     },
+     "mixer_before_fresh": true,
+     "free_slot_zero_tracks": [
+      1,
+      19,
+      20
+     ],
+     "attempts": [
+      {
+       "track": 1,
+       "mixer_before": {
+        "cache_age_sec": 0.0010600090026855469,
+        "data_source": "ax_poll",
+        "fetched_at": "2026-09-26T04:59:10.559Z",
+        "ax_occluded": false,
+        "mcu_connected": true,
+        "mcu_registered": true,
+        "mcu_last_feedback_age_ms": 4591,
+        "registered": true,
+        "strips": [
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_14698FFC-E4C5-4FB7-BB1F-98340F051649",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "鼓機設計者"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 0,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "input": "輸入 1",
+          "mixer_strip_ref": "mix_4D07AEF8-F9C7-4A0A-942F-BC281BD4D1FD",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 1,
+          "volume": 0.7657894736842106
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_A37D3D8C-796A-4A45-972D-1062508AF046",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 2,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_3ABAE9B2-E06B-4CF3-9AA7-F0FAF1AAFAA5",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 3,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_7EBC75DD-610F-4BE4-BC68-6DDF1ECD6B62",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 4,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_2524B31D-A942-41CB-9B6B-7C5DC360CF33",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 5,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_63933966-5656-43AB-9652-E726C8ADCCAD",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 6,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_3B86AA3A-A70C-4ED9-BE60-F7C7E27CEA80",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 7,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_FF24BC3F-8FAE-411C-B4EA-94EEEEF2648E",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 8,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_3B68A84E-3154-49D6-A1B1-63053688795B",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 9,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_58E19BE2-D8A8-41AB-8507-761E755DDE28",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 10,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_974CC255-31E4-45BE-B5DC-BB158CD5F074",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 11,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_7B4859CB-CB03-4256-8147-EF130D7B3F63",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 12,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_3BAACA6D-4F93-498D-BF1A-CBE3FA9882E6",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 13,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_9B088FDE-00DD-4C85-AF59-3E16549AB5AC",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 14,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_1E3CC01A-88FA-442E-85F2-EC97C5D3EF68",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 15,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_15D81811-C90C-472B-9470-7A5DC2D42600",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 16,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_EFFD6FDE-3E50-4F64-B60B-E2675B3FED1A",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 17,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_0BB76F3E-EBE7-46C0-85BD-89C22E981D5A",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 18,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 19,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 20,
+          "volume": 0.7578947368421053
+         }
+        ],
+        "routing_graph": {
+         "complete": false,
+         "edges": [],
+         "nodes": [],
+         "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+         "projectEpoch": 0,
+         "provenance": [
+          "axMixerStrip"
+         ]
+        }
+       },
+       "configuration": "單聲道",
+       "refused_first": [
+        {
+         "response": {
+          "error": "ax_write_failed",
+          "hint": "Gain was found, but this strip offers 單聲道, 單聲道->立體聲 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+          "menu_failure": "leaf_not_offered_by_this_strip",
+          "menu_leaf_offered": [
+           "單聲道",
+           "單聲道->立體聲"
+          ],
+          "menu_paths_tried": [
+           "Utility > Gain > Stereo",
+           "Utility > Gain > 스테레오",
+           "Utility > Gain > ステレオ",
+           "Utility > Gain > Estéreo",
+           "Utility > Gain > Stéréo",
+           "Utility > Gain > 立体声",
+           "Utility > Gain > 立體聲"
+          ],
+          "plugin_name": "Gain",
+          "requested_configuration": "",
+          "slot": 0,
+          "state": "C",
+          "success": false,
+          "track": 1
+         },
+         "menus_left_open": {
+          "open_before_escape": [
+           {
+            "layer": 101,
+            "bounds": {
+             "X": 736,
+             "Height": 571,
+             "Y": 503,
+             "Width": 230
+            }
+           }
+          ],
+          "open_after_escape": []
+         }
+        }
+       ],
+       "menus_left_open": null,
+       "response": {
+        "menu_leaf_chosen": "單聲道",
+        "observed_plugin_name": "Gain",
+        "plugin_name": "Gain",
+        "slot": 0,
+        "state": "A",
+        "success": true,
+        "trace_id": "lpmcp_424BB76C-03AD-4B21-9741-6EF3833C01A2",
+        "track": 1,
+        "verified": true,
+        "verify_source": "ax_plugin_slot"
+       },
+       "response_slot": 0,
+       "mixer_after": {
+        "cache_age_sec": 0.001089930534362793,
+        "data_source": "ax_poll",
+        "fetched_at": "2026-09-26T04:59:19.580Z",
+        "ax_occluded": false,
+        "mcu_connected": true,
+        "mcu_registered": true,
+        "mcu_last_feedback_age_ms": 2379,
+        "registered": true,
+        "strips": [
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_902782DA-3B53-4161-8F47-4E75B927692A",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "鼓機設計者"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 0,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "input": "輸入 1",
+          "mixer_strip_ref": "mix_F893C0C8-C4F2-4C35-9DC6-C7C739DFFA46",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "Gain"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 1,
+          "volume": 0.7657894736842106
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_81F4ABC0-9A98-4476-94A1-D0486BBC837F",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 2,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_7B6B15AE-091C-42D3-8696-FA16B53682AA",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 3,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_43B08EAE-95E9-4FA0-B4EB-4C6B5A894FA5",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 4,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_B8B561C2-51C6-4C6D-A4CD-542B889309A1",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 5,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_C7B7BAC1-2DD6-411D-8DA9-FBDB8E18A749",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 6,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_6379DB1A-9533-436D-94C6-3E60C7AC2DC6",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 7,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_35F0DC85-5EAB-495C-BD6D-8A3A754F6BBE",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 8,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_2BC54CBD-1C20-44FA-8074-6C9097BEA673",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 9,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_60C2CA84-61E8-4660-B442-0A5A20531264",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 10,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_AF9C04B1-B8C2-46F1-B207-DFAABB467A36",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 11,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_CC6BC75F-E5B4-4D24-833C-C5BA037A5643",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 12,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_C48C00E4-C306-4B0D-8791-EBB836104B5F",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 13,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_9E89E9FF-7F74-4C8B-9B09-061443BF64D1",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 14,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_B7F89A5D-19EA-41A6-B74E-64B11565E23B",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 15,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_09C7D314-8C9C-4BBD-9996-77D5FC30A80C",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 16,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_B774081D-45B2-4FE7-80B4-39AC33FCB8EB",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 17,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_BE52887E-B12F-40D6-BBD8-BD92F202A3C0",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 18,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 19,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 20,
+          "volume": 0.7578947368421053
+         }
+        ],
+        "routing_graph": {
+         "complete": false,
+         "edges": [],
+         "nodes": [],
+         "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+         "projectEpoch": 0,
+         "provenance": [
+          "axMixerStrip"
+         ]
+        }
+       },
+       "gain_seen_at_response_slot": true,
+       "edit_menu": "編輯",
+       "undo_exit": 0,
+       "undo_stderr": "",
+       "mixer_after_undo": {
+        "cache_age_sec": 0.0010780096054077148,
+        "data_source": "ax_poll",
+        "fetched_at": "2026-09-26T04:59:22.327Z",
+        "ax_occluded": false,
+        "mcu_connected": true,
+        "mcu_registered": true,
+        "mcu_last_feedback_age_ms": 2589,
+        "registered": true,
+        "strips": [
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_902782DA-3B53-4161-8F47-4E75B927692A",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "鼓機設計者"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 0,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "input": "輸入 1",
+          "mixer_strip_ref": "mix_F893C0C8-C4F2-4C35-9DC6-C7C739DFFA46",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 1,
+          "volume": 0.7657894736842106
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_81F4ABC0-9A98-4476-94A1-D0486BBC837F",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 2,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_7B6B15AE-091C-42D3-8696-FA16B53682AA",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 3,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_43B08EAE-95E9-4FA0-B4EB-4C6B5A894FA5",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 4,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_B8B561C2-51C6-4C6D-A4CD-542B889309A1",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 5,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_C7B7BAC1-2DD6-411D-8DA9-FBDB8E18A749",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 6,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_6379DB1A-9533-436D-94C6-3E60C7AC2DC6",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 7,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_35F0DC85-5EAB-495C-BD6D-8A3A754F6BBE",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 8,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_2BC54CBD-1C20-44FA-8074-6C9097BEA673",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 9,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_60C2CA84-61E8-4660-B442-0A5A20531264",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 10,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_AF9C04B1-B8C2-46F1-B207-DFAABB467A36",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 11,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_CC6BC75F-E5B4-4D24-833C-C5BA037A5643",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 12,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_C48C00E4-C306-4B0D-8791-EBB836104B5F",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 13,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_9E89E9FF-7F74-4C8B-9B09-061443BF64D1",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 14,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_B7F89A5D-19EA-41A6-B74E-64B11565E23B",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 15,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_09C7D314-8C9C-4BBD-9996-77D5FC30A80C",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 16,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_B774081D-45B2-4FE7-80B4-39AC33FCB8EB",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 17,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_BE52887E-B12F-40D6-BBD8-BD92F202A3C0",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 18,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 19,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 20,
+          "volume": 0.7578947368421053
+         }
+        ],
+        "routing_graph": {
+         "complete": false,
+         "edges": [],
+         "nodes": [],
+         "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+         "projectEpoch": 0,
+         "provenance": [
+          "axMixerStrip"
+         ]
+        }
+       },
+       "verified": true,
+       "undo_verified": true,
+       "inserted": true
+      }
+     ],
+     "track": 1,
+     "configuration": "單聲道",
+     "refused_first": [
+      {
+       "response": {
+        "error": "ax_write_failed",
+        "hint": "Gain was found, but this strip offers 單聲道, 單聲道->立體聲 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+        "menu_failure": "leaf_not_offered_by_this_strip",
+        "menu_leaf_offered": [
+         "單聲道",
+         "單聲道->立體聲"
+        ],
+        "menu_paths_tried": [
+         "Utility > Gain > Stereo",
+         "Utility > Gain > 스테레오",
+         "Utility > Gain > ステレオ",
+         "Utility > Gain > Estéreo",
+         "Utility > Gain > Stéréo",
+         "Utility > Gain > 立体声",
+         "Utility > Gain > 立體聲"
+        ],
+        "plugin_name": "Gain",
+        "requested_configuration": "",
+        "slot": 0,
+        "state": "C",
+        "success": false,
+        "track": 1
+       },
+       "menus_left_open": {
+        "open_before_escape": [
+         {
+          "layer": 101,
+          "bounds": {
+           "X": 736,
+           "Height": 571,
+           "Y": 503,
+           "Width": 230
+          }
+         }
+        ],
+        "open_after_escape": []
+       }
+      }
+     ],
+     "menus_left_open": null,
+     "response": {
+      "menu_leaf_chosen": "單聲道",
+      "observed_plugin_name": "Gain",
+      "plugin_name": "Gain",
+      "slot": 0,
+      "state": "A",
+      "success": true,
+      "trace_id": "lpmcp_424BB76C-03AD-4B21-9741-6EF3833C01A2",
+      "track": 1,
+      "verified": true,
+      "verify_source": "ax_plugin_slot"
+     },
+     "response_slot": 0,
+     "mixer_after": {
+      "cache_age_sec": 0.001089930534362793,
+      "data_source": "ax_poll",
+      "fetched_at": "2026-09-26T04:59:19.580Z",
+      "ax_occluded": false,
+      "mcu_connected": true,
+      "mcu_registered": true,
+      "mcu_last_feedback_age_ms": 2379,
+      "registered": true,
+      "strips": [
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_902782DA-3B53-4161-8F47-4E75B927692A",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "鼓機設計者"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 0,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "input": "輸入 1",
+        "mixer_strip_ref": "mix_F893C0C8-C4F2-4C35-9DC6-C7C739DFFA46",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "Gain"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 1,
+        "volume": 0.7657894736842106
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_81F4ABC0-9A98-4476-94A1-D0486BBC837F",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 2,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_7B6B15AE-091C-42D3-8696-FA16B53682AA",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 3,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_43B08EAE-95E9-4FA0-B4EB-4C6B5A894FA5",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 4,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_B8B561C2-51C6-4C6D-A4CD-542B889309A1",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 5,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_C7B7BAC1-2DD6-411D-8DA9-FBDB8E18A749",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 6,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_6379DB1A-9533-436D-94C6-3E60C7AC2DC6",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 7,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_35F0DC85-5EAB-495C-BD6D-8A3A754F6BBE",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 8,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_2BC54CBD-1C20-44FA-8074-6C9097BEA673",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 9,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_60C2CA84-61E8-4660-B442-0A5A20531264",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 10,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_AF9C04B1-B8C2-46F1-B207-DFAABB467A36",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 11,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_CC6BC75F-E5B4-4D24-833C-C5BA037A5643",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 12,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_C48C00E4-C306-4B0D-8791-EBB836104B5F",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 13,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_9E89E9FF-7F74-4C8B-9B09-061443BF64D1",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 14,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_B7F89A5D-19EA-41A6-B74E-64B11565E23B",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 15,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_09C7D314-8C9C-4BBD-9996-77D5FC30A80C",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 16,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_B774081D-45B2-4FE7-80B4-39AC33FCB8EB",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 17,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_BE52887E-B12F-40D6-BBD8-BD92F202A3C0",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 18,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 19,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 20,
+        "volume": 0.7578947368421053
+       }
+      ],
+      "routing_graph": {
+       "complete": false,
+       "edges": [],
+       "nodes": [],
+       "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+       "projectEpoch": 0,
+       "provenance": [
+        "axMixerStrip"
+       ]
+      }
+     },
+     "gain_seen_at_response_slot": true,
+     "edit_menu": "編輯",
+     "undo_exit": 0,
+     "undo_stderr": "",
+     "mixer_after_undo": {
+      "cache_age_sec": 0.0010780096054077148,
+      "data_source": "ax_poll",
+      "fetched_at": "2026-09-26T04:59:22.327Z",
+      "ax_occluded": false,
+      "mcu_connected": true,
+      "mcu_registered": true,
+      "mcu_last_feedback_age_ms": 2589,
+      "registered": true,
+      "strips": [
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_902782DA-3B53-4161-8F47-4E75B927692A",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "鼓機設計者"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 0,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "input": "輸入 1",
+        "mixer_strip_ref": "mix_F893C0C8-C4F2-4C35-9DC6-C7C739DFFA46",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 1,
+        "volume": 0.7657894736842106
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_81F4ABC0-9A98-4476-94A1-D0486BBC837F",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 2,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_7B6B15AE-091C-42D3-8696-FA16B53682AA",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 3,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_43B08EAE-95E9-4FA0-B4EB-4C6B5A894FA5",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 4,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_B8B561C2-51C6-4C6D-A4CD-542B889309A1",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 5,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_C7B7BAC1-2DD6-411D-8DA9-FBDB8E18A749",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 6,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_6379DB1A-9533-436D-94C6-3E60C7AC2DC6",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 7,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_35F0DC85-5EAB-495C-BD6D-8A3A754F6BBE",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 8,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_2BC54CBD-1C20-44FA-8074-6C9097BEA673",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 9,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_60C2CA84-61E8-4660-B442-0A5A20531264",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 10,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_AF9C04B1-B8C2-46F1-B207-DFAABB467A36",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 11,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_CC6BC75F-E5B4-4D24-833C-C5BA037A5643",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 12,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_C48C00E4-C306-4B0D-8791-EBB836104B5F",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 13,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_9E89E9FF-7F74-4C8B-9B09-061443BF64D1",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 14,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_B7F89A5D-19EA-41A6-B74E-64B11565E23B",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 15,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_09C7D314-8C9C-4BBD-9996-77D5FC30A80C",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 16,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_B774081D-45B2-4FE7-80B4-39AC33FCB8EB",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 17,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_BE52887E-B12F-40D6-BBD8-BD92F202A3C0",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 18,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 19,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 20,
+        "volume": 0.7578947368421053
+       }
+      ],
+      "routing_graph": {
+       "complete": false,
+       "edges": [],
+       "nodes": [],
+       "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+       "projectEpoch": 0,
+       "provenance": [
+        "axMixerStrip"
+       ]
+      }
+     },
+     "verified": true,
+     "undo_verified": true,
+     "inserted": true
+    },
+    "control": {
+     "mixer_before": {
+      "cache_age_sec": 0.0022699832916259766,
+      "data_source": "ax_poll",
+      "fetched_at": "2026-09-26T04:59:26.220Z",
+      "ax_occluded": false,
+      "mcu_connected": false,
+      "mcu_registered": false,
+      "mcu_last_feedback_age_ms": null,
+      "registered": false,
+      "strips": [
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_93CADC58-984C-4BA6-A681-9B0DF4BE2A44",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "鼓機設計者"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 0,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "input": "輸入 1",
+        "mixer_strip_ref": "mix_A4906579-830C-4080-8575-8A7BAB8B23D2",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 1,
+        "volume": 0.7657894736842106
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_411DE883-3E92-43EF-9119-71483BB388C6",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 2,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_C4AB1CE2-C538-4FED-A0DD-80B9941DE122",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 3,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_01746445-92BD-4EF5-AA33-A2B71E4FC250",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 4,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_20516370-646F-4A9C-B5F4-4367546166C3",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 5,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_C138DED9-EED6-487C-9919-E6629B479029",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 6,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_D456A742-43AA-48EC-8147-16DB1F86721B",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 7,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_B766B75E-80F8-425B-914B-6400B2C35D13",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 8,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_722D736D-7F90-4157-BE27-6ADF88C0FEE0",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 9,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_29316804-27E1-4594-B742-94222F97FED9",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 10,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_344E5745-7765-4F2F-89C6-F9A499E5FB88",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 11,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_DCB7656E-E85B-4F8D-B667-1FAD70197982",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 12,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_85C62271-3AD2-4AA8-A86D-AE758C6FDBE1",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 13,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_9B1482CE-22A7-48DD-8BDB-6262E11664F3",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 14,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_F9234B16-D79F-497B-90D6-558870F968DF",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 15,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_35F27297-6EF9-430A-BAD9-87054DC1971A",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 16,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_9F03AF29-F6CF-4A2E-8B7E-37DA25F1F45F",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 17,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_426E6F06-71BB-40B8-8D5C-8E83CB89256B",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 18,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 19,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 20,
+        "volume": 0.7578947368421053
+       }
+      ],
+      "routing_graph": {
+       "complete": false,
+       "edges": [],
+       "nodes": [],
+       "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+       "projectEpoch": 0,
+       "provenance": [
+        "axMixerStrip"
+       ]
+      }
+     },
+     "mixer_before_fresh": true,
+     "free_slot_zero_tracks": [
+      1,
+      19,
+      20
+     ],
+     "attempts": [
+      {
+       "track": 1,
+       "mixer_before": {
+        "cache_age_sec": 0.0010219812393188477,
+        "data_source": "ax_poll",
+        "fetched_at": "2026-09-26T04:59:28.120Z",
+        "ax_occluded": false,
+        "mcu_connected": false,
+        "mcu_registered": false,
+        "mcu_last_feedback_age_ms": null,
+        "registered": false,
+        "strips": [
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_93CADC58-984C-4BA6-A681-9B0DF4BE2A44",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "鼓機設計者"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 0,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "input": "輸入 1",
+          "mixer_strip_ref": "mix_A4906579-830C-4080-8575-8A7BAB8B23D2",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 1,
+          "volume": 0.7657894736842106
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_411DE883-3E92-43EF-9119-71483BB388C6",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 2,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_C4AB1CE2-C538-4FED-A0DD-80B9941DE122",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 3,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_01746445-92BD-4EF5-AA33-A2B71E4FC250",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 4,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_20516370-646F-4A9C-B5F4-4367546166C3",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 5,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_C138DED9-EED6-487C-9919-E6629B479029",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 6,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_D456A742-43AA-48EC-8147-16DB1F86721B",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 7,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_B766B75E-80F8-425B-914B-6400B2C35D13",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 8,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_722D736D-7F90-4157-BE27-6ADF88C0FEE0",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 9,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_29316804-27E1-4594-B742-94222F97FED9",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 10,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_344E5745-7765-4F2F-89C6-F9A499E5FB88",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 11,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_DCB7656E-E85B-4F8D-B667-1FAD70197982",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 12,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_85C62271-3AD2-4AA8-A86D-AE758C6FDBE1",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 13,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_9B1482CE-22A7-48DD-8BDB-6262E11664F3",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 14,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_F9234B16-D79F-497B-90D6-558870F968DF",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 15,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_35F27297-6EF9-430A-BAD9-87054DC1971A",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 16,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_9F03AF29-F6CF-4A2E-8B7E-37DA25F1F45F",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 17,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_426E6F06-71BB-40B8-8D5C-8E83CB89256B",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 18,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 19,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 20,
+          "volume": 0.7578947368421053
+         }
+        ],
+        "routing_graph": {
+         "complete": false,
+         "edges": [],
+         "nodes": [],
+         "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+         "projectEpoch": 0,
+         "provenance": [
+          "axMixerStrip"
+         ]
+        }
+       },
+       "configuration": "單聲道",
+       "refused_first": [],
+       "menus_left_open": {
+        "open_before_escape": [
+         {
+          "layer": 101,
+          "bounds": {
+           "X": 736,
+           "Height": 571,
+           "Y": 503,
+           "Width": 230
+          }
+         }
+        ],
+        "open_after_escape": []
+       },
+       "response": {
+        "error": "ax_write_failed",
+        "hint": "the plug-in menu never opened: the slot was pressed and no menu carrying the audio plug-in library was found",
+        "menu_failure": "root_menu_not_found",
+        "menu_leaf_offered": [],
+        "menu_paths_tried": [
+         "Utility > Gain > Stereo",
+         "Utility > Gain > 스테레오",
+         "Utility > Gain > ステレオ",
+         "Utility > Gain > Estéreo",
+         "Utility > Gain > Stéréo",
+         "Utility > Gain > 立体声",
+         "Utility > Gain > 立體聲"
+        ],
+        "plugin_name": "Gain",
+        "requested_configuration": "單聲道",
+        "slot": 0,
+        "state": "C",
+        "success": false,
+        "track": 1
+       },
+       "response_slot": 0,
+       "mixer_after": {
+        "cache_age_sec": 0.0010780096054077148,
+        "data_source": "ax_poll",
+        "fetched_at": "2026-09-26T04:59:33.443Z",
+        "ax_occluded": false,
+        "mcu_connected": false,
+        "mcu_registered": false,
+        "mcu_last_feedback_age_ms": null,
+        "registered": false,
+        "strips": [
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_93CADC58-984C-4BA6-A681-9B0DF4BE2A44",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "鼓機設計者"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 0,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "input": "輸入 1",
+          "mixer_strip_ref": "mix_A4906579-830C-4080-8575-8A7BAB8B23D2",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 1,
+          "volume": 0.7657894736842106
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_411DE883-3E92-43EF-9119-71483BB388C6",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 2,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_C4AB1CE2-C538-4FED-A0DD-80B9941DE122",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 3,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_01746445-92BD-4EF5-AA33-A2B71E4FC250",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 4,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_20516370-646F-4A9C-B5F4-4367546166C3",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 5,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_C138DED9-EED6-487C-9919-E6629B479029",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 6,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_D456A742-43AA-48EC-8147-16DB1F86721B",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 7,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_B766B75E-80F8-425B-914B-6400B2C35D13",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 8,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_722D736D-7F90-4157-BE27-6ADF88C0FEE0",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 9,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_29316804-27E1-4594-B742-94222F97FED9",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "E-Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 10,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_344E5745-7765-4F2F-89C6-F9A499E5FB88",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 11,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_DCB7656E-E85B-4F8D-B667-1FAD70197982",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 12,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_85C62271-3AD2-4AA8-A86D-AE758C6FDBE1",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 13,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_9B1482CE-22A7-48DD-8BDB-6262E11664F3",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 14,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_F9234B16-D79F-497B-90D6-558870F968DF",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 15,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_35F27297-6EF9-430A-BAD9-87054DC1971A",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 16,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_9F03AF29-F6CF-4A2E-8B7E-37DA25F1F45F",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 17,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "mixer_strip_ref": "mix_426E6F06-71BB-40B8-8D5C-8E83CB89256B",
+          "output": "立體聲輸出",
+          "pan": 0,
+          "plugins": [
+           {
+            "index": 0,
+            "isBypassed": false,
+            "name": "ChromaVerb"
+           },
+           {
+            "index": 1,
+            "isBypassed": false,
+            "name": "Compressor"
+           },
+           {
+            "index": 2,
+            "isBypassed": false,
+            "name": "Channel EQ"
+           },
+           {
+            "index": 3,
+            "isBypassed": false,
+            "name": "Piano"
+           }
+          ],
+          "plugins_source": "ax",
+          "trackIndex": 18,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 19,
+          "volume": 0.7578947368421053
+         },
+         {
+          "eqEnabled": false,
+          "pan": 0,
+          "plugins": [],
+          "plugins_source": "ax",
+          "trackIndex": 20,
+          "volume": 0.7578947368421053
+         }
+        ],
+        "routing_graph": {
+         "complete": false,
+         "edges": [],
+         "nodes": [],
+         "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+         "projectEpoch": 0,
+         "provenance": [
+          "axMixerStrip"
+         ]
+        }
+       },
+       "gain_seen_at_response_slot": false,
+       "undo_verified": null,
+       "inserted": false
+      }
+     ],
+     "track": 1,
+     "configuration": "單聲道",
+     "refused_first": [],
+     "menus_left_open": {
+      "open_before_escape": [
+       {
+        "layer": 101,
+        "bounds": {
+         "X": 736,
+         "Height": 571,
+         "Y": 503,
+         "Width": 230
+        }
+       }
+      ],
+      "open_after_escape": []
+     },
+     "response": {
+      "error": "ax_write_failed",
+      "hint": "the plug-in menu never opened: the slot was pressed and no menu carrying the audio plug-in library was found",
+      "menu_failure": "root_menu_not_found",
+      "menu_leaf_offered": [],
+      "menu_paths_tried": [
+       "Utility > Gain > Stereo",
+       "Utility > Gain > 스테레오",
+       "Utility > Gain > ステレオ",
+       "Utility > Gain > Estéreo",
+       "Utility > Gain > Stéréo",
+       "Utility > Gain > 立体声",
+       "Utility > Gain > 立體聲"
+      ],
+      "plugin_name": "Gain",
+      "requested_configuration": "單聲道",
+      "slot": 0,
+      "state": "C",
+      "success": false,
+      "track": 1
+     },
+     "response_slot": 0,
+     "mixer_after": {
+      "cache_age_sec": 0.0010780096054077148,
+      "data_source": "ax_poll",
+      "fetched_at": "2026-09-26T04:59:33.443Z",
+      "ax_occluded": false,
+      "mcu_connected": false,
+      "mcu_registered": false,
+      "mcu_last_feedback_age_ms": null,
+      "registered": false,
+      "strips": [
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_93CADC58-984C-4BA6-A681-9B0DF4BE2A44",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "鼓機設計者"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 0,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "input": "輸入 1",
+        "mixer_strip_ref": "mix_A4906579-830C-4080-8575-8A7BAB8B23D2",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 1,
+        "volume": 0.7657894736842106
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_411DE883-3E92-43EF-9119-71483BB388C6",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 2,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_C4AB1CE2-C538-4FED-A0DD-80B9941DE122",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 3,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_01746445-92BD-4EF5-AA33-A2B71E4FC250",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 4,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_20516370-646F-4A9C-B5F4-4367546166C3",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 5,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_C138DED9-EED6-487C-9919-E6629B479029",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 6,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_D456A742-43AA-48EC-8147-16DB1F86721B",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 7,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_B766B75E-80F8-425B-914B-6400B2C35D13",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 8,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_722D736D-7F90-4157-BE27-6ADF88C0FEE0",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 9,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_29316804-27E1-4594-B742-94222F97FED9",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "E-Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 10,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_344E5745-7765-4F2F-89C6-F9A499E5FB88",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 11,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_DCB7656E-E85B-4F8D-B667-1FAD70197982",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 12,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_85C62271-3AD2-4AA8-A86D-AE758C6FDBE1",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 13,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_9B1482CE-22A7-48DD-8BDB-6262E11664F3",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 14,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_F9234B16-D79F-497B-90D6-558870F968DF",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 15,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_35F27297-6EF9-430A-BAD9-87054DC1971A",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 16,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_9F03AF29-F6CF-4A2E-8B7E-37DA25F1F45F",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 17,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "mixer_strip_ref": "mix_426E6F06-71BB-40B8-8D5C-8E83CB89256B",
+        "output": "立體聲輸出",
+        "pan": 0,
+        "plugins": [
+         {
+          "index": 0,
+          "isBypassed": false,
+          "name": "ChromaVerb"
+         },
+         {
+          "index": 1,
+          "isBypassed": false,
+          "name": "Compressor"
+         },
+         {
+          "index": 2,
+          "isBypassed": false,
+          "name": "Channel EQ"
+         },
+         {
+          "index": 3,
+          "isBypassed": false,
+          "name": "Piano"
+         }
+        ],
+        "plugins_source": "ax",
+        "trackIndex": 18,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 19,
+        "volume": 0.7578947368421053
+       },
+       {
+        "eqEnabled": false,
+        "pan": 0,
+        "plugins": [],
+        "plugins_source": "ax",
+        "trackIndex": 20,
+        "volume": 0.7578947368421053
+       }
+      ],
+      "routing_graph": {
+       "complete": false,
+       "edges": [],
+       "nodes": [],
+       "partialReason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+       "projectEpoch": 0,
+       "provenance": [
+        "axMixerStrip"
+       ]
+      }
+     },
+     "gain_seen_at_response_slot": false,
+     "undo_verified": null,
+     "inserted": false
+    },
+    "control_zh_TW_outcome": "control did not insert Gain; full response recorded below"
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "993/zh_TW/candidate-insert-and-undo",
+   "passed": true,
+   "expected": "the candidate inserts Gain at its reported slot and Logic's Edit menu undo restores the original strip",
+   "observed": {
+    "language": {
+     "switched": true,
+     "arrange_window": "lpm-locale-campaign - 音軌",
+     "language_setting": [
+      "zh-TW"
+     ],
+     "window_names": [
+      "lpm-locale-campaign - 標記列表",
+      "lpm-locale-campaign - 音軌"
+     ]
+    },
+    "candidate_inserted": true,
+    "candidate_undo_verified": true,
+    "all_undos_verified": true
+   },
+   "mutation": "remove the zh_TW flat Audio Units prefix recognition: Gain cannot reach State A there, even though the other nine menu roots can be walked",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "observation",
+   "tag": "993/korean-restoration",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - 트랙",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - 마커 목록",
+     "lpm-locale-campaign - 트랙"
+    ],
+    "language_setting_after_restore": [
+     "ko"
+    ],
+    "window_names_after_restore": [
+     "lpm-locale-campaign - 마커 목록",
+     "lpm-locale-campaign - 트랙"
+    ]
+   }
+  },
+  {
+   "kind": "restoration",
+   "tag": "993/Logic-language-restored-to-Korean",
+   "restored": true,
+   "detail": "{'switched': True, 'arrange_window': 'lpm-locale-campaign - 트랙', 'language_setting': ['ko'], 'window_names': ['lpm-locale-campaign - 마커 목록', 'lpm-locale-campaign - 트랙'], 'language_setting_after_restore': ['ko'], 'window_names_after_restore': ['lpm-locale-campaign - 마커 목록', 'lpm-locale-campaign - 트랙']}"
+  },
+  {
+   "kind": "check",
+   "tag": "993/every-requested-language-inserts-and-restores-Gain",
+   "passed": true,
+   "expected": "every requested language has candidate Gain in the mixer's response-named slot and its original strip after Edit > Undo",
+   "observed": {
+    "requested": [
+     "zh_TW"
+    ],
+    "completed": [
+     "zh_TW"
+    ],
+    "all_passed": true
+   },
+   "mutation": "restore rootMenuNotFound for a zh_TW root holding only flat Audio Units: manufacturer rows; the zh_TW mixer never reads Gain back",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "environment",
+   "screen_locked": false
+  }
+ ]
+}

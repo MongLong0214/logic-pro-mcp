@@ -81,10 +81,10 @@
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
     "index/quickhelp.tsv": "0568c660242037aca4b2205e9049e08d4049f18b434517badf7e94b88d435630",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/strings.tsv": "bc5ca31723a2455ef5334e36026b2f8432f6dd7184a226f01c39d9676dc068eb",
+    "index/strings.tsv": "8a52d66b37d0a43b6fbe137bc5dea21ddb492b13143749f740db51209d91ef84",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
-    "ledger/casefold.tsv": "c73b776c3e9b31a7cfcf15d9476c4434a3b7ae26d2c574b0d95b5031d60a2e1f",
-    "ledger/presence.tsv": "e72b42f3a002a6d4ec3a14fa9c094ae8dd4ef5c283ed490b9c7784e0e729fe00"
+    "ledger/casefold.tsv": "b6644feb227e8ebad0adb582f0778d9723352c28f2355b780f1a2bb173fd3ea7",
+    "ledger/presence.tsv": "0f329c0c4a4e08fee67e4079f3b164997fa05a72eceeca56400974b39cd85f31"
   },
   "extractor_version": 2,
   "ledger_casefold_entries": {
@@ -121,16 +121,16 @@
     },
     "strings": {
       "-": 2,
-      "de": 150,
-      "en": 175,
-      "es": 151,
-      "fr": 145,
-      "it": 149,
-      "ja": 162,
-      "ko": 169,
-      "pt": 154,
-      "zh_CN": 133,
-      "zh_TW": 133
+      "de": 152,
+      "en": 176,
+      "es": 153,
+      "fr": 146,
+      "it": 150,
+      "ja": 163,
+      "ko": 170,
+      "pt": 155,
+      "zh_CN": 134,
+      "zh_TW": 134
     }
   },
   "ledger_presence_entries": {
@@ -154,16 +154,16 @@
     },
     "strings": {
       "-": 3,
-      "de": 135,
-      "en": 154,
-      "es": 140,
-      "fr": 134,
-      "it": 139,
-      "ja": 146,
-      "ko": 166,
-      "pt": 143,
-      "zh_CN": 132,
-      "zh_TW": 128
+      "de": 137,
+      "en": 156,
+      "es": 143,
+      "fr": 136,
+      "it": 141,
+      "ja": 148,
+      "ko": 168,
+      "pt": 145,
+      "zh_CN": 133,
+      "zh_TW": 129
     }
   },
   "logic": {
@@ -531,7 +531,7 @@
         "zh_CN": 1.1548866e-05,
         "zh_TW": 1.087226e-05
       },
-      "cited_rows": 2966,
+      "cited_rows": 3006,
       "cited_values": 2,
       "corpus_digest": "830a5131378ede72bb0a20211985166f367b7a35a30a85d875c9c25ff0b89e1a",
       "entries": 605190,
