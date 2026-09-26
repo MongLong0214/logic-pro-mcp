@@ -1,10 +1,10 @@
 {
   "name": "live_862_bank_answers_from_the_redrawn_upper_row",
-  "head": "de0407d39aeb190ba924270698650cb6457b9011",
+  "head": "345bb8f5b7eb23ffe8c33c8665dc363c2d7d826b",
   "artifact": {
-    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin862/LogicProMCP-de0407d39aeb190ba924270698650cb6457b9011",
-    "sha256": "1fb104e91860ccc81426874b68f90155b4fc90eac7ce09a5f849d60dacea5e02",
-    "built_from": "de0407d39aeb190ba924270698650cb6457b9011",
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin862/LogicProMCP-345bb8f5b7eb23ffe8c33c8665dc363c2d7d826b",
+    "sha256": "0952e511d9c1de21f72e6f7a1f712f2a527dc21469c9b1cf5b40267f5bf18c80",
+    "built_from": "345bb8f5b7eb23ffe8c33c8665dc363c2d7d826b",
     "worktree_clean": true,
     "built_from_is_measured": false,
     "artifact_older_than_sources": false
@@ -109,7 +109,7 @@
         "channel": "MCU",
         "direction": "left",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 8981,
+        "mcu_last_feedback_age_ms": 9180,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "readback_source": "mcu_lcd_upper_row",
@@ -120,7 +120,7 @@
           "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
         ],
         "success": true,
-        "trace_id": "lpmcp_54166ADE-9B46-4592-A4DF-C70C368F8D5E",
+        "trace_id": "lpmcp_BF38A0A9-4228-436D-BA63-361298898630",
         "upper_row_writes_observed": 0,
         "verified": false,
         "window_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
@@ -155,7 +155,7 @@
         "channel": "MCU",
         "direction": "left",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 10055,
+        "mcu_last_feedback_age_ms": 10299,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "readback_source": "mcu_lcd_upper_row",
@@ -166,7 +166,7 @@
           "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
         ],
         "success": true,
-        "trace_id": "lpmcp_AA096CA1-4249-4225-AB87-6FEF5F43FCF3",
+        "trace_id": "lpmcp_70D9A2F8-9D76-47AF-9391-B360B8F3F011",
         "upper_row_writes_observed": 0,
         "verified": false,
         "window_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
@@ -201,7 +201,7 @@
         "channel": "MCU",
         "direction": "right",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 48,
+        "mcu_last_feedback_age_ms": 32,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "state": "A",
@@ -219,110 +219,12 @@
           "StdGrn"
         ],
         "success": true,
-        "trace_id": "lpmcp_46F037DB-CBF3-44EE-9835-57D7C168A9C2",
+        "trace_id": "lpmcp_22E17CBC-3F17-46AF-8492-334128B50C1F",
         "upper_row_writes_observed": 2,
         "verified": true,
         "verify_source": "mcu_lcd_upper_row",
         "window_after": "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
         "window_before": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
-      }
-    },
-    {
-      "kind": "operation",
-      "tool": "logic://mcu/state",
-      "command": "resources/read",
-      "params": {},
-      "response": {
-        "state": null,
-        "success": null,
-        "error": null,
-        "hint": null,
-        "verified": null,
-        "write_attempted": null
-      }
-    },
-    {
-      "kind": "operation",
-      "tool": "logic://mcu/state",
-      "command": "resources/read",
-      "params": {},
-      "response": {
-        "state": null,
-        "success": null,
-        "error": null,
-        "hint": null,
-        "verified": null,
-        "write_attempted": null
-      }
-    },
-    {
-      "kind": "operation",
-      "tool": "logic://mcu/state",
-      "command": "resources/read",
-      "params": {},
-      "response": {
-        "state": null,
-        "success": null,
-        "error": null,
-        "hint": null,
-        "verified": null,
-        "write_attempted": null
-      }
-    },
-    {
-      "kind": "operation",
-      "tool": "logic://mcu/state",
-      "command": "resources/read",
-      "params": {},
-      "response": {
-        "state": null,
-        "success": null,
-        "error": null,
-        "hint": null,
-        "verified": null,
-        "write_attempted": null
-      }
-    },
-    {
-      "kind": "operation",
-      "tool": "logic://mcu/state",
-      "command": "resources/read",
-      "params": {},
-      "response": {
-        "state": null,
-        "success": null,
-        "error": null,
-        "hint": null,
-        "verified": null,
-        "write_attempted": null
-      }
-    },
-    {
-      "kind": "operation",
-      "tool": "logic://mcu/state",
-      "command": "resources/read",
-      "params": {},
-      "response": {
-        "state": null,
-        "success": null,
-        "error": null,
-        "hint": null,
-        "verified": null,
-        "write_attempted": null
-      }
-    },
-    {
-      "kind": "operation",
-      "tool": "logic://mcu/state",
-      "command": "resources/read",
-      "params": {},
-      "response": {
-        "state": null,
-        "success": null,
-        "error": null,
-        "hint": null,
-        "verified": null,
-        "write_attempted": null
       }
     },
     {
@@ -1154,7 +1056,7 @@
         "channel": "MCU",
         "direction": "right",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 54,
+        "mcu_last_feedback_age_ms": 40,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "state": "A",
@@ -1172,7 +1074,7 @@
           "Master"
         ],
         "success": true,
-        "trace_id": "lpmcp_0B197DB1-0587-4920-B985-201B1988222C",
+        "trace_id": "lpmcp_4625A7A3-CEE3-45DE-97C0-7622EA4563BE",
         "upper_row_writes_observed": 2,
         "verified": true,
         "verify_source": "mcu_lcd_upper_row",
@@ -1208,7 +1110,7 @@
         "channel": "MCU",
         "direction": "left",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 54,
+        "mcu_last_feedback_age_ms": 48,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "state": "A",
@@ -1226,7 +1128,7 @@
           "StdGrn"
         ],
         "success": true,
-        "trace_id": "lpmcp_8B578F70-8E35-4AEC-8F60-EA99E4865F9E",
+        "trace_id": "lpmcp_4FDC2CC5-750B-4B0F-B456-95C7BAF785E2",
         "upper_row_writes_observed": 2,
         "verified": true,
         "verify_source": "mcu_lcd_upper_row",
@@ -1262,7 +1164,7 @@
         "channel": "MCU",
         "direction": "left",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 48,
+        "mcu_last_feedback_age_ms": 56,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "state": "A",
@@ -1280,7 +1182,7 @@
           "DelCls"
         ],
         "success": true,
-        "trace_id": "lpmcp_644A66DE-1042-4B2E-A1C1-6A44B5DE8F98",
+        "trace_id": "lpmcp_605DA693-F8C9-49D9-BE77-396B644CB6A4",
         "upper_row_writes_observed": 2,
         "verified": true,
         "verify_source": "mcu_lcd_upper_row",
@@ -1317,7 +1219,7 @@
         "channel": "MCU",
         "direction": "right",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 33,
+        "mcu_last_feedback_age_ms": 51,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "state": "A",
@@ -1336,7 +1238,7 @@
           "Master"
         ],
         "success": true,
-        "trace_id": "lpmcp_EE80F648-D7CC-498B-A018-33EBC6DDEA93",
+        "trace_id": "lpmcp_05F09C24-2308-40ED-89BD-E7436A471EC9",
         "upper_row_writes_observed": 4,
         "verified": true,
         "verify_source": "mcu_lcd_upper_row",
@@ -1455,7 +1357,7 @@
         "channel": "MCU",
         "direction": "left",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 30,
+        "mcu_last_feedback_age_ms": 41,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "state": "A",
@@ -1473,7 +1375,7 @@
           "StdGrn"
         ],
         "success": true,
-        "trace_id": "lpmcp_BAC865D7-CD3C-401B-9256-08F60D0FA2FD",
+        "trace_id": "lpmcp_1C72F4BA-F8D0-4A8E-A4DA-05F06294E4E6",
         "upper_row_writes_observed": 2,
         "verified": true,
         "verify_source": "mcu_lcd_upper_row",
@@ -1509,7 +1411,7 @@
         "channel": "MCU",
         "direction": "left",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 49,
+        "mcu_last_feedback_age_ms": 41,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "state": "A",
@@ -1527,7 +1429,7 @@
           "DelCls"
         ],
         "success": true,
-        "trace_id": "lpmcp_F6495D61-56D1-4A36-A5C5-F75ECEC2D0D7",
+        "trace_id": "lpmcp_0330787B-7746-45A1-BBC8-D65DC20D1E38",
         "upper_row_writes_observed": 2,
         "verified": true,
         "verify_source": "mcu_lcd_upper_row",
@@ -1563,7 +1465,7 @@
         "channel": "MCU",
         "direction": "left",
         "mcu_connected": true,
-        "mcu_last_feedback_age_ms": 90,
+        "mcu_last_feedback_age_ms": 173,
         "mcu_registered": true,
         "operation": "mixer.bank",
         "readback_source": "mcu_lcd_upper_row",
@@ -1574,7 +1476,7 @@
           "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
         ],
         "success": true,
-        "trace_id": "lpmcp_2D528C8F-4322-4D52-89FF-2A0AF628247D",
+        "trace_id": "lpmcp_CBA880C7-6945-41F1-A443-D44011331FA2",
         "upper_row_writes_observed": 0,
         "verified": false,
         "window_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",

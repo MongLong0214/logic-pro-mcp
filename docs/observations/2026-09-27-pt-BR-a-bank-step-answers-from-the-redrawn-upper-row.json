@@ -29,10 +29,10 @@
   "evidence": [
     "evidence/2026-09-27-pt-BR-mcu-bank-862.json"
   ],
-  "method": "The release binary at de0407d39aeb190ba924270698650cb6457b9011 was started against the open project with the Mackie Control surface already bound. The harness walked left until a press was not State A, pressed left once more at bank 0, then right, right, left, left, and right with count 2, reading each reply and polling the MCU upper row every 20 ms for 1.5 s after the first right. It read logic://tracks for the track names, and walked left again at the end until a press was not State A. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
+  "method": "The release binary at 345bb8f5b7eb23ffe8c33c8665dc363c2d7d826b was started against the open project with the Mackie Control surface already bound. The harness walked left until a press was not State A, pressed left once more at bank 0, then right, right, left, left, and right with count 2, reading each reply and polling the MCU upper row every 20 ms for 1.5 s after the first right. It read logic://tracks for the track names, and walked left again at the end until a press was not State A. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
   "observations": [
     {
-      "binary": "de0407d39aeb190ba924270698650cb6457b9011",
+      "binary": "345bb8f5b7eb23ffe8c33c8665dc363c2d7d826b",
       "replies": {
         "left-at-bank-0": {
           "state": "B",
@@ -120,7 +120,8 @@
   "limits": [
     "State A says every step's press produced its own redraw to a different row. It does not say which bank is showing: six-character names are not an index.",
     "One project (lpm-locale-campaign, 19 tracks), one run, one host, walking only between bank 0 and bank 2. The last bank is clamped by Logic, so a step at the end of the mixer redraws unchanged, like a press Logic ignored.",
-    "The pre-upper-row State C refusal was not exercisable: the surface was already bound and the row arrived during start-up.",
+    "Neither cold-start answer was exercisable: the surface was already bound and the row arrived during start-up. With no MCU feedback the router answers channels_exhausted; with feedback but no upper row the handler answers readback_unavailable; both rest on tests.",
+    "No strip write was sent while a walk was in progress, so this run does not exercise the bank exclusion that strip writes now share with the walk; that ordering rests on a test that holds a walk's poll open.",
     "The LCD cells are compared with track names by abbreviation (first letter, then letters in order), which is how Logic 12.3 shortens a name to six characters in these runs; it is not an identity join.",
     "The two control binaries were run only in Korean; in this language there is only the reading of the fixed binary."
   ],
