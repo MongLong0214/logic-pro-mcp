@@ -102,6 +102,135 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
         return nil
     }
 
+    /// Compare the observed part of the resource, not the whole envelope. Refresh metadata and
+    /// unrelated rows can change between reads; each recipe below checks the field it restored.
+    var restoreMatchesPreState: Bool {
+        guard let operation = OperationID(rawValue: operationID),
+              let before = Self.envelope(preState),
+              let after = Self.envelope(restoreReadback) else { return false }
+
+        if let field = QualificationTransport.valueRestoreReadbackField[operation] {
+            guard let old = Self.track(before, index: 0),
+                  let restored = Self.track(after, index: 0),
+                  let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
+                  let restoredRef = restored["track_ref"] as? String,
+                  let oldValue = old[field] as? Double,
+                  let restoredValue = restored[field] as? Double else { return false }
+            return oldRef == restoredRef && oldValue == restoredValue
+        }
+        if let field = QualificationTransport.booleanToggleReadbackField[operation] {
+            guard let old = Self.track(before, index: 0)?[field] as? Bool,
+                  let restored = Self.track(after, index: 0)?[field] as? Bool else { return false }
+            return old == restored
+        }
+        if operation == .tracksRename || QualificationTransport.historyRestoreDirection[operation] != nil {
+            guard let old = Self.track(before, index: 0)?["name"] as? String,
+                  let restored = Self.track(after, index: 0)?["name"] as? String else { return false }
+            return old == restored
+        }
+        if operation == .tracksSelect {
+            guard let oldRows = before["data"] as? [[String: Any]],
+                  let restoredRows = after["data"] as? [[String: Any]],
+                  oldRows.count > 1, restoredRows.count > 1,
+                  let firstWasSelected = oldRows[0]["isSelected"] as? Bool
+            else { return false }
+            let original = firstWasSelected ? 0 : 1
+            let oldSelection = oldRows.enumerated().compactMap {
+                ($0.element["isSelected"] as? Bool) == true ? $0.offset : nil
+            }
+            let restoredSelection = restoredRows.enumerated().compactMap {
+                ($0.element["isSelected"] as? Bool) == true ? $0.offset : nil
+            }
+            return oldSelection.contains(original) && restoredSelection == oldSelection
+        }
+        if QualificationTransport.transportExpectedPlaying[operation] != nil {
+            guard let old = Self.transportState(before)?["isPlaying"] as? Bool,
+                  let restored = Self.transportState(after)?["isPlaying"] as? Bool else { return false }
+            return old == restored
+        }
+        if let field = QualificationTransport.parameterlessToggleField[operation] {
+            guard let old = Self.transportState(before)?[field] as? Bool,
+                  let restored = Self.transportState(after)?[field] as? Bool else { return false }
+            return old == restored
+        }
+        if operation == .transportSetTempo {
+            guard let old = Self.transportState(before)?["tempo"] as? Double,
+                  let restored = Self.transportState(after)?["tempo"] as? Double else { return false }
+            return old == restored
+        }
+        if QualificationTransport.playheadRestoreOperations.contains(operation)
+            || operation == .navigateGotoMarker {
+            guard let old = Self.bar(before), let restored = Self.bar(after) else { return false }
+            return old == restored
+        }
+        if operation == .navigateCreateMarker || QualificationTransport.markerStagedRestoreMode[operation] != nil {
+            guard let old = Self.markerNames(before),
+                  let restored = Self.markerNames(after) else { return false }
+            return old == restored
+        }
+        // Phase C creates are disabled in the live sweep. Their recorded restore is an inventory
+        // comparison; staged deletion replaces its own track, so its reference must change.
+        if QualificationTransport.trackCreateRestoreOperations.contains(operation) {
+            guard let old = Self.trackRefs(before), let restored = Self.trackRefs(after) else { return false }
+            return before["complete"] as? Bool == after["complete"] as? Bool
+                && Set(old) == Set(restored)
+        }
+        if operation == .tracksDelete {
+            guard let old = Self.trackRefs(before), let restored = Self.trackRefs(after) else { return false }
+            return before["complete"] as? Bool == after["complete"] as? Bool
+                && old.count == restored.count
+                && Set(old).intersection(restored).count == old.count - 1
+        }
+        return false
+    }
+
+    var verifiedCycleShape: Bool {
+        readingThatDidNotHappen == nil
+            && restoreMatchesPreState
+            && Self.writeResponse(mutation)
+            && Self.writeResponse(restore)
+    }
+
+    private static func envelope(_ raw: String) -> [String: Any]? {
+        guard let data = raw.data(using: .utf8) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    private static func track(_ envelope: [String: Any], index: Int) -> [String: Any]? {
+        guard let rows = envelope["data"] as? [[String: Any]], rows.indices.contains(index) else {
+            return nil
+        }
+        return rows[index]
+    }
+
+    private static func transportState(_ envelope: [String: Any]) -> [String: Any]? {
+        (envelope["data"] as? [String: Any])?["state"] as? [String: Any]
+    }
+
+    private static func bar(_ envelope: [String: Any]) -> Int? {
+        guard let position = transportState(envelope)?["position"] as? String,
+              let first = position.split(separator: ".").first else { return nil }
+        return Int(first)
+    }
+
+    private static func markerNames(_ envelope: [String: Any]) -> [String]? {
+        guard let rows = envelope["data"] as? [[String: Any]] else { return nil }
+        let names = rows.compactMap { $0["name"] as? String }
+        return names.count == rows.count ? names.sorted() : nil
+    }
+
+    private static func trackRefs(_ envelope: [String: Any]) -> [String]? {
+        guard let rows = envelope["data"] as? [[String: Any]] else { return nil }
+        let refs = rows.compactMap { $0["track_ref"] as? String }
+        return refs.count == rows.count ? refs : nil
+    }
+
+    private static func writeResponse(_ raw: String) -> Bool {
+        guard let response = envelope(raw) else { return false }
+        if let state = response["state"] as? String { return state == "A" || state == "B" }
+        return response["success"] as? Bool == true
+    }
+
     enum CodingKeys: String, CodingKey {
         case operationID = "operation_id"
         case preState = "pre_state"
@@ -209,9 +338,8 @@ struct QualificationOperationResult: Equatable, Sendable {
     let deadline: DeadlineClass
     let failureReason: String?
     /// ADR-001-c / #373 Phase B evidence: the verified write-and-restore cycle for a MUTATING
-    /// operation, or nil when no recipe ran. Non-nil means every step of that cycle held — see
-    /// `muteRestoreCycle`, which is the only constructor and refuses rather than returning a
-    /// record for a cycle that did not verify.
+    /// operation, or nil when no recipe ran. Each recipe refuses rather than returning a record
+    /// for a cycle whose own checks did not verify; `verifiedCycleShape` rechecks its recorded proof.
     let mutationRestore: QualificationMutationRestoreRecord?
     /// Why a Phase-B recipe that RAN produced no record. Nil when no recipe exists for the
     /// operation — the two are different facts and the deferral below says which.
@@ -309,10 +437,8 @@ struct QualificationOperationResult: Equatable, Sendable {
 
     /// The case's statement of this operation's write cycle (#984), or nil when no record exists.
     ///
-    /// `verified` is true when the restore was READ BACK and MATCHED the original, which takes two
-    /// facts: the record exists at all -- every recipe throws instead of building one when its
-    /// restore readback differs from the pre-state -- and none of its readings says it did not
-    /// happen. The second is the part a record's presence cannot supply. Not `status == .passed`,
+    /// `verified` is true when the restore was READ BACK and MATCHED the original under the
+    /// recipe's comparison rule. Not `status == .passed`,
     /// which is what `readback` uses: a cycle whose restore verified is still that when the
     /// operation's own readback was inadmissible, and the credit rule checks the status itself.
     var restore: QualificationRestoreEvidence? {
@@ -320,7 +446,7 @@ struct QualificationOperationResult: Equatable, Sendable {
               let digest = try? QualificationRunner.recordDigest(record) else { return nil }
         return QualificationRestoreEvidence(
             recordSHA256: digest,
-            verified: record.readingThatDidNotHappen == nil
+            verified: record.verifiedCycleShape
         )
     }
 
@@ -371,9 +497,10 @@ struct QualificationOperationResult: Equatable, Sendable {
             // operation's LATER readback and returns `.admissible` unconditionally for any policy
             // that is not `.readbackRequired` — `transport.toggle_cycle` and `transport.set_tempo`
             // among them. So the record's own readings are inspected here for whether a reading
-            // happened at all, which is a question freshness never asks.
+            // happened at all, which is a question freshness never asks. The recorded restore is
+            // compared with the pre-state under the recipe's observable as well.
             if let record = mutationRestore, readbackFreshness.isAdmissible {
-                return record.readingThatDidNotHappen == nil ? .passed : .notQualified
+                return record.verifiedCycleShape ? .passed : .notQualified
             }
             return .notQualified
         }

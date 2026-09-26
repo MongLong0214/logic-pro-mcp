@@ -22,14 +22,14 @@ struct Issue984VerifiedWriteCycleCreditTests {
     /// The three readings are whole resource envelopes, because `readingThatDidNotHappen` parses
     /// each one; `mutation` and `restore` are the values written.
     private static func record(
-        restoreReadback: String = #"{"source":"ax_live","data":[{"name":"before"}]}"#
+        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"before"}]}"#
     ) -> QualificationMutationRestoreRecord {
         QualificationMutationRestoreRecord(
             operationID: OperationID.tracksRename.rawValue,
-            preState: #"{"source":"ax_live","data":[{"name":"before"}]}"#,
-            mutation: "after",
-            readback: #"{"source":"ax_live","data":[{"name":"after"}]}"#,
-            restore: "before",
+            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"before"}]}"#,
+            mutation: #"{"state":"A","success":true}"#,
+            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"after"}]}"#,
+            restore: #"{"state":"A","success":true}"#,
             restoreReadback: restoreReadback
         )
     }
@@ -210,6 +210,36 @@ struct Issue984VerifiedWriteCycleCreditTests {
         if let restore = none.restore {
             Issue.record("a result with no record stated a restore: \(restore)")
         }
+    }
+
+    @Test func readableWrongRestoreNeverEarnsWriteCycleCredit() throws {
+        let cycle = try Self.result(record: Self.record(
+            restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"after"}]}"#))
+        let restore = try #require(cycle.restore)
+        #expect(!restore.verified)
+        #expect(cycle.status == .notQualified)
+        let operationCase = Self.qualificationCase(cycle)
+        #expect(!PromotionGate.operationIsLiveCredited(operationCase))
+        #expect(Self.readers(operationCase) == Self.notCredited)
+    }
+
+    @Test func valueCycleComparesTheTrackValueAndIdentity() {
+        func record(_ restored: String) -> QualificationMutationRestoreRecord {
+            QualificationMutationRestoreRecord(
+                operationID: OperationID.mixerSetVolume.rawValue,
+                preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","volume":0.4}]}"#,
+                mutation: #"{"state":"B","success":true}"#,
+                readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","volume":0.5}]}"#,
+                restore: #"{"state":"A","success":true}"#,
+                restoreReadback: restored
+            )
+        }
+        #expect(record(#"{"source":"ax_live","cache_age_sec":0,"data":[{"track_ref":"track-1","volume":0.4}]}"#)
+            .verifiedCycleShape)
+        #expect(!record(#"{"source":"ax_live","data":[{"track_ref":"track-1","volume":0.5}]}"#)
+            .verifiedCycleShape)
+        #expect(!record(#"{"source":"ax_live","data":[{"track_ref":"track-2","volume":0.4}]}"#)
+            .verifiedCycleShape)
     }
 
     /// Read credit is what it was: `.semanticReadback` does not consult `restore`.

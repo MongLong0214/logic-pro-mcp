@@ -1850,9 +1850,9 @@ package struct QualificationRunner: Sendable {
             guard let record = byOperation.removeValue(forKey: operationID) else {
                 return "mutation restore binding: no record for \(operationID)"
             }
-            guard record.readingThatDidNotHappen == nil else {
+            guard record.verifiedCycleShape else {
                 return "mutation restore binding: \(operationID) cites a record whose "
-                    + "\(record.readingThatDidNotHappen ?? "reading") did not happen"
+                    + "write cycle or restore did not verify"
             }
             guard (try? recordDigest(record)) == digest else {
                 return "mutation restore binding: \(operationID) cites a record that is not this one"
@@ -1977,13 +1977,7 @@ package struct QualificationRunner: Sendable {
             return false
         }
         return artifact.records.allSatisfy { record in
-            !record.operationID.isEmpty
-                && !record.preState.isEmpty
-                && !record.mutation.isEmpty
-                && record.preState != record.mutation
-                && record.mutation == record.readback
-                && record.preState == record.restore
-                && record.preState == record.restoreReadback
+            record.verifiedCycleShape
         }
     }
 
