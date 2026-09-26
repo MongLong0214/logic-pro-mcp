@@ -497,3 +497,31 @@ private func makePlayheadTransport(
 
     #expect(state.positionReadback == nil)
 }
+
+/// #1020: the poller reads `isArmed` from the control the arm write verifies against. It used to
+/// match the header by `trackRecordButton`, whose Spanish member `Grabar` is not inside Logic's
+/// Spanish `Activar grabación`, so a Spanish track read disarmed while `set_arm` verified its arm.
+///
+/// Mutation that turns the `armed: true` case red: read `armed` back through
+/// `extractTrackButtonState(from:prefix: "Record", ...)` with `"Record": trackRecordButton` in its
+/// keyword map, as before #1020. The input-monitoring checkbox sits beside the arm in the same
+/// header, lit, so a reader that takes any lit checkbox for the arm fails the `armed: false` case.
+@Test(arguments: [true, false])
+func testAXValueExtractorsReadTheSpanishArmFromTheRecordEnableCheckbox(armed: Bool) {
+    let builder = FakeAXRuntimeBuilder()
+    let header = builder.element(1)
+    let arm = builder.element(2)
+    let monitor = builder.element(3)
+    builder.setChildren(header, [arm, monitor])
+
+    builder.setAttribute(arm, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(arm, kAXDescriptionAttribute as String, "Activar grabación")
+    builder.setAttribute(arm, kAXValueAttribute as String, armed ? 1 : 0)
+    builder.setAttribute(monitor, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(monitor, kAXDescriptionAttribute as String, "Monitorización de entrada")
+    builder.setAttribute(monitor, kAXValueAttribute as String, 1)
+
+    let track = AXValueExtractors.extractTrackState(from: header, index: 0, runtime: builder.makeAXRuntime())
+
+    #expect(armed ? track.isArmed : !track.isArmed, "armed \(armed)")
+}

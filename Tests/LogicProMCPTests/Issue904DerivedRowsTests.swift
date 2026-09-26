@@ -173,7 +173,8 @@ struct Issue904DerivedRowsTests {
         // AXValueExtractors.extractTransportState: the tempo text field, Portuguese.
         #expect(AXLocalePolicy.tempoFieldLabel.containsAny(in: "campo de texto andamento"))
         #expect(!AXLocalePolicy.tempoFieldLabel.containsAny(in: "campo de texto posição"))
-        // AXValueExtractors.readHeaderControlState: the track-header record button, Spanish.
+        // trackRecordButton, Spanish. No production reader consults it since #1020; the arm is read from
+        // the record-enable checkbox (AXLogicProElements.trackArmControl).
         #expect(AXLocalePolicy.trackRecordButton.containsAny(in: "botón grabar de la pista"))
         #expect(!AXLocalePolicy.trackRecordButton.containsAny(in: "botón silenciar de la pista"))
         // AXLogicProElements.sliderText: volume and pan sliders, Simplified Chinese.

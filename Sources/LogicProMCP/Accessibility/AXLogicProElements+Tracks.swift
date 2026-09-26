@@ -611,20 +611,43 @@ extension AXLogicProElements {
         legacyTitle: String,
         runtime: Runtime = .production
     ) -> AXUIElement? {
+        findTrackToggleControl(in: header, labels: labels, legacyTitle: legacyTitle, ax: runtime.ax)
+    }
+
+    /// The same locator for a caller that already holds a header and only an AX runtime, which is
+    /// what the poller's `AXValueExtractors.extractTrackState` has.
+    static func findTrackToggleControl(
+        in header: AXUIElement,
+        labels: [String],
+        legacyTitle: String,
+        ax: AXHelpers.Runtime
+    ) -> AXUIElement? {
         let checkboxes = AXHelpers.findAllDescendants(
-            of: header, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime.ax
+            of: header, role: kAXCheckBoxRole, maxDepth: 4, runtime: ax
         )
-        let candidates = trackToggleCandidates(among: checkboxes, labels: labels, runtime: runtime.ax)
+        let candidates = trackToggleCandidates(among: checkboxes, labels: labels, runtime: ax)
         if let match = candidates.first {
             return match
         }
         // Legacy fallback: AXButton with description prefix / single-letter title.
         for label in labels {
-            if let button = findButtonByDescriptionPrefix(in: header, prefix: label, runtime: runtime.ax) {
+            if let button = findButtonByDescriptionPrefix(in: header, prefix: label, runtime: ax) {
                 return button
             }
         }
-        return AXHelpers.findDescendant(of: header, role: kAXButtonRole, title: legacyTitle, runtime: runtime.ax)
+        return AXHelpers.findDescendant(of: header, role: kAXButtonRole, title: legacyTitle, runtime: ax)
+    }
+
+    /// The record-enable control inside one track header.
+    ///
+    /// The arm write reads its result back here and the poller reads `isArmed` here, so the two
+    /// cannot name different controls. They did until #1020: the poller matched the header by
+    /// `trackRecordButton`, whose Spanish member `Grabar` is not inside `Activar grabación`, so
+    /// `logic://tracks` read every Spanish track as disarmed while the write verified its arm.
+    static func trackArmControl(in header: AXUIElement, ax: AXHelpers.Runtime) -> AXUIElement? {
+        findTrackToggleControl(
+            in: header, labels: AXLocalePolicy.trackRecordEnableCheckbox.labels, legacyTitle: "R", ax: ax
+        )
     }
 
     /// Find the mute button on a track header.
@@ -648,9 +671,7 @@ extension AXLogicProElements {
     /// `Record Enable` (EN) inside each track header.
     static func findTrackArmButton(trackIndex: Int, runtime: Runtime = .production) -> AXUIElement? {
         guard let header = findTrackHeader(at: trackIndex, runtime: runtime) else { return nil }
-        return findTrackToggleControl(
-            in: header, labels: AXLocalePolicy.trackRecordEnableCheckbox.labels, legacyTitle: "R", runtime: runtime
-        )
+        return trackArmControl(in: header, ax: runtime.ax)
     }
 
     /// #109: the arrange Horizontal-Zoom AXSlider (range 0...1, settable).
