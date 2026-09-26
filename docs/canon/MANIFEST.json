@@ -60,7 +60,7 @@
     "index/strings.tsv": "8a52d66b37d0a43b6fbe137bc5dea21ddb492b13143749f740db51209d91ef84",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
     "ledger/casefold.tsv": "e03c078de6a2db9a4fd5a431bd525d2b15ffb9343fccb16cba8bcbdf68828da2",
-    "ledger/presence.tsv": "d8921782f7b976a8cb4d74b7a205277e2904a18d89f66596e2791ffc7aa065a7"
+    "ledger/presence.tsv": "6a9e35bd34e9506c5e4b51c96d9b577caf345cad212e4ee7df6fc1267ab3a739"
   },
   "extractor_version": 2,
   "ledger_casefold_entries": {
@@ -117,16 +117,16 @@
     },
     "strings": {
       "-": 3,
-      "de": 135,
-      "en": 154,
-      "es": 139,
-      "fr": 134,
-      "it": 139,
-      "ja": 146,
-      "ko": 166,
-      "pt": 143,
-      "zh_CN": 132,
-      "zh_TW": 128
+      "de": 137,
+      "en": 156,
+      "es": 142,
+      "fr": 136,
+      "it": 141,
+      "ja": 148,
+      "ko": 168,
+      "pt": 145,
+      "zh_CN": 133,
+      "zh_TW": 129
     }
   },
   "logic": {
