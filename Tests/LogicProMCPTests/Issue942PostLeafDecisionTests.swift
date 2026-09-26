@@ -75,7 +75,9 @@ struct Issue942PostLeafDecisionTests {
         .init(.unreadable, .unreadable, nil, .withheldWhileDialogPresent, .refuseToAct(reason: "window_list_unreadable")),
         .init(.unreadable, .unreadable, nil, .menuEscapeMeasuredToLeaveDialog, .refuseToAct(reason: "window_list_unreadable")),
 
-        // menu closed: the dialog reading alone decides; keyboard and policy play no part.
+        // menu closed: the dialog reading decides and policy plays no part. The one keystroke it
+        // can permit, the dialog cancel, is the same Escape as the menu loop's and needs the
+        // keyboard the same way.
         .init(.closed, .absent, true, .withheldWhileDialogPresent, .none),
         .init(.closed, .absent, true, .menuEscapeMeasuredToLeaveDialog, .none),
         .init(.closed, .absent, false, .withheldWhileDialogPresent, .none),
@@ -84,10 +86,10 @@ struct Issue942PostLeafDecisionTests {
         .init(.closed, .absent, nil, .menuEscapeMeasuredToLeaveDialog, .none),
         .init(.closed, .identifiedOurs, true, .withheldWhileDialogPresent, .dialogCancel),
         .init(.closed, .identifiedOurs, true, .menuEscapeMeasuredToLeaveDialog, .dialogCancel),
-        .init(.closed, .identifiedOurs, false, .withheldWhileDialogPresent, .dialogCancel),
-        .init(.closed, .identifiedOurs, false, .menuEscapeMeasuredToLeaveDialog, .dialogCancel),
-        .init(.closed, .identifiedOurs, nil, .withheldWhileDialogPresent, .dialogCancel),
-        .init(.closed, .identifiedOurs, nil, .menuEscapeMeasuredToLeaveDialog, .dialogCancel),
+        .init(.closed, .identifiedOurs, false, .withheldWhileDialogPresent, .refuseToAct(reason: "logic_not_keyboard_owner")),
+        .init(.closed, .identifiedOurs, false, .menuEscapeMeasuredToLeaveDialog, .refuseToAct(reason: "logic_not_keyboard_owner")),
+        .init(.closed, .identifiedOurs, nil, .withheldWhileDialogPresent, .refuseToAct(reason: "logic_not_keyboard_owner")),
+        .init(.closed, .identifiedOurs, nil, .menuEscapeMeasuredToLeaveDialog, .refuseToAct(reason: "logic_not_keyboard_owner")),
         .init(.closed, .unidentified(count: 1), true, .withheldWhileDialogPresent, .refuseToAct(reason: "unidentified_dialog_present")),
         .init(.closed, .unidentified(count: 1), true, .menuEscapeMeasuredToLeaveDialog, .refuseToAct(reason: "unidentified_dialog_present")),
         .init(.closed, .unidentified(count: 1), false, .withheldWhileDialogPresent, .refuseToAct(reason: "unidentified_dialog_present")),
