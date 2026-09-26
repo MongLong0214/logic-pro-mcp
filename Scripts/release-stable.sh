@@ -108,10 +108,12 @@ run python3 Scripts/run-repo-guards.py
 run swiftc -typecheck Scripts/logic_key_event.swift
 run swiftc -typecheck Scripts/logic_ui_snapshot.swift
 run swiftc -typecheck Scripts/logic_ax_button_press.swift
-run swift test --no-parallel
-run swift build -c release
+# Builds release, requires a running Logic, then runs the whole suite against that binary (#985).
+# Record the exact HEAD qualified here so the tag-triggered workflow can verify it (#985).
+QUALIFIED=$(git rev-parse HEAD)
+run Scripts/release-qualify.sh
 
-run git tag "$VERSION" -m "Release $VERSION"
+run git tag "$VERSION" -m "Release $VERSION" -m "Live-qualified: $QUALIFIED"
 run git push origin "$VERSION"
 
 echo ""

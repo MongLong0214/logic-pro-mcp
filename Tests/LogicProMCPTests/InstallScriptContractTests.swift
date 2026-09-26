@@ -317,9 +317,11 @@ import Testing
     #expect(script.contains("refs/tags/$VERSION"))
     #expect(script.contains("gh release view \"$VERSION\""))
     #expect(script.contains("python3 -m py_compile Scripts/live-e2e-test.py"))
-    #expect(script.contains("swift test --no-parallel"))
-    #expect(script.contains("swift build -c release"))
-    #expect(script.contains("git push origin \"$VERSION\""))
+    let gate = try #require(script.range(of: "run Scripts/release-qualify.sh"))
+    let tag = try #require(script.range(of: "run git tag \"$VERSION\""))
+    let tagPush = try #require(script.range(of: "run git push origin \"$VERSION\""))
+    #expect(gate.lowerBound < tag.lowerBound)
+    #expect(tag.lowerBound < tagPush.lowerBound)
 }
 
 @Test func testFormulaClaudeRegistrationCaveatIncludesShareDirEnv() throws {

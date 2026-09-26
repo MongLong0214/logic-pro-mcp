@@ -95,7 +95,10 @@ else
     fi
 fi
 
-run "swift test --no-parallel"
+# Builds release, requires a running Logic, then runs the whole suite against that binary (#985).
+# Record the exact HEAD qualified here so the tag-triggered workflow can verify it (#985).
+QUALIFIED=$(git rev-parse HEAD)
+run "Scripts/release-qualify.sh"
 run "git diff --exit-code Package.resolved"
 
 # 2. Build + adhoc-sign
@@ -211,7 +214,7 @@ sha256: $TARBALL_SHA
 '"
 
 # 5. Tag + push
-run "git tag $VERSION -m 'Release $VERSION'"
+run "git tag $VERSION -m 'Release $VERSION' -m 'Live-qualified: $QUALIFIED'"
 run "git push origin main"
 run "git push origin $VERSION"
 

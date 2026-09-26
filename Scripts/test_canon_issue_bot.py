@@ -401,6 +401,91 @@ class EndToEndThroughTheRealChecker(unittest.TestCase):
                 self.assertEqual(result["diagnostics"][0]["code"], "checker_error")
 
 
+
+#: The note the pre-#959 workflow posted on #944 (comment 5750564523), byte for byte. Written out
+#: rather than built from the module's constants, so a constant that drifts from what GitHub
+#: actually holds fails here instead of agreeing with itself.
+LEGACY_944 = (
+    "This issue states something about Logic without citing Logic's own data, or\n"
+    "cites it in a form that does not resolve. See `docs/canon/README.md`.\n"
+    "\n"
+    "```\n"
+    "/tmp/issue.md: no canonical reference, and no opt-out.\n"
+    "  Cite what this rests on, or write the sentence 'states no fact about Logic' with the\n"
+    "  reason -- outside any code block or HTML comment. See docs/canon/README.md.\n"
+    "```\n"
+    "\n"
+    "Nothing is blocked -- an issue has no merge to stop. This is a note for whoever\n"
+    "triages it.\n")
+
+
+class ThePreviousWorkflowsNotes(unittest.TestCase):
+    """#951: an old unmarked note is adopted only from the bot's account and in its exact format.
+
+    Before this, `owned()` needed a marker the old workflow never wrote, so on #944 a repaired
+    body left the old warning standing, and a failing edit added a managed note beside it.
+    """
+
+    setUp = EndToEndThroughTheRealChecker.setUp
+    restore = EndToEndThroughTheRealChecker.restore
+    drive = EndToEndThroughTheRealChecker.drive
+
+    def test_the_real_944_note_is_recognised(self):
+        self.assertTrue(bot.legacy(comment(1, LEGACY_944), BOT_LOGIN))
+        self.assertFalse(bot.owned(comment(1, LEGACY_944), BOT_LOGIN))
+
+    def test_a_contributor_quoting_it_keeps_their_comment(self):
+        theirs = comment(1, LEGACY_944, login="a-contributor", kind="User")
+        self.assertFalse(bot.legacy(theirs, BOT_LOGIN))
+        _, fake = self.drive(REPAIRED, [theirs])
+        self.assertEqual((fake.created, fake.updated), ([], []))
+        _, fake = self.drive(UNCITED, [theirs])
+        self.assertEqual(fake.updated, [])
+        self.assertEqual(len(fake.created), 1)
+
+    def test_another_shape_from_our_account_is_not_adopted(self):
+        for body in (LEGACY_944.rstrip("\n"), LEGACY_944.replace("triages it.", "reads it."),
+                     "Note: " + LEGACY_944, LEGACY_944 + "\nmore"):
+            with self.subTest(body[-20:]):
+                self.assertFalse(bot.legacy(comment(1, body), BOT_LOGIN))
+
+    def test_a_repaired_body_resolves_the_old_note_instead_of_leaving_it(self):
+        _, fake = self.drive(REPAIRED, [comment(7, LEGACY_944)])
+        self.assertEqual(fake.created, [])
+        self.assertEqual([cid for cid, _ in fake.updated], [7])
+        self.assertEqual(bot.state_of(fake.updated[0][1]), bot.RESOLVED)
+
+    def test_a_failing_body_reuses_the_old_note_and_the_next_run_is_quiet(self):
+        _, first = self.drive(UNCITED, [comment(7, LEGACY_944)])
+        self.assertEqual(first.created, [], "a second note beside the old one")
+        self.assertEqual([cid for cid, _ in first.updated], [7])
+        self.assertEqual(bot.state_of(first.updated[0][1]), bot.ACTIONABLE)
+        _, second = self.drive(UNCITED, [comment(7, first.updated[0][1])])
+        self.assertEqual((second.created, second.updated), ([], []))
+
+    def test_a_tooling_failure_marks_the_old_note_unknown_not_resolved(self):
+        rendered = bot.render("error", [])
+        action, _ = bot.decide("error", rendered, comment(7, LEGACY_944))
+        self.assertEqual(action, "edit")
+        self.assertEqual(bot.state_of(rendered), bot.UNKNOWN)
+
+    def test_two_old_notes_keep_the_oldest_and_supersede_the_other_once(self):
+        _, fake = self.drive(REPAIRED, [comment(9, LEGACY_944), comment(4, LEGACY_944)])
+        self.assertEqual(fake.created, [])
+        edited = dict(fake.updated)
+        self.assertEqual(bot.state_of(edited[4]), bot.RESOLVED)
+        self.assertEqual(bot.state_of(edited[9]), bot.SUPERSEDED)
+        _, again = self.drive(REPAIRED, [comment(4, edited[4]), comment(9, edited[9])])
+        self.assertEqual((again.created, again.updated), ([], []))
+
+    def test_a_managed_note_outranks_an_older_old_note(self):
+        """#291 and #308 carry both: the managed note is the current one, whatever its id."""
+        current = bot.render("actionable", [("missing_declaration", "a")])
+        note, extra = bot.active_note([comment(3, LEGACY_944), comment(8, current)], BOT_LOGIN)
+        self.assertEqual(note["id"], 8)
+        self.assertEqual([c["id"] for c in extra], [3])
+
+
 class Done:
     """One finished subprocess, as `evaluate` reads it: a status and two streams."""
 
