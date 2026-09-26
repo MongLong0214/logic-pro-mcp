@@ -5320,7 +5320,8 @@ private func makeTempoFixtureWithAlert(
 /// #904: the qualification oracles for Cycle and Count In read the receipt this channel emits, so
 /// they are checked against that receipt rather than against a fixture written from the oracle.
 /// The control is titled in English and in Korean; the receipt's `button` and `control` carry the
-/// operation's `reportAs` token either way, and the oracle must accept both runs.
+/// operation's `reportAs` token either way, and the oracle must accept both runs and refuse the
+/// same receipt once its `control` carries the Korean label instead.
 @Test(arguments: [
     ("transport.toggle_cycle", "Cycle"),
     ("transport.toggle_cycle", "사이클"),
@@ -5372,4 +5373,18 @@ func semanticOracleAcceptsTheControlBarToggleReceipt(operation: String, title: S
         oracle.evaluate(responseData: Data(result.message.utf8), readbackData: Data("{}".utf8))
     )
     #expect(verdict)
+
+    // The same receipt with `control` set to the label the oracle used to expect must be refused,
+    // so accepting the honest receipt is not the oracle having stopped reading the field.
+    var forged = try #require(
+        try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+    forged["control"] = operation == "transport.toggle_cycle" ? "사이클" : "카운트 인"
+    let forgedVerdict = try #require(
+        oracle.evaluate(
+            responseData: try JSONSerialization.data(withJSONObject: forged),
+            readbackData: Data("{}".utf8)
+        )
+    )
+    #expect(!forgedVerdict)
 }
