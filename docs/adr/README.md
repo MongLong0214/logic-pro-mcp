@@ -1,13 +1,16 @@
 # Architecture Decision Records
 
-## Most Important Conclusion
+## Where to start
 
-Phase 0 freezes governance and the current baseline before any ADR runtime implementation begins.
-The binding core execution order is ADR-002/#285 (including pulled-forward #268) → ADR-001/#367 `LPMCP-PRD-001` remediation → ADR-003/#286 → ADR-005/#288 → ADR-004/#287 → ADR-001/#284 terminal closure.
-The inserted #367 remediation is a blocking production-readiness gate: #286 cannot start until its CTO review and CEO exact-head PASS are recorded. ADR-005 remains cross-cutting even though its own terminal increment is ordered after #286.
-Every ADR starts in `Proposed` status and advances only with its own implementation and qualification evidence.
+Scheduling for the ADR programme is [#308](https://github.com/MongLong0214/logic-pro-mcp/issues/308) (START HERE). It selects work and points to one owning issue per implementation contract; each ADR's owning issue, linked in the tables below, is that contract. This file is navigation and technical history, not a second schedule (#308 §1). Where this file and an owning issue disagree, the issue is right.
 
-The kernel ADRs are being delivered incrementally; their individual status entries below are authoritative. As of v3.12.0, the ADR-002 (session-stable target references), ADR-003 (operation-contract registry, strict params), ADR-004 (verified-mutation saga preflight/deadline), and ADR-005 (operation trace) runtime kernels ship enabled by default; each ADR remains `In Implementation` until its own qualification evidence completes, and ADR-001's terminal same-release live qualification gate (#284) remains open. ADR-001 currently provides a fail-closed qualification foundation only: independent release authority, the complete real-Logic fixture matrix, and published release evidence remain deferred. Earlier live qualification receipts cover their stated historical heads and feature-flag combinations, not completion of the ADR-001 assurance chain or current-head release promotion.
+The `Status` column is a closed vocabulary that `Scripts/adr-index-matches-github.py` compares with issue state. The sections under *Implementation status* are dated records of what each increment merged; their headings carry the status at the time they were written unless a correction below says otherwise.
+
+**Retired, kept as history.** Until the 2026-09-21/22 reconciliation this section stated a binding core execution order (ADR-002/#285 → ADR-001/#367 `LPMCP-PRD-001` remediation → ADR-003/#286 → ADR-005/#288 → ADR-004/#287 → ADR-001/#284 terminal closure), CTO-review and CEO exact-head approval gates, and that every ADR starts in `Proposed`. #308 now owns order; its §1 says old approval chains and status packets are evidence at their dates, not instructions.
+
+**Written at v3.12.0, kept as history, corrected where it is now wrong:** The kernel ADRs are being delivered incrementally; their individual status entries below are authoritative. As of v3.12.0, the ADR-002 (session-stable target references), ADR-003 (operation-contract registry, strict params), ADR-004 (verified-mutation saga preflight/deadline), and ADR-005 (operation trace) runtime kernels ship enabled by default; each ADR remains `In Implementation` until its own qualification evidence completes, and ADR-001's terminal same-release live qualification gate (#284) remains open. ADR-001 currently provides a fail-closed qualification foundation only: independent release authority, the complete real-Logic fixture matrix, and published release evidence remain deferred. Earlier live qualification receipts cover their stated historical heads and feature-flag combinations, not completion of the ADR-001 assurance chain or current-head release promotion.
+
+Two parts of that paragraph no longer hold. ADR-004's in-memory `MutationSaga` is not enabled by default: `FeatureFlags.adr004MutationSaga` is true only when `LOGIC_MCP_ADR004_MUTATION_SAGA=1` (`Sources/LogicProMCP/Utilities/FeatureFlags.swift`), and #308 §6 describes #287 as a bounded opt-in Saga, not default-on, universal or durable rollback. ADR-001 is not a foundation-only subsystem: it was removed on 2026-09-13, the owner reopened #284 on 2026-09-14, and #926 (`5519079e`) restored the runner, transport, contracts/promotion and CLI on 2026-09-19 without wiring independent enforcement or publishing evidence (#284 §2).
 
 ## Category A — Core execution path
 
@@ -17,14 +20,14 @@ The kernel ADRs are being delivered incrementally; their individual status entri
 | ADR-003 | Public Operation Contract Registry | A | `Shipped` | [#286](https://github.com/MongLong0214/logic-pro-mcp/issues/286) |
 | ADR-005 | Operation Trace and Support Bundle | A | `Shipped` | [#288](https://github.com/MongLong0214/logic-pro-mcp/issues/288) |
 | ADR-004 | Verified Mutation Saga | A | `Shipped` | [#287](https://github.com/MongLong0214/logic-pro-mcp/issues/287) |
-| ADR-001 | Same-Release Live Qualification Gate | A | `Retired 2026-09-13` | [#284](https://github.com/MongLong0214/logic-pro-mcp/issues/284) |
+| ADR-001 | Same-Release Live Qualification Gate | A | `In Implementation` | [#284](https://github.com/MongLong0214/logic-pro-mcp/issues/284) parent; [#373](https://github.com/MongLong0214/logic-pro-mcp/issues/373) implementation, [#816](https://github.com/MongLong0214/logic-pro-mcp/issues/816) publication. Removed 2026-09-13; the owner reopened #284 on 2026-09-14 and #926 restored the core on 2026-09-19 |
 
 ## Category B — Shared infrastructure
 
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
 | ADR-006 | Versioned Cache | B | `Shipped` | [#289](https://github.com/MongLong0214/logic-pro-mcp/issues/289) |
-| ADR-007 | AX Selector Atlas | B | `Shipped` | [#290](https://github.com/MongLong0214/logic-pro-mcp/issues/290) |
+| ADR-007 | AX Selector Atlas | B | `Shipped` | [#290](https://github.com/MongLong0214/logic-pro-mcp/issues/290), reopened 2026-09-21 for the qualification evidence adapter only; the shipped selectors stand |
 | ADR-019 | Observation Ledger | B | `Shipped` | no issue of its own; landed with [#768](https://github.com/MongLong0214/logic-pro-mcp/issues/768) |
 
 ## Category C — Expansion foundations
@@ -41,12 +44,28 @@ The kernel ADRs are being delivered incrementally; their individual status entri
 | --- | --- | --- | --- | --- |
 | ADR-011 | Full Verified Compressor Control | D | `In Implementation` | [#299](https://github.com/MongLong0214/logic-pro-mcp/issues/299) |
 | ADR-012 | Spectral Analysis and EQ Recommendation | D | `Shipped` | [#300](https://github.com/MongLong0214/logic-pro-mcp/issues/300) |
-| ADR-013 | Verified Channel EQ Band Control | D | `Shipped` | [#301](https://github.com/MongLong0214/logic-pro-mcp/issues/301) |
+| ADR-013 | Verified Channel EQ Band Control | D | `Shipped` | [#301](https://github.com/MongLong0214/logic-pro-mcp/issues/301), closed on GitHub while its body still lists the E1/E2 remainder; #308 §6 leaves that to #301's actual closing evidence |
 | ADR-014 | Independent MIDI Event Readback | D | `In Implementation` | [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
 | ADR-015 | Piano Roll Data-level Transform | D | `In Implementation` | [#303](https://github.com/MongLong0214/logic-pro-mcp/issues/303) |
 | ADR-016 | Smart Tempo and Tempo-map Control | D | `In Implementation` | [#304](https://github.com/MongLong0214/logic-pro-mcp/issues/304) |
 | ADR-017 | Flex Pitch Inspection and Verified Editing | D | `In Implementation` | [#305](https://github.com/MongLong0214/logic-pro-mcp/issues/305) |
 | ADR-018 | Verified Third-party Host-Parameter Control | D | `In Implementation` | [#306](https://github.com/MongLong0214/logic-pro-mcp/issues/306) |
+
+## Category E — Session repair (selected 2026-09-22)
+
+Filed 2026-09-22 and selected in #308 §3 as incremental extensions over #28/#95/#102 and the existing Saga, not a replacement audit or workflow platform. `Accepted` here means #308 selected the issue; no implementation is claimed. None of these has a document in `docs/adr/`; the issue body is the ADR. ADR-008/#291 (Category C) is this lane's routing owner: R0–R3 are selected, R4 sidechain mutation stays later scope.
+
+| ADR | Name | Category | Status | GitHub issue |
+| --- | --- | --- | --- | --- |
+| ADR-020 | Whole-session Observation | E | `Accepted` | [#965](https://github.com/MongLong0214/logic-pro-mcp/issues/965) |
+| ADR-021 | Intent-aware Session Audit and Repair Planning | E | `Accepted` | [#966](https://github.com/MongLong0214/logic-pro-mcp/issues/966) |
+| ADR-022 | Verified Bus/Aux Lifecycle | E | `Accepted` | [#967](https://github.com/MongLong0214/logic-pro-mcp/issues/967) |
+| ADR-023 | Non-destructive Session Cleanup (exact naming) | E | `Accepted` | [#968](https://github.com/MongLong0214/logic-pro-mcp/issues/968) |
+| ADR-024 | Stack-safe Track Organization | E | `Accepted` | [#969](https://github.com/MongLong0214/logic-pro-mcp/issues/969) |
+| ADR-025 | Verified Track/Strip Colors | E | `Accepted` | [#970](https://github.com/MongLong0214/logic-pro-mcp/issues/970) |
+| ADR-026 | End-to-end Session Repair | E | `Accepted` | [#971](https://github.com/MongLong0214/logic-pro-mcp/issues/971) |
+
+#448's missing layout and colour requirements were transferred here, not completed: population and hierarchy to #965, naming to #968, arbitrary order and stacks to #969, colour to #970, plan and execution to #966/#971. Its shipped `tracks.sort_verified` stays (#308 §3).
 
 ## Implementation status
 
@@ -79,7 +98,7 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 ### ADR-006 — Versioned Cache (`In Implementation`)
 - First increment: pure snapshot value types only — `VersionedSnapshot<Value>` (project epoch, section revision, observed-at, source, completeness, fingerprint), `StateSource` / `Completeness` / `CacheSectionID` enums, and pure `etag` / `cacheAgeMillis(now:)` derivations, behind `FeatureFlags.adr006VersionedCache` (default off).
 - **Runtime-wired (flag-gated):** the resource read-path cache envelope now carries `project_epoch` (from the ADR-002 `TargetRegistry`), `section_revision` (a per-`CacheSectionID` monotonic counter added to `StateCache`), and `etag` (a pure FNV-1a fingerprint of the body) on the `logic://tracks` / `logic://transport` / `logic://mixer` / `logic://project` resources — **only when `FeatureFlags.adr006VersionedCache` is on**. With the flag off the envelope is **byte-identical** to before (proven by dedicated byte-identity tests plus the pre-existing envelope tests still passing), so this adds zero runtime behavior by default.
-- Still deferred: the `RefreshCoordinator` (single-flight refresh + backpressure) and the 30-minute memory-soak / large-project benchmarks from #289's acceptance criteria — those need a live qualification environment and are not claimed here.
+- **Superseded 2026-09-22 (#308 §2, §6):** no `RefreshCoordinator` or new cache coordinator is planned — the next bullet records that #675 shipped single-flight without it — and the original cache benchmark / 30-minute evidence is owned by #373. The deferral as first written: the `RefreshCoordinator` (single-flight refresh + backpressure) and the 30-minute memory-soak / large-project benchmarks from #289's acceptance criteria — those need a live qualification environment and are not claimed here.
 - Deterministic tests only (no runtime path touched): field preservation, etag stability, `cacheAgeMillis` monotonicity + clock-skew guard, `Codable` round-trips, section completeness, flag-default-off.
 - **Honesty notes:** the `VersionedSnapshot` capsule (`StateSource`/`Completeness`/`cacheAgeMillis`) has been **retired**. It was scaffolding awaiting a `RefreshCoordinator` increment that never arrived, and #675 shipped the behaviour it existed to support — single-flight, cancellation, latest-value-wins — without it. A per-symbol census found zero production callers for all of it and 12 for `CacheSectionID`, which is what remains (`Sources/LogicProMCP/State/CacheSectionID.swift`). The live envelope path continues to derive its own etag and cache age in `ResourceHandlers`. The epoch flag-coupling defect (versioned cache on + target refs off froze `project_epoch` at 0 across project switches) is fixed: lifecycle invalidation now bumps the epoch when **either** consumer flag is active, with a dispatcher-path regression test.
 
@@ -93,7 +112,8 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 - **Preflight rejects before step 1 on all six classes**: stale/mismatched targets, unregistered/non-reversible operations, invalid inverses, **route availability** (the accessibility channel must report available — a dead channel cannot strand a half-applied plan), **confirmation-requiring steps** (the registry's `ConfirmationPolicy` is consulted; the saga wire carries no confirmation flow — defense-in-depth while the allowlist is all `none`), and **deadline budget** (a plan whose worst-case registry-deadline sum exceeds the saga-execute command budget rejects up front). Executor run count stays zero in every rejection.
 - Deferred (honest scope): live qualification against Logic Pro and non-reversible / multi-target operations. Those require human-attended evidence and are not claimed here.
 
-### ADR-001 — Same-Release Live Qualification Gate (`Retired 2026-09-13`)
+### ADR-001 — Same-Release Live Qualification Gate (`In Implementation`; the 2026-09-13 retirement was reversed)
+- **Correction (2026-09-14 onward, #284 §2):** the retirement recorded in the next bullet no longer holds. The owner reopened #284 on 2026-09-14 and that decision supersedes the retirement; #926 (`5519079e`) restored the runner, transport, contracts/promotion and CLI on 2026-09-19, and restoration alone did not wire independent enforcement or publish evidence. #284 is the parent, #373 owns implementation, #290 the atlas evidence adapter and #816 publication (#284, #308 §6). The bullets below are dated history.
 - **This subsystem no longer exists.** The qualification CLI (`--qualify`, `--verify-promotion`), the trusted-verifier executable, the attestation and waiver types, the managed fixture set and the release-workflow gates that consumed them were all removed. `swift build` no longer produces a `trusted-verifier` product. An earlier draft of this line also credited the removal with dropping sixteen transitive pins from `Package.resolved`, and that attribution does not survive being checked: the verifier target declared exactly one dependency, `LogicProMCP`, no `.package(…)` line was added or removed alongside it, and **the commit that INTRODUCED the verifier (`67fec5fc`) carries 9 pins, not 25**. The 25-pin resolutions arrive from `fix(ci): commit full-graph Package.resolved from CI` (`e497f254`) and `fix(lockfile): commit CI-toolchain-resolved Package.resolved` (`4496917f`) — the lockfile oscillates with whichever toolchain resolved the graph, which is a fact about CI and not about this subsystem. Everything below is kept as a record of what it WAS, because several observation records and tickets cite it; none of it describes the shipped product.
 - **Ship scope (owner decision 2026-07-17):** the required same-artifact qualification matrix is **Desktop-only** — Desktop Logic Pro × {en-US, ko-KR} (2 axes), derived from an explicit `QualificationAxis.shipVariants = [.desktop]` allowlist. Logic Pro Creator Studio is permanently out of scope (never installed/supported) and is therefore excluded from the matrix rather than perpetually waived; the `LogicVariant.creatorStudio` case remains for honest not-installed health reporting. A contract test pins the exact 2-axis set.
 - The production Swift CLI now drives the packaged binary over stdio for live handshake, health, catalog-count, trace, and fail-closed negative checks with `--qualify`, can ingest externally captured live cases with `--cases`, and validates machine-readable exception policy from `--waivers` before writing any evidence. The value types cover #284's attestation, case, waiver, and required matrix axes (desktop|creator × en-US|ko-KR, core/cold).
@@ -112,6 +132,7 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 - Deferred (honest scope): the developer-only live AX snapshot capture CLI, the real desktop/creator × en/ko baseline fixtures, and wiring the resolver into live dispatchers. Those need real Logic UI capture across the variant/locale matrix and are not claimed here.
 
 ### ADR-008 — Verified Mixer Routing Graph (`In Implementation`)
+- **Selected 2026-09-22 (#308 §3, #291 r5):** R0 resource bootstrap, R1 typed graph, R2 physical and existing-bus outputs, R3 sends/input/removal, as the session-repair routing owner for Category E; R4 sidechain-source mutation remains later scope. The bullets below are dated history of what merged before that selection.
 - `logic://mixer` now publishes an additive read-only `routing_graph` projection alongside its existing strip data. It is deliberately partial: a strip's observed output text is retained only as the source track node's `observed_output_label`, never as node identity. A main-output edge is published only when both source and destination resolve to already-issued `trk_` references; buses and physical outputs have no invented identities.
 - **Routing graph model** — `RoutingGraph` (project reference + epoch, `complete` / `partialReason`, nodes, edges, provenance); nodes are track/aux/bus/input/output; edges are input-assignment/main-output/send; a `SendEdge` records source track ref, physical slot, destination **bus number / ref** (never name alone), displayed name, level, mode, enabled. An `isConsistent` invariant enforces **a partial graph can never present as complete** (incomplete requires a reason; complete forbids one and validates node-id uniqueness, edge endpoints, provenance, and slot bounds). Empty send slots expose no destination attribute at all, so sends are absent and the graph declares that coverage gap rather than publishing an empty send list.
 - **Pure write-safety preflight** (`evaluate(request, against: graph)`) — rejects a send/input/output write, always with `write_attempted: false`, on any of: stale project epoch, partial/inconsistent graph, occupied slot without `replaceExisting`, out-of-range slot, unknown source, name-only (not bus-distinguished) destination, or unknown destination bus. Duplicate aux names are resolved by **bus number**, never by display name.
@@ -155,7 +176,7 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 - **Write-safety preflight (honesty core)** — `validateBandWrite` returns a list of rejections and performs no write: **`eqAbsent` when the channel has no EQ** (a band write is refused until an explicit `insert_verified` adds the EQ), band-out-of-range (1–8), frequency/gain/Q out-of-range, `staleTarget` on epoch mismatch, and `coordinateOnlyPlaneNotPublic` — the `EQWritePlane` priority is C4 control-surface › qualified AX Controls › coordinate-only, and the **coordinate-only plane can never be a public verified write**.
 - **Saga eligibility** — eligible only when a full 8-band before-snapshot (present + complete) and a verified restore both exist; an absent or incomplete snapshot is never eligible. Plus a pure before/after band-parameter comparison.
 - 9 deterministic synthetic tests (absent-EQ-rejects-band-write, coordinate-only-never-public, band/parameter ranges fail closed, stale-epoch-rejects, valid-write-passes-preflight, saga-requires-full-snapshot+restore, comparison, 8-band/complete invariants, flag-default-off).
-- Deferred (honest scope): the Mackie C4 control-surface adapter, the qualified AX Controls-view write/readback, the Doctor `verified_channel_eq` capability check, the MCP surface (`get_channel_eq_state_verified` / `set_channel_eq_band_verified` / …), and applying ADR-012 recommendations. Those need real Logic and are not claimed here.
+- **Superseded 2026-09-21 (#301 r2 §1):** #301 keeps the native-editor AX plane, exact-instance acquisition and `SliderIncrementWalk`, preserves `logic_plugins.set_eq_band_verified`, and does not implement C4 endpoints, a `ChannelEQC4Adapter`, a virtual control surface or a new EQ doctor subsystem; full-plan/reset/diff/batch/compensation and Automatic EQ are #955's. The deferral as first written: the Mackie C4 control-surface adapter, the qualified AX Controls-view write/readback, the Doctor `verified_channel_eq` capability check, the MCP surface (`get_channel_eq_state_verified` / `set_channel_eq_band_verified` / …), and applying ADR-012 recommendations. Those need real Logic and are not claimed here.
 
 ### ADR-015 — Piano Roll Data-Level Transform (`In Implementation`)
 - Pure MIDI transform engine + plan/verify/compensate logic only, behind `FeatureFlags.adr015PianoRoll` (default off), with no runtime path. Operates on the ADR-010 note **data model**, not on graphic note dragging.
