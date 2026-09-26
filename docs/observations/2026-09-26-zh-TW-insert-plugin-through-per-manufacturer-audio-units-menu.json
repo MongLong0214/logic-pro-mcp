@@ -1,0 +1,196 @@
+{
+  "schema": 3,
+  "id": "2026-09-26-zh-TW-insert-plugin-through-per-manufacturer-audio-units-menu",
+  "date": "2026-09-26",
+  "subject": "insert_plugin on a zh_TW Logic, whose plug-in menu lists Audio Units one item per manufacturer",
+  "question": "Does insert_plugin insert Gain into an empty insert slot on a zh-TW Logic, before and after the #993 change?",
+  "verdict": "works",
+  "surface": "mixer.inserts",
+  "issues": [
+    993,
+    1016
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "zh-TW",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_993_plugin_root_menu_in_every_locale.py <candidate-binary> --control <control-binary> zh_TW",
+    "expected": "the candidate inserts Gain at the response's slot and Logic's Edit menu undo leaves the strip as it was; the control, run on the candidate's track with the candidate's configuration, refuses with menu_failure root_menu_not_found",
+    "cost": "needs Logic with the lpm-locale-campaign fixture and two release binaries; switches Logic's language to zh_TW, relaunches it, and restores Korean at the end; about three minutes"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Plugins.swift:isAudioPluginRootMenu",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:pluginMenuAudioUnitsManufacturerItem"
+  ],
+  "method": "The harness switched Logic to zh_TW, relaunched it, and called insert_plugin for Gain through each binary's MCP server. The candidate was built from b1e55721 (sha256 819ee0da...); the control from 12599461, the parent of the change (sha256 9e6113bb...). It chose a track whose slot 0 was empty on a fresh mixer read. The candidate was asked first with no configuration and refused, naming the two leaves the strip offered; the harness asked again with the one leaf that has no `->`. The control was then run on the same track with that configuration. After each call the harness listed Logic's windows at or above the pop-up menu window level, pressed Escape while any remained, and listed them again. The candidate's insert was undone through Logic's Edit menu, found by its localised title. Korean was restored at the end. Nothing was changed by hand. On this host the zh_TW plug-in menu ends in `音訊單元：Apple`, `音訊單元：iZotope` and `音訊單元：Native Instruments`, each item beginning with Apple's zh_TW `Audio Units:` row `音訊單元：`, as read by the record 2026-09-26-zh-TW-plugin-menu-lists-audio-units-per-manufacturer; this run did not read the menu's titles itself.",
+  "observations": [
+    {
+      "binary": "candidate",
+      "call": 1,
+      "track": 1,
+      "requested_configuration": "",
+      "response": {
+        "error": "ax_write_failed",
+        "hint": "Gain was found, but this strip offers 單聲道, 單聲道->立體聲 for it — the last segment of a menu path is the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. Name one with 'configuration' to choose; this operation will not pick a channel layout on your behalf",
+        "menu_failure": "leaf_not_offered_by_this_strip",
+        "menu_leaf_offered": [
+          "單聲道",
+          "單聲道->立體聲"
+        ],
+        "menu_paths_tried": [
+          "Utility > Gain > Stereo",
+          "Utility > Gain > 스테레오",
+          "Utility > Gain > ステレオ",
+          "Utility > Gain > Estéreo",
+          "Utility > Gain > Stéréo",
+          "Utility > Gain > 立体声",
+          "Utility > Gain > 立體聲"
+        ],
+        "plugin_name": "Gain",
+        "requested_configuration": "",
+        "slot": 0,
+        "state": "C",
+        "success": false,
+        "track": 1
+      },
+      "menus_left_open": {
+        "open_before_escape": [
+          {
+            "layer": 101,
+            "bounds": {
+              "X": 736,
+              "Height": 571,
+              "Y": 503,
+              "Width": 230
+            }
+          }
+        ],
+        "open_after_escape": []
+      }
+    },
+    {
+      "binary": "candidate",
+      "call": 2,
+      "track": 1,
+      "requested_configuration": "單聲道",
+      "mixer_before": {
+        "fetched_at": "2026-09-26T04:59:10.559Z",
+        "data_source": "ax_poll",
+        "trackIndex": 1,
+        "plugins": []
+      },
+      "response": {
+        "menu_leaf_chosen": "單聲道",
+        "observed_plugin_name": "Gain",
+        "plugin_name": "Gain",
+        "slot": 0,
+        "state": "A",
+        "success": true,
+        "trace_id": "lpmcp_424BB76C-03AD-4B21-9741-6EF3833C01A2",
+        "track": 1,
+        "verified": true,
+        "verify_source": "ax_plugin_slot"
+      },
+      "menus_left_open": null,
+      "mixer_after": {
+        "fetched_at": "2026-09-26T04:59:19.580Z",
+        "data_source": "ax_poll",
+        "trackIndex": 1,
+        "plugins": [
+          {
+            "index": 0,
+            "isBypassed": false,
+            "name": "Gain"
+          }
+        ]
+      },
+      "edit_menu": "編輯",
+      "undo_exit": 0,
+      "mixer_after_undo": {
+        "fetched_at": "2026-09-26T04:59:22.327Z",
+        "data_source": "ax_poll",
+        "trackIndex": 1,
+        "plugins": []
+      }
+    },
+    {
+      "binary": "control",
+      "call": 1,
+      "track": 1,
+      "requested_configuration": "單聲道",
+      "mixer_before": {
+        "fetched_at": "2026-09-26T04:59:28.120Z",
+        "data_source": "ax_poll",
+        "trackIndex": 1,
+        "plugins": []
+      },
+      "response": {
+        "error": "ax_write_failed",
+        "hint": "the plug-in menu never opened: the slot was pressed and no menu carrying the audio plug-in library was found",
+        "menu_failure": "root_menu_not_found",
+        "menu_leaf_offered": [],
+        "menu_paths_tried": [
+          "Utility > Gain > Stereo",
+          "Utility > Gain > 스테레오",
+          "Utility > Gain > ステレオ",
+          "Utility > Gain > Estéreo",
+          "Utility > Gain > Stéréo",
+          "Utility > Gain > 立体声",
+          "Utility > Gain > 立體聲"
+        ],
+        "plugin_name": "Gain",
+        "requested_configuration": "單聲道",
+        "slot": 0,
+        "state": "C",
+        "success": false,
+        "track": 1
+      },
+      "menus_left_open": {
+        "open_before_escape": [
+          {
+            "layer": 101,
+            "bounds": {
+              "X": 736,
+              "Height": 571,
+              "Y": 503,
+              "Width": 230
+            }
+          }
+        ],
+        "open_after_escape": []
+      },
+      "mixer_after": {
+        "fetched_at": "2026-09-26T04:59:33.443Z",
+        "data_source": "ax_poll",
+        "trackIndex": 1,
+        "plugins": []
+      }
+    }
+  ],
+  "evidence": [
+    "evidence/2026-09-26-zh-TW-insert-plugin-live-993.json"
+  ],
+  "conclusion": "On the same track with the same configuration, the candidate inserted Gain at slot 0 (state A, verify_source ax_plugin_slot, and the next mixer read lists Gain at index 0) and the Edit menu `編輯` undo left the slot empty again, while the control refused with root_menu_not_found and inserted nothing. The difference is the one the change makes: the control could not recognise the per-manufacturer menu as the plug-in root menu. Both refusals, the candidate's first call and the control's, left a menu at window layer 101 open after they returned, and one Escape closed it each time; the harness does not look after a state A insert. That is filed as #1016.",
+  "limits": [
+    "One build of Logic: Logic Pro 12.3 (6674) on macOS 26.3 (25D125), with Apple, iZotope and Native Instruments Audio Units installed.",
+    "One plug-in (Gain, a Logic plug-in reached through the Utility category) on one mono track. An Audio Units plug-in, which is the path through a per-manufacturer item itself, was not inserted.",
+    "The candidate's first call refused because this strip offers two channel configurations for Gain and none was named; that refusal is the product's rule, not a zh_TW defect, and it is not counted as a failed insert.",
+    "The open menus were seen by window level, not by AX; which menu they were is not established."
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/zh_TW/Audio%20Units%3A#value",
+      "value": "音訊單元：",
+      "used_for": "Apple's zh_TW row for the Audio Units path; its full-width colon is why the menu the candidate recognised has one item per manufacturer",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ]
+}
