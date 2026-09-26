@@ -38,7 +38,12 @@ struct Issue440TransportFrontmostTests {
                 // A normal pre-actuation dialog refusal proves the route can safely reach its
                 // documented slider refusal without opening a real Logic dialog.
                 return .success(#"{"result":"MENU_NOT_FOUND: fixture"}"#)
-            }
+            },
+            // #942. The route reads the window list before its script, and the seam defaults to
+            // this machine's screen; the test that passes the gate would read it. No list here,
+            // and an Escape is a test failure rather than a keystroke to whatever is frontmost.
+            onScreenWindowList: { nil },
+            postPopupMenuEscape: { Issue.record("a test runtime posted a live Escape") }
         )
     }
 

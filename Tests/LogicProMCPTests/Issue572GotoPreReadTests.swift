@@ -56,7 +56,11 @@ struct Issue572GotoPreReadTests {
                 performAction: axBase.performAction,
                 childCount: axBase.childCount
             ),
-            executeAppleScript: base.executeAppleScript
+            executeAppleScript: base.executeAppleScript,
+            // #942. The goto route reads the window list before its script, and the seam defaults
+            // to this machine's screen. No list here, and an Escape is a test failure.
+            onScreenWindowList: { nil },
+            postPopupMenuEscape: { Issue.record("a test runtime posted a live Escape") }
         )
         return AccessibilityChannel.Runtime(
             isTrusted: { true },

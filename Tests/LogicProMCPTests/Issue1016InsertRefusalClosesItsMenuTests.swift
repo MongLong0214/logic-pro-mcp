@@ -14,9 +14,13 @@ private let logicPID: pid_t = 4242
 /// The popup-menu layer measured on the live failure: one Logic-owned window at layer 101.
 private let measuredPopupMenuLayer = 101
 
-private func window(owner: pid_t, layer: Int) -> [String: Any] {
+/// `number` is `kCGWindowNumber`, which every live row carries and `LogicOnScreenWindows.logicOwned`
+/// requires: the popup count is that reader's since #942, and a row without a number is dropped
+/// as malformed, not counted as a window. Each fixture row gets its own.
+private func window(owner: pid_t, number: Int, layer: Int) -> [String: Any] {
     [
         kCGWindowOwnerPID as String: NSNumber(value: owner),
+        kCGWindowNumber as String: NSNumber(value: number),
         kCGWindowLayer as String: NSNumber(value: layer),
     ]
 }
@@ -35,7 +39,10 @@ private final class FakeWindowServer: @unchecked Sendable {
         self.behaviour = behaviour
         // Present in every readable case: Logic's own ordinary window and another process's popup,
         // neither of which is Logic's popup menu.
-        baseWindows = [window(owner: logicPID, layer: 0), window(owner: 999, layer: measuredPopupMenuLayer)]
+        baseWindows = [
+            window(owner: logicPID, number: 10160, layer: 0),
+            window(owner: 999, number: 10161, layer: measuredPopupMenuLayer),
+        ]
     }
 
     var escapeCount: Int { lock.withLock { escapes } }
@@ -52,10 +59,10 @@ private final class FakeWindowServer: @unchecked Sendable {
             case .noPopup:
                 return baseWindows
             case .popupsStay:
-                return baseWindows + [window(owner: logicPID, layer: measuredPopupMenuLayer)]
+                return baseWindows + [window(owner: logicPID, number: 10162, layer: measuredPopupMenuLayer)]
             case .popupsCloseOnEscape:
                 return escapes == 0
-                    ? baseWindows + [window(owner: logicPID, layer: measuredPopupMenuLayer)]
+                    ? baseWindows + [window(owner: logicPID, number: 10162, layer: measuredPopupMenuLayer)]
                     : baseWindows
             }
         }
@@ -248,7 +255,7 @@ func issue1016RefusalWithNoPopupOnScreenPostsNothing(_ refusal: Issue1016Refusal
     let runtime = AXLogicProElements.Runtime(
         logicProPID: base.logicProPID,
         ax: base.ax,
-        onScreenWindowList: { [window(owner: logicPID, layer: 102)] },
+        onScreenWindowList: { [window(owner: logicPID, number: 10163, layer: 102)] },
         postPopupMenuEscape: { Issue.record("no popup was counted, so nothing may be typed") }
     )
     let outcome = AccessibilityChannel.livePluginPopupMenuCleaner(runtime)
