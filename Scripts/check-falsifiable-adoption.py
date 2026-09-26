@@ -57,7 +57,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # resolution is the union rather than either side.
 # 23 -> 24 on 2026-09-27, the same shape again: #862's bank harness and #291's read-order harness
 # were each the 23rd on their own branch.
-FLOOR = 24
+# 24 -> 25 on 2026-09-27: live_1020_mcu_set_arm_is_a_set, whose disarm counterexample is the reply and
+# track list before #1020 — State B from the LED echo with the track still armed — so a predicate that
+# accepted a lone velocity-0 release would fail in the same run.
+FLOOR = 25
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )
