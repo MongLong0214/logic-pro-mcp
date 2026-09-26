@@ -779,7 +779,7 @@ enum SemanticOracleFixtures {
         .transportToggleCycle: SemanticOracleFixture(
             response: """
                 {"success":true,"verified":true,"state":"A","button":"Cycle",\
-                "control":"사이클","observed":true,"previous":false,\
+                "control":"Cycle","observed":true,"previous":false,\
                 "action":"axpress","attempts":["axpress"]}
                 """,
             readback: "{}"
@@ -788,7 +788,7 @@ enum SemanticOracleFixtures {
         .transportToggleCountIn: SemanticOracleFixture(
             response: """
                 {"success":true,"verified":true,"state":"A","button":"Count In",\
-                "control":"카운트 인","observed":true,"previous":false,\
+                "control":"Count In","observed":true,"previous":false,\
                 "action":"axpress","attempts":["axpress"]}
                 """,
             readback: "{}"
