@@ -1,0 +1,17 @@
+Limit: a nib in no .lproj being shown untranslated on every locale is measured for the Compressor editor on de-DE only
+Ruled-out: keying an old-style nib's label by object index | 20 of the 60 old-style nibs have a different object sequence in at least one locale; the object path puts 613 of 623 translated addresses in all ten locales
+Ruled-out: reading the plug-in screens' `text` and `labelString` runtime attributes | they are properties of MA classes with no definition here, so nothing says whether a value is a label
+Ruled-out: widening the Interface Builder default list to designer placeholders such as `Header Text` | no class separates them from a label, so the rule would be a guess
+Warn: an English value dropped as an Interface Builder default must drop its translated twins too; otherwise translated defaults such as `Objekt 2` enter the corpus
+Record-Id: r-b97ec82c1b6f
+Provenance: inherited 7ad6fb184b8d051993adf636030ffcd8d6d44494
+
+Warn: the census's `nibs_with_a_label` counts units, and a unit is either one bare nib or one old-style nib across its locales; compare the 312 bare plug-in nibs only with `nibs_in_no_lproj_with_a_label` (68)
+Record-Id: r-d6ecefd95531
+Provenance: inherited e9ed6537699f436cff36fc9deb9f43b12b224978
+
+Limit: numeric NSTextFieldCell contents and placeholders are still treated as readouts; a static numeric text-field label there can still read absent
+Ruled-out: the no-letter test at every label site | it dropped KeyAssign.nib's symbol headers and the 12/8 menu title, static labels Apple shows
+Warn: the reason keeps its name no_letter although it now fires only for blanks and numeric text-field readouts; the name is written into persisted records
+Record-Id: r-daf5fddab047
+Provenance: inherited 36173cd6be9108014ca4bdc964baeb0ffa088361
