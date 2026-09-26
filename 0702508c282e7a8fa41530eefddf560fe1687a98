@@ -1,0 +1,27 @@
+Warn: the removed doc comment's rule (no project identity as a side effect of another resource read) is superseded: logic://mixer issues prj_ through ProjectReferenceIssuance from observed name and bundle path, the same derivation as logic://project/info
+Record-Id: r-08768c59716a
+Provenance: inherited b434364ad0d1e9f8a6e30eeba64d0507e6bccd3d
+
+Limit: the routing graph still joins a mixer strip to a track by ordinal (strip.trackIndex == track.id); the live run shows the same 19 track nodes in every read order, not that each node is bound to the right strip; that binding stays R1 (#965 forbids an ordinal join as association evidence)
+Limit: logic://project/info name is the raw window title with a localized suffix (#1022); the mixer's prj_ is derived the same way, so their equality does not show the name is clean
+Ruled-out: removing the mixer.routing members from RATCHETS raised.surfaces_without_records too | raised is the dated history of when the ratchet was raised; only allowed shrinks when a record closes a member
+Warn: TRACK_NODE_KIND is RoutingGraph.swift's own node-kind enum; check-livekit-ui-literals flags any == "track" because AXLocalePolicy.trackMenuBar carries variants — do not interpolate a locale table there, the value is not a Logic label
+Record-Id: r-c3c0b12b3676
+Provenance: inherited e0b112aa0e3847b57b76ac09623add5d22d0c06f
+
+Warn: FeatureFlags.adr002TargetRef falls back to the process environment, which FeatureFlagsTests rewrites while other suites run in parallel; a test that reads the ambient value can see references switched off, so these fixtures pin it through the TaskLocal override
+Record-Id: r-3d6f2a8d9a3b
+Provenance: inherited 6f85e4ca330322771a7ad9ff1390642693cc48a4
+
+Limit: while the poller's own project-file read keeps failing, logic://project/info shows a bundle path but issues no project_ref.
+Ruled-out: letting the mixer fall back to the registry's current project binding when its cache has no path | that is a lookup by name, and while the path is unobserved two documents sharing a name stay at the same cache identity, so the mixer could carry the other document's reference.
+Ruled-out: having project/info write its file-filled path back into the cache | the poller is the sole writer of project state and a resource read that changes the cached identity would clear project-dependent state as a side effect.
+Warn: TargetRegistry's project epoch is bumped only by ProjectDispatcher, not by the cache's epoch advance when the poller fills a path, so a reference issued before that fill is not made stale by it.
+Record-Id: r-19b39b57e979
+Provenance: inherited 990e58bafc445c579dd4d6ea72c7a91df6064d59
+
+Limit: an entry whose AXRole cannot be read stays in the scan, so a tooltip whose role read fails still turns the snapshot cannot-tell.
+Ruled-out: treating AXModal -25205 as not modal for every window | the product and Scripts/logic_ui_snapshot.swift deliberately fail closed on an absent AXModal whatever the subrole, and only a role read as a help tag says the entry cannot hold input.
+Ruled-out: moving the pointer off Logic before each run | the tooltip comes back whenever the pointer rests on a control, and the next run's snapshots would be cannot-tell again.
+Record-Id: r-c67518470b85
+Provenance: inherited 85d77e3277b281741c826501a43fc92b6c608ab3
