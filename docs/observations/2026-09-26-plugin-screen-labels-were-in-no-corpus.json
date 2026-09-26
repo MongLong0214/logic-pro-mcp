@@ -20,7 +20,7 @@
   "reverify": {
     "kind": "script",
     "command": "python3 Scripts/logic_canon.py census",
-    "expected": "niblabels: files 1007, entries 8992; niblabels_join: addresses 623, all_ten_locales 613",
+    "expected": "at e9ed6537, which took this reading: niblabels: files 1007, entries 8992; niblabels_join: addresses 623, all_ten_locales 613. From 36173cd6 on, which keeps labels without a letter outside readouts: niblabels: files 1007, entries 9259; niblabels_join: addresses 636, all_ten_locales 630",
     "cost": "~40s; reads the app bundle, launches nothing"
   },
   "depends": [
@@ -161,7 +161,8 @@
   "limits": [
     "Only 68 of the 312 MAPlugInGUI nibs in no .lproj carry a label at these sites; the rest set their text through `text` and `labelString` runtime attributes, which are not read.",
     "That a nib in no .lproj is shown untranslated on every locale is measured for the Compressor on de-DE only.",
-    "Designer placeholders such as `Header Text` and `Text here` are in the corpus, because no class separates them from a label. Presence is not use."
+    "Designer placeholders such as `Header Text` and `Text here` are in the corpus, because no class separates them from a label. Presence is not use.",
+    "Every count in this record and its evidence is the extractor at e9ed6537. 36173cd6 stopped dropping labels without a letter except where AppKit draws a readout, and on the same Logic 12.3 (6674) the census then gives 9259 entries, 636 translated addresses of which 630 carry all ten locales, and 1145 plug-in GUI rows, with 69 of the 312 nibs in no .lproj carrying a label. The findings about the Compressor titles and `Invert Selection` do not depend on that change."
   ],
   "evidence": [
     "evidence/2026-09-26-plugin-screen-labels-were-in-no-corpus.json"
