@@ -482,6 +482,25 @@ def _live_logic_apps(applications):
             if app.bundleIdentifier() in LOGIC_BUNDLE_IDS and not app.isTerminated()]
 
 
+# kAXHelpTagRole, the Accessibility constant, not a Logic label.
+AX_HELP_TAG_ROLE = "AXHelpTag"
+
+
+def _is_help_tag(ax, window):
+    """Whether an entry of AXWindows is a tooltip, by its role as read.
+
+    The tooltip Logic shows while the pointer rests on a control is listed among the application's
+    AXWindows, answers AXModal with -25205, and cannot hold input. Measured 2026-09-27 on the #862
+    run: one help tag beside two standard windows (AXModal false) made the snapshot of every check
+    cannot-tell, in every language, although nothing was blocking. Only a role READ as a help tag
+    leaves the scan; an unreadable role keeps the window in, where AXModal decides as before.
+    """
+    try:
+        return ax.text(ax.attribute(window, "AXRole", "AXRole"), "AXRole") == AX_HELP_TAG_ROLE
+    except _ModalReadError:
+        return False
+
+
 def _production_ax_modal_signals():
     """Return app-wide modal AX windows and sheets for every running Logic process.
 
@@ -520,6 +539,8 @@ def _production_ax_modal_signals():
             app_element = ax.application(app.processIdentifier())
             windows = ax.elements(ax.attribute(app_element, "AXWindows", "AXWindows"), "AXWindows")
             for window in windows:
+                if _is_help_tag(ax, window):
+                    continue
                 title = _ax_optional_title(ax, window)
                 # A positively identified sheet already proves this document is blocked. Do not
                 # discard that fact because AXModal on its ordinary host fails a later read: the
