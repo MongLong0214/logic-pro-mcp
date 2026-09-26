@@ -1,0 +1,13 @@
+Limit: an unmarked note from the pre-#959 workflow is never adopted; such an issue keeps its old comment and gets one new managed note beside it
+Ruled-out: an observation record for the #1006 runs | docs/observations/SURFACES.md is a map of Logic's UI with no surface for a GitHub Actions event, and every record's host is Logic Pro
+Ruled-out: a new repository.ci surface in SURFACES.md | it widens a Logic-scoped taxonomy and the per-locale surfaces_without_records ratchet would gain nine members
+Ruled-out: adding #951 to GRANDFATHERED in check-observations-cover-live-walls.py | that list is for measurements that predate the records and may only shrink
+Warn: the live-walls guard reads any dated measurement verb in a roadmap row as needing a Logic observation record, and the record store cannot hold a GitHub-side observation; this row is anchored to main 8c09e586, run ids and comment id 5841495806 instead
+Record-Id: r-i02observe951
+Provenance: inherited 6f5468fd4806bd0823ff68e60c8661806002a4b1
+
+Ruled-out: ranking pre-#959 notes by id alongside managed ones | #291 and #308 already carry a managed note next to older legacy notes, and lowest-id-wins would demote the current managed note to superseded
+Ruled-out: adopting any bot comment that mentions Logic or canon | the issue asks for the exact legacy format, and a loose match could rewrite a different bot comment
+Warn: LEGACY_HEAD and LEGACY_TAIL are the old workflow's echo lines byte for byte, trailing newline included; the test fixture is the literal #944 comment so drift in either constant fails there
+Record-Id: r-db63e42e96f7
+Provenance: inherited 5600381e7b607e66898301de96b01b125996244f
