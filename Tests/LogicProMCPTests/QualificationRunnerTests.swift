@@ -2032,7 +2032,9 @@ struct QualificationRunnerTests {
             """
             no value-restore cycle produced evidence in this run. Expected one of \
             \(valueCycleOperations.sorted()); saw records for \
-            \(withEvidence.map(\.operationID).sorted())
+            \(withEvidence.map(\.operationID).sorted()); the value recipes answered \
+            \(mutating.filter { valueCycleOperations.contains($0.operationID) }
+                .map { "\($0.operationID): \($0.mutationRestoreRefusal ?? "no refusal recorded")" })
             """
         )
         #expect(withEvidence.allSatisfy {
