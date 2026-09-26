@@ -1,0 +1,1041 @@
+{
+  "name": "probe_942_escape_over_goto_dialog",
+  "head": "04015265f60d1ecb8a6d5e5e9b6ceebe397b192b",
+  "artifact": {
+    "path": "",
+    "sha256": null,
+    "built_from": "04015265f60d1ecb8a6d5e5e9b6ceebe397b192b",
+    "worktree_clean": true,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": false
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "ui"
+    },
+    {
+      "kind": "observation",
+      "tag": "942/menu-path",
+      "payload": {
+        "navigate": "탐색",
+        "go_to": "이동",
+        "position": "위치…"
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "942/baseline",
+      "payload": [
+        {
+          "id": 9143,
+          "layer": 3,
+          "name": "lpm-locale-campaign - 마커 목록",
+          "bounds": {
+            "X": 20,
+            "Height": 746,
+            "Y": 50,
+            "Width": 452
+          }
+        },
+        {
+          "id": 9142,
+          "layer": 0,
+          "name": "lpm-locale-campaign - 트랙",
+          "bounds": {
+            "X": 0,
+            "Height": 1050,
+            "Y": 30,
+            "Width": 1920
+          }
+        }
+      ]
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-0-dialog-before-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-before-escape.png",
+      "window": {
+        "id": 9146,
+        "title": "위치로 이동",
+        "x": 760,
+        "y": 255,
+        "w": 399,
+        "h": 155
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "3a5ede4383f274ae8d02518e05ac5f09c101d4a9a017f0b8c8b2256117de8a5d",
+      "region_hash": "44d2eb072003b782e47965cd6ee9b1f785a3a1d671da3f48d91603a85a0ab860",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0-dialog-before-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          806,
+          314
+        ],
+        "points": [
+          399,
+          155
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-0-menu-over-dialog",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-0-menu-over-dialog.png",
+      "window": {
+        "id": 9182,
+        "title": "",
+        "x": 250,
+        "y": 31,
+        "w": 348,
+        "h": 436
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "db89062e5a2465ceb1d6bb644a815a197ca6803c9e3271b684d5a6a49132ea4e",
+      "region_hash": "2c464fd5aa29e50d934526f72f2870cfca4ade6e700315d070d477a016f381dd",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0-menu-over-dialog/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          696,
+          872
+        ],
+        "points": [
+          348,
+          436
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-0-dialog-after-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-after-escape.png",
+      "window": {
+        "id": 9146,
+        "title": "위치로 이동",
+        "x": 758,
+        "y": 254,
+        "w": 403,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "3a5ede4383f274ae8d02518e05ac5f09c101d4a9a017f0b8c8b2256117de8a5d",
+      "region_hash": "44d2eb072003b782e47965cd6ee9b1f785a3a1d671da3f48d91603a85a0ab860",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0-dialog-after-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          806,
+          314
+        ],
+        "points": [
+          403,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "visual",
+      "tag": "942/sample-0-dialog-unchanged-by-the-menu-escape",
+      "region": [
+        0,
+        0,
+        399,
+        155
+      ],
+      "subject": "the Logic window named '위치로 이동'",
+      "before": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-before-escape.png",
+      "after": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-after-escape.png",
+      "expected": "region does not change — the Escape closed the menu; the dialog under it is the same window, untouched",
+      "observed": "before 44d2eb072003b782 after 44d2eb072003b782 changed=False",
+      "passed": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0",
+      "payload": {
+        "open_dialog_for_control": "menu item 위치… of menu 이동 of menu item 이동 of menu 탐색 of menu bar item 탐색 of menu bar 1 of application process Logic Pro",
+        "control_dialog": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "control_keyboard_owner_is_logic": true,
+        "control_after_escape": [],
+        "control_dialog_gone_after_seconds": 0.235,
+        "open_dialog": "menu item 위치… of menu 이동 of menu item 이동 of menu 탐색 of menu bar item 탐색 of menu bar 1 of application process Logic Pro",
+        "dialog": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "id": 9182,
+            "layer": 101,
+            "name": "",
+            "bounds": {
+              "X": 250,
+              "Height": 436,
+              "Y": 31,
+              "Width": 348
+            }
+          }
+        ],
+        "dialog_under_menu": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 758,
+              "Height": 157,
+              "Y": 254,
+              "Width": 403
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.28,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_after_seconds": null,
+        "dialog_after_one_escape": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 758,
+              "Height": 157,
+              "Y": 254,
+              "Width": 403
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "after_cleanup": [
+          {
+            "id": 9143,
+            "layer": 3,
+            "name": "lpm-locale-campaign - 마커 목록",
+            "bounds": {
+              "X": 20,
+              "Height": 746,
+              "Y": 50,
+              "Width": 452
+            }
+          },
+          {
+            "id": 9142,
+            "layer": 0,
+            "name": "lpm-locale-campaign - 트랙",
+            "bounds": {
+              "X": 0,
+              "Height": 1050,
+              "Y": 30,
+              "Width": 1920
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "942/sample-0-left-no-menu-and-no-dialog",
+      "restored": true,
+      "detail": ""
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-1-dialog-before-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-before-escape.png",
+      "window": {
+        "id": 9146,
+        "title": "위치로 이동",
+        "x": 760,
+        "y": 255,
+        "w": 399,
+        "h": 155
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "3a5ede4383f274ae8d02518e05ac5f09c101d4a9a017f0b8c8b2256117de8a5d",
+      "region_hash": "44d2eb072003b782e47965cd6ee9b1f785a3a1d671da3f48d91603a85a0ab860",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1-dialog-before-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          806,
+          314
+        ],
+        "points": [
+          399,
+          155
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-1-menu-over-dialog",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-1-menu-over-dialog.png",
+      "window": {
+        "id": 9183,
+        "title": "",
+        "x": 250,
+        "y": 31,
+        "w": 348,
+        "h": 436
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "db89062e5a2465ceb1d6bb644a815a197ca6803c9e3271b684d5a6a49132ea4e",
+      "region_hash": "2c464fd5aa29e50d934526f72f2870cfca4ade6e700315d070d477a016f381dd",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1-menu-over-dialog/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          696,
+          872
+        ],
+        "points": [
+          348,
+          436
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-1-dialog-after-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-after-escape.png",
+      "window": {
+        "id": 9146,
+        "title": "위치로 이동",
+        "x": 758,
+        "y": 254,
+        "w": 403,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "3a5ede4383f274ae8d02518e05ac5f09c101d4a9a017f0b8c8b2256117de8a5d",
+      "region_hash": "44d2eb072003b782e47965cd6ee9b1f785a3a1d671da3f48d91603a85a0ab860",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1-dialog-after-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          806,
+          314
+        ],
+        "points": [
+          403,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "visual",
+      "tag": "942/sample-1-dialog-unchanged-by-the-menu-escape",
+      "region": [
+        0,
+        0,
+        399,
+        155
+      ],
+      "subject": "the Logic window named '위치로 이동'",
+      "before": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-before-escape.png",
+      "after": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-after-escape.png",
+      "expected": "region does not change — the Escape closed the menu; the dialog under it is the same window, untouched",
+      "observed": "before 44d2eb072003b782 after 44d2eb072003b782 changed=False",
+      "passed": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1",
+      "payload": {
+        "open_dialog_for_control": "menu item 위치… of menu 이동 of menu item 이동 of menu 탐색 of menu bar item 탐색 of menu bar 1 of application process Logic Pro",
+        "control_dialog": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 760,
+              "Height": 157,
+              "Y": 254,
+              "Width": 399
+            }
+          }
+        ],
+        "control_keyboard_owner_is_logic": true,
+        "control_after_escape": [],
+        "control_dialog_gone_after_seconds": 0.23,
+        "open_dialog": "menu item 위치… of menu 이동 of menu item 이동 of menu 탐색 of menu bar item 탐색 of menu bar 1 of application process Logic Pro",
+        "dialog": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "id": 9183,
+            "layer": 101,
+            "name": "",
+            "bounds": {
+              "X": 250,
+              "Height": 436,
+              "Y": 31,
+              "Width": 348
+            }
+          }
+        ],
+        "dialog_under_menu": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 758,
+              "Height": 157,
+              "Y": 254,
+              "Width": 403
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.293,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_after_seconds": null,
+        "dialog_after_one_escape": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 758,
+              "Height": 157,
+              "Y": 254,
+              "Width": 403
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "after_cleanup": [
+          {
+            "id": 9143,
+            "layer": 3,
+            "name": "lpm-locale-campaign - 마커 목록",
+            "bounds": {
+              "X": 20,
+              "Height": 746,
+              "Y": 50,
+              "Width": 452
+            }
+          },
+          {
+            "id": 9142,
+            "layer": 0,
+            "name": "lpm-locale-campaign - 트랙",
+            "bounds": {
+              "X": 0,
+              "Height": 1050,
+              "Y": 30,
+              "Width": 1920
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "942/sample-1-left-no-menu-and-no-dialog",
+      "restored": true,
+      "detail": ""
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-2-dialog-before-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-before-escape.png",
+      "window": {
+        "id": 9146,
+        "title": "위치로 이동",
+        "x": 760,
+        "y": 255,
+        "w": 399,
+        "h": 155
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "3a5ede4383f274ae8d02518e05ac5f09c101d4a9a017f0b8c8b2256117de8a5d",
+      "region_hash": "44d2eb072003b782e47965cd6ee9b1f785a3a1d671da3f48d91603a85a0ab860",
+      "frames": 3,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2-dialog-before-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          806,
+          314
+        ],
+        "points": [
+          399,
+          155
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-2-menu-over-dialog",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-2-menu-over-dialog.png",
+      "window": {
+        "id": 9184,
+        "title": "",
+        "x": 250,
+        "y": 31,
+        "w": 348,
+        "h": 436
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "db89062e5a2465ceb1d6bb644a815a197ca6803c9e3271b684d5a6a49132ea4e",
+      "region_hash": "2c464fd5aa29e50d934526f72f2870cfca4ade6e700315d070d477a016f381dd",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2-menu-over-dialog/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          696,
+          872
+        ],
+        "points": [
+          348,
+          436
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-2-dialog-after-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-after-escape.png",
+      "window": {
+        "id": 9146,
+        "title": "위치로 이동",
+        "x": 758,
+        "y": 254,
+        "w": 403,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "3a5ede4383f274ae8d02518e05ac5f09c101d4a9a017f0b8c8b2256117de8a5d",
+      "region_hash": "44d2eb072003b782e47965cd6ee9b1f785a3a1d671da3f48d91603a85a0ab860",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2-dialog-after-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          806,
+          314
+        ],
+        "points": [
+          403,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "visual",
+      "tag": "942/sample-2-dialog-unchanged-by-the-menu-escape",
+      "region": [
+        0,
+        0,
+        399,
+        155
+      ],
+      "subject": "the Logic window named '위치로 이동'",
+      "before": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-before-escape.png",
+      "after": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-after-escape.png",
+      "expected": "region does not change — the Escape closed the menu; the dialog under it is the same window, untouched",
+      "observed": "before 44d2eb072003b782 after 44d2eb072003b782 changed=False",
+      "passed": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2",
+      "payload": {
+        "open_dialog_for_control": "menu item 위치… of menu 이동 of menu item 이동 of menu 탐색 of menu bar item 탐색 of menu bar 1 of application process Logic Pro",
+        "control_dialog": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "control_keyboard_owner_is_logic": true,
+        "control_after_escape": [],
+        "control_dialog_gone_after_seconds": 0.231,
+        "open_dialog": "menu item 위치… of menu 이동 of menu item 이동 of menu 탐색 of menu bar item 탐색 of menu bar 1 of application process Logic Pro",
+        "dialog": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "id": 9184,
+            "layer": 101,
+            "name": "",
+            "bounds": {
+              "X": 250,
+              "Height": 436,
+              "Y": 31,
+              "Width": 348
+            }
+          }
+        ],
+        "dialog_under_menu": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 758,
+              "Height": 157,
+              "Y": 254,
+              "Width": 403
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.291,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_after_seconds": null,
+        "dialog_after_one_escape": [
+          {
+            "id": 9146,
+            "layer": 8,
+            "name": "위치로 이동",
+            "bounds": {
+              "X": 758,
+              "Height": 157,
+              "Y": 254,
+              "Width": 403
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "after_cleanup": [
+          {
+            "id": 9143,
+            "layer": 3,
+            "name": "lpm-locale-campaign - 마커 목록",
+            "bounds": {
+              "X": 20,
+              "Height": 746,
+              "Y": 50,
+              "Width": 452
+            }
+          },
+          {
+            "id": 9142,
+            "layer": 0,
+            "name": "lpm-locale-campaign - 트랙",
+            "bounds": {
+              "X": 0,
+              "Height": 1050,
+              "Y": 30,
+              "Width": 1920
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "942/sample-2-left-no-menu-and-no-dialog",
+      "restored": true,
+      "detail": ""
+    },
+    {
+      "kind": "recording",
+      "file": "<LPM_EVIDENCE_ROOT>/04015265f60d1ecb8a6d5e5e9b6ceebe397b192b/probe_942_escape_over_goto_dialog__run.mov",
+      "exists": true,
+      "bytes": 75226690
+    },
+    {
+      "kind": "check",
+      "tag": "942/escape-reaches-the-dialog-alone",
+      "passed": true,
+      "expected": "with only the dialog up and Logic owning the keyboard, one Escape removes the dialog",
+      "observed": [
+        {
+          "control_dialog": [
+            {
+              "id": 9146,
+              "layer": 8,
+              "name": "위치로 이동",
+              "bounds": {
+                "X": 760,
+                "Height": 155,
+                "Y": 255,
+                "Width": 399
+              }
+            }
+          ],
+          "control_keyboard_owner_is_logic": true,
+          "control_after_escape": [],
+          "control_dialog_gone_after_seconds": 0.235,
+          "error": null
+        },
+        {
+          "control_dialog": [
+            {
+              "id": 9146,
+              "layer": 8,
+              "name": "위치로 이동",
+              "bounds": {
+                "X": 760,
+                "Height": 157,
+                "Y": 254,
+                "Width": 399
+              }
+            }
+          ],
+          "control_keyboard_owner_is_logic": true,
+          "control_after_escape": [],
+          "control_dialog_gone_after_seconds": 0.23,
+          "error": null
+        },
+        {
+          "control_dialog": [
+            {
+              "id": 9146,
+              "layer": 8,
+              "name": "위치로 이동",
+              "bounds": {
+                "X": 760,
+                "Height": 155,
+                "Y": 255,
+                "Width": 399
+              }
+            }
+          ],
+          "control_keyboard_owner_is_logic": true,
+          "control_after_escape": [],
+          "control_dialog_gone_after_seconds": 0.231,
+          "error": null
+        }
+      ],
+      "mutation": "if the Escape could not reach the dialog, a dialog surviving the measured Escape would prove nothing about which window it closes",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "942/one-escape-closes-the-menu-and-leaves-the-dialog",
+      "passed": true,
+      "expected": "with a Logic menu open over the dialog and Logic owning the keyboard, one Escape leaves no Logic menu and the same dialog window still on screen",
+      "observed": [
+        {
+          "menus_over_dialog": [
+            {
+              "id": 9182,
+              "layer": 101,
+              "name": "",
+              "bounds": {
+                "X": 250,
+                "Height": 436,
+                "Y": 31,
+                "Width": 348
+              }
+            }
+          ],
+          "dialog_under_menu": [
+            {
+              "id": 9146,
+              "layer": 8,
+              "name": "위치로 이동",
+              "bounds": {
+                "X": 758,
+                "Height": 157,
+                "Y": 254,
+                "Width": 403
+              }
+            }
+          ],
+          "keyboard_owner_is_logic": true,
+          "menus_after_one_escape": [],
+          "menu_gone_after_seconds": 0.28,
+          "dialog_survival_bound_seconds": 1.5,
+          "dialog_gone_after_seconds": null,
+          "dialog_after_one_escape": [
+            {
+              "id": 9146,
+              "layer": 8,
+              "name": "위치로 이동",
+              "bounds": {
+                "X": 758,
+                "Height": 157,
+                "Y": 254,
+                "Width": 403
+              }
+            }
+          ],
+          "menus_after_survival_bound": [],
+          "error": null
+        },
+        {
+          "menus_over_dialog": [
+            {
+              "id": 9183,
+              "layer": 101,
+              "name": "",
+              "bounds": {
+                "X": 250,
+                "Height": 436,
+                "Y": 31,
+                "Width": 348
+              }
+            }
+          ],
+          "dialog_under_menu": [
+            {
+              "id": 9146,
+              "layer": 8,
+              "name": "위치로 이동",
+              "bounds": {
+                "X": 758,
+                "Height": 157,
+                "Y": 254,
+                "Width": 403
+              }
+            }
+          ],
+          "keyboard_owner_is_logic": true,
+          "menus_after_one_escape": [],
+          "menu_gone_after_seconds": 0.293,
+          "dialog_survival_bound_seconds": 1.5,
+          "dialog_gone_after_seconds": null,
+          "dialog_after_one_escape": [
+            {
+              "id": 9146,
+              "layer": 8,
+              "name": "위치로 이동",
+              "bounds": {
+                "X": 758,
+                "Height": 157,
+                "Y": 254,
+                "Width": 403
+              }
+            }
+          ],
+          "menus_after_survival_bound": [],
+          "error": null
+        },
+        {
+          "menus_over_dialog": [
+            {
+              "id": 9184,
+              "layer": 101,
+              "name": "",
+              "bounds": {
+                "X": 250,
+                "Height": 436,
+                "Y": 31,
+                "Width": 348
+              }
+            }
+          ],
+          "dialog_under_menu": [
+            {
+              "id": 9146,
+              "layer": 8,
+              "name": "위치로 이동",
+              "bounds": {
+                "X": 758,
+                "Height": 157,
+                "Y": 254,
+                "Width": 403
+              }
+            }
+          ],
+          "keyboard_owner_is_logic": true,
+          "menus_after_one_escape": [],
+          "menu_gone_after_seconds": 0.291,
+          "dialog_survival_bound_seconds": 1.5,
+          "dialog_gone_after_seconds": null,
+          "dialog_after_one_escape": [
+            {
+              "id": 9146,
+              "layer": 8,
+              "name": "위치로 이동",
+              "bounds": {
+                "X": 758,
+                "Height": 157,
+                "Y": 254,
+                "Width": 403
+              }
+            }
+          ],
+          "menus_after_survival_bound": [],
+          "error": null
+        }
+      ],
+      "mutation": "if Logic routed the Escape to the modal first, the dialog would be gone after it and this check fails",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    }
+  ]
+}
