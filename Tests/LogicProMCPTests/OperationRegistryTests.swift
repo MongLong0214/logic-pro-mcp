@@ -29,6 +29,7 @@ struct OperationRegistryTests {
         (.mixerSetMasterVolume, "set_master_volume"),
         (.mixerSetPluginParam, "set_plugin_param"),
         (.mixerInsertPlugin, "insert_plugin"),
+        (.mixerBank, "bank"),
     ]
 
     private static let navigateCommands: [(String, String)] = [

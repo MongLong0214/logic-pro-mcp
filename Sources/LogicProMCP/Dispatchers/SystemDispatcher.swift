@@ -1968,6 +1968,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   set_volume        -> { track: Int, value: Float } (0.0-1.0)
                   set_pan           -> { track: Int, value: Float } (-1.0 to 1.0)
                   set_master_volume -> { value: Float }
+                  bank              -> { direction: "left"|"right", count?: Int (1-31) } — MCU bank window; State A from the LCD upper row
                   set_plugin_param  -> { track: Int, insert: 0, param: Int, value: Float } — selected track via Scripter
 
                 Read state via resource: logic://mixer

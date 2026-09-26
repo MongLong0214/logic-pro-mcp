@@ -156,8 +156,14 @@ struct MCUProtocol {
 
     // MARK: - Transport
 
-    /// Encode transport command → Note On bytes.
+    /// Encode transport command → the press half only (Note On velocity 127). MCUChannel does not
+    /// send this: it presses `transportButton(command)`, which adds the release (#862).
     static func encodeTransport(_ command: TransportCommand) -> [UInt8] {
+        encodeButton(transportButton(command), on: true)
+    }
+
+    /// The MCU button a transport command presses.
+    static func transportButton(_ command: TransportCommand) -> ButtonFunction {
         let function: ButtonFunction
         switch command {
         case .play: function = .play
@@ -171,7 +177,7 @@ struct MCUProtocol {
         case .click: function = .click
         case .soloGlobal: function = .soloGlobal
         }
-        return encodeButton(function, on: true)
+        return function
     }
 
     // MARK: - V-Pot

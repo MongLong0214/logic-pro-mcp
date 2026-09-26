@@ -105,6 +105,9 @@ extension ChannelRouter {
         "mixer.set_send":             [.mcu],
         "mixer.get_channel_strip":    [.mcu, .accessibility],
         "mixer.set_master_volume":    [.mcu],
+        // #862: a bank move is an MCU verb and its only readback is the MCU LCD upper row, so
+        // no other surface can carry it or prove it.
+        "mixer.bank":                 [.mcu],
         "mixer.set_plugin_param":     [.scripter],  // public path narrowed to deterministic Scripter flow
         "plugin.insert":              [.accessibility],
 

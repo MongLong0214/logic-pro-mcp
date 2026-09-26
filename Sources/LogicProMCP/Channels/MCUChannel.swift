@@ -197,6 +197,10 @@ actor MCUChannel: Channel {
     private let cache: StateCache
     private let feedbackParser: MCUFeedbackParser
     private let axReadback: AXReadback?
+    /// Every wait the bank-window path takes goes through here (#862). Production sleeps; a
+    /// test injects a sleeper that returns at once and COUNTS the waits, because a bound on
+    /// elapsed time measures the machine and a count of polls measures the code (#804).
+    private let sleep: @Sendable (Duration) async -> Void
     private(set) var currentBank: Int = 0
     private var bankingQueue: [CheckedContinuation<Void, Never>] = []
     private var isBanking: Bool = false
@@ -225,11 +229,15 @@ actor MCUChannel: Channel {
     init(
         transport: any MCUTransportProtocol,
         cache: StateCache,
-        axReadback: AXReadback? = nil
+        axReadback: AXReadback? = nil,
+        sleep: @escaping @Sendable (Duration) async -> Void = { duration in
+            try? await Task.sleep(for: duration)
+        }
     ) {
         self.transport = transport
         self.cache = cache
         self.axReadback = axReadback
+        self.sleep = sleep
         self.feedbackParser = MCUFeedbackParser(cache: cache)
     }
 
@@ -422,6 +430,8 @@ actor MCUChannel: Channel {
             return await executeSetPan(params)
         case "mixer.set_master_volume":
             return await executeSetMasterVolume(params)
+        case "mixer.bank":
+            return await executeBank(params)
         case "mixer.set_send":
             return .error("MCU send targeting is not deterministic enough for the production MCP contract")
         case "transport.play":
@@ -739,9 +749,18 @@ actor MCUChannel: Channel {
         ))
     }
 
+    /// The only way a momentary MCU button press is sent: Note On velocity 127, then velocity 0.
+    /// A press with no release is a HELD button to Logic — measured 2026-09-26 (#862): after a
+    /// bank-left walk and one bank-right, Logic auto-repeated both held bank buttons and redrew the
+    /// LCD upper row between two windows every ~30 ms (443 SysEx frames in 3 s) from one TX triple
+    /// per press; sending the release gave one redraw per press.
+    private func pressButton(_ function: MCUProtocol.ButtonFunction, strip: Int = 0) async {
+        await transport.send(MCUProtocol.encodeButton(function, strip: strip, on: true))
+        await transport.send(MCUProtocol.encodeButton(function, strip: strip, on: false))
+    }
+
     private func sendTransport(_ command: MCUProtocol.TransportCommand) async -> ChannelResult {
-        let bytes = MCUProtocol.encodeTransport(command)
-        await transport.send(bytes)
+        await pressButton(MCUProtocol.transportButton(command))
         // v3.1.2 (P0-1) — MCU transport buttons are press-only triggers; Logic
         // does not echo a transport state back over the same MIDI surface, so
         // every send is honestly `readback_unavailable`. Wrap in HC envelope
@@ -778,8 +797,13 @@ actor MCUChannel: Channel {
         }
 
         return await withBanking(targetTrack: track) { strip in
-            let bytes = MCUProtocol.encodeButton(function, strip: strip, on: enabled)
-            await self.transport.send(bytes)
+            if enabled {
+                await self.pressButton(function, strip: strip)
+            } else {
+                // Deliberately unchanged by #862: this bare velocity-0 byte is not a press, and what
+                // `enabled: false` should mean for a toggle button is a separate question.
+                await self.transport.send(MCUProtocol.encodeButton(function, strip: strip, on: false))
+            }
             // v3.1.2 (P0-1) — MCU button echo is LED-only, no AX-side mirror
             // wired into StateCache yet. The press lands but cannot be read
             // back, so honestly: State B `readback_unavailable`. Wrapping
@@ -825,7 +849,7 @@ actor MCUChannel: Channel {
         }
 
         return await withBanking(targetTrack: track) { strip in
-            await self.transport.send(MCUProtocol.encodeButton(.select, strip: strip, on: true))
+            await self.pressButton(.select, strip: strip)
             var observedSelectedTrack: Int?
             if let axReadback = self.axReadback {
                 for attempt in 0..<10 {
@@ -846,7 +870,7 @@ actor MCUChannel: Channel {
                 ))
             }
 
-            await self.transport.send(MCUProtocol.encodeButton(function, on: true))
+            await self.pressButton(function)
             extras["automation_write_attempted"] = true
             if let axReadback = self.axReadback {
                 for attempt in 0..<10 {
@@ -984,6 +1008,233 @@ actor MCUChannel: Channel {
         }
     }
 
+    // MARK: - Bank window (#862)
+
+    /// One poll of the LCD upper row while a bank move is awaited.
+    static let bankWindowPollMilliseconds = 25
+
+    /// How many upper-row polls a bank move is given. A COUNT, not a deadline: the wait is
+    /// `echoTimeoutMs` worth of 25 ms polls, so a test that injects a sleeper returning at once
+    /// can count the polls instead of timing them (#804), and a loaded machine can only make the
+    /// loop turn slower, never more often.
+    static var bankWindowPollBudget: Int { max(1, echoTimeoutMs / bankWindowPollMilliseconds) }
+
+    /// The only readback a bank move has. Nothing in the MCU protocol reports the bank offset;
+    /// what Logic does report, after every bank move, is the eight six-character names of the
+    /// strips now under the surface, as the LCD upper row (measured 2026-09-13, #862).
+    static let bankWindowVerifySource = "mcu_lcd_upper_row"
+
+    /// Bank bookkeeping is clamped to the 32 banks of a 256-track project.
+    static let bankIndexRange = 0...31
+
+    /// `mixer.bank`: move the MCU window `count` banks left or right, one press at a time, and
+    /// say how many of those presses Logic moved the window for.
+    ///
+    /// The press being sent proves nothing — `withBanking` sends the same bytes and measured a
+    /// miss (#862, 2026-09-11), and two presses sent back to back moved Logic 12.3 ONE bank
+    /// (#862, 2026-09-27). So every step is its own press and its own readback: snapshot the LCD
+    /// upper row, press once, then poll. A step MOVED when the row was WRITTEN after that step's
+    /// snapshot (`mcuUpperRowWriteSequence` advanced), stopped moving (the sequence unchanged
+    /// across two consecutive polls — Logic may redraw a row in several partial SysEx writes, and
+    /// the first of them is not the window), and READS differently from that step's snapshot. A
+    /// step whose redraw left the bytes identical is UNCHANGED: at bank 0 pressing left, at the
+    /// last bank pressing right, or eight neighbours whose six-char truncations coincide all look
+    /// like that, and six characters cannot tell them apart. A step with no quiescent redraw
+    /// inside the poll budget had NO REDRAW. The walk stops at the first step that did not move,
+    /// and no further press is sent.
+    ///
+    /// State A means every one of the `count` presses produced its own quiescent redraw to a row
+    /// different from the one before it. It still cannot say WHICH bank is showing — six-char
+    /// names are not an index — only that each step moved. No step moved is the single-press
+    /// answer: State B `noop_unobservable` for an unchanged row, State B echo timeout for no
+    /// redraw. Some but not all steps moved is State B too: `readback_mismatch` when the stopping
+    /// step redrew unchanged (the end of the mixer in that direction), echo timeout when it did
+    /// not redraw. `banks_moved` never exceeds the steps witnessed. A row that was never received
+    /// at all is refused BEFORE anything is sent, because with nothing to compare against there
+    /// is no way to know whether Logic moved and no honest answer to give afterwards.
+    ///
+    /// `currentBank` is bookkeeping this file keeps about itself, never read back from Logic; it
+    /// moves by the witnessed `banks_moved` only, and both values are reported so drift is visible.
+    private func executeBank(_ params: [String: String]) async -> ChannelResult {
+        let operation = "mixer.bank"
+        let direction: String
+        let count: Int
+        do {
+            direction = try Self.requiredBankDirection(params["direction"], operation: operation)
+            count = try Self.optionalBankCount(params["count"], operation: operation)
+        } catch {
+            let hint = (error as? ValidationFailure)?.hint ?? "Invalid MCU parameters for \(operation)"
+            // Every reply this handler gives says how far it got; a refused parameter got nowhere.
+            return .error(HonestContract.encodeStateC(
+                error: .invalidParams,
+                hint: hint,
+                extras: [
+                    "operation": operation, "channel": "MCU",
+                    "bank_presses_sent": 0, "banks_moved": 0, "step_windows": [String](),
+                ]
+            ))
+        }
+        let button: MCUProtocol.ButtonFunction = direction == "right" ? .bankRight : .bankLeft
+        let sign = direction == "right" ? 1 : -1
+
+        return await withBankExclusion {
+            let bookkeepingBefore = currentBank
+            var extras: [String: Any] = [
+                "operation": operation,
+                "channel": "MCU",
+                "direction": direction,
+                "bank_bookkeeping_before": bookkeepingBefore,
+            ]
+
+            // Snapshot BEFORE the first byte goes out: the comparison is against what the row
+            // held when the caller asked, not against whatever a poll happens to read first.
+            let before = await cache.mcuUpperRowSnapshot()
+            guard before.sequence > 0 else {
+                extras["write_attempted"] = false
+                extras["bank_presses_sent"] = 0
+                extras["banks_moved"] = 0
+                extras["banks_requested"] = count
+                extras["step_windows"] = [String]()
+                extras["verify_source"] = Self.bankWindowVerifySource
+                for (k, v) in await mcuConnectionExtras() { extras[k] = v }
+                let hint = "\(operation) sent nothing: the MCU LCD upper row has never been received on this "
+                    + "server, so there is no bank window to compare a move against. Install the Mackie "
+                    + "Control surface with both ports bound to LogicProMCP-MCU-Internal "
+                    + "(logic_system setup_control_surface), confirm logic://mcu/state shows "
+                    + "display.upperRow, then retry."
+                return .error(HonestContract.encodeStateC(
+                    error: .readbackUnavailable, hint: hint, extras: extras
+                ))
+            }
+            extras["window_before"] = before.row
+
+            var banksMoved = 0
+            var pressesSent = 0
+            var writesObserved = 0
+            var stepWindows: [String] = []
+            var lastWindow = before.row
+            // nil while every step so far moved; otherwise how the stopping step ended.
+            var stoppedQuiescent: Bool?
+            var stoppedUnchanged = false
+            for step in 0..<count {
+                var stepBefore = before
+                if step > 0 { stepBefore = await cache.mcuUpperRowSnapshot() }
+                await pressButton(button)
+                pressesSent += 1
+
+                // Fresh means WRITTEN after this step's snapshot, strictly. Quiescent means the
+                // write count held still for one more poll after the last fresh write.
+                var after = stepBefore
+                var quiescent = false
+                for _ in 0..<Self.bankWindowPollBudget {
+                    await sleep(.milliseconds(Self.bankWindowPollMilliseconds))
+                    let snapshot = await cache.mcuUpperRowSnapshot()
+                    guard snapshot.sequence > stepBefore.sequence else { continue }
+                    if snapshot.sequence == after.sequence {
+                        quiescent = true
+                        break
+                    }
+                    after = snapshot
+                }
+                let stepWrites = Int(clamping: after.sequence - stepBefore.sequence)
+                writesObserved += stepWrites
+                stepWindows.append(after.row)
+                lastWindow = after.row
+
+                guard stepWrites > 0, quiescent else {
+                    stoppedQuiescent = quiescent
+                    break
+                }
+                guard after.row != stepBefore.row else {
+                    stoppedQuiescent = true
+                    stoppedUnchanged = true
+                    break
+                }
+                banksMoved += 1
+            }
+
+            extras["bank_presses_sent"] = pressesSent
+            extras["banks_moved"] = banksMoved
+            extras["banks_requested"] = count
+            extras["step_windows"] = stepWindows
+            extras["upper_row_writes_observed"] = writesObserved
+            extras["window_after"] = lastWindow
+            for (k, v) in await mcuConnectionExtras() { extras[k] = v }
+
+            if banksMoved > 0 {
+                currentBank = min(
+                    max(currentBank + sign * banksMoved, Self.bankIndexRange.lowerBound),
+                    Self.bankIndexRange.upperBound
+                )
+            }
+            extras["bank_bookkeeping_after"] = currentBank
+
+            guard let quiescent = stoppedQuiescent else {
+                extras["verify_source"] = Self.bankWindowVerifySource
+                extras["strips"] = Self.bankWindowStrips(lastWindow)
+                return .success(HonestContract.encodeStateA(extras: extras))
+            }
+
+            guard stoppedUnchanged else {
+                extras["readback_source"] = Self.bankWindowVerifySource
+                extras["row_quiescent"] = quiescent
+                return .success(HonestContract.encodeStateB(
+                    reason: .echoTimeout(ms: Self.echoTimeoutMs), extras: extras
+                ))
+            }
+
+            extras["verify_source"] = Self.bankWindowVerifySource
+            guard banksMoved > 0 else {
+                let limitation = "the LCD upper row redrew with the same six-character names it held before "
+                    + "the press; an identical redraw cannot confirm a bank move (bank 0 pressed left, the "
+                    + "last bank pressed right, or eight neighbours whose truncated names coincide)"
+                extras["surface_limitation"] = limitation
+                return .success(HonestContract.encodeStateB(
+                    reason: .noopUnobservable, extras: extras
+                ))
+            }
+            let limitation = "the LCD upper row moved \(banksMoved) of \(count) requested banks, then redrew "
+                + "unchanged on the next press; an identical redraw is what the end of the mixer in that "
+                + "direction looks like (or eight neighbours whose truncated names coincide), so no further "
+                + "press was sent"
+            extras["surface_limitation"] = limitation
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch, extras: extras
+            ))
+        }
+    }
+
+    /// The eight seven-character cells of a 56-character LCD row — six characters of name and
+    /// one separator — with trailing spaces trimmed. A row that is not 56 characters long is
+    /// padded or cut to 56 first so the cell boundaries stay where the surface draws them.
+    static func bankWindowStrips(_ row: String) -> [String] {
+        let chars = Array(row.padding(toLength: 56, withPad: " ", startingAt: 0))
+        return stride(from: 0, to: chars.count, by: 7).map { start in
+            var cell = String(chars[start..<start + 7])
+            while cell.hasSuffix(" ") { cell.removeLast() }
+            return cell
+        }
+    }
+
+    private static func requiredBankDirection(_ raw: String?, operation: String) throws -> String {
+        let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard value == "left" || value == "right" else {
+            throw ValidationFailure(hint: "\(operation) requires 'direction' as left or right")
+        }
+        return value
+    }
+
+    private static func optionalBankCount(_ raw: String?, operation: String) throws -> Int {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return 1 }
+        return try requiredInt(
+            raw,
+            field: "count",
+            range: 1...31,
+            operation: operation,
+            rangeDescription: "1...31"
+        )
+    }
+
     // MARK: - Banking (Proper Queue)
 
     /// How long Logic is given to finish banking before a strip-relative message is sent.
@@ -995,21 +1246,17 @@ actor MCUChannel: Channel {
     /// silently did not.
     static let bankSettleMilliseconds = 250
 
-    private func withBanking(targetTrack: Int, operation: @escaping (Int) async -> ChannelResult) async -> ChannelResult {
-        // Sanity cap: real Logic projects rarely exceed 256 tracks (32 MCU banks).
-        // A `track.select {index: 99999}` was seen to spend 25 s walking 12499
-        // bank-right presses then restoring — far past any client timeout. Reject
-        // up front rather than burning that time.
-        guard (0...255).contains(targetTrack) else {
-            return .error("MCU bank target track \(targetTrack) out of range (0..255)")
-        }
-        let targetBank = targetTrack / 8
-        let strip = targetTrack % 8
-
-        if targetBank == currentBank {
-            return await operation(strip)
-        }
-
+    /// Serialises everything that moves the bank AND everything that addresses a strip. `withBanking`
+    /// moves it and moves it back; `executeBank` moves it and leaves it. Interleaving the two would
+    /// restore a bank neither asked for. A strip index names a channel only relative to the bank
+    /// Logic is showing, and `executeBank` updates `currentBank` only after its walk, so a strip
+    /// write that read `currentBank` while a walk was suspended in a poll would land in whatever
+    /// bank the walk had already drawn (#862). Every strip-relative operation therefore holds this
+    /// lock too, including the one whose track is in the bank the bookkeeping holds.
+    ///
+    /// Not re-entrant: nothing running under it may call `withBanking`, `withBankExclusion` or
+    /// `executeBank`, or it waits for itself.
+    private func withBankExclusion(_ body: () async -> ChannelResult) async -> ChannelResult {
         // Wait if another banking operation is in progress (loop to handle spurious wakeups)
         while isBanking {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -1024,41 +1271,67 @@ actor MCUChannel: Channel {
                 bankingQueue.removeFirst().resume()
             }
         }
-        let originalBank = currentBank
+        return await body()
+    }
 
-        // Bank to target
-        let bankDelta = targetBank - currentBank
-        let bankButton: MCUProtocol.ButtonFunction = bankDelta > 0 ? .bankRight : .bankLeft
-        for _ in 0..<abs(bankDelta) {
-            await transport.send(MCUProtocol.encodeButton(bankButton, on: true))
-            try? await Task.sleep(for: .milliseconds(1))
+    /// Test-only observation: how many callers are parked waiting for `withBankExclusion`. A test
+    /// that holds the lock open needs to know a second caller reached it without reading a clock.
+    var bankExclusionWaiterCount: Int { bankingQueue.count }
+
+    private func withBanking(targetTrack: Int, operation: @escaping (Int) async -> ChannelResult) async -> ChannelResult {
+        // Sanity cap: real Logic projects rarely exceed 256 tracks (32 MCU banks).
+        // A `track.select {index: 99999}` was seen to spend 25 s walking 12499
+        // bank-right presses then restoring — far past any client timeout. Reject
+        // up front rather than burning that time.
+        guard (0...255).contains(targetTrack) else {
+            return .error("MCU bank target track \(targetTrack) out of range (0..255)")
         }
-        currentBank = targetBank
-        // Logic has not banked yet. The presses above go out 1 ms apart and the strip-relative
-        // message right behind them addresses a bank that has not moved: measured 2026-09-11
-        // (#862), asking for arrange track 11 — targetBank 1, strip 3 — selected CHANNEL 3, and
-        // Logic answered `Deluxe Classic` where `Studio Grand` was requested. A strip index that
-        // names the wrong channel is not a slow operation, it is a write to a target the caller
-        // did not name, and every strip-relative MCU operation goes through here.
-        try? await Task.sleep(for: .milliseconds(Self.bankSettleMilliseconds))
+        let targetBank = targetTrack / 8
+        let strip = targetTrack % 8
 
-        // Execute on target bank
-        let result = await operation(strip)
+        return await withBankExclusion {
+            // Decided under the lock: read outside it, `currentBank` can be the bank a suspended
+            // `executeBank` walk has already left.
+            if targetBank == currentBank {
+                return await operation(strip)
+            }
 
-        // Restore original bank
-        let restoreDelta = originalBank - currentBank
-        let restoreButton: MCUProtocol.ButtonFunction = restoreDelta > 0 ? .bankRight : .bankLeft
-        for _ in 0..<abs(restoreDelta) {
-            await transport.send(MCUProtocol.encodeButton(restoreButton, on: true))
-            try? await Task.sleep(for: .milliseconds(1))
+            let originalBank = currentBank
+
+            // Bank to target
+            let bankDelta = targetBank - currentBank
+            let bankButton: MCUProtocol.ButtonFunction = bankDelta > 0 ? .bankRight : .bankLeft
+            for _ in 0..<abs(bankDelta) {
+                await pressButton(bankButton)
+                try? await Task.sleep(for: .milliseconds(1))
+            }
+            currentBank = targetBank
+            // Logic has not banked yet. The presses above go out 1 ms apart and the strip-relative
+            // message right behind them addresses a bank that has not moved: measured 2026-09-11
+            // (#862), asking for arrange track 11 — targetBank 1, strip 3 — selected CHANNEL 3, and
+            // Logic answered `Deluxe Classic` where `Studio Grand` was requested. A strip index that
+            // names the wrong channel is not a slow operation, it is a write to a target the caller
+            // did not name, and every strip-relative MCU operation goes through here.
+            try? await Task.sleep(for: .milliseconds(Self.bankSettleMilliseconds))
+
+            // Execute on target bank
+            let result = await operation(strip)
+
+            // Restore original bank
+            let restoreDelta = originalBank - currentBank
+            let restoreButton: MCUProtocol.ButtonFunction = restoreDelta > 0 ? .bankRight : .bankLeft
+            for _ in 0..<abs(restoreDelta) {
+                await pressButton(restoreButton)
+                try? await Task.sleep(for: .milliseconds(1))
+            }
+            currentBank = originalBank
+            // The restore loop has the same shape and the same problem. Without this the NEXT caller
+            // inherits a bank Logic has not finished moving to, which is the same defect one call
+            // later and harder to attribute.
+            try? await Task.sleep(for: .milliseconds(Self.bankSettleMilliseconds))
+
+            // withBankExclusion's defer handles: isBanking = false + queue wake
+            return result
         }
-        currentBank = originalBank
-        // The restore loop has the same shape and the same problem. Without this the NEXT caller
-        // inherits a bank Logic has not finished moving to, which is the same defect one call
-        // later and harder to attribute.
-        try? await Task.sleep(for: .milliseconds(Self.bankSettleMilliseconds))
-
-        // defer handles: isBanking = false + queue wake
-        return result
     }
 }

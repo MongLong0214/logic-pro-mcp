@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Added
-
+- `logic_mixer bank` (`mixer.bank`, MCU only, #862): moves the Mackie Control fader bank by eight strips per step, `{ direction: "left" | "right", count?: 1–31 }`. Each step is one press followed by its own readback, a fresh, changed MCU LCD upper row that holds still, never the press having been sent; two presses sent back to back moved Logic 12.3 one bank, so presses are not batched, and the walk stops at the first step that did not move. Handler replies carry `banks_moved`, `banks_requested`, `bank_presses_sent` and `step_windows`. State A (`verify_source: mcu_lcd_upper_row`, `window_before` / `window_after` / `strips`) means every step moved; it does not say which bank is showing. With no step moved, State B `noop_unobservable` when the row redraws unchanged and `echo_timeout_<ms>ms` when it never redraws; with some steps moved, State B `readback_mismatch` when the next step redraws unchanged (the end of the mixer) and `echo_timeout_<ms>ms` when it does not redraw, with the bank counter moved by `banks_moved` only. A cold start has two answers, and neither sends a byte: with no MCU feedback received yet, the shared router health gate answers State C `channels_exhausted` before the handler runs, as for every MCU operation; with feedback but no upper row yet, State C `readback_unavailable` with `write_attempted: false`, `bank_presses_sent: 0`, `banks_moved: 0`, `banks_requested` equal to `count` and `step_windows: []`. Registered, handler-bound, in the skill catalog, help text and API docs; listed as an audited exclusion in the semantic-oracle table until a live observation record exists.
 - **`logic_project.inspect_session`: a cache-only session population report (#965, first
   increment).** The `logic_pro_mcp_session_population.v1` report is read from the state cache
   alone: no Accessibility call, no UI navigation, nothing restored. Every requested domain
@@ -20,10 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   count that does not match the rail are all reported as what they are instead of as an empty or
   complete session; `associations` and `hierarchy` are `unavailable` because the cache holds no
   evidence for either. `allow_ui_navigation=true` is refused with State C `not_implemented` until
-  the navigating increment lands. Registry censuses grow to 115 operations / 24 read-only.
+  the navigating increment lands. Registry censuses grow to 116 operations / 24 read-only.
 
 ### Fixed
-
+- MCU button presses now send the button release: bank left/right (`mixer.bank` and the bank walk behind every strip-relative MCU operation), track select, automation mode, the mute / solo / arm / select strip buttons, and the MCU transport buttons (play, stop, record, rewind, fast forward, cycle). Before, each press was a Note On with no release, so Logic saw every button as held, and it auto-repeats held bank buttons: after one bank walk left and one press right, the LCD kept redrawing between two bank windows for seconds. `track.set_mute` / `set_solo` / `set_arm` with `enabled: false` still send what they sent before, a single release with no press. (#862)
 - **`logic://mixer`'s `routing_graph` no longer depends on whether `logic://tracks` was read
   first (#291).** In a fresh server a mixer read published no track nodes at all until
   `logic://tracks` had been read, because only that resource issued `trk_` references; the same
