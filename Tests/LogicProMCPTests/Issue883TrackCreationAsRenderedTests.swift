@@ -175,3 +175,249 @@ struct Issue883TrackCreationAsRenderedTests {
         #expect(pressed.current() == [create], "pressed \(pressed.current())")
     }
 }
+
+/// The Spanish sheet read on 2026-09-26, with the one thing that failed that day put back: a Create
+/// whose title the Create LabelSet does not hold. The description still names the sheet and Cancel
+/// is enabled, as both languages read it.
+private let unidentifiableCreate = "Crear pista"
+private let spanishCancel = "Cancelar"
+
+/// The sheet leaves only because Cancel was pressed: until then it is in the window's children and
+/// its own AXRole reads; after, it is out of the children and its identity answers `-25202`. With
+/// `dismissalRemovesSheet == false` the press is accepted and nothing changes, which is the case the
+/// envelope must not call closed.
+private final class OwnedSheetFixture: @unchecked Sendable {
+    let builder = FakeAXRuntimeBuilder()
+    let app: AXUIElement
+    let window: AXUIElement
+    let menuBar: AXUIElement
+    let headers: AXUIElement
+    let existing: AXUIElement
+    let sheet: AXUIElement
+    let create: AXUIElement
+    let cancel: AXUIElement
+    let pressed = PressedTitles()
+    let dismissalRemovesSheet: Bool
+
+    init(base: Int, dismissalRemovesSheet: Bool) {
+        self.dismissalRemovesSheet = dismissalRemovesSheet
+        app = builder.element(base)
+        window = builder.element(base + 1)
+        menuBar = builder.element(base + 2)
+        headers = builder.element(base + 3)
+        existing = builder.element(base + 4)
+        sheet = builder.element(base + 5)
+        create = builder.element(base + 6)
+        cancel = builder.element(base + 7)
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+        builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(window, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setAttribute(window, kAXTitleAttribute as String, "Sin título 1 - Pistas")
+        builder.setAttribute(headers, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(headers, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setAttribute(existing, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setAttribute(existing, kAXTitleAttribute as String, "Audio 1")
+        builder.setChildren(headers, [existing])
+        builder.setChildren(menuBar, [])
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "Nueva pista")
+        builder.setChildren(sheet, [create, cancel])
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, unidentifiableCreate)
+        builder.setAttribute(create, kAXEnabledAttribute as String, true)
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, spanishCancel)
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, true)
+    }
+
+    var cancelPresses: Int { pressed.current().filter { $0 == spanishCancel }.count }
+    var createPresses: Int { pressed.current().filter { $0 == unidentifiableCreate }.count }
+    private var sheetDismissed: Bool { dismissalRemovesSheet && cancelPresses > 0 }
+
+    func showSheet() {
+        builder.setChildren(window, [headers, sheet])
+    }
+
+    /// `extraPress` lets a caller add a menu leaf; returning nil falls through to the sheet buttons.
+    func runtime(extraPress: (@Sendable (AXUIElement) -> Bool?)? = nil) -> AXLogicProElements.Runtime {
+        let unsupported = AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue)
+        let destroyed = AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue)
+        return builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { [self] element, attribute in
+                if attribute == "AXSheets" { return .failure(unsupported) }
+                if sheetDismissed, CFEqual(element, sheet) { return .failure(destroyed) }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { [self] element, action in
+                guard action == (kAXPressAction as String) else { return false }
+                if let handled = extraPress?(element) { return handled }
+                if CFEqual(element, create) {
+                    pressed.append(unidentifiableCreate)
+                    return true
+                }
+                if CFEqual(element, cancel) {
+                    pressed.append(spanishCancel)
+                    if dismissalRemovesSheet {
+                        builder.setChildren(window, [headers])
+                    }
+                    return true
+                }
+                return false
+            }
+        )
+    }
+}
+
+private func decodeEnvelope(_ result: ChannelResult) throws -> [String: Any] {
+    try #require(try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any])
+}
+
+@Suite("Issue #883 — a New Track sheet the operation gave up on is dismissed and re-read")
+struct Issue883OwnedNewTrackSheetCleanupTests {
+
+    @Test(
+        "project.new dismisses its own sheet when Create cannot be identified, and reports the re-read",
+        arguments: [true, false]
+    )
+    func projectNewDismissesItsSheet(dismissalRemovesSheet: Bool) async throws {
+        let fixture = OwnedSheetFixture(base: 8870, dismissalRemovesSheet: dismissalRemovesSheet)
+        fixture.showSheet()
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime(),
+            selection: "Empty Project",
+            observationAttempts: 1,
+            observationDelayNanoseconds: 0,
+            newTrackSheetCleanupAttempts: 2
+        )
+        let envelope = try decodeEnvelope(result)
+        let cleanup = try #require(
+            envelope["new_track_sheet_cleanup"] as? [String: Any],
+            "no cleanup was reported: \(result.message)"
+        )
+
+        #expect(!result.isSuccess)
+        #expect(envelope["state"] as? String == "B")
+        #expect(envelope["phase"] as? String == "mandatory_track_create_unconfirmed")
+        #expect(fixture.createPresses == 0, "a Create the policy cannot identify must never be pressed")
+        #expect(fixture.cancelPresses == 1)
+        let dismissAttempted = try #require(cleanup["dismiss_attempted"] as? Bool)
+        let boundSheetGone = try #require(cleanup["bound_sheet_gone"] as? Bool)
+        #expect(dismissAttempted)
+        #expect(cleanup["method"] as? String == "cancel_button")
+        if dismissalRemovesSheet {
+            #expect(cleanup["result"] as? String == "observed_closed")
+            #expect(boundSheetGone)
+            #expect(cleanup["post_cleanup_modal"] as? String == "none")
+        } else {
+            #expect(cleanup["result"] as? String == "not_observed_closed")
+            #expect(!boundSheetGone)
+            #expect(cleanup["post_cleanup_modal"] as? String == "mandatory_new_track")
+            #expect(cleanup["polls"] as? Int == 2)
+        }
+    }
+
+    @Test(
+        "track.create dismisses the sheet its menu press opened when Create cannot be identified",
+        arguments: [true, false]
+    )
+    func trackCreateDismissesTheSheetItOpened(dismissalRemovesSheet: Bool) async throws {
+        let fixture = OwnedSheetFixture(base: 8880, dismissalRemovesSheet: dismissalRemovesSheet)
+        let trackMenu = fixture.builder.element(8890)
+        let leaf = fixture.builder.element(8891)
+        fixture.builder.setChildren(fixture.window, [fixture.headers])
+        fixture.builder.setChildren(fixture.menuBar, [trackMenu])
+        fixture.builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Pista")
+        fixture.builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
+        fixture.builder.setChildren(trackMenu, [leaf])
+        fixture.builder.setAttribute(leaf, kAXTitleAttribute as String, "Nueva pista de audio")
+        fixture.builder.setAttribute(leaf, kAXSelectedAttribute as String, false)
+
+        let runtime = fixture.runtime(extraPress: { element in
+            guard CFEqual(element, leaf) else { return nil }
+            fixture.pressed.append("leaf")
+            fixture.showSheet()
+            return true
+        })
+        let result = await AccessibilityChannel.createTrackViaMenu(
+            item: AXLocalePolicy.LabelSet(
+                canonical: "New Audio Track",
+                variants: ["Nueva pista de audio"],
+                rationale: "fixture menu leaf"),
+            expectedTrackType: .audio,
+            runtime: runtime,
+            dialogPollAttempts: 2,
+            dialogPollDelayNanoseconds: 0,
+            newTrackSheetCleanupAttempts: 2
+        )
+        let envelope = try decodeEnvelope(result)
+        let cleanup = try #require(
+            envelope["new_track_sheet_cleanup"] as? [String: Any],
+            "no cleanup was reported: \(result.message)"
+        )
+
+        #expect(fixture.pressed.current().first == "leaf", "the menu press seam must fire first")
+        #expect(envelope["state"] as? String == "B")
+        let verified = try #require(envelope["verified"] as? Bool)
+        let dismissAttempted = try #require(cleanup["dismiss_attempted"] as? Bool)
+        let dialogPresent = try #require(envelope["dialog_present"] as? Bool)
+        #expect(!verified)
+        #expect(envelope["reconciled_modal_kind"] as? String == "mandatory_new_track")
+        #expect(fixture.createPresses == 0)
+        #expect(fixture.cancelPresses == 1)
+        #expect(dismissAttempted)
+        if dismissalRemovesSheet {
+            #expect(cleanup["result"] as? String == "observed_closed")
+            #expect(!dialogPresent)
+            #expect(envelope["waiting_for_user"] == nil)
+        } else {
+            #expect(cleanup["result"] as? String == "not_observed_closed")
+            #expect(dialogPresent)
+            let waitingForUser = try #require(envelope["waiting_for_user"] as? Bool)
+            #expect(waitingForUser)
+        }
+    }
+
+    @Test("track.create does not dismiss a New Track sheet that was already up before its menu press")
+    func trackCreateLeavesASheetItDidNotOpen() async throws {
+        let fixture = OwnedSheetFixture(base: 8900, dismissalRemovesSheet: true)
+        let trackMenu = fixture.builder.element(8910)
+        let leaf = fixture.builder.element(8911)
+        fixture.showSheet()
+        fixture.builder.setChildren(fixture.menuBar, [trackMenu])
+        fixture.builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Pista")
+        fixture.builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
+        fixture.builder.setChildren(trackMenu, [leaf])
+        fixture.builder.setAttribute(leaf, kAXTitleAttribute as String, "Nueva pista de audio")
+        fixture.builder.setAttribute(leaf, kAXSelectedAttribute as String, false)
+
+        let runtime = fixture.runtime(extraPress: { element in
+            guard CFEqual(element, leaf) else { return nil }
+            fixture.pressed.append("leaf")
+            return true
+        })
+        let result = await AccessibilityChannel.createTrackViaMenu(
+            item: AXLocalePolicy.LabelSet(
+                canonical: "New Audio Track",
+                variants: ["Nueva pista de audio"],
+                rationale: "fixture menu leaf"),
+            expectedTrackType: .audio,
+            runtime: runtime,
+            dialogPollAttempts: 2,
+            dialogPollDelayNanoseconds: 0,
+            newTrackSheetCleanupAttempts: 2
+        )
+        let envelope = try decodeEnvelope(result)
+
+        #expect(fixture.pressed.current().contains("leaf"), "the menu press seam must fire")
+        #expect(envelope["reconciled_modal_kind"] as? String == "mandatory_new_track")
+        #expect(fixture.cancelPresses == 0, "a sheet this call did not open is not its to dismiss")
+        #expect(envelope["new_track_sheet_cleanup"] == nil)
+    }
+}

@@ -565,6 +565,9 @@ extension AccessibilityChannel {
         let sheet: AXUIElement?
         let createButton: AXUIElement?
         let deleteButton: AXUIElement?
+        /// #883: the sheet's Cancel, resolved by the same LabelSet pass as Create. Only
+        /// `dismissOwnedNewTrackSheet` presses it, and only on a New Track sheet an operation owns.
+        let cancelButton: AXUIElement?
         let unreadableReason: ModalReadFailure?
         /// #549: see `ModalReconcileOutcome.sheetScanFailureDetail`.
         let sheetScanFailureDetail: ModalSheetScanFailureDetail?
@@ -746,6 +749,7 @@ extension AccessibilityChannel {
             sheet: nil,
             createButton: nil,
             deleteButton: nil,
+            cancelButton: nil,
             unreadableReason: unreadableReason,
             sheetScanFailureDetail: sheetScanFailureDetail
         )
@@ -789,6 +793,7 @@ extension AccessibilityChannel {
             sheet: nil,
             createButton: nil,
             deleteButton: nil,
+            cancelButton: nil,
             unreadableReason: nil,
             sheetScanFailureDetail: nil
         )
@@ -910,6 +915,7 @@ extension AccessibilityChannel {
         sheet: sheet,
         createButton: createButton?.element,
         deleteButton: deleteButton?.element,
+        cancelButton: cancelButton?.element,
         unreadableReason: nil,
         sheetScanFailureDetail: nil)
     }
@@ -1977,6 +1983,167 @@ extension AccessibilityChannel {
         return "escaped"
         """
         return await runtime.executeAppleScript(script).isSuccess
+    }
+
+    // MARK: - Owned New Track sheet cleanup (#883)
+
+    /// What a give-up path did about the New Track sheet its own operation raised, and what a
+    /// fresh read saw afterwards. `observedClosed` is a re-read, never an inference from the press.
+    struct NewTrackSheetCleanup: Sendable, Equatable {
+        /// Why no dismissal was issued. Each names the gate that stopped it, not a guess about
+        /// what is on screen.
+        enum Refusal: String, Sendable, Equatable {
+            case modalReadIncomplete = "modal_read_incomplete"
+            /// A sheet is up, but it does not classify as New Track, so this operation cannot
+            /// attribute it to itself.
+            case notNewTrackSheet = "not_new_track_sheet"
+            case cancelNotIdentified = "cancel_not_identified"
+            case cancelDisabled = "cancel_disabled"
+            case cancelLabelChanged = "cancel_label_changed"
+        }
+
+        let dismissAttempted: Bool
+        let refusal: Refusal?
+        let actionFailure: AXHelpers.AXActionError?
+        /// The pressed sheet's own AX identity read back `invalidUIElement`. Meaningful only when
+        /// a dismissal was attempted.
+        let boundSheetGone: Bool
+        let observedClosed: Bool
+        let postCleanupKind: ModalReconciliation.BlockingModalKind
+        let postCleanupObservationComplete: Bool
+        let pollCount: Int
+
+        var envelopeValue: [String: Any] {
+            var value: [String: Any] = [
+                "result": observedClosed ? "observed_closed" : "not_observed_closed",
+                "dismiss_attempted": dismissAttempted,
+                "post_cleanup_modal": AccessibilityChannel.reconcileKindLabel(postCleanupKind),
+                "post_cleanup_observation": postCleanupObservationComplete ? "complete" : "incomplete",
+                "polls": pollCount,
+            ]
+            if dismissAttempted {
+                value["method"] = "cancel_button"
+                value["bound_sheet_gone"] = boundSheetGone
+            }
+            if let refusal {
+                value["refusal"] = refusal.rawValue
+            }
+            if let actionFailure {
+                value["action_error"] = actionFailure.diagnosticLabel
+            }
+            return value
+        }
+    }
+
+    /// A sheet-shaped blocker is still up. The New Track sheet counts as closed only when a
+    /// complete read finds none of these: a New Track sheet whose labels drifted can classify
+    /// as `unknownSheet`, and reading that as closed would claim a close nobody saw.
+    static func kindIsSheetShaped(_ kind: ModalReconciliation.BlockingModalKind) -> Bool {
+        switch kind {
+        case .mandatoryNewTrack, .unknownSheet, .deleteConfirm:
+            return true
+        case .none, .informationalAlert, .strayMenu:
+            return false
+        }
+    }
+
+    /// Dismiss the New Track sheet an operation raised and then gave up on, and re-read whether
+    /// it closed.
+    ///
+    /// The CALLER owns attribution: it calls this only for a sheet its own action raised
+    /// (`project.new`'s mandatory sheet, or the one a `track.create_*` menu press opened). This
+    /// function adds the second half of that gate: it re-reads, and acts only on a sheet that
+    /// still classifies as `.mandatoryNewTrack` — never on an unknown sheet, a delete
+    /// confirmation or an alert.
+    ///
+    /// The dismissal is the sheet's own Cancel, resolved by `AXLocalePolicy.cancelButton` in the
+    /// same reader pass that looks for Create, re-bound by label immediately before the press
+    /// the way `clickNewTrackCreateButton` re-binds Create. That is the mechanism the Save As and
+    /// Go To Position cleanups already use; no Escape is sent, because a key goes to whatever
+    /// window has focus and cannot be bound to this sheet. A Cancel that reads disabled is not
+    /// pressed.
+    static func dismissOwnedNewTrackSheet(
+        runtime: AXLogicProElements.Runtime = .production,
+        observationAttempts: Int = 10,
+        observationDelayNanoseconds: UInt64 = 100_000_000
+    ) async -> NewTrackSheetCleanup {
+        let mainWindow = modalMainWindow(runtime: runtime)
+        let read = readModalSignalsAndAlertTarget(runtime: runtime, mainWindow: mainWindow)
+        let kind = ModalReconciliation.classify(read.signals)
+
+        func unattempted(_ refusal: NewTrackSheetCleanup.Refusal?) -> NewTrackSheetCleanup {
+            NewTrackSheetCleanup(
+                dismissAttempted: false,
+                refusal: refusal,
+                actionFailure: nil,
+                boundSheetGone: false,
+                observedClosed: refusal == nil
+                    && read.modalObservationIsComplete
+                    && !kindIsSheetShaped(kind),
+                postCleanupKind: kind,
+                postCleanupObservationComplete: read.modalObservationIsComplete,
+                pollCount: 1
+            )
+        }
+
+        guard kind == .mandatoryNewTrack, let sheet = read.sheet else {
+            if kindIsSheetShaped(kind) { return unattempted(.notNewTrackSheet) }
+            if !read.modalObservationIsComplete { return unattempted(.modalReadIncomplete) }
+            // The sheet is already gone on a complete read; there is nothing to dismiss.
+            return unattempted(nil)
+        }
+        guard let cancel = read.cancelButton else { return unattempted(.cancelNotIdentified) }
+        if (AXHelpers.getAttribute(cancel, kAXEnabledAttribute as String, runtime: runtime.ax) as Bool?) == false {
+            return unattempted(.cancelDisabled)
+        }
+        guard buttonLabel(cancel, runtime: runtime.ax) == read.signals.cancelButtonTitle else {
+            return unattempted(.cancelLabelChanged)
+        }
+
+        let actionFailure: AXHelpers.AXActionError?
+        switch AXHelpers.performActionResult(cancel, kAXPressAction as String, runtime: runtime.ax) {
+        case .success:
+            actionFailure = nil
+        case .failure(let error):
+            actionFailure = error
+        }
+
+        // Two facts, as in `observeProjectCreationOutcome`: the pressed sheet's identity is gone,
+        // AND a fresh complete read finds no sheet-shaped blocker. Either alone is not a close.
+        let attempts = max(1, observationAttempts)
+        var boundSheetGone = false
+        var postKind = kind
+        var postComplete = false
+        var polls = 0
+        for index in 1...attempts {
+            polls = index
+            if boundSheetWitnessObservation(sheet, runtime: runtime) == .gone {
+                boundSheetGone = true
+            }
+            let fresh = readModalSignalsAndAlertTarget(runtime: runtime, mainWindow: mainWindow)
+            postKind = ModalReconciliation.classify(fresh.signals)
+            postComplete = fresh.modalObservationIsComplete
+            if boundSheetGone, postComplete, !kindIsSheetShaped(postKind) { break }
+            if index < attempts {
+                try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
+            }
+        }
+        let observedClosed = boundSheetGone && postComplete && !kindIsSheetShaped(postKind)
+        Log.info(
+            "new_track_sheet_cleanup press_error=\(actionFailure?.diagnosticLabel ?? "none") "
+                + "bound_sheet_gone=\(boundSheetGone) observed_closed=\(observedClosed)",
+            subsystem: .ax
+        )
+        return NewTrackSheetCleanup(
+            dismissAttempted: true,
+            refusal: nil,
+            actionFailure: actionFailure,
+            boundSheetGone: boundSheetGone,
+            observedClosed: observedClosed,
+            postCleanupKind: postKind,
+            postCleanupObservationComplete: postComplete,
+            pollCount: polls
+        )
     }
 
     // MARK: - Extras labels
