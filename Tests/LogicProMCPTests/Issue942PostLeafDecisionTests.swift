@@ -205,9 +205,11 @@ struct Issue942PostLeafDecisionTests {
         #expect(seen == known)
     }
 
-    @Test func theShippedPolicyWithholdsEscapeOverTheDialog() {
-        #expect(Policy.current == .withheldWhileDialogPresent)
-        #expect(Policy.current.rawValue == "withheld_while_dialog_present")
+    /// The shipped policy follows the live record
+    /// 2026-09-26-ko-KR-escape-over-go-to-position-closes-the-menu-first; changing it needs a new record.
+    @Test func theShippedPolicyIsTheMeasuredOrdering() {
+        #expect(Policy.current == .menuEscapeMeasuredToLeaveDialog)
+        #expect(Policy.withheldWhileDialogPresent.rawValue == "withheld_while_dialog_present")
         #expect(Policy.menuEscapeMeasuredToLeaveDialog.rawValue == "menu_escape_measured_to_leave_dialog")
         #expect(Policy.allCases.count == 2)
     }

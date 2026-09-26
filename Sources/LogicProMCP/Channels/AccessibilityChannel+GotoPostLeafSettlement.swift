@@ -43,17 +43,22 @@ extension AccessibilityChannel {
     /// Whether Escape may be sent at an open menu while the Go To Position dialog is also up.
     ///
     /// The menu sits above the modal dialog. One Escape either closes the menu and leaves the
-    /// dialog, or is taken by the dialog under it, and which of the two Logic does for this dialog
-    /// has not been measured. Until it has, the menu loop is withheld whenever the dialog is
-    /// present. Only a linked live observation record of that Escape ordering -- a Logic menu open
-    /// over the modal Go To Position dialog, Escape sent, both surfaces re-read from the window
-    /// list -- may change `current`. A unit test cannot, and neither can the record taken for a
-    /// different dialog.
+    /// dialog, or is taken by the dialog under it. Only a linked live observation record of that
+    /// Escape ordering -- a Logic menu open over the modal Go To Position dialog, Escape sent the
+    /// way the server sends it, both surfaces re-read from the window list -- may change `current`.
+    /// A unit test cannot, and neither can a record taken for a different dialog.
+    ///
+    /// `current` is `.menuEscapeMeasuredToLeaveDialog` on the strength of
+    /// docs/observations/2026-09-26-ko-KR-escape-over-go-to-position-closes-the-menu-first.json:
+    /// in three samples a key-53 Escape at the HID tap closed the Navigate menu and left the same
+    /// dialog window on screen, unchanged, 1.5 s later: over six times the longest the same Escape
+    /// took to remove the dialog alone (0.235 s). The loop that acts on it must re-read the popup
+    /// count before every Escape, so a further Escape goes out only while a menu is still counted.
     enum EscapeOverDialogPolicy: String, Sendable, CaseIterable {
         case withheldWhileDialogPresent = "withheld_while_dialog_present"
         case menuEscapeMeasuredToLeaveDialog = "menu_escape_measured_to_leave_dialog"
 
-        static let current: EscapeOverDialogPolicy = .withheldWhileDialogPresent
+        static let current: EscapeOverDialogPolicy = .menuEscapeMeasuredToLeaveDialog
     }
 
     enum PostLeafAction: Equatable, Sendable {
