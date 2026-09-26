@@ -186,6 +186,17 @@ private let spanishCancel = "Cancelar"
 /// its own AXRole reads; after, it is out of the children and its identity answers `-25202`. With
 /// `dismissalRemovesSheet == false` the press is accepted and nothing changes, which is the case the
 /// envelope must not call closed.
+///
+/// `afterCancel` is what Logic does to the project on `project.new`'s mandatory sheet, measured
+/// 2026-09-26 in Korean from a cold launch: Cancel closes the untitled project. Its window's identity
+/// then answers `-25202`, `AXMainWindow` reads `-25212` with no windows, and about half a second
+/// later the project chooser, an ordinary non-modal standard window, is main.
+private enum AfterCancel {
+    case projectStays
+    case noWindow
+    case chooserIsMain
+}
+
 private final class OwnedSheetFixture: @unchecked Sendable {
     let builder = FakeAXRuntimeBuilder()
     let app: AXUIElement
@@ -196,11 +207,14 @@ private final class OwnedSheetFixture: @unchecked Sendable {
     let sheet: AXUIElement
     let create: AXUIElement
     let cancel: AXUIElement
+    let chooser: AXUIElement
     let pressed = PressedTitles()
     let dismissalRemovesSheet: Bool
+    let afterCancel: AfterCancel
 
-    init(base: Int, dismissalRemovesSheet: Bool) {
+    init(base: Int, dismissalRemovesSheet: Bool, afterCancel: AfterCancel = .projectStays) {
         self.dismissalRemovesSheet = dismissalRemovesSheet
+        self.afterCancel = afterCancel
         app = builder.element(base)
         window = builder.element(base + 1)
         menuBar = builder.element(base + 2)
@@ -209,6 +223,7 @@ private final class OwnedSheetFixture: @unchecked Sendable {
         sheet = builder.element(base + 5)
         create = builder.element(base + 6)
         cancel = builder.element(base + 7)
+        chooser = builder.element(base + 8)
 
         builder.setAttribute(app, kAXMainWindowAttribute as String, window)
         builder.setAttribute(app, kAXWindowsAttribute as String, [window])
@@ -232,11 +247,17 @@ private final class OwnedSheetFixture: @unchecked Sendable {
         builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
         builder.setAttribute(cancel, kAXTitleAttribute as String, spanishCancel)
         builder.setAttribute(cancel, kAXEnabledAttribute as String, true)
+        builder.setAttribute(chooser, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(chooser, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+        builder.setAttribute(chooser, kAXModalAttribute as String, false)
+        builder.setAttribute(chooser, kAXTitleAttribute as String, "Seleccionar un proyecto")
+        builder.setChildren(chooser, [])
     }
 
     var cancelPresses: Int { pressed.current().filter { $0 == spanishCancel }.count }
     var createPresses: Int { pressed.current().filter { $0 == unidentifiableCreate }.count }
     private var sheetDismissed: Bool { dismissalRemovesSheet && cancelPresses > 0 }
+    private var projectClosed: Bool { sheetDismissed && afterCancel != .projectStays }
 
     func showSheet() {
         builder.setChildren(window, [headers, sheet])
@@ -246,11 +267,25 @@ private final class OwnedSheetFixture: @unchecked Sendable {
     func runtime(extraPress: (@Sendable (AXUIElement) -> Bool?)? = nil) -> AXLogicProElements.Runtime {
         let unsupported = AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue)
         let destroyed = AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue)
+        let noValue = AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
         return builder.makeLogicRuntime(
             appElement: app,
             attributeValueResultHandler: { [self] element, attribute in
                 if attribute == "AXSheets" { return .failure(unsupported) }
                 if sheetDismissed, CFEqual(element, sheet) { return .failure(destroyed) }
+                if projectClosed, CFEqual(element, window) { return .failure(destroyed) }
+                if afterCancel == .noWindow, projectClosed, CFEqual(element, app),
+                   attribute == (kAXMainWindowAttribute as String) {
+                    return .failure(noValue)
+                }
+                return nil
+            },
+            // A destroyed element answers -25202 to every attribute, AXChildren included. Children
+            // come through their own seam, so without this the dead window still lists its children
+            // and a scan of it reads as complete.
+            childrenResultHandler: { [self] element in
+                if sheetDismissed, CFEqual(element, sheet) { return .failure(destroyed) }
+                if projectClosed, CFEqual(element, window) { return .failure(destroyed) }
                 return nil
             },
             setAttributeHandler: nil,
@@ -265,6 +300,15 @@ private final class OwnedSheetFixture: @unchecked Sendable {
                     pressed.append(spanishCancel)
                     if dismissalRemovesSheet {
                         builder.setChildren(window, [headers])
+                        switch afterCancel {
+                        case .projectStays:
+                            break
+                        case .noWindow:
+                            builder.setAttribute(app, kAXWindowsAttribute as String, [AXUIElement]())
+                        case .chooserIsMain:
+                            builder.setAttribute(app, kAXMainWindowAttribute as String, chooser)
+                            builder.setAttribute(app, kAXWindowsAttribute as String, [chooser])
+                        }
                     }
                     return true
                 }
@@ -321,6 +365,37 @@ struct Issue883OwnedNewTrackSheetCleanupTests {
             #expect(cleanup["post_cleanup_modal"] as? String == "mandatory_new_track")
             #expect(cleanup["polls"] as? Int == 2)
         }
+    }
+
+    @Test(
+        "project.new's Cancel closes the untitled project, and the re-read follows the app, not the dead window",
+        arguments: [AfterCancel.noWindow, AfterCancel.chooserIsMain]
+    )
+    fileprivate func projectNewCancelClosesTheProject(afterCancel: AfterCancel) async throws {
+        let fixture = OwnedSheetFixture(base: 8880, dismissalRemovesSheet: true, afterCancel: afterCancel)
+        fixture.showSheet()
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime(),
+            selection: "Empty Project",
+            observationAttempts: 1,
+            observationDelayNanoseconds: 0,
+            newTrackSheetCleanupAttempts: 2
+        )
+        let envelope = try decodeEnvelope(result)
+        let cleanup = try #require(
+            envelope["new_track_sheet_cleanup"] as? [String: Any],
+            "no cleanup was reported: \(result.message)"
+        )
+
+        #expect(!result.isSuccess)
+        #expect(fixture.cancelPresses == 1)
+        let boundSheetGone = try #require(cleanup["bound_sheet_gone"] as? Bool)
+        #expect(boundSheetGone)
+        #expect(cleanup["post_cleanup_observation"] as? String == "complete",
+                "a read of the window Cancel destroyed is not a read of what is on screen: \(cleanup)")
+        #expect(cleanup["post_cleanup_modal"] as? String == "none")
+        #expect(cleanup["result"] as? String == "observed_closed")
     }
 
     @Test(

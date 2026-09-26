@@ -2067,8 +2067,7 @@ extension AccessibilityChannel {
         observationAttempts: Int = 10,
         observationDelayNanoseconds: UInt64 = 100_000_000
     ) async -> NewTrackSheetCleanup {
-        let mainWindow = modalMainWindow(runtime: runtime)
-        let read = readModalSignalsAndAlertTarget(runtime: runtime, mainWindow: mainWindow)
+        let read = readModalSignalsAndAlertTarget(runtime: runtime)
         let kind = ModalReconciliation.classify(read.signals)
 
         func unattempted(_ refusal: NewTrackSheetCleanup.Refusal?) -> NewTrackSheetCleanup {
@@ -2110,6 +2109,10 @@ extension AccessibilityChannel {
 
         // Two facts, as in `observeProjectCreationOutcome`: the pressed sheet's identity is gone,
         // AND a fresh complete read finds no sheet-shaped blocker. Either alone is not a close.
+        // The main window is looked up again on every poll: on `project.new`'s mandatory sheet,
+        // Cancel closes the untitled project itself (measured 2026-09-26: AXMainWindow read -25212
+        // with no windows, then the project chooser became main). Reading the window captured
+        // before the press walked a destroyed element and made every post-cleanup read incomplete.
         let attempts = max(1, observationAttempts)
         var boundSheetGone = false
         var postKind = kind
@@ -2120,7 +2123,7 @@ extension AccessibilityChannel {
             if boundSheetWitnessObservation(sheet, runtime: runtime) == .gone {
                 boundSheetGone = true
             }
-            let fresh = readModalSignalsAndAlertTarget(runtime: runtime, mainWindow: mainWindow)
+            let fresh = readModalSignalsAndAlertTarget(runtime: runtime)
             postKind = ModalReconciliation.classify(fresh.signals)
             postComplete = fresh.modalObservationIsComplete
             if boundSheetGone, postComplete, !kindIsSheetShaped(postKind) { break }

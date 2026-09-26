@@ -43,8 +43,11 @@ or either Chinese. Guessing one would be the defect #883 is about, in the harnes
 WHICH CHECKS NAME A MUTATION
 ----------------------------
 The three checks this fix governs name the change that turns them red: `AXLocalePolicy.swift` as
-it was on 8c09e586, before this fix. Spanish `project.new` leaving no sheet depends on `Crear` in
-`createButton`. The German drummer's State A and its one inserted track depend on the U+0020
+it was on 8c09e586, before this fix. Spanish `project.new` opening a project depends on `Crear` in
+`createButton`: without it the product cannot press Create, presses the sheet's Cancel instead, and
+Cancel on the mandatory sheet closes the untitled project, so no arrange window appears. (On
+8c09e586 the sheet was left up; since b8f9b410 the product dismisses it, so the no-sheet check no
+longer turns red and the open-project check does.) The German drummer's State A and its one inserted track depend on the U+0020
 spelling of its leaf: without it the create finds no leaf and falls back to a key command, which
 returns State B and inserts nothing. That fallback leaves no sheet, so the drummer's no-sheet check
 names no mutation. The other checks name none either. A Spanish create that fails after a sheet was
@@ -105,9 +108,9 @@ _DRUMMER = ("the drummer LabelSet without its U+0020 German spelling, as AXLocal
 
 #: check tag -> the change that turns that check red. See WHICH CHECKS NAME A MUTATION.
 MUTATIONS = {
-    "883/es/project-new-leaves-no-sheet":
+    "883/es/a-new-project-is-open-in-this-language":
         "createButton without `Crear`, as AXLocalePolicy.swift was on 8c09e586: the Spanish "
-        "sheet's button matches nothing and the sheet is left up",
+        "sheet's Create matches nothing, the product presses Cancel, and Cancel closes the project",
     "883/de/create_drummer/envelope-is-state-a": _DRUMMER,
     "883/de/create_drummer/exactly-one-track-was-inserted-and-the-response-names-it": _DRUMMER,
 }
@@ -175,6 +178,22 @@ def track_menu_titles(bar):
     raw = osa('tell application "System Events" to tell process "Logic Pro" to get name of '
               f'every menu item of menu 1 of menu bar item "{bar}" of menu bar 1')
     return None if raw is None else raw.split(", ")[:6]
+
+
+def sheet_cleanup(body):
+    """The `new_track_sheet_cleanup` envelope a response carries, or None.
+
+    It sits at the top level of a structured body, or inside the JSON of its `hint`.
+    """
+    if not isinstance(body, dict):
+        return None
+    if isinstance(body.get("new_track_sheet_cleanup"), dict):
+        return body["new_track_sheet_cleanup"]
+    try:
+        hint = json.loads(body.get("hint") or "")
+    except (TypeError, ValueError):
+        return None
+    return hint.get("new_track_sheet_cleanup") if isinstance(hint, dict) else None
 
 
 def press_discard():
@@ -362,16 +381,26 @@ for lproj, code in LOCALES:
     ev.check(f"{tag}/a-new-project-is-open-in-this-language", ok_lang,
              f"one arrange window whose title ends with ' - {suffix}', Apple's `Tracks` for {lproj}",
              f"launched={launched!r} windows={names!r} "
-             f"project_new={ {k: created.get(k) for k in ('state', 'reason', 'error')} !r}", None)
+             f"project_new={ {k: created.get(k) for k in ('state', 'reason', 'error')} !r}",
+             MUTATIONS.get(f"{tag}/a-new-project-is-open-in-this-language"))
+    # Read whether or not a project opened: when the product gives up on the sheet it presses
+    # Cancel, which closes the project, and a check made only after a project opened never ran.
+    blocking = blocking_counts()
+    ev.check(f"{tag}/project-new-leaves-no-sheet", blocking == (0, 0),
+             "System Events reports no sheet and no dialog after project.new",
+             f"sheets_and_dialogs={blocking!r}", MUTATIONS.get(f"{tag}/project-new-leaves-no-sheet"))
+    cleanup = sheet_cleanup(created)
+    if cleanup is not None:
+        ev.check(f"{tag}/the-sheet-cleanup-report-agrees-with-system-events",
+                 blocking is not None
+                 and (cleanup.get("result") == "observed_closed") == (blocking[0] == 0),
+                 "the product says observed_closed exactly when System Events counts no sheet",
+                 f"cleanup={cleanup!r} sheets_and_dialogs={blocking!r}", None)
     if not ok_lang:
         summary[lproj] = "no new project in this language"
         d.close()
         ev.stop_recording(rec)
         continue
-    blocking = blocking_counts()
-    ev.check(f"{tag}/project-new-leaves-no-sheet", blocking == (0, 0),
-             "System Events reports no sheet and no dialog after project.new",
-             f"sheets_and_dialogs={blocking!r}", MUTATIONS.get(f"{tag}/project-new-leaves-no-sheet"))
     ev.note(f"{tag}/track-menu", {"bar": bar, "titles": track_menu_titles(bar)})
 
     rail = rail_subject = None
