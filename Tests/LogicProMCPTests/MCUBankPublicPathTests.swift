@@ -32,6 +32,7 @@ private let lowerRowValues = lcdRow(["-3.0dB", "-6.0dB", "0.0dB", "-inf", "-1.5d
 private let lowerRowOffset: UInt8 = 0x38
 
 private let bankRightPress = MCUProtocol.encodeButton(.bankRight, on: true)
+private let bankRightRelease = MCUProtocol.encodeButton(.bankRight, on: false)
 
 private struct PublicPathRig {
     let router: ChannelRouter
@@ -101,7 +102,7 @@ struct MCUBankPublicPathTests {
         #expect(await rig.channel.currentBank == 1)
 
         let sent = await rig.surface.sentBytes
-        #expect(sent == [bankRightPress])
+        #expect(sent == [bankRightPress, bankRightRelease])
         #expect(await rig.sleeper.count(of: .milliseconds(1)) == 1)
         #expect(await rig.sleeper.count(of: .milliseconds(25)) == 2)
     }
@@ -122,7 +123,7 @@ struct MCUBankPublicPathTests {
         #expect(obj["bank_bookkeeping_after"] as? Int == 2)
         #expect(obj["strips"] as? [String] == bank1Names)
         let sent = await rig.surface.sentBytes
-        #expect(sent == [bankRightPress, bankRightPress])
+        #expect(sent == [bankRightPress, bankRightRelease, bankRightPress, bankRightRelease])
         #expect(await rig.sleeper.count(of: .milliseconds(1)) == 2)
     }
 

@@ -113,7 +113,9 @@ private let bank0Row = lcdRow(bank0Names)
 private let bank1Row = lcdRow(bank1Names)
 
 private let bankRightPress = MCUProtocol.encodeButton(.bankRight, on: true)
+private let bankRightRelease = MCUProtocol.encodeButton(.bankRight, on: false)
 private let bankLeftPress = MCUProtocol.encodeButton(.bankLeft, on: true)
+private let bankLeftRelease = MCUProtocol.encodeButton(.bankLeft, on: false)
 
 private struct BankRig {
     let channel: MCUChannel
@@ -169,7 +171,7 @@ struct MCUBankWindowTests {
         #expect(await rig.channel.currentBank == 1)
 
         let sent = await rig.surface.sentBytes
-        #expect(sent == [bankRightPress])
+        #expect(sent == [bankRightPress, bankRightRelease])
         // One press spacing, then the fresh poll and the one poll that shows the row held still.
         #expect(await rig.sleeper.count(of: .milliseconds(1)) == 1)
         #expect(await rig.sleeper.count(of: .milliseconds(25)) == 2)
@@ -198,7 +200,7 @@ struct MCUBankWindowTests {
         #expect(await rig.channel.currentBank == 0)
 
         let sent = await rig.surface.sentBytes
-        #expect(sent == [bankRightPress])
+        #expect(sent == [bankRightPress, bankRightRelease])
         // The budget is spelled out here rather than read from the product, so a product that
         // shrank its own budget would disagree with this line instead of agreeing with itself.
         let budget = max(1, MCUChannel.echoTimeoutMs / 25)
@@ -233,7 +235,7 @@ struct MCUBankWindowTests {
         #expect(await rig.channel.currentBank == 0)
 
         let sent = await rig.surface.sentBytes
-        #expect(sent == [bankLeftPress])
+        #expect(sent == [bankLeftPress, bankLeftRelease])
     }
 
     // T4
@@ -350,7 +352,7 @@ struct MCUBankWindowTests {
         #expect(await rig.channel.currentBank == 3)
 
         let sent = await rig.surface.sentBytes
-        #expect(sent == [bankRightPress, bankRightPress, bankRightPress])
+        #expect(sent == Array(repeating: [bankRightPress, bankRightRelease], count: 3).flatMap { $0 })
         let waits = await rig.sleeper.requested
         #expect(Array(waits.prefix(3)) == [.milliseconds(1), .milliseconds(1), .milliseconds(1)])
         #expect(Array(waits.dropFirst(3)) == [.milliseconds(25), .milliseconds(25)])
@@ -371,7 +373,7 @@ struct MCUBankWindowTests {
         #expect(obj["bank_bookkeeping_after"] as? Int == 0)
         #expect(await rig.channel.currentBank == 0)
         let sent = await rig.surface.sentBytes
-        #expect(sent == Array(repeating: bankLeftPress, count: 5))
+        #expect(sent == Array(repeating: [bankLeftPress, bankLeftRelease], count: 5).flatMap { $0 })
     }
 
     @Test func bankWindowStripsSplitsSevenCharacterCellsAndTrimsTrailingSpaces() {

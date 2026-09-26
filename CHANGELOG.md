@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Added
 - `logic_mixer bank` (`mixer.bank`, MCU only, #862): moves the Mackie Control fader bank by eight strips per step, `{ direction: "left" | "right", count?: 1–31 }`. State A is decided by a fresh, changed MCU LCD upper row (`verify_source: mcu_lcd_upper_row`, `window_before` / `window_after` / `strips` / `bank_presses_sent`), never by the press having been sent, and it does not confirm how many banks the window moved; State B `noop_unobservable` when the row redraws unchanged and `echo_timeout_<ms>ms` when it never redraws; State C `readback_unavailable` with `write_attempted: false`, before any byte is sent, when the upper row has never been received. Registered, handler-bound, in the skill catalog, help text and API docs; listed as an audited exclusion in the semantic-oracle table until a live observation record exists.
 
+### Fixed
+- MCU button presses now send the button release: bank left/right (`mixer.bank` and the bank walk behind every strip-relative MCU operation), track select, automation mode, the mute / solo / arm / select strip buttons, and the MCU transport buttons (play, stop, record, rewind, fast forward, cycle). Before, each press was a Note On with no release, so Logic saw every button as held, and it auto-repeats held bank buttons: after one bank walk left and one press right, the LCD kept redrawing between two bank windows for seconds. `track.set_mute` / `set_solo` / `set_arm` with `enabled: false` still send what they sent before, a single release with no press. (#862)
+
 ---
 
 ## [3.17.0] — 2026-09-25

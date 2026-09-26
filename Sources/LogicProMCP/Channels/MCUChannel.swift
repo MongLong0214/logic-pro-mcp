@@ -749,9 +749,18 @@ actor MCUChannel: Channel {
         ))
     }
 
+    /// The only way a momentary MCU button press is sent: Note On velocity 127, then velocity 0.
+    /// A press with no release is a HELD button to Logic — measured 2026-09-26 (#862): after a
+    /// bank-left walk and one bank-right, Logic auto-repeated both held bank buttons and redrew the
+    /// LCD upper row between two windows every ~30 ms (443 SysEx frames in 3 s) from one TX triple
+    /// per press; sending the release gave one redraw per press.
+    private func pressButton(_ function: MCUProtocol.ButtonFunction, strip: Int = 0) async {
+        await transport.send(MCUProtocol.encodeButton(function, strip: strip, on: true))
+        await transport.send(MCUProtocol.encodeButton(function, strip: strip, on: false))
+    }
+
     private func sendTransport(_ command: MCUProtocol.TransportCommand) async -> ChannelResult {
-        let bytes = MCUProtocol.encodeTransport(command)
-        await transport.send(bytes)
+        await pressButton(MCUProtocol.transportButton(command))
         // v3.1.2 (P0-1) — MCU transport buttons are press-only triggers; Logic
         // does not echo a transport state back over the same MIDI surface, so
         // every send is honestly `readback_unavailable`. Wrap in HC envelope
@@ -788,8 +797,13 @@ actor MCUChannel: Channel {
         }
 
         return await withBanking(targetTrack: track) { strip in
-            let bytes = MCUProtocol.encodeButton(function, strip: strip, on: enabled)
-            await self.transport.send(bytes)
+            if enabled {
+                await self.pressButton(function, strip: strip)
+            } else {
+                // Deliberately unchanged by #862: this bare velocity-0 byte is not a press, and what
+                // `enabled: false` should mean for a toggle button is a separate question.
+                await self.transport.send(MCUProtocol.encodeButton(function, strip: strip, on: false))
+            }
             // v3.1.2 (P0-1) — MCU button echo is LED-only, no AX-side mirror
             // wired into StateCache yet. The press lands but cannot be read
             // back, so honestly: State B `readback_unavailable`. Wrapping
@@ -835,7 +849,7 @@ actor MCUChannel: Channel {
         }
 
         return await withBanking(targetTrack: track) { strip in
-            await self.transport.send(MCUProtocol.encodeButton(.select, strip: strip, on: true))
+            await self.pressButton(.select, strip: strip)
             var observedSelectedTrack: Int?
             if let axReadback = self.axReadback {
                 for attempt in 0..<10 {
@@ -856,7 +870,7 @@ actor MCUChannel: Channel {
                 ))
             }
 
-            await self.transport.send(MCUProtocol.encodeButton(function, on: true))
+            await self.pressButton(function)
             extras["automation_write_attempted"] = true
             if let axReadback = self.axReadback {
                 for attempt in 0..<10 {
@@ -1074,7 +1088,7 @@ actor MCUChannel: Channel {
 
             var pressesSent = 0
             for _ in 0..<count {
-                await transport.send(MCUProtocol.encodeButton(button, on: true))
+                await pressButton(button)
                 pressesSent += 1
                 await sleep(.milliseconds(1))
             }
@@ -1212,7 +1226,7 @@ actor MCUChannel: Channel {
             let bankDelta = targetBank - currentBank
             let bankButton: MCUProtocol.ButtonFunction = bankDelta > 0 ? .bankRight : .bankLeft
             for _ in 0..<abs(bankDelta) {
-                await transport.send(MCUProtocol.encodeButton(bankButton, on: true))
+                await pressButton(bankButton)
                 try? await Task.sleep(for: .milliseconds(1))
             }
             currentBank = targetBank
@@ -1231,7 +1245,7 @@ actor MCUChannel: Channel {
             let restoreDelta = originalBank - currentBank
             let restoreButton: MCUProtocol.ButtonFunction = restoreDelta > 0 ? .bankRight : .bankLeft
             for _ in 0..<abs(restoreDelta) {
-                await transport.send(MCUProtocol.encodeButton(restoreButton, on: true))
+                await pressButton(restoreButton)
                 try? await Task.sleep(for: .milliseconds(1))
             }
             currentBank = originalBank
