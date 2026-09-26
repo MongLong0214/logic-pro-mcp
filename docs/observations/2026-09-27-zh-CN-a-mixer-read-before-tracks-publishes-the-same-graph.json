@@ -31,10 +31,10 @@
   "evidence": [
     "evidence/2026-09-27-zh-CN-mixer-read-order-291.json"
   ],
-  "method": "The release binary at b434364ad0d1e9f8a6e30eeba64d0507e6bccd3d was started twice against the same open project, one server after the other, with nothing else talking to Logic. Session A: refresh_cache, logic://mixer, logic://tracks, logic://mixer again, then logic://project/info. Session B: refresh_cache, logic://tracks, then logic://mixer. If the product's own mixer read did not report a fresh poll, the harness pressed X (Logic's Mixer key, the same in every language) and asked again, and it pressed X once more at the end. Before this run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
+  "method": "The release binary at 85d77e3277b281741c826501a43fc92b6c608ab3 was started twice against the same open project, one server after the other, with nothing else talking to Logic. Session A: refresh_cache, logic://mixer, logic://tracks, logic://mixer again, then logic://project/info. Session B: refresh_cache, logic://tracks, then logic://mixer. If the product's own mixer read did not report a fresh poll, the harness pressed X (Logic's Mixer key, the same in every language) and asked again, and it pressed X once more at the end. Before this run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
   "observations": [
     {
-      "binary": "b434364ad0d1e9f8a6e30eeba64d0507e6bccd3d",
+      "binary": "85d77e3277b281741c826501a43fc92b6c608ab3",
       "session_a_mixer_then_tracks": {
         "mixer_before_any_tracks_read": {
           "strips": 21,
