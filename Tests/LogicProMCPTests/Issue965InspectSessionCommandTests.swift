@@ -246,6 +246,49 @@ struct Issue965InspectSessionCommandTests {
         }
     }
 
+    // SP-04: Logic switched to another project outside the server. The poller wrote it to the
+    // cache, and no reader has bound it, so the registry still accepts the old project's ref.
+    @Test("a project_ref the registry still accepts but the cache has left is refused, and nothing is bound")
+    func projectRefForTheProjectTheCacheLeftIsRefused() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cache = await populatedCache()
+            let registry = TargetRegistry()
+            let info = try await ResourceHandlers.read(
+                uri: "logic://project/info",
+                cache: cache,
+                router: ChannelRouter(),
+                targetRegistry: registry,
+                fileReader: .unavailable
+            )
+            let infoEnvelope = try #require(sharedJSONObject(sharedResourceText(info)))
+            let infoData = try #require(infoEnvelope["data"] as? [String: Any])
+            let projectRef = try #require(infoData["project_ref"] as? String)
+            let boundBefore = try #require(await registry.currentProjectIdentity)
+
+            var other = ProjectInfo(name: "Other", filePath: "/tmp/Other.logicx")
+            other.lastUpdated = Self.fixedDate
+            await cache.updateProject(other)
+            await cache.updateTracks([TrackState(id: 0, name: "Pad", type: .audio)])
+            // The scenario, not a registry bump: the ref still passes the pre-capture validator.
+            let stillAccepted = await registry.resolveCurrentProject(TargetReference(rawValue: projectRef))
+            #expect(stillAccepted != nil)
+
+            let result = await inspect(["project_ref": .string(projectRef)], cache: cache, targetRegistry: registry)
+            let body = try stateCBody(result)
+            #expect(body["error"] as? String == "stale_target_reference")
+            #expect(body["project_ref"] as? String == projectRef)
+            #expect(body["schema"] == nil)
+            #expect(body["project"] == nil)
+            #expect(body["tracks"] == nil)
+            let text = sharedToolText(result)
+            #expect(!text.contains("Other"))
+            #expect(!text.contains("Pad"))
+            // Binding the captured project would have replaced the registry's current project.
+            let boundAfter = try #require(await registry.currentProjectIdentity)
+            #expect(boundAfter == boundBefore)
+        }
+    }
+
     @Test("strict validation rejects an unknown param and admits the declared ones")
     func unknownParamsAreRejectedByStrictValidation() throws {
         let rejected = try #require(LogicProServer.strictParamValidationResult(

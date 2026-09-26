@@ -52,6 +52,10 @@ enum SessionPopulationObservation {
         case stackStateUnreadable = "stack_state_unreadable"
         case hiddenTracksUnobserved = "hidden_tracks_unobserved"
         case trackReadbackGap = "track_readback_gap"
+        case countIsTheOnlyEndWitness = "count_is_the_only_end_witness"
+        case projectFileNotBound = "project_file_not_bound"
+        case trackCacheStale = "track_cache_stale"
+        case selectionStateUnverified = "selection_state_unverified"
         case mixerNotVisible = "mixer_not_visible"
         case mixerCacheStale = "mixer_cache_stale"
         case mixerFiltersUnread = "mixer_filters_unread"
@@ -84,24 +88,30 @@ enum SessionPopulationObservation {
 
     /// One reading of the cache and the registry, taken by `capture` and consumed by `build`.
     ///
-    /// `versionsBefore` and `versionsAfter` bracket the reading: any section whose version differs
-    /// between them moved while the capture was in flight, and the report then refuses to call any
-    /// domain better than `unstable`.
+    /// `before` and `after` bracket the reading: if anything in them differs — a watched section's
+    /// version or a flag no version covers — the cache moved while the capture was in flight, and
+    /// the report then refuses to call any domain better than `unstable`. `hasDocument` and
+    /// `axOccluded` are read from `before`.
     struct Capture: Sendable {
-        let hasDocument: Bool
-        let axOccluded: Bool
+        let before: StateCache.CaptureBoundary
+        let after: StateCache.CaptureBoundary
         let projectEpoch: UInt64
         let project: ProjectInfo
         let tracks: [TrackState]
         let tracksFetchedAt: Date
         let channelStrips: [ChannelStripState]
         let mixerFetchedAt: Date
-        let versionsBefore: [CacheSectionID: StateCache.SectionVersion]
-        let versionsAfter: [CacheSectionID: StateCache.SectionVersion]
         /// `NumberOfTracks` from the project bundle's MetaData.plist, or nil when the bundle could
-        /// not be read. It is the one count the rail did not produce, which is what makes it an
-        /// expected count rather than a restatement of the rows.
+        /// not be read or is not the captured project's bundle. It is the one count the rail did
+        /// not produce, which is what makes it an expected count rather than a restatement of the
+        /// rows.
         let fileTrackCount: Int?
+        /// A bundle was read, but its path is not the captured project's path (or the cache holds
+        /// no path), so its count describes some other document or none that can be named.
+        let projectFileNotBound: Bool
+        /// Nil when the caller named no `project_ref`; false when the reference does not name the
+        /// captured project, in which case nothing was issued and the report must not be returned.
+        let requestedProjectMatches: Bool?
         let referencesEnabled: Bool
         /// Nil while `referencesEnabled` means the registry moved on during issuance.
         let issued: IssuedTrackReferences?
@@ -118,17 +128,19 @@ enum SessionPopulationObservation {
     /// References are issued through the same two issuers `logic://tracks` and `logic://mixer` use,
     /// under the same gate (`FeatureFlags.adr002TargetRef` and a registry), so a `track_ref` here
     /// is the reference those resources return for the same observed row.
+    ///
+    /// `requestedProjectRef` is the caller's `project_ref`, already accepted by the registry. It is
+    /// compared with the project the cache actually holds before anything is issued: see
+    /// `Capture.requestedProjectMatches`.
     static func capture(
         cache: StateCache,
         targetRegistry: TargetRegistry?,
         fileReader: LogicProjectFileReader.Runtime,
+        requestedProjectRef: String? = nil,
         now: @Sendable () -> Date = Date.init
     ) async -> Capture {
         let beganAt = now()
-        var versionsBefore: [CacheSectionID: StateCache.SectionVersion] = [:]
-        for section in watchedSections {
-            versionsBefore[section] = await cache.currentVersion(for: section)
-        }
+        let before = await cache.captureBoundary(watching: watchedSections)
         let snapshot = await cache.auditSnapshot()
 
         let targetSnapshot: TargetRegistrySnapshot?
@@ -138,11 +150,35 @@ enum SessionPopulationObservation {
             targetSnapshot = nil
         }
 
-        let fileTrackCount = await LogicProjectFileReader.read(runtime: fileReader)?.trackCount
+        // The reader asks Logic for its front document on its own, so the bundle it reads need
+        // not be the project the cache holds. Its count is evidence about the captured project
+        // only when the two paths name the same bundle.
+        let metadata = await LogicProjectFileReader.read(runtime: fileReader)
+        let fileBound = metadata.map { sameBundle($0.bundlePath, cachedPath: snapshot.project.filePath) }
+        let fileTrackCount = fileBound == true ? metadata?.trackCount : nil
+
+        // The registry accepted the reference because it names the registry's current project,
+        // but an external switch moves the cache without touching the registry until some reader
+        // binds the new project. Compare before issuing, so a mismatch neither reports nor binds
+        // the project the caller did not name.
+        var requestedProjectMatches: Bool?
+        if let requestedProjectRef {
+            var matches = false
+            if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot,
+               let binding = await targetRegistry.resolveCurrentProject(TargetReference(rawValue: requestedProjectRef)),
+               let captured = ProjectReferenceIssuance.descriptor(
+                   name: snapshot.project.name,
+                   filePath: snapshot.project.filePath,
+                   epoch: targetSnapshot.projectEpoch
+               ) {
+                matches = binding.descriptor == captured
+            }
+            requestedProjectMatches = matches
+        }
 
         var issued: IssuedTrackReferences?
         var projectIssuance: ProjectIssuance?
-        if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
+        if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot, requestedProjectMatches != false {
             issued = await TrackReferenceIssuance.issue(
                 for: TrackReferenceIssuance.liveInventory(snapshot.tracks),
                 registry: targetRegistry,
@@ -153,26 +189,32 @@ enum SessionPopulationObservation {
                 registry: targetRegistry,
                 snapshot: targetSnapshot
             )
+            // The registry can move between the comparison and the bind; the bind must hand back
+            // the very reference the caller named.
+            if let requestedProjectRef {
+                var reissued = false
+                if case .issued(let reference)? = projectIssuance {
+                    reissued = reference.rawValue == requestedProjectRef
+                }
+                if !reissued { requestedProjectMatches = false }
+            }
         }
 
-        var versionsAfter: [CacheSectionID: StateCache.SectionVersion] = [:]
-        for section in watchedSections {
-            versionsAfter[section] = await cache.currentVersion(for: section)
-        }
+        let after = await cache.captureBoundary(watching: watchedSections)
         let endedAt = now()
 
         return Capture(
-            hasDocument: snapshot.hasDocument,
-            axOccluded: snapshot.axOccluded,
+            before: before,
+            after: after,
             projectEpoch: snapshot.projectEpoch,
             project: snapshot.project,
             tracks: snapshot.tracks,
             tracksFetchedAt: snapshot.tracksFetchedAt,
             channelStrips: snapshot.channelStrips,
             mixerFetchedAt: snapshot.mixerFetchedAt,
-            versionsBefore: versionsBefore,
-            versionsAfter: versionsAfter,
             fileTrackCount: fileTrackCount,
+            projectFileNotBound: fileBound == false,
+            requestedProjectMatches: requestedProjectMatches,
             referencesEnabled: targetSnapshot != nil,
             issued: issued,
             projectIssuance: projectIssuance,
@@ -322,6 +364,9 @@ enum SessionPopulationObservation {
         let count: Int
         let expectedCount: Int?
         let expectedCountSource: String?
+        /// Whether `expected_count` equals the whole rail's row count (not the scoped `count`).
+        /// Present only beside `expected_count`. A match is evidence, not completeness.
+        let expectedCountMatchesRail: Bool?
 
         enum CodingKeys: String, CodingKey {
             case firstRow = "first_row"
@@ -329,6 +374,7 @@ enum SessionPopulationObservation {
             case count
             case expectedCount = "expected_count"
             case expectedCountSource = "expected_count_source"
+            case expectedCountMatchesRail = "expected_count_matches_rail"
         }
 
         func encode(to encoder: Encoder) throws {
@@ -338,6 +384,7 @@ enum SessionPopulationObservation {
             try container.encode(count, forKey: .count)
             try container.encodeIfPresent(expectedCount, forKey: .expectedCount)
             try container.encodeIfPresent(expectedCountSource, forKey: .expectedCountSource)
+            try container.encodeIfPresent(expectedCountMatchesRail, forKey: .expectedCountMatchesRail)
         }
     }
 
@@ -431,9 +478,7 @@ enum SessionPopulationObservation {
 
     /// Pure: the same capture and request always produce the same report.
     static func build(request: Request, capture: Capture) -> Report {
-        let moved = watchedSections.contains { section in
-            capture.versionsBefore[section] != capture.versionsAfter[section]
-        }
+        let moved = capture.before != capture.after
 
         // The rail as `logic://tracks` sees it: an Inspector-contaminated walk is dropped whole.
         let live = TrackReferenceIssuance.liveInventory(capture.tracks)
@@ -463,13 +508,14 @@ enum SessionPopulationObservation {
         }
         let ambiguousTrackIndices = issued?.ambiguousTrackIndices ?? duplicateTrackIndices(in: live)
 
-        // Coverage describes the rail that was read; the scope only narrows which rows are shown.
+        // Coverage describes the rail that was read; the scope narrows which rows are shown and,
+        // for a selection, adds the one reason the rail cannot answer.
         let tracksCoverage: Coverage
         var tracksReasons: [Reason] = []
         if moved {
             tracksCoverage = .unstable
             tracksReasons = [.cacheMovedDuringCapture]
-        } else if !capture.hasDocument {
+        } else if !capture.before.hasDocument {
             tracksCoverage = .unavailable
             tracksReasons = [.noDocument]
         } else if capture.tracksFetchedAt == .distantPast {
@@ -482,12 +528,17 @@ enum SessionPopulationObservation {
             tracksCoverage = .unstable
             tracksReasons = [.targetSnapshotStale]
         } else {
-            if capture.axOccluded {
+            if capture.before.axOccluded {
                 tracksReasons.append(.axOccluded)
             }
             if live.isEmpty {
                 // The cache cannot tell a failed rail read from an empty rail.
                 tracksReasons.append(.unverifiedEmpty)
+            }
+            // The poller keeps the last rows when a read fails, so rows can outlive the rail they
+            // describe. The audit's threshold, so both reports call the same rows stale.
+            if capture.endedAt.timeIntervalSince(capture.tracksFetchedAt) > ProjectSessionAudit.staleThresholdSeconds {
+                tracksReasons.append(.trackCacheStale)
             }
             if !collapsedStackRows.isEmpty {
                 tracksReasons.append(.collapsedTrackStack)
@@ -496,14 +547,22 @@ enum SessionPopulationObservation {
                 tracksReasons.append(.stackStateUnreadable)
             }
             if let expected = capture.fileTrackCount {
-                if expected == live.count {
-                    // The count agrees; it cannot upgrade a row set that carries another reason.
-                } else {
-                    tracksReasons.append(.trackReadbackGap)
-                }
+                // A matching count says the rail has as many rows as the file has tracks, not
+                // that these rows are those tracks: nothing in the cache witnesses where the rail
+                // ends, so a count alone never makes the population complete (#965).
+                tracksReasons.append(expected == live.count ? .countIsTheOnlyEndWitness : .trackReadbackGap)
             } else {
+                if capture.projectFileNotBound {
+                    tracksReasons.append(.projectFileNotBound)
+                }
                 // Without an independent expected count nothing rules out rows the rail does not show.
                 tracksReasons.append(.hiddenTracksUnobserved)
+            }
+            if request.scope == .selection {
+                // The AX reader folds an AXSelected read that failed into `false`
+                // (`AXValueExtractors.extractTrackState`), so an unselected row may be a selected
+                // one whose state was not read: the selected set, empty or not, is not observed.
+                tracksReasons.append(.selectionStateUnverified)
             }
             tracksCoverage = tracksReasons.isEmpty ? .complete : .partial
         }
@@ -523,7 +582,8 @@ enum SessionPopulationObservation {
                 lastRow: rows.last?.row,
                 count: rows.count,
                 expectedCount: capture.fileTrackCount,
-                expectedCountSource: capture.fileTrackCount == nil ? nil : "project_file"
+                expectedCountSource: capture.fileTrackCount == nil ? nil : "project_file",
+                expectedCountMatchesRail: capture.fileTrackCount.map { $0 == live.count }
             ),
             rows: rows,
             ambiguousTrackIndices: ambiguousTrackIndices,
@@ -633,13 +693,25 @@ enum SessionPopulationObservation {
     }
 
     static func snapshotID(for capture: Capture) -> String {
-        let epoch = capture.versionsBefore[.project]?.projectEpoch
-            ?? capture.versionsBefore[.tracks]?.projectEpoch
+        let epoch = capture.before.versions[.project]?.projectEpoch
+            ?? capture.before.versions[.tracks]?.projectEpoch
             ?? capture.projectEpoch
         func revision(_ section: CacheSectionID) -> UInt64 {
-            capture.versionsBefore[section]?.sectionRevision ?? 0
+            capture.before.versions[section]?.sectionRevision ?? 0
         }
         return "snap_\(epoch)_t\(revision(.tracks))_m\(revision(.mixer))_p\(revision(.project))"
+    }
+
+    /// Whether the bundle the file reader read is the cached project's bundle. Both sides are
+    /// resolved and standardized, because the reader resolves symlinks (`/var` is `/private/var`)
+    /// and the cached path need not. A cache with no absolute path names no bundle.
+    static func sameBundle(_ bundle: URL, cachedPath: String?) -> Bool {
+        guard let cached = cachedPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              cached.hasPrefix("/") else {
+            return false
+        }
+        let cachedBundle = URL(fileURLWithPath: cached).resolvingSymlinksInPath().standardizedFileURL.path
+        return cachedBundle == bundle.resolvingSymlinksInPath().standardizedFileURL.path
     }
 
     /// The same rule `TrackReferenceIssuance.issue` applies, for a capture that issued nothing:

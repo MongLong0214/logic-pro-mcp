@@ -461,8 +461,19 @@ struct ProjectDispatcher: OperationTraceDispatching {
             let capture = await SessionPopulationObservation.capture(
                 cache: cache,
                 targetRegistry: targetRegistry,
-                fileReader: cleanupAuditFileReader
+                fileReader: cleanupAuditFileReader,
+                requestedProjectRef: request.projectRef
             )
+            // The registry accepted `project_ref` above, but it can still name the project the
+            // cache held before an external switch. Another project's report is not an answer.
+            if capture.requestedProjectMatches == false {
+                return TargetRefResolver.staleTargetReferenceResult(
+                    request.projectRef,
+                    operation: "project.inspect_session",
+                    referenceKey: "project_ref",
+                    hint: "project_ref does not name the project the state cache holds (it changed after the reference was issued); no report was built"
+                )
+            }
             let report = SessionPopulationObservation.build(request: request, capture: capture)
             do {
                 return toolTextResult(try encodeJSONStrict(report, compact: true))
@@ -910,7 +921,8 @@ struct ProjectDispatcher: OperationTraceDispatching {
     /// #965: `inspect_session` parameters. A missing key takes the Request
     /// default; a wrong type, an unknown member, or an empty `domains` list is
     /// State C `invalid_params` with nothing captured. `project_ref` has already
-    /// been validated against the registry at the top of `handle`.
+    /// been validated against the registry at the top of `handle`; the capture
+    /// then compares it with the project the cache actually holds.
     static func inspectSessionRequest(_ params: [String: Value]) -> InspectSessionParse {
         typealias Observation = SessionPopulationObservation
         func reject(_ hint: String) -> InspectSessionParse {
@@ -965,7 +977,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             scope: scope,
             domains: domains,
             allowUINavigation: allowUINavigation,
-            projectRef: params["project_ref"]?.stringValue
+            projectRef: params["project_ref"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
         ))
     }
 

@@ -19,8 +19,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   inspector-contaminated walk, a collapsed stack, an unreadable stack state, and a project-file
   count that does not match the rail are all reported as what they are instead of as an empty or
   complete session; `associations` and `hierarchy` are `unavailable` because the cache holds no
-  evidence for either. `allow_ui_navigation=true` is refused with State C `not_implemented` until
-  the navigating increment lands. Registry censuses grow to 116 operations / 24 read-only.
+  evidence for either. A count is not completeness: in this increment `tracks` is never
+  `complete`, a project-file count that matches the rail stays evidence beside
+  `count_is_the_only_end_witness`, a count read from a bundle other than the cached project's is
+  not reported (`project_file_not_bound`), and rows older than the audit's 30-second threshold say
+  `track_cache_stale`. `scope: selection` is always `partial` (`selection_state_unverified`),
+  because an unreadable AXSelected reads as unselected. A section version, `ax_occluded` or the
+  document flag that moves during the capture makes every requested domain `unstable`, and a
+  `project_ref` that no longer names the cached project is refused with State C
+  `stale_target_reference` without binding the other project. `allow_ui_navigation=true` is
+  refused with State C `not_implemented` until the navigating increment lands. Registry censuses grow to 116 operations / 24 read-only.
 
 ### Fixed
 - MCU button presses now send the button release: bank left/right (`mixer.bank` and the bank walk behind every strip-relative MCU operation), track select, automation mode, the mute / solo / arm / select strip buttons, and the MCU transport buttons (play, stop, record, rewind, fast forward, cycle). Before, each press was a Note On with no release, so Logic saw every button as held, and it auto-repeats held bank buttons: after one bank walk left and one press right, the LCD kept redrawing between two bank windows for seconds. `track.set_mute` / `set_solo` / `set_arm` with `enabled: false` still send what they sent before, a single release with no press. (#862)

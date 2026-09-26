@@ -2,8 +2,9 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-// #965 O1, cache-only increment. Every case here drives `build` on a hand-built Capture and asserts
-// on the encoded JSON, because the wire document is what a consumer reads.
+// #965 O1, cache-only increment. The cases drive `build` on a hand-built Capture, except the last
+// suite, which drives `capture` against a real cache; all assert on the encoded JSON, because the
+// wire document is what a consumer reads.
 //
 // The #965 required cases (its tests section) that do not apply to a cache-only report and are therefore not tested here:
 // - a missing middle page: the cache is read in one actor hop, there is no paging;
@@ -55,22 +56,23 @@ private func makeCapture(
     versionsBefore: [CacheSectionID: StateCache.SectionVersion] = baselineVersions,
     versionsAfter: [CacheSectionID: StateCache.SectionVersion] = baselineVersions,
     fileTrackCount: Int? = nil,
+    projectFileNotBound: Bool = false,
     referencesEnabled: Bool = false,
     issued: IssuedTrackReferences? = nil,
     projectIssuance: ProjectIssuance? = nil
 ) -> Observation.Capture {
     Observation.Capture(
-        hasDocument: hasDocument,
-        axOccluded: axOccluded,
+        before: StateCache.CaptureBoundary(versions: versionsBefore, hasDocument: hasDocument, axOccluded: axOccluded),
+        after: StateCache.CaptureBoundary(versions: versionsAfter, hasDocument: hasDocument, axOccluded: axOccluded),
         projectEpoch: 3,
         project: ProjectInfo(name: "Song", filePath: "/Users/x/Song.logicx"),
         tracks: tracks,
         tracksFetchedAt: tracksFetchedAt,
         channelStrips: strips,
         mixerFetchedAt: mixerFetchedAt,
-        versionsBefore: versionsBefore,
-        versionsAfter: versionsAfter,
         fileTrackCount: fileTrackCount,
+        projectFileNotBound: projectFileNotBound,
+        requestedProjectMatches: nil,
         referencesEnabled: referencesEnabled,
         issued: issued,
         projectIssuance: projectIssuance,
@@ -196,7 +198,7 @@ struct Issue965TracksCoverageTests {
         let report = try encodedReport(makeCapture(tracks: tracks, fileTrackCount: 19))
         let tracksSection = try section(report, "tracks")
         #expect(try coverage(tracksSection) == "partial")
-        #expect(try reasons(tracksSection) == ["collapsed_track_stack"])
+        #expect(try reasons(tracksSection) == ["collapsed_track_stack", "count_is_the_only_end_witness"])
         #expect(tracksSection["collapsed_stack_rows"] as? [Int] == [4])
         let row = try rows(tracksSection)[4]
         #expect(try #require(row["is_stack_header"] as? Bool))
@@ -209,7 +211,7 @@ struct Issue965TracksCoverageTests {
         let report = try encodedReport(makeCapture(tracks: tracks, fileTrackCount: 19))
         let tracksSection = try section(report, "tracks")
         #expect(try coverage(tracksSection) == "partial")
-        #expect(try reasons(tracksSection) == ["stack_state_unreadable"])
+        #expect(try reasons(tracksSection) == ["stack_state_unreadable", "count_is_the_only_end_witness"])
         let row = try rows(tracksSection)[7]
         #expect(row["is_stack_header"] is NSNull)
         #expect(row["stack_collapsed"] is NSNull)
@@ -228,24 +230,44 @@ struct Issue965TracksCoverageTests {
         #expect(witnesses["count"] as? Int == 19)
         #expect(witnesses["expected_count"] as? Int == 20)
         #expect(witnesses["expected_count_source"] as? String == "project_file")
+        let matched = try #require(witnesses["expected_count_matches_rail"] as? Bool)
+        #expect(!matched)
         #expect(try section(report, "sources")["expected_count"] as? String == "project_file")
     }
 
-    @Test func matchingFileCountOnACleanRailIsComplete() throws {
+    // Counts alone do not establish completion (#965): a clean rail whose count matches the file
+    // keeps the count as evidence and stays partial, because nothing witnesses where it ends.
+    @Test func matchingFileCountOnACleanRailIsEvidenceNotCompleteness() throws {
         let report = try encodedReport(
             makeCapture(tracks: liveTracks(19), fileTrackCount: 19),
             request: Observation.Request(domains: [.tracks])
         )
         let tracks = try section(report, "tracks")
-        #expect(try coverage(tracks) == "complete")
-        #expect(try reasons(tracks).isEmpty)
+        #expect(try coverage(tracks) == "partial")
+        #expect(try reasons(tracks) == ["count_is_the_only_end_witness"])
         let witnesses = try section(tracks, "witnesses")
         #expect(witnesses["first_row"] as? Int == 0)
         #expect(witnesses["last_row"] as? Int == 18)
         #expect(witnesses["count"] as? Int == 19)
+        #expect(witnesses["expected_count"] as? Int == 19)
+        let matched = try #require(witnesses["expected_count_matches_rail"] as? Bool)
+        #expect(matched)
         let complete = try overallComplete(report)
-        #expect(complete)
-        #expect(try section(report, "overall")["incomplete_domains"] as? [String] == [])
+        #expect(!complete)
+        #expect(try section(report, "overall")["incomplete_domains"] as? [String] == ["tracks"])
+    }
+
+    // SP-01: rows the poller kept after failed reads, with a count that happens to match.
+    @Test func staleRowsWithAMatchingCountAreNotComplete() throws {
+        let report = try encodedReport(
+            makeCapture(tracks: liveTracks(19), tracksFetchedAt: staleRead, fileTrackCount: 19),
+            request: Observation.Request(domains: [.tracks])
+        )
+        let tracks = try section(report, "tracks")
+        #expect(try coverage(tracks) == "partial")
+        #expect(try reasons(tracks) == ["track_cache_stale", "count_is_the_only_end_witness"])
+        let complete = try overallComplete(report)
+        #expect(!complete)
     }
 
     @Test func matchingFileCountNeverUpgradesACollapsedStack() throws {
@@ -257,7 +279,7 @@ struct Issue965TracksCoverageTests {
         )
         let tracksSection = try section(report, "tracks")
         #expect(try coverage(tracksSection) == "partial")
-        #expect(try reasons(tracksSection) == ["collapsed_track_stack"])
+        #expect(try reasons(tracksSection) == ["collapsed_track_stack", "count_is_the_only_end_witness"])
         let complete = try overallComplete(report)
         #expect(!complete)
     }
@@ -270,13 +292,14 @@ struct Issue965TracksCoverageTests {
         let witnesses = try section(tracks, "witnesses")
         #expect(witnesses["expected_count"] == nil)
         #expect(witnesses["expected_count_source"] == nil)
+        #expect(witnesses["expected_count_matches_rail"] == nil)
     }
 
     @Test func occludedAXIsPartialEvenWhenTheCountMatches() throws {
         let report = try encodedReport(makeCapture(axOccluded: true, tracks: liveTracks(19), fileTrackCount: 19))
         let tracks = try section(report, "tracks")
         #expect(try coverage(tracks) == "partial")
-        #expect(try reasons(tracks) == ["ax_occluded"])
+        #expect(try reasons(tracks) == ["ax_occluded", "count_is_the_only_end_witness"])
     }
 }
 
@@ -361,7 +384,7 @@ struct Issue965StripsAndDomainsTests {
         let color = try section(requested, "color")
         #expect(try coverage(color) == "unavailable")
         #expect(try reasons(color) == ["color_deferred_to_issue_970"])
-        #expect(try section(requested, "overall")["incomplete_domains"] as? [String] == ["routing", "color"])
+        #expect(try section(requested, "overall")["incomplete_domains"] as? [String] == ["tracks", "routing", "color"])
         #expect(requested["requested_domains"] as? [String] == ["tracks", "routing", "color"])
     }
 }
@@ -414,7 +437,23 @@ struct Issue965StabilityScopeReferenceTests {
         #expect(witnesses["last_row"] as? Int == 3)
         #expect(witnesses["count"] as? Int == 2)
         #expect(witnesses["expected_count"] as? Int == 5)
-        #expect(try coverage(tracksSection) == "complete")
+        #expect(try coverage(tracksSection) == "partial")
+        #expect(try reasons(tracksSection) == ["count_is_the_only_end_witness", "selection_state_unverified"])
+    }
+
+    // SP-03: the selected header's AXSelected read failed, which the AX reader folds into `false`,
+    // while its name and stack fields read. Every row therefore reads unselected.
+    @Test func anUnreadableSelectionIsNotAnObservedEmptySelection() throws {
+        let report = try encodedReport(
+            makeCapture(tracks: liveTracks(19), fileTrackCount: 19),
+            request: Observation.Request(scope: .selection, domains: [.tracks])
+        )
+        let tracksSection = try section(report, "tracks")
+        #expect(try rows(tracksSection).isEmpty)
+        #expect(try coverage(tracksSection) == "partial")
+        #expect(try reasons(tracksSection) == ["count_is_the_only_end_witness", "selection_state_unverified"])
+        let complete = try overallComplete(report)
+        #expect(!complete)
     }
 
     @Test func referencesDisabledLeavesCoverageAloneAndIssuesNothing() throws {
@@ -423,7 +462,8 @@ struct Issue965StabilityScopeReferenceTests {
             request: Observation.Request(domains: [.tracks])
         )
         let tracks = try section(report, "tracks")
-        #expect(try coverage(tracks) == "complete")
+        #expect(try coverage(tracks) == "partial")
+        #expect(try reasons(tracks) == ["count_is_the_only_end_witness"])
         for row in try rows(tracks) {
             #expect(row["track_ref"] == nil)
         }
@@ -495,5 +535,120 @@ struct Issue965StabilityScopeReferenceTests {
         let window = try section(report, "capture")
         #expect(window["began_at"] as? String == "2023-11-14T22:13:19.990Z")
         #expect(window["ended_at"] as? String == "2023-11-14T22:13:20.000Z")
+    }
+}
+
+// Through `capture`, not a hand-built Capture: the cache is written from inside the asynchronous
+// file read, the one await `capture` makes that a test can reach, and `fileReader` is the seam.
+// No registry is passed, so nothing here depends on the reference flag.
+@Suite("#965 session population: capture")
+struct Issue965CaptureTests {
+    private func populatedCache(projectPath: String = "/Users/x/Song.logicx") async -> StateCache {
+        let cache = StateCache()
+        await cache.updateProject(ProjectInfo(name: "Song", filePath: projectPath))
+        await cache.updateTracks(liveTracks(3))
+        return cache
+    }
+
+    /// A reader whose front-document query runs `duringRead`, then names no document.
+    private func reader(duringRead: @escaping @Sendable () async -> Void) -> LogicProjectFileReader.Runtime {
+        LogicProjectFileReader.Runtime(
+            currentDocumentPath: {
+                await duringRead()
+                return nil
+            },
+            now: { fixedNow },
+            readPlistData: { _ in nil },
+            mtime: { _ in nil },
+            sleep: { _ in }
+        )
+    }
+
+    private func captureReport(
+        _ cache: StateCache,
+        reader: LogicProjectFileReader.Runtime,
+        domains: [Observation.Domain]
+    ) async throws -> [String: Any] {
+        let capture = await Observation.capture(cache: cache, targetRegistry: nil, fileReader: reader, now: { fixedNow })
+        return try encodedReport(capture, request: Observation.Request(domains: domains))
+    }
+
+    private func expectEveryDomainUnstable(_ report: [String: Any]) throws {
+        for key in ["tracks", "strips", "associations", "hierarchy", "routing", "color"] {
+            let domain = try section(report, key)
+            #expect(try coverage(domain) == "unstable", Comment(rawValue: key))
+            #expect(try reasons(domain) == ["cache_moved_during_capture"], Comment(rawValue: key))
+        }
+        let complete = try overallComplete(report)
+        #expect(!complete)
+    }
+
+    // SP-02: `updateAXOccluded` advances no section version, so versions alone cannot see it move.
+    @Test func anOcclusionFlipDuringTheFileReadMakesEveryRequestedDomainUnstable() async throws {
+        let quiet = await populatedCache()
+        let control = try await captureReport(quiet, reader: reader(duringRead: {}), domains: Observation.Domain.allCases)
+        #expect(try coverage(try section(control, "tracks")) == "partial")
+
+        let cache = await populatedCache()
+        let report = try await captureReport(
+            cache,
+            reader: reader(duringRead: { await cache.updateAXOccluded(true) }),
+            domains: Observation.Domain.allCases
+        )
+        let occludedAfterCapture = await cache.getAXOccluded()
+        #expect(occludedAfterCapture)
+        try expectEveryDomainUnstable(report)
+    }
+
+    @Test func aTrackWriteDuringTheFileReadMakesEveryRequestedDomainUnstable() async throws {
+        let cache = await populatedCache()
+        let report = try await captureReport(
+            cache,
+            reader: reader(duringRead: { await cache.updateTracks(liveTracks(4)) }),
+            domains: Observation.Domain.allCases
+        )
+        let tracksAfterCapture = await cache.getTracks()
+        #expect(tracksAfterCapture.count == 4)
+        try expectEveryDomainUnstable(report)
+    }
+
+    // SP-01: the reader reads Logic's front document, Other.logicx, whose three tracks match the
+    // three rows the cache holds for Song.logicx. The control in the same run points the cache at
+    // the bundle the reader reads, through `/var` where the reader resolves to `/private/var`.
+    @Test func aForeignProjectFileWhoseCountMatchesIsNotAnExpectedCount() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("issue965-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let foreign = directory.appendingPathComponent("Other.logicx", isDirectory: true)
+        let alternative = foreign.appendingPathComponent("Alternatives/000", isDirectory: true)
+        try FileManager.default.createDirectory(at: alternative, withIntermediateDirectories: true)
+        try Data().write(to: alternative.appendingPathComponent("MetaData.plist"))
+        let reader = LogicProjectFileReader.Runtime(
+            currentDocumentPath: { foreign.path },
+            now: { fixedNow },
+            readPlistData: { _ in
+                try? PropertyListSerialization.data(fromPropertyList: ["NumberOfTracks": 3], format: .binary, options: 0)
+            },
+            mtime: { _ in fixedNow },
+            sleep: { _ in }
+        )
+
+        let boundCache = await populatedCache(projectPath: foreign.path)
+        let bound = try await captureReport(boundCache, reader: reader, domains: [.tracks])
+        let boundTracks = try section(bound, "tracks")
+        #expect(try reasons(boundTracks) == ["count_is_the_only_end_witness"])
+        #expect(try section(boundTracks, "witnesses")["expected_count"] as? Int == 3)
+
+        let foreignCache = await populatedCache(projectPath: directory.appendingPathComponent("Song.logicx").path)
+        let report = try await captureReport(foreignCache, reader: reader, domains: [.tracks])
+        let tracks = try section(report, "tracks")
+        #expect(try coverage(tracks) == "partial")
+        #expect(try reasons(tracks) == ["project_file_not_bound", "hidden_tracks_unobserved"])
+        let witnesses = try section(tracks, "witnesses")
+        #expect(witnesses["count"] as? Int == 3)
+        #expect(witnesses["expected_count"] == nil)
+        #expect(witnesses["expected_count_matches_rail"] == nil)
+        let complete = try overallComplete(report)
+        #expect(!complete)
     }
 }

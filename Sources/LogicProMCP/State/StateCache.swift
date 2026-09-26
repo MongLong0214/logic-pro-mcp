@@ -158,6 +158,26 @@ actor StateCache {
         )
     }
 
+    /// #965: everything a whole-session capture must see unchanged, read in one actor hop.
+    ///
+    /// `hasDocument` and `axOccluded` are written without advancing any section version
+    /// (`updateDocumentState(true)`, `updateAXOccluded`), so comparing versions alone cannot see
+    /// them move. Reading the versions one `await` at a time also leaves a gap between reads that
+    /// a write can land in unseen. One synchronous call leaves neither.
+    struct CaptureBoundary: Sendable, Equatable {
+        let versions: [CacheSectionID: SectionVersion]
+        let hasDocument: Bool
+        let axOccluded: Bool
+    }
+
+    func captureBoundary(watching sections: [CacheSectionID]) -> CaptureBoundary {
+        var versions: [CacheSectionID: SectionVersion] = [:]
+        for section in sections {
+            versions[section] = currentVersion(for: section)
+        }
+        return CaptureBoundary(versions: versions, hasDocument: hasDocument, axOccluded: axOccluded)
+    }
+
     /// Number of conditional writes rejected because their observed version
     /// no longer matches this section. This counter never decreases.
     func droppedStaleWriteCount(for section: CacheSectionID) -> UInt64 {
