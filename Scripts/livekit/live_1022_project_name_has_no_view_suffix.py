@@ -150,26 +150,33 @@ ev.note("1022/project-info", {
     "standard_window_titles": titles, "suffixes": SUFFIXES,
 })
 
+# The bundle's file name without the extension, when the reply carries a path. (a) needs it for a
+# project whose own name ends in a view label, and (b) compares against it.
+bundle_stem = None
+if isinstance(file_path, str) and file_path.strip():
+    bundle = os.path.basename(file_path.rstrip("/"))
+    bundle_stem = bundle[:-len(BUNDLE_EXTENSION)] if bundle.endswith(BUNDLE_EXTENSION) else bundle
+
 # (a) ------------------------------------------------------------------------------------------------
-suffix_form = {"name": name, "suffixes": SUFFIXES}
+suffix_form = {"name": name, "suffixes": SUFFIXES, "bundle_stem": bundle_stem}
 ev.falsifiable(
     "1022/name-carries-no-view-suffix",
     lambda o: (isinstance(o["name"], str) and bool(o["name"].strip())
-               and not carries_a_view_suffix(o["name"], o["suffixes"])),
+               and (not carries_a_view_suffix(o["name"], o["suffixes"])
+                    or o["name"] == o["bundle_stem"])),
     suffix_form,
     {**suffix_form, "name": pre_change_name},
     "logic://project/info's name is non-empty and does not end with ` - ` followed by any spelling "
-    "of the arrange view the product knows. THE COUNTEREXAMPLE is the arrange window's raw title, "
+    "of the arrange view the product knows, unless the project's own bundle name ends that way and "
+    "the name is exactly that bundle name. THE COUNTEREXAMPLE is the arrange window's raw title, "
     "which is what name read before #1022",
     mutation="assign the window title to info.name unchanged in defaultGetProjectInfo "
              "(the pre-#1022 line)",
 )
 
 # (b) ------------------------------------------------------------------------------------------------
-if isinstance(file_path, str) and file_path.strip():
-    bundle = os.path.basename(file_path.rstrip("/"))
-    stem = bundle[:-len(BUNDLE_EXTENSION)] if bundle.endswith(BUNDLE_EXTENSION) else bundle
-    bundle_form = {"name": name, "bundle_stem": stem, "filePath": file_path}
+if bundle_stem is not None:
+    bundle_form = {"name": name, "bundle_stem": bundle_stem, "filePath": file_path}
     ev.falsifiable(
         "1022/name-is-the-bundle-file-name",
         lambda o: bool(o["name"]) and o["name"] == o["bundle_stem"],

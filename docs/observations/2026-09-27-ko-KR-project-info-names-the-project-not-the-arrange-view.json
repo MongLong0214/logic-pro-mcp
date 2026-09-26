@@ -19,7 +19,7 @@
   "reverify": {
     "kind": "script",
     "command": "/usr/bin/python3 Scripts/livekit/live_1022_project_name_has_no_view_suffix.py <worktree> <full-40-char-head> [binary]",
-    "expected": "all three checks pass: the name carries none of the arrangeWindowTitleSuffix labels, it equals the .logicx bundle's file name without the extension, and Logic's Arrange window title is that name plus ' - ' and exactly one of those labels",
+    "expected": "all three checks pass: the name carries none of the arrangeWindowTitleSuffix labels unless it is exactly a bundle name ending in one, it equals the .logicx bundle's file name without the extension, and Logic's Arrange window title is that name plus ' - ' and exactly one of those labels",
     "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository and a running Logic with a saved project open; starts one server; reads only"
   },
   "depends": [
@@ -67,7 +67,8 @@
   ],
   "conclusion": "logic://project/info named the project 'lpm-locale-campaign', the bundle's file name 'lpm-locale-campaign.logicx' without its extension, while Logic's Arrange window was titled 'lpm-locale-campaign - 트랙'. All 3 checks passed. The same harness against main at 3147d410 read the name 'lpm-locale-campaign - 트랙' and passed 0 of the 3 checks.",
   "limits": [
-    "One saved project whose bundle name has no ' - ' in it, one run per language, one host. A project whose own name ends in ' - ' plus one of the ten view names would lose that part; nothing here measures such a name.",
+    "One saved project whose bundle name has no ' - ' in it, one run per language, one host. A project whose own name ends in ' - ' plus one of the ten view names keeps that part, because only the last suffix is removed; that rests on the unit test, and no live run here measured such a name.",
+    "These runs used the harness before its first check was changed to accept a name that is exactly a bundle name ending in a view label. For this fixture, whose name has no ' - ', the earlier and the current check give the same answer.",
     "Only the Arrange window title is parsed. A project whose main window shows another view in its title keeps the whole title as its name, which is the behaviour before this change.",
     "The window titles are the ones System Events listed during the run; Logic's Marker List window was open next to the Arrange window because the fixture reopens with it."
   ],
