@@ -25,7 +25,8 @@
   "depends": [
     "Sources/LogicProMCP/State/TrackReferenceIssuance.swift:TrackReferenceIssuance",
     "Sources/LogicProMCP/State/ProjectReferenceIssuance.swift:ProjectReferenceIssuance",
-    "Sources/LogicProMCP/Routing/RoutingGraphPublication.swift:RoutingGraphPublication"
+    "Sources/LogicProMCP/Routing/RoutingGraphPublication.swift:RoutingGraphPublication",
+    "Scripts/livekit/live_291_mixer_graph_does_not_depend_on_read_order.py:graph_of"
   ],
   "evidence": [
     "evidence/2026-09-27-fr-FR-mixer-read-order-291.json"
