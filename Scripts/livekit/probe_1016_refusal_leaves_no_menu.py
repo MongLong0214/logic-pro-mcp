@@ -142,8 +142,10 @@ def mixer_band(ev):
     """The Mixer's band and the description it was found by, read off the live tree."""
     with open(os.path.join(HERE, "..", "..", "docs", "locale", "ui-labels.json"), encoding="utf-8") as h:
         row = json.load(h)["labels"]["mixerNamedElement"]
+    # Measured 2026-09-26 (ko): the label also names a 235-wide AXLayoutArea beside the 1317-wide
+    # Mixer, and the tool refuses the pair as ambiguous.
     for name in [row["canonical"], *row["variants"]]:
-        band, subject = ev.located_band(name, "--role", "AXLayoutArea")
+        band, subject = ev.located_band(name, "--role", "AXLayoutArea", "--min-width", "600")
         if band:
             return band, subject
     return None, None
