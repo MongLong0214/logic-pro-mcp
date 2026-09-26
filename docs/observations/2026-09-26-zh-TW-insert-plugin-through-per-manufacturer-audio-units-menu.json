@@ -19,7 +19,7 @@
   },
   "reverify": {
     "kind": "script",
-    "command": "/usr/bin/python3 Scripts/livekit/live_993_plugin_root_menu_in_every_locale.py <candidate-binary> --control <control-binary> zh_TW",
+    "command": "LPM_EVIDENCE_ROOT=<evidence-dir> /usr/bin/python3 Scripts/livekit/live_993_plugin_root_menu_in_every_locale.py <worktree> <full-40-char-head> <candidate-binary> --control <control-binary> zh_TW  (the reading: worktree at b1e557211ebbed2b3ad5d1f4332c388d806c5b68, candidate built from it, control built from 12599461)",
     "expected": "the candidate inserts Gain at the response's slot and Logic's Edit menu undo leaves the strip as it was; the control, run on the candidate's track with the candidate's configuration, refuses with menu_failure root_menu_not_found",
     "cost": "needs Logic with the lpm-locale-campaign fixture and two release binaries; switches Logic's language to zh_TW, relaunches it, and restores Korean at the end; about three minutes"
   },
