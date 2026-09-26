@@ -111,12 +111,38 @@ def open_logic_menus():
         return None
 
 
+def logic_owns_keyboard():
+    """Whether the first normal-layer window on screen is Logic's; None when the list is unread."""
+    try:
+        import Quartz
+        windows = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly,
+                                                    Quartz.kCGNullWindowID)
+        if windows is None:
+            return None
+        for window in windows:
+            if int(window.get(Quartz.kCGWindowLayer) or 0) == 0:
+                return bool(E._is_logic_owned_window(window))
+        return None
+    except Exception:  # noqa: BLE001 - an unread owner is not a known one
+        return None
+
+
 def close_menus():
-    """Escape until no Logic menu is on screen; the final reading is returned."""
+    """Escape while a Logic menu is counted on screen; the final reading is returned.
+
+    An Escape goes to whatever owns the keyboard, so one is sent only after a reading that counted a
+    Logic menu AND found Logic in front (#942: act only on what was measured). An unread list, or a
+    keyboard owner that is not Logic, stops here and returns None; the caller treats that as a failed
+    sample rather than a clean screen.
+    """
     for _ in range(4):
         found = open_logic_menus()
-        if found is not None and not found:
+        if found is None:
+            return None
+        if not found:
             return found
+        if logic_owns_keyboard() is not True:
+            return None
         osa('tell application "System Events" to key code 53', timeout=5)
         time.sleep(0.5)
     return open_logic_menus()
@@ -166,7 +192,7 @@ def sample(ev, binary, track, tag, band, subject, photographed=True):
             "track": track, "slot": 0, "plugin_name": "Gain",
             "configuration": CONFIGURATION, "confirmed": True}) or {}
         menus = open_logic_menus()
-        # Unknown is cleaned up too; only a reading of none skips it.
+        # An unknown reading is read again by the clean-up, which sends Escape only for a counted menu.
         closed = [] if menus == [] else close_menus()
         if photographed:
             after_shot = ev.shot(f"{tag}-mixer-after", settle_region=band)
