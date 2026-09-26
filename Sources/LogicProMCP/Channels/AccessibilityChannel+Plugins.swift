@@ -178,23 +178,35 @@ extension AccessibilityChannel {
         try? await Task.sleep(for: .milliseconds(250))
         let selection = await selectPlugin(spec, app, configuration, runtime.ax)
         guard selection.succeeded else {
-            dismissOpenMenu()
+            // #1016 — the slot press opened a menu, and this refusal leaves it on screen unless it
+            // is closed here. A blind Escape said nothing about whether it worked, and an open Logic
+            // popup menu stops Logic answering AppleEvents, so the next call failed for a reason
+            // that looked unrelated. The cleanup counts Logic's popup-level windows, cancels them,
+            // and says what it saw: `window_count_unavailable` is unknown, never clean.
+            let popupCleanup = livePluginPopupMenuCleaner(runtime)
             // #855 — the failure names WHICH step failed and, for the one that actually bites, what
             // the menu offered instead. All three used to be "plugin menu selection failed", and a
             // caller reading that had no way to tell a wrong category name from a channel
             // configuration this strip does not have.
+            var refusalExtras: [String: Any] = [
+                "track": track,
+                "slot": slotIndex,
+                "plugin_name": spec.canonicalName,
+                "menu_failure": menuFailureLabel(selection),
+                "menu_paths_tried": spec.menuPaths.map { $0.joined(separator: " > ") },
+                "menu_leaf_offered": menuLeafOffered(selection),
+                "requested_configuration": configuration ?? "",
+            ]
+            refusalExtras.merge(pluginPopupMenuStateFields(popupCleanup)) { _, new in new }
+            if !popupCleanup.isClean {
+                refusalExtras["recovery_hint"] = "The plug-in menu this refusal opened may still be "
+                    + "on screen. Dismiss any Logic popup menu with Escape before the next call, "
+                    + "because an open one blocks Logic's AppleEvent handler."
+            }
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: menuSelectionHint(selection, spec: spec),
-                extras: [
-                    "track": track,
-                    "slot": slotIndex,
-                    "plugin_name": spec.canonicalName,
-                    "menu_failure": menuFailureLabel(selection),
-                    "menu_paths_tried": spec.menuPaths.map { $0.joined(separator: " > ") },
-                    "menu_leaf_offered": menuLeafOffered(selection),
-                    "requested_configuration": configuration ?? "",
-                ]
+                extras: refusalExtras
             ))
         }
 
@@ -493,14 +505,6 @@ extension AccessibilityChannel {
             }
         }
         return nil
-    }
-
-    private static func dismissOpenMenu() {
-        let source = CGEventSource(stateID: .hidSystemState)
-        let down = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: true)
-        let up = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: false)
-        down?.post(tap: .cghidEventTap)
-        up?.post(tap: .cghidEventTap)
     }
 
     private static func undoLastLogicAction() -> Bool {
