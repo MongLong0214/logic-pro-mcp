@@ -1,0 +1,17 @@
+Limit: no committed test fails if a close moves back under its user: the race needs a late queue or reader, which only an uncommitted reproduction forced (3/3); no leak branch of the five committed sites was exercised
+Ruled-out: draining the transport's writeQueue before closing | the queue is private and a drain needs a test-only production seam; the test already knows the block is done because send returned
+Ruled-out: a DispatchSemaphore wait for the reader in the async tests | it blocks a cooperative-pool thread; the file's async tests poll with Task.sleep for that reason
+Ruled-out: failing the test when the reader never returns | the reader is cleanup only, and on a saturated machine that would turn a leak into a red run
+Warn: a descriptor handed to a SerializedStdioTransport or a reader thread must stay open until send returned or the thread returned; a defer that closes on return closes it under a late user
+Record-Id: r-448c6c0616b6
+Provenance: inherited 97e3fae3181a851b9113dd5e7e181e6ba6577150
+
+Limit: the watchdog test's report can still be lost when the other stall test swaps the process-wide report sink at the same time (#1003); not fixed here
+Ruled-out: marking the stall suite .serialized | it orders only this suite's tests; other suites in the process keep opening descriptors in parallel, so the closed number can still be taken
+Record-Id: r-4106542d6ed9
+Provenance: inherited 5e47505b233bfae397f49a7f04dadf338939c309
+
+Ruled-out: marking the suite .serialized | it orders only this suite and keeps a process-wide sink that a test in another suite could replace later, and it serializes eight unrelated tests
+Warn: an observation hook on this transport belongs in the instance's init, not in a static a test swaps; parallel tests share the static and the last restore wins
+Record-Id: r-e8ba641f2e37
+Provenance: inherited f584a760d6a38151e9a3fd1346b5b7524248dc46
