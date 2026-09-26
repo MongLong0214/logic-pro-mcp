@@ -80,8 +80,19 @@ def _canon():
     return module
 
 
-def _unescape(text: str) -> str:
-    return text.replace('\\"', '"').replace("\\\\", "\\")
+def _swift_literals():
+    spec = importlib.util.spec_from_file_location(
+        "locale_labels_for_labelsets", os.path.join(REPO, "Scripts", "locale_labels.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# #993 -- Swift's escapes are decoded by locale_labels.py's reader, the one that writes
+# ui-labels.json. This file used to undo only `\"` and `\\`, so a member written
+# `Audio Units\u{00A0}:` reached the digest as the eight characters `\u{00A0}` and the one
+# language whose row it is (fr) was reported as a language the product cannot work in.
+_unescape = _swift_literals()._unescape
 
 
 def declarations(source: str):

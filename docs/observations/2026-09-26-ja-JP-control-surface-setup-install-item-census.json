@@ -1,0 +1,71 @@
+{
+ "schema": 3,
+ "id": "2026-09-26-ja-JP-control-surface-setup-install-item-census",
+ "date": "2026-09-26",
+ "subject": "The Install item of the Control Surfaces Setup window's own New menu, as drawn (ja-JP)",
+ "question": "Which characters does the AXTitle of the Install item in the Setup window's New menu carry in ja-JP?",
+ "verdict": "works",
+ "surface": "system.midi",
+ "issues": [
+  1004
+ ],
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ja-JP",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "/usr/bin/python3 Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py . <out.json> <scratch-dir> ja",
+  "expected": "the controlSurfaceInstallMenuItem reading for ja carries the title_scalars in this record's row; a different sequence means Logic changed how it draws the item and the LabelSet wants re-reading",
+  "cost": "needs Logic with the lpm-locale-campaign fixture; switches Logic's language, relaunches it, and restores Korean at the end; about one minute per language"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:controlSurfaceInstallMenuItem"
+ ],
+ "method": "Opened through the application menu bar: the Logic Pro item, Control Surfaces, then Setup, each found by its LabelSet with U+00A0 and U+0020 folded together for navigation only. Where two items share the Setup title, each is pressed until the Setup window is up, and any other window that appeared is closed. The window's AXMenuButton whose AXDescription is the New label was pressed and the popup menu read from under it; AXCancel then closed it. The row below is the menu item whose folded title matches the Install label, with its AXTitle as read and every scalar of it. Nothing was installed and the Setup window was closed afterwards.",
+ "observations": [
+  {
+   "surface": "system.midi",
+   "path": "AXWindow[コントロールサーフェス設定]/AXMenuButton{新規}/AXMenu/AXMenuItem[インストール…]",
+   "role": "AXMenuItem",
+   "subrole": null,
+   "title": "インストール…",
+   "title_scalars": [
+    "U+30A4",
+    "U+30F3",
+    "U+30B9",
+    "U+30C8",
+    "U+30FC",
+    "U+30EB",
+    "U+2026"
+   ],
+   "description": null,
+   "help": null,
+   "value": null,
+   "identifier": null
+  }
+ ],
+ "evidence": [
+  "evidence/2026-09-26-ja-JP-nbsp-labels-as-drawn.json"
+ ],
+ "conclusion": "The drawn title carries exactly the scalars of Apple's own row for this language (U+30A4 U+30F3 U+30B9 U+30C8 U+30FC U+30EB U+2026).",
+ "limits": [
+  "One build of Logic and one language: Logic Pro 12.3 (6674) on macOS 26.3 (25D125) in ja-JP. Another build may draw another space.",
+  "The title is read through AX. That is what the product matches against; it says nothing about how the glyphs look on screen.",
+  "One reading, not a rate. The item was read once in this run."
+ ],
+ "supersedes": null,
+ "canon": [
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ja/Install%E2%80%A6#value",
+   "value": "インストール…",
+   "used_for": "Apple's own row for this item in ja, which controlSurfaceInstallMenuItem derives from; the drawn title has the same scalars",
+   "binding": {
+    "kind": "record"
+   }
+  }
+ ]
+}

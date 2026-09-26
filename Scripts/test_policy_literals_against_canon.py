@@ -129,7 +129,9 @@ class Ratchet(unittest.TestCase):
                      "check-canon-citations.py", "check-labelsets-are-derived.py",
                      # `check-canon-citations.py` imports the shared merge-base comparison by
                      # path. Without it the copy does not run a weaker guard, it does not run.
-                     "ratchet.py"):
+                     "ratchet.py",
+                     # `check-labelsets-are-derived.py` decodes Swift's escapes with this (#993).
+                     "locale_labels.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name), os.path.join(root, "Scripts", name))
         policy_rel = os.path.join("Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
         for path in guard.swift_sources():
@@ -348,7 +350,9 @@ class MissingEvidenceIsRefused(unittest.TestCase):
                      "check-canon-citations.py", "check-labelsets-are-derived.py",
                      # `check-canon-citations.py` imports the shared merge-base comparison by
                      # path. Without it the copy does not run a weaker guard, it does not run.
-                     "ratchet.py"):
+                     "ratchet.py",
+                     # `check-labelsets-are-derived.py` decodes Swift's escapes with this (#993).
+                     "locale_labels.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name), os.path.join(root, "Scripts", name))
         for path in guard.swift_sources():
             target = os.path.join(root, os.path.relpath(path, REPO))
@@ -382,6 +386,14 @@ class MissingEvidenceIsRefused(unittest.TestCase):
         proc = self._tree(omit="Scripts/check-labelsets-are-derived.py")
         self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[-400:])
         self.assertIn("NOT APPLIED", proc.stdout + proc.stderr)
+
+    def test_losing_the_readers_escape_decoder_is_refused(self):
+        """#993 -- the LabelSet reader loads `locale_labels.py`. A tree without it cannot read the
+        declared compositions, and that is a rule not applied, not fifteen literals unaccounted for."""
+        proc = self._tree(omit="Scripts/locale_labels.py")
+        self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[-400:])
+        self.assertIn("NOT APPLIED", proc.stdout + proc.stderr)
+        self.assertNotIn("DECOMPOSABILITY alone", proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":

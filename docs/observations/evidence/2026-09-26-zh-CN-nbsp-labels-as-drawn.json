@@ -1,19 +1,18 @@
 {
  "probe": "Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py",
- "locale": "es-ES",
+ "locale": "zh-CN",
  "host": {
   "app": "Logic Pro",
   "version": "12.3",
   "build": "6674",
-  "locale": "es-ES",
+  "locale": "zh-CN",
   "os": "macOS 26.3 (25D125)"
  },
  "language": {
   "switched": true,
-  "arrange_window": "lpm-locale-campaign - Pistas",
+  "arrange_window": "lpm-locale-campaign - 轨道",
   "windows": [
-   "lpm-locale-campaign - Lista marcadores",
-   "lpm-locale-campaign - Pistas"
+   "lpm-locale-campaign - 轨道"
   ]
  },
  "setup_install": {
@@ -21,13 +20,10 @@
   "open_setup": "pressed",
   "menu_outcome": "read",
   "new_button": {
-   "description": "Nueva",
+   "description": "新建",
    "description_scalars": [
-    "U+004E",
-    "U+0075",
-    "U+0065",
-    "U+0076",
-    "U+0061"
+    "U+65B0",
+    "U+5EFA"
    ],
    "enabled": true,
    "help": null,
@@ -47,16 +43,10 @@
     "help_scalars": null,
     "role": "AXMenuItem",
     "subrole": null,
-    "title": "Instalar…",
+    "title": "安装…",
     "title_scalars": [
-     "U+0049",
-     "U+006E",
-     "U+0073",
-     "U+0074",
-     "U+0061",
-     "U+006C",
-     "U+0061",
-     "U+0072",
+     "U+5B89",
+     "U+88C5",
      "U+2026"
     ]
    },
@@ -68,34 +58,14 @@
     "help_scalars": null,
     "role": "AXMenuItem",
     "subrole": null,
-    "title": "Explorar todos los modelos",
+    "title": "扫描所有型号",
     "title_scalars": [
-     "U+0045",
-     "U+0078",
-     "U+0070",
-     "U+006C",
-     "U+006F",
-     "U+0072",
-     "U+0061",
-     "U+0072",
-     "U+0020",
-     "U+0074",
-     "U+006F",
-     "U+0064",
-     "U+006F",
-     "U+0073",
-     "U+0020",
-     "U+006C",
-     "U+006F",
-     "U+0073",
-     "U+0020",
-     "U+006D",
-     "U+006F",
-     "U+0064",
-     "U+0065",
-     "U+006C",
-     "U+006F",
-     "U+0073"
+     "U+626B",
+     "U+63CF",
+     "U+6240",
+     "U+6709",
+     "U+578B",
+     "U+53F7"
     ]
    },
    {
@@ -117,48 +87,24 @@
     "help_scalars": null,
     "role": "AXMenuItem",
     "subrole": null,
-    "title": "Instalación automática",
+    "title": "自动安装",
     "title_scalars": [
-     "U+0049",
-     "U+006E",
-     "U+0073",
-     "U+0074",
-     "U+0061",
-     "U+006C",
-     "U+0061",
-     "U+0063",
-     "U+0069",
-     "U+00F3",
-     "U+006E",
-     "U+0020",
-     "U+0061",
-     "U+0075",
-     "U+0074",
-     "U+006F",
-     "U+006D",
-     "U+00E1",
-     "U+0074",
-     "U+0069",
-     "U+0063",
-     "U+0061"
+     "U+81EA",
+     "U+52A8",
+     "U+5B89",
+     "U+88C5"
     ]
    }
   ],
   "reading": {
    "surface": "system.midi",
-   "path": "AXWindow[Configuración de superficies de control]/AXMenuButton{Nueva}/AXMenu/AXMenuItem[Instalar…]",
+   "path": "AXWindow[控制表面设置]/AXMenuButton{新建}/AXMenu/AXMenuItem[安装…]",
    "role": "AXMenuItem",
    "subrole": null,
-   "title": "Instalar…",
+   "title": "安装…",
    "title_scalars": [
-    "U+0049",
-    "U+006E",
-    "U+0073",
-    "U+0074",
-    "U+0061",
-    "U+006C",
-    "U+0061",
-    "U+0072",
+    "U+5B89",
+    "U+88C5",
     "U+2026"
    ],
    "description": null,
@@ -171,7 +117,7 @@
  },
  "plugin_menu": {
   "item": "pluginMenuAudioUnits",
-  "slot_description": "módulo de audio",
+  "slot_description": "音频插件",
   "menu_outcome": "read",
   "slot_candidates": 36,
   "press_rc": -25204,
@@ -182,17 +128,12 @@
     "role": "AXMenuItem"
    },
    {
-    "title": "Recientes",
+    "title": "最近项目",
     "title_scalars": [
-     "U+0052",
-     "U+0065",
-     "U+0063",
-     "U+0069",
-     "U+0065",
-     "U+006E",
-     "U+0074",
-     "U+0065",
-     "U+0073"
+     "U+6700",
+     "U+8FD1",
+     "U+9879",
+     "U+76EE"
     ],
     "role": "AXMenuItem"
    },
@@ -469,19 +410,12 @@
     "role": "AXMenuItem"
    },
    {
-    "title": "Audio Units",
+    "title": "音频单元",
     "title_scalars": [
-     "U+0041",
-     "U+0075",
-     "U+0064",
-     "U+0069",
-     "U+006F",
-     "U+0020",
-     "U+0055",
-     "U+006E",
-     "U+0069",
-     "U+0074",
-     "U+0073"
+     "U+97F3",
+     "U+9891",
+     "U+5355",
+     "U+5143"
     ],
     "role": "AXMenuItem"
    },
@@ -493,22 +427,15 @@
   ],
   "reading": {
    "surface": "mixer.inserts",
-   "path": "AXButton{módulo de audio}/AXMenu/AXMenuItem[Audio Units]",
+   "path": "AXButton{音频插件}/AXMenu/AXMenuItem[音频单元]",
    "role": "AXMenuItem",
    "subrole": null,
-   "title": "Audio Units",
+   "title": "音频单元",
    "title_scalars": [
-    "U+0041",
-    "U+0075",
-    "U+0064",
-    "U+0069",
-    "U+006F",
-    "U+0020",
-    "U+0055",
-    "U+006E",
-    "U+0069",
-    "U+0074",
-    "U+0073"
+    "U+97F3",
+    "U+9891",
+    "U+5355",
+    "U+5143"
    ],
    "description": null,
    "help": null,
@@ -523,7 +450,7 @@
   "panel_open": true,
   "destination_field": {
    "outcome": "set",
-   "read_back": "<scratch>/stems-es/",
+   "read_back": "<scratch>/stems-zh_CN/",
    "set_rc": 0
   },
   "export_press": {
@@ -538,16 +465,10 @@
     "help_scalars": null,
     "role": "AXButton",
     "subrole": null,
-    "title": "Exportar",
+    "title": "导出",
     "title_scalars": [
-     "U+0045",
-     "U+0078",
-     "U+0070",
-     "U+006F",
-     "U+0072",
-     "U+0074",
-     "U+0061",
-     "U+0072"
+     "U+5BFC",
+     "U+51FA"
     ]
    }
   },
@@ -560,14 +481,14 @@
     "help_scalars": null,
     "role": "AXWindow",
     "subrole": "AXDialog",
-    "title": "Logic Pro",
+    "title": "Logic Pro",
     "title_scalars": [
      "U+004C",
      "U+006F",
      "U+0067",
      "U+0069",
      "U+0063",
-     "U+00A0",
+     "U+0020",
      "U+0050",
      "U+0072",
      "U+006F"
@@ -581,7 +502,7 @@
     "help_scalars": null,
     "role": "AXWindow",
     "subrole": "AXStandardWindow",
-    "title": "lpm-locale-campaign - Lista marcadores",
+    "title": "lpm-locale-campaign - 轨道",
     "title_scalars": [
      "U+006C",
      "U+0070",
@@ -605,62 +526,8 @@
      "U+0020",
      "U+002D",
      "U+0020",
-     "U+004C",
-     "U+0069",
-     "U+0073",
-     "U+0074",
-     "U+0061",
-     "U+0020",
-     "U+006D",
-     "U+0061",
-     "U+0072",
-     "U+0063",
-     "U+0061",
-     "U+0064",
-     "U+006F",
-     "U+0072",
-     "U+0065",
-     "U+0073"
-    ]
-   },
-   {
-    "description": null,
-    "description_scalars": null,
-    "enabled": null,
-    "help": null,
-    "help_scalars": null,
-    "role": "AXWindow",
-    "subrole": "AXStandardWindow",
-    "title": "lpm-locale-campaign - Pistas",
-    "title_scalars": [
-     "U+006C",
-     "U+0070",
-     "U+006D",
-     "U+002D",
-     "U+006C",
-     "U+006F",
-     "U+0063",
-     "U+0061",
-     "U+006C",
-     "U+0065",
-     "U+002D",
-     "U+0063",
-     "U+0061",
-     "U+006D",
-     "U+0070",
-     "U+0061",
-     "U+0069",
-     "U+0067",
-     "U+006E",
-     "U+0020",
-     "U+002D",
-     "U+0020",
-     "U+0050",
-     "U+0069",
-     "U+0073",
-     "U+0074",
-     "U+0061",
-     "U+0073"
+     "U+8F68",
+     "U+9053"
     ]
    }
   ],
@@ -669,7 +536,7 @@
    "sent"
   ],
   "watch": {
-   "polls": 190,
+   "polls": 193,
    "interval_ms": 20,
    "titles": [
     {
@@ -679,17 +546,14 @@
      "first_poll": 1,
      "help": null,
      "help_scalars": null,
-     "last_poll": 44,
-     "polls_seen": 44,
+     "last_poll": 45,
+     "polls_seen": 45,
      "role": "AXWindow",
      "subrole": "AXDialog",
-     "title": "Abrir",
+     "title": "打开",
      "title_scalars": [
-      "U+0041",
-      "U+0062",
-      "U+0072",
-      "U+0069",
-      "U+0072"
+      "U+6253",
+      "U+5F00"
      ]
     },
     {
@@ -699,11 +563,11 @@
      "first_poll": 1,
      "help": null,
      "help_scalars": null,
-     "last_poll": 190,
-     "polls_seen": 190,
+     "last_poll": 193,
+     "polls_seen": 193,
      "role": "AXWindow",
      "subrole": "AXStandardWindow",
-     "title": "lpm-locale-campaign - Lista marcadores",
+     "title": "lpm-locale-campaign - 轨道",
      "title_scalars": [
       "U+006C",
       "U+0070",
@@ -727,86 +591,29 @@
       "U+0020",
       "U+002D",
       "U+0020",
-      "U+004C",
-      "U+0069",
-      "U+0073",
-      "U+0074",
-      "U+0061",
-      "U+0020",
-      "U+006D",
-      "U+0061",
-      "U+0072",
-      "U+0063",
-      "U+0061",
-      "U+0064",
-      "U+006F",
-      "U+0072",
-      "U+0065",
-      "U+0073"
+      "U+8F68",
+      "U+9053"
      ]
     },
     {
      "description": null,
      "description_scalars": null,
      "enabled": null,
-     "first_poll": 1,
+     "first_poll": 47,
      "help": null,
      "help_scalars": null,
-     "last_poll": 190,
-     "polls_seen": 190,
-     "role": "AXWindow",
-     "subrole": "AXStandardWindow",
-     "title": "lpm-locale-campaign - Pistas",
-     "title_scalars": [
-      "U+006C",
-      "U+0070",
-      "U+006D",
-      "U+002D",
-      "U+006C",
-      "U+006F",
-      "U+0063",
-      "U+0061",
-      "U+006C",
-      "U+0065",
-      "U+002D",
-      "U+0063",
-      "U+0061",
-      "U+006D",
-      "U+0070",
-      "U+0061",
-      "U+0069",
-      "U+0067",
-      "U+006E",
-      "U+0020",
-      "U+002D",
-      "U+0020",
-      "U+0050",
-      "U+0069",
-      "U+0073",
-      "U+0074",
-      "U+0061",
-      "U+0073"
-     ]
-    },
-    {
-     "description": null,
-     "description_scalars": null,
-     "enabled": null,
-     "first_poll": 46,
-     "help": null,
-     "help_scalars": null,
-     "last_poll": 48,
-     "polls_seen": 3,
+     "last_poll": 50,
+     "polls_seen": 4,
      "role": "AXWindow",
      "subrole": "AXDialog",
-     "title": "Logic Pro",
+     "title": "Logic Pro",
      "title_scalars": [
       "U+004C",
       "U+006F",
       "U+0067",
       "U+0069",
       "U+0063",
-      "U+00A0",
+      "U+0020",
       "U+0050",
       "U+0072",
       "U+006F"
@@ -818,17 +625,17 @@
   "export_directory_exists_after_cleanup": false,
   "reading": {
    "surface": "project.export",
-   "path": "AXWindow[Logic Pro]",
+   "path": "AXWindow[Logic Pro]",
    "role": "AXWindow",
    "subrole": "AXDialog",
-   "title": "Logic Pro",
+   "title": "Logic Pro",
    "title_scalars": [
     "U+004C",
     "U+006F",
     "U+0067",
     "U+0069",
     "U+0063",
-    "U+00A0",
+    "U+0020",
     "U+0050",
     "U+0072",
     "U+006F"

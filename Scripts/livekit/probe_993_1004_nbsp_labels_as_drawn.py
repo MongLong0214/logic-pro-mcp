@@ -2,7 +2,7 @@
 """Read which space character a running Logic draws in three labels, per language (#993, #1004).
 
 Usage:  /usr/bin/python3 probe_993_1004_nbsp_labels_as_drawn.py <worktree> <out.json> <scratch-dir> \
-        [lproj ...]        (default: de es fr ko)
+        [lproj ...]        (default: all ten: en ko ja de es fr it pt zh_CN zh_TW)
 
 WHAT IS ASKED
 -------------
@@ -62,7 +62,7 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else ""
 SCRATCH = sys.argv[3] if len(sys.argv) > 3 else ""
 if not WT or not OUT or not SCRATCH or not os.path.isabs(SCRATCH):
     sys.exit(__doc__)
-LPROJS = sys.argv[4:] or ["de", "es", "fr", "ko"]
+LPROJS = sys.argv[4:] or ["en", "ko", "ja", "de", "es", "fr", "it", "pt", "zh_CN", "zh_TW"]
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evidence as E  # noqa: E402
@@ -295,6 +295,13 @@ def read_setup_install(lproj):
                                     "cancel": True})
     out["menu_outcome"] = menu.get("outcome")
     out["new_button"] = menu.get("pressed")
+    if menu.get("outcome") == "no_candidate":
+        # Which menu buttons the window does vend, as read: without them a language where no
+        # `New` matched says only that nothing matched, not what Logic draws there instead.
+        out["menu_buttons"] = [{"description": c.get("description"), "title": c.get("title"),
+                                "subrole": c.get("subrole")}
+                               for c in probe("candidates", {"role": "AXMenuButton"})
+                               .get("candidates", [])]
     out["press_rc"] = menu.get("press_rc")
     wanted = {folded(t) for t in labels("controlSurfaceInstallMenuItem")}
     items = next((m["items"] for m in menu.get("open_menus_after") or []
@@ -331,6 +338,11 @@ def read_plugin_menu(lproj):
         hit = next(i for i in items if folded(i.get("title")) in wanted)
         out["reading"] = row("mixer.inserts",
                              f"AXButton{{{slot}}}/AXMenu/AXMenuItem[{hit.get('title')}]", hit)
+    else:
+        # No open menu held the label: record what the open menus did hold, so a language that
+        # draws the item under another string shows that string instead of an empty list.
+        out["open_menus_titles"] = [[i.get("title") for i in m["items"]]
+                                    for m in menu.get("open_menus_after") or []]
     out["menus_open_after_cancel"] = menus_left_open(menu)
     return out
 

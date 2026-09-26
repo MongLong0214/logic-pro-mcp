@@ -1,0 +1,440 @@
+{
+ "probe": "Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py",
+ "locale": "zh-TW",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "zh-TW",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "language": {
+  "switched": true,
+  "arrange_window": "lpm-locale-campaign - 音軌",
+  "windows": [
+   "lpm-locale-campaign - 標記列表",
+   "lpm-locale-campaign - 音軌"
+  ]
+ },
+ "setup_install": {
+  "item": "controlSurfaceInstallMenuItem",
+  "open_setup": "pressed",
+  "menu_outcome": "read",
+  "new_button": {
+   "description": "新增",
+   "description_scalars": [
+    "U+65B0",
+    "U+589E"
+   ],
+   "enabled": true,
+   "help": null,
+   "help_scalars": null,
+   "role": "AXMenuButton",
+   "subrole": "AXSegment",
+   "title": null,
+   "title_scalars": null
+  },
+  "press_rc": 0,
+  "menu_items": [
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": true,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXMenuItem",
+    "subrole": null,
+    "title": "安裝⋯",
+    "title_scalars": [
+     "U+5B89",
+     "U+88DD",
+     "U+22EF"
+    ]
+   },
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": true,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXMenuItem",
+    "subrole": null,
+    "title": "掃描所有機型",
+    "title_scalars": [
+     "U+6383",
+     "U+63CF",
+     "U+6240",
+     "U+6709",
+     "U+6A5F",
+     "U+578B"
+    ]
+   },
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": false,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXMenuItem",
+    "subrole": null,
+    "title": "",
+    "title_scalars": []
+   },
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": true,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXMenuItem",
+    "subrole": null,
+    "title": "自動安裝",
+    "title_scalars": [
+     "U+81EA",
+     "U+52D5",
+     "U+5B89",
+     "U+88DD"
+    ]
+   }
+  ],
+  "reading": {
+   "surface": "system.midi",
+   "path": "AXWindow[控制表面設定]/AXMenuButton{新增}/AXMenu/AXMenuItem[安裝⋯]",
+   "role": "AXMenuItem",
+   "subrole": null,
+   "title": "安裝⋯",
+   "title_scalars": [
+    "U+5B89",
+    "U+88DD",
+    "U+22EF"
+   ],
+   "description": null,
+   "help": null,
+   "value": null,
+   "identifier": null
+  },
+  "menus_open_after_cancel": 0,
+  "close_setup": "closed"
+ },
+ "plugin_menu": {
+  "item": "pluginMenuAudioUnits",
+  "slot_description": "音訊外掛模組",
+  "menu_outcome": "read",
+  "slot_candidates": 36,
+  "press_rc": -25204,
+  "menu_items": [],
+  "open_menus_titles": [
+   [
+    null,
+    "最近項目",
+    "Compressor",
+    "Channel EQ",
+    "Gain",
+    "Raum",
+    "Tremolo",
+    "",
+    "Amps and Pedals",
+    "Delay",
+    "Distortion",
+    "Dynamics",
+    "EQ",
+    "Filter",
+    "Imaging",
+    "Metering",
+    "Modulation",
+    "Multi Effects",
+    "Pitch",
+    "Reverb",
+    "Specialized",
+    "Utility",
+    "",
+    "音訊單元：Apple",
+    "音訊單元：iZotope",
+    "音訊單元：Native Instruments",
+    ""
+   ]
+  ],
+  "menus_open_after_cancel": 0
+ },
+ "stem_progress": {
+  "item": "stemExportProgressWindowTitle",
+  "open_export": "pressed",
+  "panel_open": true,
+  "destination_field": {
+   "outcome": "set",
+   "read_back": "<scratch>/stems-zh_TW/",
+   "set_rc": 0
+  },
+  "export_press": {
+   "candidates": 1,
+   "outcome": "pressed",
+   "press_rc": 0,
+   "pressed": {
+    "description": null,
+    "description_scalars": null,
+    "enabled": true,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXButton",
+    "subrole": null,
+    "title": "輸出",
+    "title_scalars": [
+     "U+8F38",
+     "U+51FA"
+    ]
+   }
+  },
+  "windows_during_export": [
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": null,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXWindow",
+    "subrole": "AXDialog",
+    "title": "Logic Pro",
+    "title_scalars": [
+     "U+004C",
+     "U+006F",
+     "U+0067",
+     "U+0069",
+     "U+0063",
+     "U+0020",
+     "U+0050",
+     "U+0072",
+     "U+006F"
+    ]
+   },
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": null,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "title": "lpm-locale-campaign - 標記列表",
+    "title_scalars": [
+     "U+006C",
+     "U+0070",
+     "U+006D",
+     "U+002D",
+     "U+006C",
+     "U+006F",
+     "U+0063",
+     "U+0061",
+     "U+006C",
+     "U+0065",
+     "U+002D",
+     "U+0063",
+     "U+0061",
+     "U+006D",
+     "U+0070",
+     "U+0061",
+     "U+0069",
+     "U+0067",
+     "U+006E",
+     "U+0020",
+     "U+002D",
+     "U+0020",
+     "U+6A19",
+     "U+8A18",
+     "U+5217",
+     "U+8868"
+    ]
+   },
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": null,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "title": "lpm-locale-campaign - 音軌",
+    "title_scalars": [
+     "U+006C",
+     "U+0070",
+     "U+006D",
+     "U+002D",
+     "U+006C",
+     "U+006F",
+     "U+0063",
+     "U+0061",
+     "U+006C",
+     "U+0065",
+     "U+002D",
+     "U+0063",
+     "U+0061",
+     "U+006D",
+     "U+0070",
+     "U+0061",
+     "U+0069",
+     "U+0067",
+     "U+006E",
+     "U+0020",
+     "U+002D",
+     "U+0020",
+     "U+97F3",
+     "U+8ECC"
+    ]
+   }
+  ],
+  "files_during_export": 9,
+  "cancel": [
+   "sent"
+  ],
+  "watch": {
+   "polls": 149,
+   "interval_ms": 20,
+   "titles": [
+    {
+     "description": null,
+     "description_scalars": null,
+     "enabled": null,
+     "first_poll": 1,
+     "help": null,
+     "help_scalars": null,
+     "last_poll": 44,
+     "polls_seen": 44,
+     "role": "AXWindow",
+     "subrole": "AXDialog",
+     "title": "打開",
+     "title_scalars": [
+      "U+6253",
+      "U+958B"
+     ]
+    },
+    {
+     "description": null,
+     "description_scalars": null,
+     "enabled": null,
+     "first_poll": 1,
+     "help": null,
+     "help_scalars": null,
+     "last_poll": 149,
+     "polls_seen": 149,
+     "role": "AXWindow",
+     "subrole": "AXStandardWindow",
+     "title": "lpm-locale-campaign - 標記列表",
+     "title_scalars": [
+      "U+006C",
+      "U+0070",
+      "U+006D",
+      "U+002D",
+      "U+006C",
+      "U+006F",
+      "U+0063",
+      "U+0061",
+      "U+006C",
+      "U+0065",
+      "U+002D",
+      "U+0063",
+      "U+0061",
+      "U+006D",
+      "U+0070",
+      "U+0061",
+      "U+0069",
+      "U+0067",
+      "U+006E",
+      "U+0020",
+      "U+002D",
+      "U+0020",
+      "U+6A19",
+      "U+8A18",
+      "U+5217",
+      "U+8868"
+     ]
+    },
+    {
+     "description": null,
+     "description_scalars": null,
+     "enabled": null,
+     "first_poll": 1,
+     "help": null,
+     "help_scalars": null,
+     "last_poll": 149,
+     "polls_seen": 149,
+     "role": "AXWindow",
+     "subrole": "AXStandardWindow",
+     "title": "lpm-locale-campaign - 音軌",
+     "title_scalars": [
+      "U+006C",
+      "U+0070",
+      "U+006D",
+      "U+002D",
+      "U+006C",
+      "U+006F",
+      "U+0063",
+      "U+0061",
+      "U+006C",
+      "U+0065",
+      "U+002D",
+      "U+0063",
+      "U+0061",
+      "U+006D",
+      "U+0070",
+      "U+0061",
+      "U+0069",
+      "U+0067",
+      "U+006E",
+      "U+0020",
+      "U+002D",
+      "U+0020",
+      "U+97F3",
+      "U+8ECC"
+     ]
+    },
+    {
+     "description": null,
+     "description_scalars": null,
+     "enabled": null,
+     "first_poll": 46,
+     "help": null,
+     "help_scalars": null,
+     "last_poll": 48,
+     "polls_seen": 3,
+     "role": "AXWindow",
+     "subrole": "AXDialog",
+     "title": "Logic Pro",
+     "title_scalars": [
+      "U+004C",
+      "U+006F",
+      "U+0067",
+      "U+0069",
+      "U+0063",
+      "U+0020",
+      "U+0050",
+      "U+0072",
+      "U+006F"
+     ]
+    }
+   ]
+  },
+  "dialogs_after_cancel": [],
+  "export_directory_exists_after_cleanup": false,
+  "reading": {
+   "surface": "project.export",
+   "path": "AXWindow[Logic Pro]",
+   "role": "AXWindow",
+   "subrole": "AXDialog",
+   "title": "Logic Pro",
+   "title_scalars": [
+    "U+004C",
+    "U+006F",
+    "U+0067",
+    "U+0069",
+    "U+0063",
+    "U+0020",
+    "U+0050",
+    "U+0072",
+    "U+006F"
+   ],
+   "description": null,
+   "help": null,
+   "value": null,
+   "identifier": null
+  }
+ }
+}

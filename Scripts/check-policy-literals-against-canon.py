@@ -468,7 +468,9 @@ def _composition_evidence_missing() -> tuple:
     # "it says no" -- the same distinction this repository makes for `history: unavailable`, and
     # the first version of this rule got it wrong: it turned a fixture missing two Scripts into
     # fifteen accusations against literals that are fine.
-    for name in ("check-canon-citations.py", "check-labelsets-are-derived.py"):
+    # `locale_labels.py` because the second reader decodes Swift's escapes with it (#993): without
+    # it that reader does not load, and the fifteen literals would read as unaccounted for.
+    for name in ("check-canon-citations.py", "check-labelsets-are-derived.py", "locale_labels.py"):
         if not os.path.exists(os.path.join(REPO, "Scripts", name)):
             missing.append(f"Scripts/{name}")
     return tuple(missing)

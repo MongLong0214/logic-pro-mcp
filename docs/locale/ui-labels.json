@@ -849,6 +849,56 @@
      "role": "AXMenuItem",
      "attribute": "title",
      "match": "exact"
+    },
+    "Instalar…": {
+     "locale": "es-ES",
+     "date": "2026-09-26",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-26-es-ES-control-surface-setup-install-item-census",
+     "observed": "Instalar…",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "Installa…": {
+     "locale": "it-IT",
+     "date": "2026-09-26",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-26-it-IT-control-surface-setup-install-item-census",
+     "observed": "Installa…",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "インストール…": {
+     "locale": "ja-JP",
+     "date": "2026-09-26",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-26-ja-JP-control-surface-setup-install-item-census",
+     "observed": "インストール…",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "安装…": {
+     "locale": "zh-CN",
+     "date": "2026-09-26",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-26-zh-CN-control-surface-setup-install-item-census",
+     "observed": "安装…",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "安裝⋯": {
+     "locale": "zh-TW",
+     "date": "2026-09-26",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-26-zh-TW-control-surface-setup-install-item-census",
+     "observed": "安裝⋯",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
     }
    },
    "roles": [
@@ -858,14 +908,14 @@
    "coverage": {
     "en-US": "derived",
     "ko-KR": "measured",
-    "ja-JP": "derived",
+    "ja-JP": "measured",
     "de-DE": "measured",
-    "es-ES": "derived",
+    "es-ES": "measured",
     "fr-FR": "measured",
-    "it-IT": "derived",
+    "it-IT": "measured",
     "pt-BR": "derived",
-    "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-CN": "measured",
+    "zh-TW": "measured"
    }
   },
   "controlSurfaceInstallWindowTitle": {
@@ -948,7 +998,7 @@
     "신규",
     "新規",
     "Neu",
-    "Nuevo",
+    "Nueva",
     "Nouveau",
     "Nuovo",
     "Novo",
@@ -4439,6 +4489,18 @@
     "音訊單元"
    ],
    "rationale": "Derived from Apple's `Audio Units` across the ten locales Logic ships; only zh_CN and zh_TW differ (Logic 12.3 build 6674). Cited in docs/observations/2026-09-16-two-languages-was-the-whole-design.json.",
+   "provenance": {
+    "音频单元": {
+     "locale": "zh-CN",
+     "date": "2026-09-26",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-26-zh-CN-plugin-menu-audio-units-item-census",
+     "observed": "音频单元",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
@@ -4452,7 +4514,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -4463,6 +4525,28 @@
    },
    "coverage_attributes": {
     "es-ES": "title"
+   }
+  },
+  "pluginMenuAudioUnitsManufacturerItem": {
+   "canonical": "Audio Units:",
+   "variants": [
+    "Audio Units :",
+    "音频单元:",
+    "音訊單元："
+   ],
+   "rationale": "Derived from Apple's `Audio Units:` row across the ten locales Logic ships (Logic 12.3 build 6674): en, ko, ja, de, es, it and pt are `Audio Units:`, fr is `Audio Units` U+00A0 `:`, zh_CN `音频单元:` and zh_TW `音訊單元：` with U+FF1A. The zh_TW plug-in menu was read live on 2026-09-26 by Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py: its tail was the three manufacturer items with this prefix and no Audio Units item, which is what left the product unable to recognise the menu there. Checked offline by Scripts/check-labelsets-are-derived.py.",
+   "match": "prefix",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "pluginMenuUtility": {
