@@ -1,0 +1,24 @@
+Limit: the check is pgrep -xq "Logic Pro": it proves a Logic process is running, not that the binary holds its permissions; the suite's behaviour without them was not measured
+Ruled-out: letting the live qualification tests skip when Logic is unreachable | a skip there is absence reported as success, and a release could pass without ever driving Logic
+Record-Id: r-4378d66493b1
+Provenance: inherited f0eb732991d7a119fe30dfa67c6bfd52f38d0ff0
+
+Limit: the Live-qualified tag line is written by whoever makes the tag; it stops a release cut around the scripts, not a hand-typed line; unforgeable evidence is #816
+Limit: the release.yml step was not run on a GitHub runner; it runs only on a tag push and no tag was pushed
+Ruled-out: a structural check of line order in the release scripts | the reviewer's two broken variants (exit 1 replaced by :, the suite narrowed to --filter) both passed it; order says nothing about what a line does
+Ruled-out: leaving the permission question to the suite | how the suite behaves without a grant was never measured, so the gate runs the new binary's --check-permissions and stops before the suite
+Warn: Scripts/release.sh commits Formula/logic-pro-mcp.rb after qualification, so the tag check lets exactly that file differ; a new post-qualification commit in either script must be allowed there too, or every release is refused
+Warn: the Automation probes in --check-permissions are osascript calls with a 1.0 s timeout, and a timeout reads as not granted; on a loaded machine the gate can stop on a timeout rather than a denial, and the printed lines name the check
+Record-Id: r-2d6f4190920d
+Provenance: inherited 94a84483febbf27c00dbff2ef95682fa2d032e68
+
+Limit: a Live-qualified line typed by someone who can push a tag is not stopped; that person can also edit this check on the tagged commit; whether #985 needs unforgeable evidence (#816) is with the repository owner
+Ruled-out: letting the Formula check also refuse source changes | it did so only through the empty-line artifact, so the file-list mutant went unseen; each check now refuses its own case
+Warn: Scripts/release.sh rewrites only the Formula's sha256 line after qualification (awk, lines 186-189); version and url are edited by hand before the cut, so every other Formula line must match the qualified commit
+Warn: an empty git diff read through a here-string yields one empty line; the loop skips it, and without that skip the Formula check refused a source-only change by accident and hid whether the file-list check was still there
+Record-Id: r-8d0eaa0e9387
+Provenance: inherited 3f9695e766e710160e875283d078c1775a4a1e5a
+
+Limit: the tag checker proves the post-qualification Formula edit is one checksum swap; it does not prove the new checksum is the archive's, and a hand-forged Live-qualified tag line is routed to #816
+Record-Id: r-028dd4ce036d
+Provenance: inherited ac7f1ac345ba648921773494d8999d10622199c9
