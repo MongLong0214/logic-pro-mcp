@@ -3034,6 +3034,9 @@ extension AccessibilityChannel {
         )
     }
 
+    /// nil is a list that did not come back or a Logic that has no pid, not zero popups. The count
+    /// itself is `LogicOnScreenWindows.popupMenuCount` (#942): one reader for the plug-in menu and
+    /// the Go To Position menu, so the two cannot disagree about what a Logic popup is.
     private static func logicOwnedPopupMenuWindowCount(
         runtime: AXLogicProElements.Runtime
     ) -> Int? {
@@ -3041,16 +3044,7 @@ extension AccessibilityChannel {
               let windows = runtime.onScreenWindowList() else {
             return nil
         }
-        let popupMenuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
-        return windows.reduce(into: 0) { count, window in
-            guard let ownerPID = (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
-                  let level = (window[kCGWindowLayer as String] as? NSNumber)?.intValue,
-                  ownerPID == logicPID,
-                  level == popupMenuLevel else {
-                return
-            }
-            count += 1
-        }
+        return LogicOnScreenWindows.popupMenuCount(windows, logicPID: logicPID)
     }
 
     /// The number of menus the cancel action was performed on.

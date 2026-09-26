@@ -1,0 +1,1041 @@
+{
+  "name": "probe_942_escape_over_goto_dialog",
+  "head": "1af8870160ef40d07beb360047ff722856ebb90b",
+  "artifact": {
+    "path": "",
+    "sha256": null,
+    "built_from": "1af8870160ef40d07beb360047ff722856ebb90b",
+    "worktree_clean": true,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": false
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "ui"
+    },
+    {
+      "kind": "observation",
+      "tag": "942/menu-path",
+      "payload": {
+        "navigate": "Navigieren",
+        "go_to": "Gehe zu",
+        "position": "Position …"
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "942/baseline",
+      "payload": [
+        {
+          "id": 9344,
+          "layer": 3,
+          "name": "lpm-locale-campaign - Marker-Liste",
+          "bounds": {
+            "X": 20,
+            "Height": 746,
+            "Y": 50,
+            "Width": 452
+          }
+        },
+        {
+          "id": 9343,
+          "layer": 0,
+          "name": "lpm-locale-campaign - Spuren",
+          "bounds": {
+            "X": 0,
+            "Height": 1050,
+            "Y": 30,
+            "Width": 1920
+          }
+        }
+      ]
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-0-dialog-before-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-before-escape.png",
+      "window": {
+        "id": 9345,
+        "title": "Zu Position",
+        "x": 753,
+        "y": 255,
+        "w": 413,
+        "h": 155
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "6bae11b2002cf662bde4c842b0c58a59ceab6598fe574923a824c02270ea030e",
+      "region_hash": "a704df1d1daf32d87da42ffa93a3c9b2a4901a51efbccb27544028e9bf9b1b7c",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0-dialog-before-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          413,
+          155
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-0-menu-over-dialog",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-menu-over-dialog.png",
+      "window": {
+        "id": 9346,
+        "title": "",
+        "x": 319,
+        "y": 31,
+        "w": 507,
+        "h": 436
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "58e836f8aa2e2bae30bb3b621bb59c86907730f5f746bda23f06982da4e15774",
+      "region_hash": "de0ef93aea4a75e817e9149f084633a58bde1ce920adedbf7f23f4fd089593c5",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0-menu-over-dialog/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          1014,
+          872
+        ],
+        "points": [
+          507,
+          436
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-0-dialog-after-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-after-escape.png",
+      "window": {
+        "id": 9345,
+        "title": "Zu Position",
+        "x": 751,
+        "y": 254,
+        "w": 417,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "6bae11b2002cf662bde4c842b0c58a59ceab6598fe574923a824c02270ea030e",
+      "region_hash": "a704df1d1daf32d87da42ffa93a3c9b2a4901a51efbccb27544028e9bf9b1b7c",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0-dialog-after-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          417,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "visual",
+      "tag": "942/sample-0-dialog-unchanged-by-the-menu-escape",
+      "region": [
+        0,
+        0,
+        413,
+        155
+      ],
+      "subject": "the Logic window named 'Zu Position'",
+      "before": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-before-escape.png",
+      "after": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-after-escape.png",
+      "expected": "region does not change — the Escape closed the menu; the dialog under it is the same window, untouched",
+      "observed": "before a704df1d1daf32d8 after a704df1d1daf32d8 changed=False",
+      "passed": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0",
+      "payload": {
+        "open_dialog_for_control": "menu item Position … of menu Gehe zu of menu item Gehe zu of menu Navigieren of menu bar item Navigieren of menu bar 1 of application process Logic Pro",
+        "control_dialog": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 754,
+              "Height": 155,
+              "Y": 255,
+              "Width": 411
+            }
+          }
+        ],
+        "control_keyboard_owner_is_logic": true,
+        "control_after_escape": [],
+        "control_dialog_gone_after_seconds": 0.232,
+        "open_dialog": "menu item Position … of menu Gehe zu of menu item Gehe zu of menu Navigieren of menu bar item Navigieren of menu bar 1 of application process Logic Pro",
+        "dialog": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 753,
+              "Height": 155,
+              "Y": 255,
+              "Width": 413
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "id": 9346,
+            "layer": 101,
+            "name": "",
+            "bounds": {
+              "X": 319,
+              "Height": 436,
+              "Y": 31,
+              "Width": 507
+            }
+          }
+        ],
+        "dialog_under_menu": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.273,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_after_seconds": null,
+        "dialog_after_one_escape": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "after_cleanup": [
+          {
+            "id": 9344,
+            "layer": 3,
+            "name": "lpm-locale-campaign - Marker-Liste",
+            "bounds": {
+              "X": 20,
+              "Height": 746,
+              "Y": 50,
+              "Width": 452
+            }
+          },
+          {
+            "id": 9343,
+            "layer": 0,
+            "name": "lpm-locale-campaign - Spuren",
+            "bounds": {
+              "X": 0,
+              "Height": 1050,
+              "Y": 30,
+              "Width": 1920
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "942/sample-0-left-no-menu-and-no-dialog",
+      "restored": true,
+      "detail": ""
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-1-dialog-before-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-before-escape.png",
+      "window": {
+        "id": 9345,
+        "title": "Zu Position",
+        "x": 753,
+        "y": 255,
+        "w": 413,
+        "h": 155
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "6bae11b2002cf662bde4c842b0c58a59ceab6598fe574923a824c02270ea030e",
+      "region_hash": "a704df1d1daf32d87da42ffa93a3c9b2a4901a51efbccb27544028e9bf9b1b7c",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1-dialog-before-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          413,
+          155
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-1-menu-over-dialog",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-menu-over-dialog.png",
+      "window": {
+        "id": 9347,
+        "title": "",
+        "x": 319,
+        "y": 31,
+        "w": 507,
+        "h": 436
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "58e836f8aa2e2bae30bb3b621bb59c86907730f5f746bda23f06982da4e15774",
+      "region_hash": "de0ef93aea4a75e817e9149f084633a58bde1ce920adedbf7f23f4fd089593c5",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1-menu-over-dialog/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          1014,
+          872
+        ],
+        "points": [
+          507,
+          436
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-1-dialog-after-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-after-escape.png",
+      "window": {
+        "id": 9345,
+        "title": "Zu Position",
+        "x": 751,
+        "y": 254,
+        "w": 417,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "6bae11b2002cf662bde4c842b0c58a59ceab6598fe574923a824c02270ea030e",
+      "region_hash": "a704df1d1daf32d87da42ffa93a3c9b2a4901a51efbccb27544028e9bf9b1b7c",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1-dialog-after-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          417,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "visual",
+      "tag": "942/sample-1-dialog-unchanged-by-the-menu-escape",
+      "region": [
+        0,
+        0,
+        413,
+        155
+      ],
+      "subject": "the Logic window named 'Zu Position'",
+      "before": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-before-escape.png",
+      "after": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-after-escape.png",
+      "expected": "region does not change — the Escape closed the menu; the dialog under it is the same window, untouched",
+      "observed": "before a704df1d1daf32d8 after a704df1d1daf32d8 changed=False",
+      "passed": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1",
+      "payload": {
+        "open_dialog_for_control": "menu item Position … of menu Gehe zu of menu item Gehe zu of menu Navigieren of menu bar item Navigieren of menu bar 1 of application process Logic Pro",
+        "control_dialog": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 753,
+              "Height": 157,
+              "Y": 254,
+              "Width": 413
+            }
+          }
+        ],
+        "control_keyboard_owner_is_logic": true,
+        "control_after_escape": [],
+        "control_dialog_gone_after_seconds": 0.227,
+        "open_dialog": "menu item Position … of menu Gehe zu of menu item Gehe zu of menu Navigieren of menu bar item Navigieren of menu bar 1 of application process Logic Pro",
+        "dialog": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 753,
+              "Height": 155,
+              "Y": 255,
+              "Width": 413
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "id": 9347,
+            "layer": 101,
+            "name": "",
+            "bounds": {
+              "X": 319,
+              "Height": 436,
+              "Y": 31,
+              "Width": 507
+            }
+          }
+        ],
+        "dialog_under_menu": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.273,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_after_seconds": null,
+        "dialog_after_one_escape": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "after_cleanup": [
+          {
+            "id": 9344,
+            "layer": 3,
+            "name": "lpm-locale-campaign - Marker-Liste",
+            "bounds": {
+              "X": 20,
+              "Height": 746,
+              "Y": 50,
+              "Width": 452
+            }
+          },
+          {
+            "id": 9343,
+            "layer": 0,
+            "name": "lpm-locale-campaign - Spuren",
+            "bounds": {
+              "X": 0,
+              "Height": 1050,
+              "Y": 30,
+              "Width": 1920
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "942/sample-1-left-no-menu-and-no-dialog",
+      "restored": true,
+      "detail": ""
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-2-dialog-before-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-before-escape.png",
+      "window": {
+        "id": 9345,
+        "title": "Zu Position",
+        "x": 753,
+        "y": 254,
+        "w": 413,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "6bae11b2002cf662bde4c842b0c58a59ceab6598fe574923a824c02270ea030e",
+      "region_hash": "a704df1d1daf32d87da42ffa93a3c9b2a4901a51efbccb27544028e9bf9b1b7c",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2-dialog-before-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          413,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-2-menu-over-dialog",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-menu-over-dialog.png",
+      "window": {
+        "id": 9348,
+        "title": "",
+        "x": 319,
+        "y": 31,
+        "w": 507,
+        "h": 436
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "58e836f8aa2e2bae30bb3b621bb59c86907730f5f746bda23f06982da4e15774",
+      "region_hash": "de0ef93aea4a75e817e9149f084633a58bde1ce920adedbf7f23f4fd089593c5",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2-menu-over-dialog/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          1014,
+          872
+        ],
+        "points": [
+          507,
+          436
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-2-dialog-after-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-after-escape.png",
+      "window": {
+        "id": 9345,
+        "title": "Zu Position",
+        "x": 751,
+        "y": 254,
+        "w": 417,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "6bae11b2002cf662bde4c842b0c58a59ceab6598fe574923a824c02270ea030e",
+      "region_hash": "a704df1d1daf32d87da42ffa93a3c9b2a4901a51efbccb27544028e9bf9b1b7c",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2-dialog-after-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          417,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "visual",
+      "tag": "942/sample-2-dialog-unchanged-by-the-menu-escape",
+      "region": [
+        0,
+        0,
+        413,
+        157
+      ],
+      "subject": "the Logic window named 'Zu Position'",
+      "before": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-before-escape.png",
+      "after": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-after-escape.png",
+      "expected": "region does not change — the Escape closed the menu; the dialog under it is the same window, untouched",
+      "observed": "before a704df1d1daf32d8 after a704df1d1daf32d8 changed=False",
+      "passed": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2",
+      "payload": {
+        "open_dialog_for_control": "menu item Position … of menu Gehe zu of menu item Gehe zu of menu Navigieren of menu bar item Navigieren of menu bar 1 of application process Logic Pro",
+        "control_dialog": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 753,
+              "Height": 155,
+              "Y": 255,
+              "Width": 413
+            }
+          }
+        ],
+        "control_keyboard_owner_is_logic": true,
+        "control_after_escape": [],
+        "control_dialog_gone_after_seconds": 0.217,
+        "open_dialog": "menu item Position … of menu Gehe zu of menu item Gehe zu of menu Navigieren of menu bar item Navigieren of menu bar 1 of application process Logic Pro",
+        "dialog": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 753,
+              "Height": 157,
+              "Y": 254,
+              "Width": 413
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "id": 9348,
+            "layer": 101,
+            "name": "",
+            "bounds": {
+              "X": 319,
+              "Height": 436,
+              "Y": 31,
+              "Width": 507
+            }
+          }
+        ],
+        "dialog_under_menu": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.278,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_after_seconds": null,
+        "dialog_after_one_escape": [
+          {
+            "id": 9345,
+            "layer": 8,
+            "name": "Zu Position",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "after_cleanup": [
+          {
+            "id": 9344,
+            "layer": 3,
+            "name": "lpm-locale-campaign - Marker-Liste",
+            "bounds": {
+              "X": 20,
+              "Height": 746,
+              "Y": 50,
+              "Width": 452
+            }
+          },
+          {
+            "id": 9343,
+            "layer": 0,
+            "name": "lpm-locale-campaign - Spuren",
+            "bounds": {
+              "X": 0,
+              "Height": 1050,
+              "Y": 30,
+              "Width": 1920
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "942/sample-2-left-no-menu-and-no-dialog",
+      "restored": true,
+      "detail": ""
+    },
+    {
+      "kind": "recording",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__run.mov",
+      "exists": true,
+      "bytes": 60002512
+    },
+    {
+      "kind": "check",
+      "tag": "942/escape-reaches-the-dialog-alone",
+      "passed": true,
+      "expected": "with only the dialog up and Logic owning the keyboard, one Escape removes the dialog",
+      "observed": [
+        {
+          "control_dialog": [
+            {
+              "id": 9345,
+              "layer": 8,
+              "name": "Zu Position",
+              "bounds": {
+                "X": 754,
+                "Height": 155,
+                "Y": 255,
+                "Width": 411
+              }
+            }
+          ],
+          "control_keyboard_owner_is_logic": true,
+          "control_after_escape": [],
+          "control_dialog_gone_after_seconds": 0.232,
+          "error": null
+        },
+        {
+          "control_dialog": [
+            {
+              "id": 9345,
+              "layer": 8,
+              "name": "Zu Position",
+              "bounds": {
+                "X": 753,
+                "Height": 157,
+                "Y": 254,
+                "Width": 413
+              }
+            }
+          ],
+          "control_keyboard_owner_is_logic": true,
+          "control_after_escape": [],
+          "control_dialog_gone_after_seconds": 0.227,
+          "error": null
+        },
+        {
+          "control_dialog": [
+            {
+              "id": 9345,
+              "layer": 8,
+              "name": "Zu Position",
+              "bounds": {
+                "X": 753,
+                "Height": 155,
+                "Y": 255,
+                "Width": 413
+              }
+            }
+          ],
+          "control_keyboard_owner_is_logic": true,
+          "control_after_escape": [],
+          "control_dialog_gone_after_seconds": 0.217,
+          "error": null
+        }
+      ],
+      "mutation": "if the Escape could not reach the dialog, a dialog surviving the measured Escape would prove nothing about which window it closes",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "942/one-escape-closes-the-menu-and-leaves-the-dialog",
+      "passed": true,
+      "expected": "with a Logic menu open over the dialog and Logic owning the keyboard, one Escape leaves no Logic menu and the same dialog window still on screen",
+      "observed": [
+        {
+          "menus_over_dialog": [
+            {
+              "id": 9346,
+              "layer": 101,
+              "name": "",
+              "bounds": {
+                "X": 319,
+                "Height": 436,
+                "Y": 31,
+                "Width": 507
+              }
+            }
+          ],
+          "dialog_under_menu": [
+            {
+              "id": 9345,
+              "layer": 8,
+              "name": "Zu Position",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "keyboard_owner_is_logic": true,
+          "menus_after_one_escape": [],
+          "menu_gone_after_seconds": 0.273,
+          "dialog_survival_bound_seconds": 1.5,
+          "dialog_gone_after_seconds": null,
+          "dialog_after_one_escape": [
+            {
+              "id": 9345,
+              "layer": 8,
+              "name": "Zu Position",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "menus_after_survival_bound": [],
+          "error": null
+        },
+        {
+          "menus_over_dialog": [
+            {
+              "id": 9347,
+              "layer": 101,
+              "name": "",
+              "bounds": {
+                "X": 319,
+                "Height": 436,
+                "Y": 31,
+                "Width": 507
+              }
+            }
+          ],
+          "dialog_under_menu": [
+            {
+              "id": 9345,
+              "layer": 8,
+              "name": "Zu Position",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "keyboard_owner_is_logic": true,
+          "menus_after_one_escape": [],
+          "menu_gone_after_seconds": 0.273,
+          "dialog_survival_bound_seconds": 1.5,
+          "dialog_gone_after_seconds": null,
+          "dialog_after_one_escape": [
+            {
+              "id": 9345,
+              "layer": 8,
+              "name": "Zu Position",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "menus_after_survival_bound": [],
+          "error": null
+        },
+        {
+          "menus_over_dialog": [
+            {
+              "id": 9348,
+              "layer": 101,
+              "name": "",
+              "bounds": {
+                "X": 319,
+                "Height": 436,
+                "Y": 31,
+                "Width": 507
+              }
+            }
+          ],
+          "dialog_under_menu": [
+            {
+              "id": 9345,
+              "layer": 8,
+              "name": "Zu Position",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "keyboard_owner_is_logic": true,
+          "menus_after_one_escape": [],
+          "menu_gone_after_seconds": 0.278,
+          "dialog_survival_bound_seconds": 1.5,
+          "dialog_gone_after_seconds": null,
+          "dialog_after_one_escape": [
+            {
+              "id": 9345,
+              "layer": 8,
+              "name": "Zu Position",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "menus_after_survival_bound": [],
+          "error": null
+        }
+      ],
+      "mutation": "if Logic routed the Escape to the modal first, the dialog would be gone after it and this check fails",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    }
+  ]
+}

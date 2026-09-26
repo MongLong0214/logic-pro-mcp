@@ -1,5 +1,5 @@
 {
-  "note": "LabelSets that name no Apple row. THIS LIST MAY ONLY SHRINK.\n\n`check-labelsets-are-derived.py` proves, offline and per locale, that a LabelSet's members are the values Apple pins at its row -- but only for the sets that DECLARE one. `check-new-labelsets-name-a-row.py` requires a declaration of every set added from now on, measured against the merge base. Between them sits this census: the sets that predate both rules. Nothing asked whether these work in every language, and the answer is UNMEASURED rather than no.\n\nThe list was 58 when it was written and is 61. The three added on 2026-09-20 -- `eventListColumnM`, `eventListColumnName`, `eventListColumnPosition` -- are not new LabelSets: they name no row and always did, and the guard's own parser could not see them because their declarations close on the same line as their last argument. The guard reads them through `check-labelsets-are-derived.py`'s parser now, and it refuses an addition only when the set named a row at the merge base.\n\nEach entry carries what `Scripts/derive_label_variants.py` says about it, so the work is sized rather than guessed. `value` and `namespace` mean a row was found; `ambiguous` means several resolve and somebody has to pick the one that MEANS this control; `no-row` means an absence proof is what closes it.\n\nDO NOT CLOSE THESE MECHANICALLY. Measured while writing this file: `trackTypeMaster`'s best candidate is `ChineseOnly_TI_BassAmpLabel_Master_lowercase`, a Bass Amp label whose value happens to match and whose meaning does not. A row that resolves is not the row a control is named by.",
+  "note": "LabelSets that name no Apple row. THIS LIST MAY ONLY SHRINK.\n\n`check-labelsets-are-derived.py` proves, offline and per locale, that a LabelSet's members are the values Apple pins at its row -- but only for the sets that DECLARE one. `check-new-labelsets-name-a-row.py` requires a declaration of every set added from now on, measured against the merge base. Between them sits this census: the sets that predate both rules. Nothing asked whether these work in every language, and the answer is UNMEASURED rather than no.\n\nThe list was 58 when it was written and is 61. The three added on 2026-09-20 -- `eventListColumnM`, `eventListColumnName`, `eventListColumnPosition` -- are not new LabelSets: they name no row and always did, and the guard's own parser could not see them because their declarations close on the same line as their last argument. The guard reads them through `check-labelsets-are-derived.py`'s parser now, and it refuses an addition only when the set named a row at the merge base.\n\nEach entry carries what `Scripts/derive_label_variants.py` says about it, so the work is sized rather than guessed. `value` and `namespace` mean a row was found; `ambiguous` means several resolve and somebody has to pick the one that MEANS this control; `no-row` means an absence proof is what closes it.\n\nDO NOT CLOSE THESE MECHANICALLY. Measured while writing this file: `trackTypeMaster`'s best candidate is `ChineseOnly_TI_BassAmpLabel_Master_lowercase`, a Bass Amp label whose value happens to match and whose meaning does not. A row that resolves is not the row a control is named by.\n\n13 lines left on 2026-09-26 (#904) -- transportCycleControl, transportAutopunchControl, tempoFieldLabel, tempoSliderLabel, midiImportTempoAlertText, trackRecordButton, sliderVolumeHint, sliderPanHint, headerPanHint, transportContainerMetadata, undoPluginInsertMenuItem, projectOrSectionMenuItem, trackTypeInstrument -- because for each the candidate row IS the control's own word in the namespace its consumer reads, so each now names it in `derivedFrom`; the other candidates this census records were re-read and left in place (compound negative tables, a Bass Amp label, nib titles of unrelated dialogs, another sheet's button, a `Record Enable` checkbox whose verbatim match resolved to the `Record` menu title), which is what DO NOT CLOSE THESE MECHANICALLY means.",
   "how_to_shrink": "Give the LabelSet a `derivedFrom` naming its row, or prove there is none with an entry in docs/canon/LABELSETS-WITHOUT-A-ROW.json. Then delete its line here. Scripts/check-labelset-census-only-shrinks.py refuses any other direction.",
   "counted_on": "2026-09-20",
   "total_labelsets": 195,
@@ -44,11 +44,6 @@
       "candidate": "Localizable.strings Delete#key via #key",
       "members": 4
     },
-    "headerPanHint": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Pan#par via #par",
-      "members": 4
-    },
     "horizontalZoomSlider": {
       "verdict": "value",
       "candidate": "ControllerAssignments.strings aGM-qO-ZOT.title",
@@ -68,11 +63,6 @@
       "verdict": "no-row",
       "candidate": "0 candidate(s)",
       "members": 1
-    },
-    "midiImportTempoAlertText": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Tempo#mti via #mti",
-      "members": 3
     },
     "nonInsertButtonText": {
       "verdict": "namespace",
@@ -98,11 +88,6 @@
       "verdict": "no-row",
       "candidate": "0 candidate(s)",
       "members": 1
-    },
-    "projectOrSectionMenuItem": {
-      "verdict": "value",
-      "candidate": "Localizable.strings Project or Section…",
-      "members": 6
     },
     "projectPickerWindow": {
       "verdict": "ambiguous",
@@ -144,35 +129,15 @@
       "candidate": "2 candidate(s)",
       "members": 3
     },
-    "sliderPanHint": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Pan#par via #par",
-      "members": 5
-    },
     "sliderSendHint": {
       "verdict": "ambiguous",
       "candidate": "10 candidate(s)",
       "members": 2
     },
-    "sliderVolumeHint": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Volume#acc via #acc",
-      "members": 4
-    },
     "sliderZoomHint": {
       "verdict": "value",
       "candidate": "SongSettingsScore.strings 101232.title",
       "members": 2
-    },
-    "tempoFieldLabel": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Tempo#mti via #mti",
-      "members": 3
-    },
-    "tempoSliderLabel": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Tempo#mti via #mti",
-      "members": 4
     },
     "tickSliderLabel": {
       "verdict": "ambiguous",
@@ -193,11 +158,6 @@
       "verdict": "no-row",
       "candidate": "0 candidate(s)",
       "members": 7
-    },
-    "trackRecordButton": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Record#mti via #mti",
-      "members": 5
     },
     "trackRecordEnableCheckbox": {
       "verdict": "namespace",
@@ -224,35 +184,15 @@
       "candidate": "0 candidate(s)",
       "members": 1
     },
-    "trackTypeInstrument": {
-      "verdict": "value",
-      "candidate": "Localizable.strings instrument",
-      "members": 3
-    },
     "trackTypeMaster": {
       "verdict": "value",
       "candidate": "Localizable.strings ChineseOnly_TI_BassAmpLabel_Master_lowercase",
       "members": 2
     },
-    "transportAutopunchControl": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings StrTransportBtns|||Autopunch via StrTransportBtns",
-      "members": 3
-    },
     "transportContainerControlKeywords": {
       "verdict": "ambiguous",
       "candidate": "48 candidate(s)",
       "members": 18
-    },
-    "transportContainerMetadata": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Control Bar#acc via #acc",
-      "members": 4
-    },
-    "transportCycleControl": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings StrTransportBtns|||Cycle via StrTransportBtns",
-      "members": 4
     },
     "transportKeywordFalseFriends": {
       "verdict": "namespace",
@@ -277,11 +217,6 @@
     "undoMenuItemPrefix": {
       "verdict": "ambiguous",
       "candidate": "13 candidate(s)",
-      "members": 2
-    },
-    "undoPluginInsertMenuItem": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Insert Plug-in in Channel Strip#und via #und",
       "members": 2
     }
   },

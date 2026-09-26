@@ -1094,6 +1094,17 @@ extension AccessibilityChannel {
                 ) == .closed
             }
         }
+        // #942. The Logic-owned window numbers on screen before the script runs, read from the
+        // same list the post-leaf settlement reads, so a window that is there afterwards and was
+        // not here is one the leaf click left behind. Read after the lock: the lock is what makes
+        // "appeared since" this run's own. nil is a list that did not come back, and the settlement
+        // then reports the dialog unreadable rather than absent.
+        let postLeafBaseline: Set<Int>? = {
+            guard let logicPID = runtime.logicProPID(), let windows = runtime.onScreenWindowList() else {
+                return nil
+            }
+            return Set(LogicOnScreenWindows.logicOwned(windows, logicPID: logicPID).map(\.number))
+        }()
         let dialogResult = await gotoPositionViaDialog(
             position: requestedPosition,
             executeScript: dialogScriptExecutor,
@@ -1105,6 +1116,18 @@ extension AccessibilityChannel {
         var dialogRouteExtras = baseExtras
         if case let .failed(classification) = dialogResult {
             dialogRouteExtras.merge(classification.menuActuationReceiptFields) { _, new in new }
+        }
+        // #942. The fourteen results that returned without observing the menu are followed by one
+        // in-process reading of the screen and at most the action that reading permits; the
+        // receipt carries what was read, sent and read again. The refusal each result reaches is
+        // untouched: `dialog_cleanup`, `menu_state`, `safe_to_retry` and `fallback_unsafe` still
+        // say what the script observed, and this object says what the parent observed after it.
+        if case let .failed(classification) = dialogResult,
+           classification.requiresPostLeafScreenSettlement {
+            let settlement = settlePostLeafScreen(
+                baseline: postLeafBaseline, runtime: runtime, policy: .current, sleepMicros: sleepMicros
+            )
+            dialogRouteExtras.merge(settlement.receiptFields) { _, new in new }
         }
         if case let .driven(payload) = dialogResult {
             // The dialog rung builds its own envelope, so without this the same operation reports
@@ -2434,6 +2457,23 @@ extension AccessibilityChannel {
                 return cleanup
             default:
                 return nil
+            }
+        }
+
+        /// The fourteen post-leaf results that end without anyone having observed the menu (#942):
+        /// the twelve `PostLeafCleanupSite` dialog refusals, whose menu cleanup never ran, and the
+        /// two appearance results, which run no cleanup at all. Each is followed by one in-process
+        /// window-list settlement (`settlePostLeafScreen`). A menu refusal is not here -- its
+        /// dialog was observed closed and its menu goes through the reconciliation pass -- and
+        /// neither is a site's own result, a pre-leaf refusal or a dead child, none of which left
+        /// the screen unread.
+        var requiresPostLeafScreenSettlement: Bool {
+            switch self {
+            case .failure(.dialogUnidentifiedNewWindow),
+                 .failure(.dialogAppearanceUnreadable):
+                return true
+            default:
+                return postLeafCleanup == .dialogNotObservedClosed
             }
         }
 

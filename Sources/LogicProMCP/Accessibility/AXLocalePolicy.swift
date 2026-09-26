@@ -868,8 +868,10 @@ enum AXLocalePolicy {
     /// locales, so all four spellings are kept rather than assuming one glyph.
     static let projectOrSectionMenuItem = LabelSet(
         canonical: "Project or Section…",
-        variants: ["프로젝트 또는 섹션…", "Project or Section...", "프로젝트 또는 섹션...", "プロジェクトまたは選択範囲…", "Projekt oder Abschnitt …"],
+        variants: ["프로젝트 또는 섹션…", "Project or Section...", "프로젝트 또는 섹션...", "プロジェクトまたは選択範囲…", "Projekt oder Abschnitt …", "Projekt oder Abschnitt …", "Proyecto o sección…", "Projet ou section…", "Progetto o sezione…", "Projeto ou Seção…", "项目或部分…", "計畫案或段落⋯"],
         rationale: "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Project or Section…`; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. The three-dot spellings stay as the readings they were. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Project%20or%20Section%E2%80%A6#value"
     )
 
     /// #519: File > Import.
@@ -937,8 +939,10 @@ enum AXLocalePolicy {
     /// alert. Matched by containment because the rest of the alert is a paragraph of explanation.
     static let midiImportTempoAlertText = LabelSet(
         canonical: "tempo",
-        variants: ["템포", "Tempo-Informationen"],
+        variants: ["템포", "Tempo-Informationen", "テンポ", "Ritmo", "Andamento", "速度", "拍速"],
         rationale: "Positively identifies the post-import tempo alert, which exposes no window name. German text read 2026-09-13: `Auch Tempo-Informationen importieren?`. Callers match it by CONTAINMENT — the alert's body is a paragraph, and the question is one phrase inside it."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Tempo#mti` in Apple's own namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. The row is the KEYWORD the containment consumer matches inside the alert's body, not the element's whole label: the alert is a paragraph and the tempo word is one phrase in it, so `Auch Tempo-Informationen importieren?` matches on `Tempo` and on the `Tempo-Informationen` reading kept beside it. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tempo%23mti#value"
     )
 
     static let midiImportPanelTitle = LabelSet(
@@ -1217,8 +1221,10 @@ enum AXLocalePolicy {
     /// of those undoes the user's work instead of ours.
     static let undoPluginInsertMenuItem = LabelSet(
         canonical: "Insert Plug-in in Channel Strip",
-        variants: ["채널 스트립에 플러그인 삽입"],
+        variants: ["채널 스트립에 플러그인 삽입", "채널 스트립의 플러그인 삽입", "チャンネルストリップにプラグインを挿入", "Plug-in in Channel-Strip einfügen", "inserción del módulo del canal", "Insérer le module dans la tranche de console", "Inserisci plugin nella channel strip", "Inserir Plug-in no Canal", "在通道条中插入插件", "在聲道控制排中插入外掛模組"],
         rationale: "Confirms the Undo entry describes OUR insert before a rollback presses it."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Insert Plug-in in Channel Strip#und` in Apple's own undo namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. The row is the undo-operation NAME the containment consumer in AccessibilityChannel+VerifiedPlugins matches inside the Edit menu's Undo title, not the element's whole label: Logic offers `Undo Insert Plug-in in Channel Strip`, and the operation is the part after `Undo`. The Korean reading `채널 스트립에 플러그인 삽입` stays beside Apple's `채널 스트립의 플러그인 삽입`. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Insert%20Plug-in%20in%20Channel%20Strip%23und#value"
     )
 
     static let goToPositionDialogTitle = LabelSet(
@@ -1429,8 +1435,10 @@ enum AXLocalePolicy {
 
     static let transportCycleControl = LabelSet(
         canonical: "cycle",
-        variants: ["loop", "사이클", "サイクル"],
+        variants: ["loop", "사이클", "サイクル", "Ciclo", "Repetição", "循环", "循環"],
         rationale: "Identifies the Cycle/Loop transport control; read-only."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `StrTransportBtns|||Cycle` in Apple's own transport-button namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. `loop` stays: it is the tolerance the containment consumers in AXValueExtractors and AccessibilityChannel+Transport matched before, and no row's value. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTransportBtns%7C%7C%7CCycle#value"
     )
 
     /// Japanese Logic labels this control with ONE compound string, `メトロノームクリック`,
@@ -1517,8 +1525,10 @@ enum AXLocalePolicy {
 
     static let transportAutopunchControl = LabelSet(
         canonical: "Autopunch",
-        variants: ["Auto Punch", "Auto-Punch"],
+        variants: ["Auto Punch", "Auto-Punch", "오토펀치", "オートパンチ", "Pinchazo preprogramado", "Punch automatico", "Punch automático", "自动插入", "自動錄音"],
         rationale: "Locates Logic's Control Bar Autopunch checkbox for AXPress; State A is still gated by readback."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `StrTransportBtns|||Autopunch` in Apple's own transport-button namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. `Auto Punch` and `Auto-Punch` stay as the tolerance spellings they were. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTransportBtns%7C%7C%7CAutopunch#value"
     )
 
     /// Record-arm disambiguation tokens. Their PRESENCE on a Record control
@@ -1531,8 +1541,10 @@ enum AXLocalePolicy {
 
     static let tempoFieldLabel = LabelSet(
         canonical: "tempo",
-        variants: ["bpm", "템포"],
+        variants: ["bpm", "템포", "テンポ", "Ritmo", "Andamento", "速度", "拍速"],
         rationale: "Identifies a tempo text field/slider description; read-only."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Tempo#mti` in Apple's own namespace, the row tempoSliderContainsLabel already cites; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. `bpm` stays: it is the tolerance the containment consumer in AXValueExtractors matched before, and no row's value. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tempo%23mti#value"
     )
 
     static let playheadPositionFieldLabel = LabelSet(
@@ -1741,8 +1753,10 @@ enum AXLocalePolicy {
     /// Includes `bpm` because that locator explicitly accepts `desc == "bpm"`.
     static let tempoSliderLabel = LabelSet(
         canonical: "tempo",
-        variants: ["bpm", "템포", "テンポ"],
+        variants: ["bpm", "템포", "テンポ", "Ritmo", "Andamento", "速度", "拍速"],
         rationale: "Identifies the tempo slider; verbatim (lowercased) description match; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the Control Bar tempo slider."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Tempo#mti` in Apple's own namespace, the row tempoSliderContainsLabel already cites; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. `bpm` stays, and the consumer's `.exactStrict` match is unchanged: a derived value matches the whole lowercased description, not a fragment of it. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tempo%23mti#value"
     )
 
     /// Tempo slider description for the read-only `extractTransportState` slider
@@ -1797,8 +1811,10 @@ enum AXLocalePolicy {
 
     static let trackRecordButton = LabelSet(
         canonical: "Record",
-        variants: ["Rec", "녹음 활성화", "레코드 활성화", "Aufnahme"],
+        variants: ["Rec", "녹음 활성화", "레코드 활성화", "Aufnahme", "녹음", "録音", "Grabar", "Enregistrement", "Registra", "Gravação", "录音", "錄音"],
         rationale: "Identifies the track Record/arm button by description substring; read-only state extraction. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Record#mti` in Apple's own namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. The row is the KEYWORD the containment consumer in AXValueExtractors matches inside a track-header control's description, not the element's whole label: `Rec`, `녹음 활성화` and `레코드 활성화` stay as the readings they were, and Apple's `녹음` is the word inside two of them. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Record%23mti#value"
     )
 
     /// Per-track record-enable AXCheckBox description. Verbatim match preserves
@@ -1971,8 +1987,10 @@ enum AXLocalePolicy {
     /// Control-bar / transport container metadata tokens (id/title/desc scan).
     static let transportContainerMetadata = LabelSet(
         canonical: "transport",
-        variants: ["control bar", "컨트롤 막대", "コントロールバー"],
+        variants: ["control bar", "컨트롤 막대", "コントロールバー", "Steuerungsleiste", "Barra de controles", "Barre des commandes", "Barra di controllo", "控制条", "控制列"],
         rationale: "Classifies the transport/control-bar container by metadata substring; read-only."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `StrTabBtnLabel|||Control Bar`, the row controlBarGroupLabel cites for the same description; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. Not `Control Bar#acc`, which Scripts/derive_label_variants.py names for this set: #979 read a Portuguese Logic live and its control bar is described `Barra de Controles`, the value of `StrTabBtnLabel|||Control Bar`, where `Control Bar#acc` says `Barra de Controle`. Portuguese adds no member of its own because that value equals the Spanish one ignoring case, which is how the consumer matches. `transport` stays as the tolerance it was. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTabBtnLabel%7C%7C%7CControl%20Bar#value"
     )
 
     /// Transport control-button label tokens (≥2 distinct hits ⇒ transport bar).
@@ -2072,13 +2090,17 @@ enum AXLocalePolicy {
     )
     static let sliderVolumeHint = LabelSet(
         canonical: "volume",
-        variants: ["fader", "볼륨", "ボリューム"],
+        variants: ["fader", "볼륨", "ボリューム", "Volumen", "音量"],
         rationale: "Classifies a slider as a volume fader; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the track area's volume slider."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Volume#acc` in Apple's own namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. `fader` stays as the tolerance it was. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Volume%23acc#value"
     )
     static let sliderPanHint = LabelSet(
         canonical: "pan",
-        variants: ["panning", "패닝", "밸런스", "パン"],
+        variants: ["panning", "패닝", "밸런스", "パン", "声像", "相位"],
         rationale: "Classifies a slider as a pan control; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Pan#par` in Apple's own namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. `패닝` and `밸런스` stay as the readings they were. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Pan%23par#value"
     )
 
     /// The insert slot's BYPASS toggle -- the child `AXCheckBox` of an occupied slot's `AXGroup`.
@@ -2294,8 +2316,10 @@ enum AXLocalePolicy {
     )
     static let trackTypeInstrument = LabelSet(
         canonical: "instrument",
-        variants: ["software", "악기"],
+        variants: ["software", "악기", "音源", "instrumento", "strumento", "乐器", "樂器"],
         rationale: "Classifies a software-instrument track; read-only classifier."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `instrument` in MAAudioUnitSupport.framework's Localizable.strings, the unit Scripts/derive_label_variants.py resolves it to; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. `software` stays as the tolerance it was. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAAudioUnitSupport.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/instrument#value"
     )
     static let trackTypeDrummer = LabelSet(
         canonical: "drummer",
@@ -2339,8 +2363,10 @@ enum AXLocalePolicy {
     /// `패닝` (different syllables), so it has never been the variant doing the work.
     static let headerPanHint = LabelSet(
         canonical: "pan",
-        variants: ["팬", "밸런스", "パン"],
+        variants: ["팬", "밸런스", "パン", "Panning", "声像", "相位"],
         rationale: "Retired locator for the track-header pan slider; superseded by sliderPanHint. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider."
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Pan#par` in Apple's own namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. `팬` and `밸런스` stay as the readings they were. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Pan%23par#value"
     )
 
     /// Track-header rail description (normalized exact match).

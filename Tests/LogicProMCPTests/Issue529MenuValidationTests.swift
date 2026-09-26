@@ -443,12 +443,26 @@ private actor Issue529DialogLockGate {
     }
 }
 
+/// #942 / #1016. `AXLogicProElements.Runtime` defaults its two window-server seams to the live
+/// `CGWindowListCopyWindowInfo` and a live key-53 Escape at the HID tap, and
+/// `FakeAXRuntimeBuilder.makeLogicRuntime` does not pass them. A goto test that reaches one of the
+/// fourteen post-leaf results the settlement follows would otherwise read this machine's screen
+/// and could type into whatever is frontmost. Every goto runtime built here gets these two unless
+/// the test supplies its own: no list, which the settlement refuses as unreadable, and an Escape
+/// that fails the test instead of leaving the process.
+private let issue529NoWindowList: @Sendable () -> [[String: Any]]? = { nil }
+private let issue529RecordedLiveEscape: @Sendable () -> Void = {
+    Issue.record("a test runtime posted a live Escape")
+}
+
 private func issue529SliderRuntime(
     sliderWrites: Issue529Counter,
     includeBeatSlider: Bool = false,
     executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = { _ in
         .success(#"{"result":"MENU_NOT_FOUND"}"#)
-    }
+    },
+    onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = issue529NoWindowList,
+    postPopupMenuEscape: @escaping @Sendable () -> Void = issue529RecordedLiveEscape
 ) -> AXLogicProElements.Runtime {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(5290)
@@ -475,7 +489,7 @@ private func issue529SliderRuntime(
         builder.setAttribute(beatSlider, kAXValueAttribute as String, NSNumber(value: 1))
     }
 
-    return builder.makeLogicRuntime(
+    let base = builder.makeLogicRuntime(
         appElement: app,
         setAttributeHandler: { element, attribute, value in
             if (element == barSlider || element == beatSlider), attribute == kAXValueAttribute as String {
@@ -486,6 +500,14 @@ private func issue529SliderRuntime(
         },
         performActionHandler: { _, _ in true },
         executeAppleScript: executeAppleScript
+    )
+    return AXLogicProElements.Runtime(
+        logicProPID: base.logicProPID,
+        ax: base.ax,
+        executeAppleScript: base.executeAppleScript,
+        executeAppleScriptWithTimeout: base.executeAppleScriptWithTimeout,
+        onScreenWindowList: onScreenWindowList,
+        postPopupMenuEscape: postPopupMenuEscape
     )
 }
 
@@ -523,7 +545,7 @@ private func issue529PreexistingDialogRuntime(
     builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
     builder.setChildren(dialogWindow, [cancel])
 
-    let runtime = builder.makeLogicRuntime(
+    let base = builder.makeLogicRuntime(
         appElement: app,
         setAttributeHandler: nil,
         performActionHandler: nil,
@@ -532,6 +554,16 @@ private func issue529PreexistingDialogRuntime(
             reconciliationCalls.bump()
             return .success(#"{"result":"CLOSED"}"#)
         }
+    )
+    // The same two seams as `issue529SliderRuntime`: this runtime also drives the goto route, which
+    // reads the window list before its script (#942).
+    let runtime = AXLogicProElements.Runtime(
+        logicProPID: base.logicProPID,
+        ax: base.ax,
+        executeAppleScript: base.executeAppleScript,
+        executeAppleScriptWithTimeout: base.executeAppleScriptWithTimeout,
+        onScreenWindowList: issue529NoWindowList,
+        postPopupMenuEscape: issue529RecordedLiveEscape
     )
     return (builder, runtime, cancel)
 }
@@ -3167,8 +3199,12 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
     /// Runs the route on one site's menu refusal with a READY snapshot on the ledger, so a pass
     /// handed the snapshot path would carry it in its script. With `executionFailureStage` the
     /// child instead dies after writing that stage to the ledger, which runs the snapshot pass.
+    /// `onScreenWindowList` and `postPopupMenuEscape` are the post-leaf settlement's two seams
+    /// (#942); left nil, the runtime reads no list and fails the test on any Escape.
     static func runMenuRefusal(
-        _ site: Site, reconcilerAnswer: String, result: String? = nil, executionFailureStage: String? = nil
+        _ site: Site, reconcilerAnswer: String, result: String? = nil, executionFailureStage: String? = nil,
+        onScreenWindowList: (@Sendable () -> [[String: Any]]?)? = nil,
+        postPopupMenuEscape: (@Sendable () -> Void)? = nil
     ) async throws -> (envelope: [String: Any], calls: Int, script: String?, snapshotPath: String, sliderWrites: Int) {
         let sliderWrites = Issue529Counter()
         let calls = Issue529Counter()
@@ -3186,7 +3222,9 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
                     reconciliationScript.set(script)
                     calls.bump()
                     return .success(#"{"result":"\#(reconcilerAnswer)"}"#)
-                }
+                },
+                onScreenWindowList: onScreenWindowList ?? issue529NoWindowList,
+                postPopupMenuEscape: postPopupMenuEscape ?? issue529RecordedLiveEscape
             ),
             isFrontmost: { true },
             activateLogic: { true },

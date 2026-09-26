@@ -1,0 +1,236 @@
+{
+  "schema": 3,
+  "id": "2026-09-26-ko-KR-escape-over-go-to-position-closes-the-menu-first",
+  "date": "2026-09-26",
+  "subject": "which window one Escape closes when a Logic menu is open over the modal Go To Position dialog",
+  "question": "With the Navigate menu open over the Go To Position dialog and Logic owning the keyboard, does one Escape posted at the HID tap close the menu and leave the dialog, or does the dialog take it?",
+  "verdict": "works",
+  "surface": "arrange.menus",
+  "issues": [
+    942
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/probe_942_escape_over_goto_dialog.py <worktree> <full-40-char-head> --samples 3",
+    "expected": "both checks pass: one Escape removes the dialog when it is alone, and with the Navigate menu open over it one Escape leaves no Logic menu and the same dialog window on screen after the survival bound",
+    "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository and a running Logic with a project open; changes nothing in the project; about one minute"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+GotoPostLeafSettlement.swift:EscapeOverDialogPolicy"
+  ],
+  "evidence": [
+    "evidence/2026-09-26-ko-KR-escape-over-go-to-position-942.json"
+  ],
+  "method": "The probe drives no server operation; it drives Logic through System Events clicks and reads only the window server's on-screen list. The menu path and the dialog title were resolved from docs/locale/ui-labels.json against the names this Logic showed (navigateMenuBar, goToMenuItem, goToPositionMenuItem, goToPositionDialogTitle). Escape was posted exactly as the server posts its popup-menu Escape: key 53 down and up at the HID event tap, with the first layer-0 window's owner read before each one. Each of three samples started from a screen with no Logic menu and no dialog. Control: open Go To Position from the menu bar, one Escape, time until that window left the list. Measured step: open the dialog again, capture it, click the Navigate menu bar item so its menu opens over the dialog, capture the menu, one Escape, then read until no Logic window at the pop-up menu level remained and keep reading the dialog's window for max(1.5 s, five times the control's disappearance time) before recording it as surviving. The dialog was captured again and compared with its pre-menu capture over the whole window. Clean-up Escapes ran outside the bracket and the screen was re-read clean after every sample. Nine captures all settled, three visual comparisons passed, one screen recording; the evidence document is not is_clean only because no server operation was driven (operations_driven 0), which the probe states.",
+  "observations": [
+    {
+      "sample": 0,
+      "control": {
+        "dialog_on_screen": [
+          {
+            "layer": 8,
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "dialog_after_one_escape": [],
+        "dialog_gone_after_seconds": 0.235
+      },
+      "measured": {
+        "dialog_on_screen": [
+          {
+            "layer": 8,
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "layer": 101,
+            "bounds": {
+              "X": 250,
+              "Height": 436,
+              "Y": 31,
+              "Width": 348
+            }
+          }
+        ],
+        "dialog_under_menu_same_window": true,
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.28,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_within_bound": false,
+        "same_dialog_window_after_one_escape": true,
+        "dialog_after_one_escape": [
+          {
+            "layer": 8,
+            "bounds": {
+              "X": 758,
+              "Height": 157,
+              "Y": 254,
+              "Width": 403
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "dialog_pixels_unchanged_across_the_escape": true
+      },
+      "after_cleanup_no_menu_no_dialog": true
+    },
+    {
+      "sample": 1,
+      "control": {
+        "dialog_on_screen": [
+          {
+            "layer": 8,
+            "bounds": {
+              "X": 760,
+              "Height": 157,
+              "Y": 254,
+              "Width": 399
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "dialog_after_one_escape": [],
+        "dialog_gone_after_seconds": 0.23
+      },
+      "measured": {
+        "dialog_on_screen": [
+          {
+            "layer": 8,
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "layer": 101,
+            "bounds": {
+              "X": 250,
+              "Height": 436,
+              "Y": 31,
+              "Width": 348
+            }
+          }
+        ],
+        "dialog_under_menu_same_window": true,
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.293,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_within_bound": false,
+        "same_dialog_window_after_one_escape": true,
+        "dialog_after_one_escape": [
+          {
+            "layer": 8,
+            "bounds": {
+              "X": 758,
+              "Height": 157,
+              "Y": 254,
+              "Width": 403
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "dialog_pixels_unchanged_across_the_escape": true
+      },
+      "after_cleanup_no_menu_no_dialog": true
+    },
+    {
+      "sample": 2,
+      "control": {
+        "dialog_on_screen": [
+          {
+            "layer": 8,
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "dialog_after_one_escape": [],
+        "dialog_gone_after_seconds": 0.231
+      },
+      "measured": {
+        "dialog_on_screen": [
+          {
+            "layer": 8,
+            "bounds": {
+              "X": 760,
+              "Height": 155,
+              "Y": 255,
+              "Width": 399
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "layer": 101,
+            "bounds": {
+              "X": 250,
+              "Height": 436,
+              "Y": 31,
+              "Width": 348
+            }
+          }
+        ],
+        "dialog_under_menu_same_window": true,
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.291,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_within_bound": false,
+        "same_dialog_window_after_one_escape": true,
+        "dialog_after_one_escape": [
+          {
+            "layer": 8,
+            "bounds": {
+              "X": 758,
+              "Height": 157,
+              "Y": 254,
+              "Width": 403
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "dialog_pixels_unchanged_across_the_escape": true
+      },
+      "after_cleanup_no_menu_no_dialog": true
+    }
+  ],
+  "conclusion": "In all three samples one Escape with only the dialog up removed it (0.23 to 0.235 s), so the Escape reached the dialog. With the Navigate menu open over the dialog, one Escape removed the menu (0.28 to 0.293 s), and the same dialog window was still on screen 1.5 s later with its pixels unchanged. On this host a single Escape at an open menu is taken by the menu, not by the modal dialog under it, which is what EscapeOverDialogPolicy.menuEscapeMeasuredToLeaveDialog states.",
+  "limits": [
+    "One menu (the Navigate menu bar menu, top level only) over one dialog. A menu with a submenu expanded, and the plug-in popup, were not measured here; the product's loop re-reads the popup count before every Escape, so a second Escape is sent only while a menu is still counted.",
+    "Korean only. The Escape routing reads no label, but the ten-locale default scope applies: the #942 wiring's live verification re-runs this probe in all ten locales before the change merges.",
+    "The dialog's first listed size (399 by 155 points) differs from its settled size (403 by 157) and from its captures (806 by 314 pixels); the window number stayed the same, and the whole-window comparison covered the full image in both captures."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "The record measures window-server layers, window numbers and key routing; it names no Logic string, and the labels it drove by are read from docs/locale/ui-labels.json rather than asserted here."
+  }
+}

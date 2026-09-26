@@ -31,8 +31,16 @@ struct Issue60LocalePhase4Tests {
             ("mixerNamedElement", AXLocalePolicy.mixerNamedElement.labels, ["mixer", "믹서", "ミキサー", "Mezclador", "Table de mixage", "混音器"]),
             ("sliderSendHint", AXLocalePolicy.sliderSendHint.labels, ["send", "센드"]),
             ("sliderZoomHint", AXLocalePolicy.sliderZoomHint.labels, ["zoom", "확대"]),
-            ("sliderVolumeHint", AXLocalePolicy.sliderVolumeHint.labels, ["volume", "fader", "볼륨", "ボリューム"]),
-            ("sliderPanHint", AXLocalePolicy.sliderPanHint.labels, ["pan", "panning", "패닝", "밸런스", "パン"]),
+            // Extended 2026-09-26 (#904) from the row in `derivedFrom` -- `Volume#acc`. Ten locales
+            // add two strings: `Volume` is what seven of them ship and `볼륨`/`ボリューム` were already
+            // here, so only Spanish `Volumen` and the Chinese `音量` are new. `fader` stays as the
+            // tolerance it was. The set stays EXACT here on purpose: that is what makes this a drift
+            // guard, so a future addition still has to say where it came from.
+            ("sliderVolumeHint", AXLocalePolicy.sliderVolumeHint.labels, ["volume", "fader", "볼륨", "ボリューム", "Volumen", "音量"]),
+            // Extended 2026-09-26 (#904) from the row in `derivedFrom` -- `Pan#par`. Apple ships `Pan`
+            // in seven locales and Italian `Panning`, both already members up to case, so only the
+            // two Chinese values are new; `패닝` and `밸런스` stay as the readings they were.
+            ("sliderPanHint", AXLocalePolicy.sliderPanHint.labels, ["pan", "panning", "패닝", "밸런스", "パン", "声像", "相位"]),
             // Extended 2026-09-25 (#977) from the two rows these LabelSets now name in `derivedFrom`:
             // MAGUI `bypass` at the insert slot, MAToolKit `bypass` in the editor window. They differ
             // only in German -- `Umgehen` at the slot and `Bypass` in the editor, both read off a
@@ -62,7 +70,10 @@ struct Issue60LocalePhase4Tests {
                 "monitor", "모니터링", "volume", "볼륨", "fader", "페이더",
                 "pan", "패닝", "밸런스",
             ]),
-            ("headerPanHint", AXLocalePolicy.headerPanHint.labels, ["pan", "팬", "밸런스", "パン"]),
+            // Extended 2026-09-26 (#904) from the row in `derivedFrom` -- `Pan#par`, the same row as
+            // sliderPanHint. This set never carried `panning`, so Italian `Panning` is new here where
+            // it was a duplicate up to case there; `팬` and `밸런스` stay as the readings they were.
+            ("headerPanHint", AXLocalePolicy.headerPanHint.labels, ["pan", "팬", "밸런스", "パン", "Panning", "声像", "相位"]),
             // `Spuren Titel` added 2026-09-12 (#876), read off the de-DE navigation-free census as the
             // AXDescription of the AXGroup this label addresses. Not drift: without it `located_band`
             // and every reader keyed on this description find nothing on a German Logic, which is the

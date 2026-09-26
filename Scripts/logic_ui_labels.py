@@ -18,7 +18,7 @@ BOUNCE_CONFIRM_BUTTONS: Final[tuple[str, ...]] = ('aceptar', 'ok', '好', '확�
 BOUNCE_DIALOG_KEYWORDS: Final[tuple[str, ...]] = ('bounce', 'bouncen', 'renderizar', 'バウンス', '併軌', '并轨', '바운스',)
 
 #: projectOrSectionMenuItem
-BOUNCE_PROJECT_OR_SECTION: Final[tuple[str, ...]] = ('project or section...', 'project or section…', 'projekt oder abschnitt …', 'プロジェクトまたは選択範囲…', '프로젝트 또는 섹션...', '프로젝트 또는 섹션…',)
+BOUNCE_PROJECT_OR_SECTION: Final[tuple[str, ...]] = ('progetto o sezione…', 'project or section...', 'project or section…', 'projekt oder abschnitt …', 'projekt oder abschnitt\xa0…', 'projet ou section…', 'projeto ou seção…', 'proyecto o sección…', 'プロジェクトまたは選択範囲…', '計畫案或段落⋯', '项目或部分…', '프로젝트 또는 섹션...', '프로젝트 또는 섹션…',)
 
 #: bounceRealtimeSetting + bounceOfflineSetting + bounceNormalizeSetting + literals Apple does not translate: pcm, audio tail
 BOUNCE_SETTINGS_MARKERS: Final[tuple[str, ...]] = ('audio tail', 'déconnecté', 'echtzeit', 'in tempo reale', 'normaliser', 'normalisieren', 'normalizar', 'normalize', 'normalizza', 'off-line', 'offline', 'pcm', 'realtime', 'sin conexión', 'tempo real', 'temps réel', 'tiempo real', 'オフライン', 'ノーマライズ', 'リアルタイム', '即時', '实时', '標準化', '正常化', '离线', '離線', '노멀라이즈', '실시간', '오프라인',)

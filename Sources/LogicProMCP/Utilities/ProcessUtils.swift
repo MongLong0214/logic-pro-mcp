@@ -322,7 +322,7 @@ enum ProcessUtils {
         return preferredLogicPID(from: candidates)
     }
 
-    private static func pidValue(from value: Any?) -> pid_t? {
+    static func pidValue(from value: Any?) -> pid_t? {
         if let pid = value as? pid_t {
             return pid
         }
