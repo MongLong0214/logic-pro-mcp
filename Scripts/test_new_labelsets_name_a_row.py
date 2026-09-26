@@ -72,6 +72,13 @@ class StubCanon:
             raise CanonError(self.raises)
         return text not in self.present
 
+    # The guard asks `presence` since #992. This corpus compares strings, so nothing it holds is
+    # a collision and nothing is unconfirmed; `test_canon_presence.py` drives the third answer.
+    SHIPS, ABSENT, UNCONFIRMED = "ships", "absent", "unconfirmed"
+
+    def presence(self, source, locale, text):
+        return self.ABSENT if self.is_absent(source, locale, text) else self.SHIPS
+
 
 class GuardRun(unittest.TestCase):
     def run_guard(self, before, now, waivers=None, canon=None, env=None):

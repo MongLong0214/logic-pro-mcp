@@ -186,10 +186,20 @@ def prove_absent(name, entry, canonical, canon, failures):
         return
     for source in sources:
         try:
-            if not canon.is_absent(source, "en", canonical):
+            # A 32-bit prefix match is not a row (#992): a pinned string comparison that found a
+            # collision lets the waiver stand, and one nobody ran holds it with the command that
+            # settles it.
+            verdict = canon.presence(source, "en", canonical)
+            if verdict == canon.SHIPS:
                 failures.append(
                     f"{name}: {canonical!r} IS a value in {source}/en, so a row can be looked up "
                     f"for it and must be. Name it in `derivedFrom` instead of waiving it.")
+                return
+            if verdict == canon.UNCONFIRMED:
+                failures.append(
+                    f"{name}: {canonical!r} has its 32-bit prefix in {source}/en and nobody "
+                    f"compared the string, so the waiver is not proved. Run "
+                    f"`Scripts/logic_canon.py confirm {canonical!r}` on a machine with Logic.")
                 return
         except canon.CanonError as exc:
             failures.append(f"{name}: {canonical!r} in {source}/en: {exc}")
