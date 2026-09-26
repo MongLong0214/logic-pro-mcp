@@ -1,0 +1,43 @@
+Limit: the live run does not prove the type of the created track (#766); the unit test tells the four operations apart by the leaf each presses, not by the track Logic makes
+Limit: a New Track sheet whose Create the product cannot identify is still left up; the reconciler presses nothing it cannot identify and the call returns State C, as the Spanish run before the fix showed
+Ruled-out: folding U+00A0 into U+0020 inside menuItem(path:) | it widens a matcher every menu lookup shares while fixing one leaf; the LabelSet carries the rendered spelling instead
+Ruled-out: replacing Apple's row value with the rendered one | the row is what derivedFrom cites and what check-labelsets-are-derived.py pins, so the rendered spelling is added beside it
+Ruled-out: re-citing createButton to NewTrackStack.strings 100009.title | it agrees with all four languages read live but is another dialog's button, and the New Track sheet's own strings are in no table the extractors read
+Ruled-out: applying all fourteen provenance blocks the German census proposer offered | ten are outside #883 and some are guesses a person has to judge; only the four Track-menu leaves were carried
+Warn: a LabelSet derived from an Apple row is a claim about the strings file, not about what Logic draws; #883 found a no-break space the menu renders as a plain space and a #und row whose Spanish is a noun, and only a live read in each language showed either
+Record-Id: r-dc2e7a84286f
+Provenance: inherited d33f50de9de5270250a7439505b3b12b6c598fbb
+
+Ruled-out: adding guessed es/fr/it/pt/zh spellings of the rail's AXDescription to AX_REGION_LABELS | that table holds measured pairs only; a guessed label is the #883 defect in the harness
+Warn: a live run whose checks all pass can still be unclean; compute is_clean on the evidence before quoting a pass count, and name a mutation only on a check seen to turn red under it
+Record-Id: r-9fbb16d75218
+Provenance: inherited 7c92f50527de8c6be8458a1bf524639103df9102
+
+Limit: the cleanup is unit-tested only; no Logic run has pressed a New Track sheet's Cancel through this path, and whether the pressed sheet's identity reads -25202 after Cancel, as it does after Create (#538), is unmeasured
+Limit: last-track deletion shares the Create reader and still leaves such a sheet up; it takes no modal read before the delete, so it cannot attribute the sheet to itself
+Limit: a Cancel that reads disabled is not pressed; on the older recorded shape of the mandatory sheet the envelope says not_observed_closed and the sheet stays
+Ruled-out: sending Escape to dismiss the sheet | a key goes to whatever Logic window has focus and cannot be bound to the sheet the operation owns
+Ruled-out: reading AXCancelButton off the sheet | nothing here uses it and no Logic reading shows it vended; the cancelButton LabelSet already covers ten locales and is what the Save As and Go To Position cleanups press
+Ruled-out: calling the sheet closed on the press, or on one read alone | the pressed sheet's identity must be gone AND a fresh complete read must find no sheet, as with the project.new latch
+Warn: a sheet is a create's own only when the preflight read was complete and saw no sheet; widening that to any New Track sheet would let a create dismiss a sheet something else raised
+Warn: #expect(x as? Bool == true) passes unconditionally on this toolchain; the first draft of these tests used it at eight sites and ci-forbid-dead-expect caught them
+Record-Id: r-bc7806eb28fa
+Provenance: inherited b8f9b410858efdb7ad168ecec01eda630c72d53f
+
+Limit: the reconcile perform path still captures mainWindow once for completeModalReadIsClear; a press there that destroys the window reads incomplete and fails closed, unmeasured live
+Ruled-out: keeping the captured main window and calling an incomplete read closed | an incomplete read is not absence; it would report a sheet gone that nothing observed
+Warn: Cancel on project.new's mandatory New Track sheet closes the untitled project, so a main window captured before the press is destroyed; every post-cleanup read must look the main window up again
+Warn: test runtimes answer AXChildren through childrenResultHandler, not the attribute handler; a destroyed element must fail there too or a scan of it reads complete
+Record-Id: r-1194fa8730dd
+Provenance: inherited 0c38d91e82b01ef4c91e60a6e3893315592d76f2
+
+Limit: the late sheet is modelled by a fixture that raises it on the first track count; the settle has not yet been driven against a live Logic
+Ruled-out: waiting out the whole observation budget for a sheet that may never come | a build that never raises the sheet would then spend twenty seconds on every project.new
+Warn: project.new holds a window that has no track and has never shown the New Track sheet for up to zeroTrackSettleObservations complete polls (12, three seconds at the default delay) before reporting it open; a build that opens a zero-track project directly pays that settle on every project.new
+Record-Id: r-b8ffb27fa56f
+Provenance: inherited 7bfd097b3d35ddf9face288d8f5e080600e9c978
+
+Limit: the track-create sheet cleanup was driven live in Korean only, through probe_883_track_create_cleanup.py on the open fixture; the other nine languages are covered for Cancel's label by the project.new cleanup runs, not by a track create
+Ruled-out: sending Escape or another key when Cancel leaves the New Track sheet up | a key goes to whatever is frontmost and the operation cannot show it reaches the sheet; the response reports the sheet as not_observed_closed instead
+Record-Id: r-a75c1f224c79
+Provenance: inherited 40277e1cd1a01952123b2a7b7890a3e786e8e10f
