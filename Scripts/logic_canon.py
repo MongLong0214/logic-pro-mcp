@@ -975,7 +975,10 @@ IB_DEFAULT_TITLES = {
 #: is built in code and the template's items keep the placeholder.
 _IB_TEMPLATE_APP_NAME = "NewApplication"
 
-_LETTER = re.compile(r"[^\W\d_]")
+# Numeric text-field contents are readout examples filled by the running code. The same bytes at
+# title sites are static labels: KeyAssign.nib's symbol headers and old-style time-signature menus
+# have no letters, for example. An arrow in a text field can also be a static label.
+_NUMERIC_READOUT = re.compile(r"(?:[+-]?\d[\d:.,%/ +-]*|[+-])")
 _DO_NOT_LOCALIZE = re.compile(r"(?:NOT|N['’]T)\s+LOCALI[SZ]E", re.IGNORECASE)
 
 #: `nibarchive.T_OBJECT`, repeated so the rules above read without importing the parser.
@@ -984,8 +987,13 @@ _NIB_T_OBJECT = 10
 
 def _nib_label_exclusion(site, text: str):
     """Why a string at a label site is not a label Apple shows, or None when it is one."""
-    if not _LETTER.search(text):
-        # `0`, `-12`, `1234`, ` `: a readout's placeholder, overwritten by the code that owns it.
+    if not text.strip():
+        # A blank title is not a label at any site.
+        return "no_letter"
+    if site in (("NSTextFieldCell", "NSContents"),
+                ("NSTextFieldCell", "NSPlaceholderString")) and \
+            _NUMERIC_READOUT.fullmatch(text.strip()):
+        # `0`, `-12`, `1234`, `00:38`: numeric readout examples on text fields.
         return "no_letter"
     if _DO_NOT_LOCALIZE.search(text):
         # `DO NOT LOCALIZE`, `DOT NOT LOCALIZE` and `DON'T LOCALIZE THIS WINDOW !`: Apple's own

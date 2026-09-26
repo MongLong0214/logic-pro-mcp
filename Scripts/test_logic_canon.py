@@ -1081,6 +1081,51 @@ class ANonBaseNibIsReadByWhatItsClassMeans(unittest.TestCase):
                             ("NSString", {"NS.bytes": b"Rec"})])
         self.assertEqual(_labels(archive), [("/header[0]/NSContents[0]", "Name")])
 
+    def test_key_assign_symbol_headers_survive_the_niblabels_extractor(self):
+        """KeyAssign.nib has NSTableColumn.NSHeaderCell -> NSTableHeaderCell.NSContents."""
+        symbols = ("⇧", "^", "⌥", "⌘")
+        archive_objects = [("NSObject", {f"column{i}": 1 + 3 * i
+                                         for i in range(len(symbols))})]
+        for i, symbol in enumerate(symbols):
+            archive_objects.extend([
+                ("NSTableColumn", {"NSHeaderCell": 2 + 3 * i}),
+                ("NSTableHeaderCell", {"NSContents": 3 + 3 * i}),
+                ("NSString", {"NS.bytes": symbol.encode("utf-8")}),
+            ])
+        archive = _archive(archive_objects)
+        with tempfile.TemporaryDirectory() as bundle:
+            resources = os.path.join(bundle, "Contents", "Frameworks", "MAKeymap.framework",
+                                     "Versions", "A", "Resources")
+            os.makedirs(resources)
+            with open(os.path.join(resources, "KeyAssign.nib"), "wb") as handle:
+                handle.write(b"key-assign")
+            with mock.patch.object(nibarchive, "parse", return_value=archive):
+                rows = list(canon.extract_niblabels(bundle))
+        self.assertEqual(
+            [(key, value) for _unit, _locale, key, _field, value in rows],
+            [(f"/column{i}[0]/NSHeaderCell[0]/NSContents[0]", symbol)
+             for i, symbol in enumerate(symbols)])
+
+    def test_nonletter_menu_button_segment_and_text_field_symbols_are_labels(self):
+        archive = _archive([
+            ("NSObject", {"menu": 1, "button": 4, "segment": 6, "field": 8}),
+            ("NSMenu", {"item": 2}),
+            ("NSMenuItem", {"NSTitle": 3}),
+            ("NSString", {"NS.bytes": b"12/8"}),
+            ("NSButtonCell", {"NSContents": 5}),
+            ("NSString", {"NS.bytes": "↑".encode()}),
+            ("NSSegmentItem", {"NSSegmentItemLabel": 7}),
+            ("NSString", {"NS.bytes": b"1"}),
+            ("NSTextFieldCell", {"NSContents": 9}),
+            ("NSString", {"NS.bytes": "→".encode()}),
+        ])
+        self.assertEqual(_labels(archive), [
+            ("/menu[0]/item[0]/NSTitle[0]", "12/8"),
+            ("/button[0]/NSContents[0]", "↑"),
+            ("/segment[0]/NSSegmentItemLabel[0]", "1"),
+            ("/field[0]/NSContents[0]", "→"),
+        ])
+
     def test_a_swapped_custom_cell_is_read_as_the_appkit_class_it_replaces(self):
         """The Compressor's circuit buttons are `MAButtonCell`s recorded as `NSClassSwapper`, and a
         German Logic shows their English titles (2026-09-25 de-DE plug-in editor record)."""
@@ -1117,6 +1162,10 @@ class ANonBaseNibIsReadByWhatItsClassMeans(unittest.TestCase):
         site = ("NSTextFieldCell", "NSContents")
         self.assertIsNone(canon._nib_label_exclusion(site, "-12 dB"))
         self.assertEqual(canon._nib_label_exclusion(site, "-12"), "no_letter")
+        self.assertEqual(canon._nib_label_exclusion(
+            ("NSTextFieldCell", "NSPlaceholderString"), "00:38"), "no_letter")
+        self.assertEqual(canon._nib_label_exclusion(
+            ("NSButtonCell", "NSContents"), " "), "no_letter")
         self.assertEqual(canon._nib_label_exclusion(
             site, "INTERNAL USE ONLY  DON'T LOCALIZE THIS WINDOW !"), "do_not_localize")
         self.assertEqual(canon._nib_label_exclusion(site, "Style: - DO NOT LOCALIZE"),
