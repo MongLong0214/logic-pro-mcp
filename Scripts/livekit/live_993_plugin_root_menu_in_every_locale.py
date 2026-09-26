@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -215,9 +216,42 @@ def close_left_open_menus():
     return {"open_before_escape": found, "open_after_escape": open_logic_menus()}
 
 
+def unidentified_documents():
+    """Documents open in Logic other than the fixture, or None when the list cannot be read.
+
+    Quitting answers Logic's save prompt with don't-save, and that is only ours to answer for the
+    fixture: another open project may be an iCloud one, which no authorisation covers. The rule is
+    Scripts/observations/locale-campaign.sh's: every window's AXDocument, not window 1's, and
+    `missing value` is a palette or modal with no document.
+    """
+    raw = osa('''tell application "System Events" to tell process "Logic Pro"
+  set out to ""
+  repeat with w in windows
+    try
+      set out to out & (value of attribute "AXDocument" of w as string) & linefeed
+    end try
+  end repeat
+  return out & "lpm:end-of-documents"
+end tell''')
+    if raw is None or not raw.endswith("lpm:end-of-documents"):
+        return None
+    others = []
+    for line in raw.splitlines()[:-1]:
+        doc = line.strip()
+        if not doc or doc == "missing value":
+            continue
+        path = urllib.parse.unquote(urllib.parse.urlparse(doc).path) if doc.startswith("file:") else doc
+        if os.path.realpath(path.rstrip("/")) != os.path.realpath(FIXTURE):
+            others.append(doc)
+    return others
+
+
 def quit_logic():
     if not logic_running():
         return True
+    others = unidentified_documents()
+    if others is None or others:
+        return False
     dismiss_sheets()
     close_left_open_menus()
     for _ in range(4):
@@ -256,7 +290,7 @@ def switch_to(lproj, force=False):
         return {"switched": False, "arrange_window": title,
                 "language_setting": language_setting(), "window_names": window_names()}
     if not quit_logic():
-        return {"error": "Logic did not quit", "language_setting": language_setting()}
+        return {"error": "Logic did not quit", "unidentified_documents": unidentified_documents(), "language_setting": language_setting()}
     written = subprocess.run(["defaults", "write", "com.apple.logic10", "AppleLanguages",
                               "-array", CODES[lproj]], capture_output=True, text=True)
     if written.returncode != 0:

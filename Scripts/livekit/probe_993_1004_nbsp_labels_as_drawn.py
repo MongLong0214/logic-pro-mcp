@@ -56,6 +56,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.parse
 
 WT = sys.argv[1] if len(sys.argv) > 1 else ""
 OUT = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -180,9 +181,42 @@ def dismiss_sheets():
     return first
 
 
+def unidentified_documents():
+    """Documents open in Logic other than the fixture, or None when the list cannot be read.
+
+    Quitting answers Logic's save prompt with don't-save, and that is only ours to answer for the
+    fixture: another open project may be an iCloud one, which no authorisation covers. The rule is
+    Scripts/observations/locale-campaign.sh's: every window's AXDocument, not window 1's, and
+    `missing value` is a palette or modal with no document.
+    """
+    raw = osa('''tell application "System Events" to tell process "Logic Pro"
+  set out to ""
+  repeat with w in windows
+    try
+      set out to out & (value of attribute "AXDocument" of w as string) & linefeed
+    end try
+  end repeat
+  return out & "lpm:end-of-documents"
+end tell''')
+    if raw is None or not raw.endswith("lpm:end-of-documents"):
+        return None
+    others = []
+    for line in raw.splitlines()[:-1]:
+        doc = line.strip()
+        if not doc or doc == "missing value":
+            continue
+        path = urllib.parse.unquote(urllib.parse.urlparse(doc).path) if doc.startswith("file:") else doc
+        if os.path.realpath(path.rstrip("/")) != os.path.realpath(FIXTURE):
+            others.append(doc)
+    return others
+
+
 def quit_logic():
     if not logic_running():
         return True
+    others = unidentified_documents()
+    if others is None or others:
+        return False
     dismiss_sheets()
     for _ in range(4):
         osa('tell application "Logic Pro" to quit', timeout=8)
@@ -451,7 +485,7 @@ def switch_to(lproj):
     if language_setting()[:1] == [CODES[lproj]] and title in (window_names() or []):
         return {"switched": False, "arrange_window": title}
     if not quit_logic():
-        return {"error": "Logic did not quit"}
+        return {"error": "Logic did not quit", "unidentified_documents": unidentified_documents()}
     set_language([CODES[lproj]])
     names = launch(FIXTURE, title)
     time.sleep(4)
