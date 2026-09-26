@@ -485,10 +485,15 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/New%23mti#value"
     )
 
+    /// The German appears TWICE, and the two differ only in the character before the ellipsis. The
+    /// first is Apple's row, with U+00A0 there. The Setup window's `New` menu does not draw it that
+    /// way: its AXTitle on a German Logic 12.3 read 2026-09-26 is `Installieren\u{0020}…`, with
+    /// U+0020. The match is exact, so with only the row the install route found no item in German
+    /// (#1004). The row stays, because it is what `derivedFrom` cites and what the offline check pins.
     static let controlSurfaceInstallMenuItem = LabelSet(
         canonical: "Install…",
-        variants: ["설치…", "インストール…", "Installieren …", "Instalar…", "Installer…", "Installa…", "安装…", "安裝⋯"],
-        rationale: "First item of the Setup window's `New` menu, beside `Scan All Models` and `Automatic Installation`. ko-KR `설치…` read live 2026-09-15 with siblings `모든 모델 스캔` and `자동 설치`. English canonical unmeasured on this host."
+        variants: ["설치…", "インストール…", "Installieren …", "Installieren …", "Instalar…", "Installer…", "Installa…", "安装…", "安裝⋯"],
+        rationale: "First item of the Setup window's `New` menu, beside `Scan All Models` and `Automatic Installation`. ko-KR `설치…` read live 2026-09-15 with siblings `모든 모델 스캔` and `자동 설치`. de-DE read live 2026-09-26 as `Installieren\\u{0020}…` (U+0020), where Apple's row has U+00A0; both are carried. English canonical unmeasured on this host."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Install%E2%80%A6#value"
     )
@@ -608,10 +613,18 @@ enum AXLocalePolicy {
     /// space in some locales and a NO-BREAK SPACE in Korean. Keep the measured
     /// product label in locale policy rather than scattering a literal through
     /// the export driver.
+    ///
+    /// `Logic\u{00A0}Pro` is carried beside the row because that is what the window draws: its
+    /// AXTitle read 2026-09-26 on Logic 12.3 has U+00A0 in de-DE, es-ES, fr-FR and ko-KR alike (#993).
+    /// `progressWindowTitleMatches` folds whitespace before matching, so it matches that title
+    /// without the variant; the variant makes the set itself hold the drawn spelling, so a caller that matches the
+    /// set directly does not depend on that fold. The row stays, because it is what `derivedFrom`
+    /// cites and what the offline check pins.
     static let stemExportProgressWindowTitle = LabelSet(
         canonical: "Logic Pro",
-        variants: [],
+        variants: ["Logic\u{00A0}Pro"],
         rationale: "Measured on the live Korean progress dialog on 2026-09-02 as `Logic\\u{00A0}Pro`; whitespace is normalized only for this product-title rendering."
+            + " Read again 2026-09-26 in de-DE, es-ES, fr-FR and ko-KR: every one draws `Logic\\u{00A0}Pro` (U+00A0), which is now a member beside the row."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Logic%20Pro#value"
     )

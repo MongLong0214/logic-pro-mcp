@@ -811,13 +811,14 @@
     "설치…",
     "インストール…",
     "Installieren …",
+    "Installieren …",
     "Instalar…",
     "Installer…",
     "Installa…",
     "安装…",
     "安裝⋯"
    ],
-   "rationale": "First item of the Setup window's `New` menu, beside `Scan All Models` and `Automatic Installation`. ko-KR `설치…` read live 2026-09-15 with siblings `모든 모델 스캔` and `자동 설치`. English canonical unmeasured on this host.",
+   "rationale": "First item of the Setup window's `New` menu, beside `Scan All Models` and `Automatic Installation`. ko-KR `설치…` read live 2026-09-15 with siblings `모든 모델 스캔` and `자동 설치`. de-DE read live 2026-09-26 as `Installieren\\u{0020}…` (U+0020), where Apple's row has U+00A0; both are carried. English canonical unmeasured on this host.",
    "provenance": {
     "설치…": {
      "attribute": "title",
@@ -828,6 +829,26 @@
      "observed": "설치…",
      "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
      "role": "AXMenuItem"
+    },
+    "Installieren …": {
+     "locale": "de-DE",
+     "date": "2026-09-26",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-26-de-DE-control-surface-setup-install-item-census",
+     "observed": "Installieren …",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "Installer…": {
+     "locale": "fr-FR",
+     "date": "2026-09-26",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-26-fr-FR-control-surface-setup-install-item-census",
+     "observed": "Installer…",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
     }
    },
    "roles": [
@@ -838,9 +859,9 @@
     "en-US": "derived",
     "ko-KR": "measured",
     "ja-JP": "derived",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
-    "fr-FR": "derived",
+    "fr-FR": "measured",
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
@@ -4418,18 +4439,30 @@
     "音訊單元"
    ],
    "rationale": "Derived from Apple's `Audio Units` across the ten locales Logic ships; only zh_CN and zh_TW differ (Logic 12.3 build 6674). Cited in docs/observations/2026-09-16-two-languages-was-the-whole-design.json.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
+    "es-ES": "measured",
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
+   },
+   "coverage_records": {
+    "es-ES": "2026-09-26-es-ES-plugin-menu-audio-units-item-census"
+   },
+   "coverage_roles": {
+    "es-ES": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "es-ES": "title"
    }
   },
   "pluginMenuUtility": {
@@ -5927,16 +5960,33 @@
   },
   "stemExportProgressWindowTitle": {
    "canonical": "Logic Pro",
-   "variants": [],
+   "variants": [
+    "Logic Pro"
+   ],
    "rationale": "Measured on the live Korean progress dialog on 2026-09-02 as `Logic\\u{00A0}Pro`; whitespace is normalized only for this product-title rendering.",
+   "provenance": {
+    "Logic Pro": {
+     "locale": "de-DE",
+     "date": "2026-09-26",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-26-de-DE-stem-export-progress-window-title-census",
+     "observed": "Logic Pro",
+     "role": "AXWindow",
+     "attribute": "title",
+     "match": "exact"
+    }
+   },
+   "roles": [
+    "AXWindow"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "unmeasured",
+    "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
+    "de-DE": "measured",
+    "es-ES": "derived",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",

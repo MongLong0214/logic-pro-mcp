@@ -1,0 +1,78 @@
+{
+ "schema": 3,
+ "id": "2026-09-26-de-DE-control-surface-setup-install-item-census",
+ "date": "2026-09-26",
+ "subject": "The Install item of the Control Surfaces Setup window's own New menu, as drawn (de-DE)",
+ "question": "Which characters does the AXTitle of the Install item in the Setup window's New menu carry in de-DE?",
+ "verdict": "works",
+ "surface": "system.midi",
+ "issues": [
+  1004
+ ],
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "de-DE",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "/usr/bin/python3 Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py . <out.json> <scratch-dir> de",
+  "expected": "the controlSurfaceInstallMenuItem reading for de carries the title_scalars in this record's row; a different sequence means Logic changed how it draws the item and the LabelSet wants re-reading",
+  "cost": "needs Logic with the lpm-locale-campaign fixture; switches Logic's language, relaunches it, and restores Korean at the end; about one minute per language"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:controlSurfaceInstallMenuItem"
+ ],
+ "method": "Opened through the application menu bar: the Logic Pro item, Control Surfaces, then Setup, each found by its LabelSet with U+00A0 and U+0020 folded together for navigation only. Where two items share the Setup title, each is pressed until the Setup window is up, and any other window that appeared is closed. The window's AXMenuButton whose AXDescription is the New label was pressed and the popup menu read from under it; AXCancel then closed it. The row below is the menu item whose folded title matches the Install label, with its AXTitle as read and every scalar of it. Nothing was installed and the Setup window was closed afterwards.",
+ "observations": [
+  {
+   "surface": "system.midi",
+   "path": "AXWindow[Bedienoberflächen-Setup]/AXMenuButton{Neu}/AXMenu/AXMenuItem[Installieren …]",
+   "role": "AXMenuItem",
+   "subrole": null,
+   "title": "Installieren …",
+   "title_scalars": [
+    "U+0049",
+    "U+006E",
+    "U+0073",
+    "U+0074",
+    "U+0061",
+    "U+006C",
+    "U+006C",
+    "U+0069",
+    "U+0065",
+    "U+0072",
+    "U+0065",
+    "U+006E",
+    "U+0020",
+    "U+2026"
+   ],
+   "description": null,
+   "help": null,
+   "value": null,
+   "identifier": null
+  }
+ ],
+ "evidence": [
+  "evidence/2026-09-26-de-DE-nbsp-labels-as-drawn.json"
+ ],
+ "conclusion": "Logic draws U+0049 U+006E U+0073 U+0074 U+0061 U+006C U+006C U+0069 U+0065 U+0072 U+0065 U+006E U+0020 U+2026, and Apple's row for this language is U+0049 U+006E U+0073 U+0074 U+0061 U+006C U+006C U+0069 U+0065 U+0072 U+0065 U+006E U+00A0 U+2026: they differ, and `LabelSet.matches` does not equate them.",
+ "limits": [
+  "One build of Logic and one language: Logic Pro 12.3 (6674) on macOS 26.3 (25D125) in de-DE. Another build may draw another space.",
+  "The title is read through AX. That is what the product matches against; it says nothing about how the glyphs look on screen.",
+  "One reading, not a rate. The item was read once in this run."
+ ],
+ "supersedes": null,
+ "canon": [
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/de/Install%E2%80%A6#value",
+   "value": "Installieren …",
+   "used_for": "Apple's own row for this item in de, which controlSurfaceInstallMenuItem derives from; the drawn title differs from it in the space, which is what this record shows",
+   "binding": {
+    "kind": "record"
+   }
+  }
+ ]
+}
