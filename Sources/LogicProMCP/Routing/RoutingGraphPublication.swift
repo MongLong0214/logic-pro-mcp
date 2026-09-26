@@ -1,19 +1,34 @@
 import Foundation
 
+/// How the graph's project reference was obtained by the reader.
+enum RoutingProjectBinding: Sendable {
+    case issued(TargetReference)
+    case unavailable(reason: String)
+}
+
 /// Builds the read-only ADR-008 projection from cached mixer observations.
 ///
-/// The AX reader contributes only an output *label*. The registry is the sole
-/// source of identities: a label may select one already-issued `trk_` reference
-/// only when the current live-track inventory has exactly one matching name.
-/// It is never itself a node id.
+/// Identities come only from `issued`, which the reader obtained through
+/// `TrackReferenceIssuance` for the rows it observed — the same path
+/// `logic://tracks` uses, so the graph does not depend on which resource was
+/// read first (#291 R0). The AX reader contributes an output *label*; a label
+/// selects a destination only when exactly one live track row carries that name
+/// and that row has an issued reference. It is never itself a node id.
+///
+/// This function is pure: it never sees the registry and never reads another
+/// resource. Every state it cannot answer is named in `partialReason`.
 enum RoutingGraphPublication {
+    /// `tracks` is the live inventory `issued` was issued for, row for row.
+    /// `issued == nil` means reference support is off or has no registry.
     static func publish(
         strips: [ChannelStripState],
         tracks: [TrackState],
-        targetRegistry: TargetRegistry?,
-        snapshot: TargetRegistrySnapshot?,
-        mixerWasObserved: Bool
-    ) async -> RoutingGraph {
+        issued: IssuedTrackReferences?,
+        project: RoutingProjectBinding,
+        projectEpoch: UInt64,
+        mixerWasObserved: Bool,
+        tracksWereObserved: Bool
+    ) -> RoutingGraph {
         var partialReasons: [String] = []
         func recordPartial(_ reason: String) {
             if !partialReasons.contains(reason) {
@@ -21,7 +36,7 @@ enum RoutingGraphPublication {
             }
         }
 
-        guard let targetRegistry, let snapshot else {
+        guard let issued else {
             recordPartial("routing endpoints could not resolve: the ADR-002 reference registry is unavailable")
             recordPartial(sendCoverageReason)
             if !mixerWasObserved {
@@ -29,7 +44,7 @@ enum RoutingGraphPublication {
             }
             return RoutingGraph(
                 projectReference: nil,
-                projectEpoch: 0,
+                projectEpoch: projectEpoch,
                 complete: false,
                 partialReason: partialReasons.joined(separator: "; "),
                 nodes: [],
@@ -38,57 +53,69 @@ enum RoutingGraphPublication {
             )
         }
 
-        let tracksByIndex = Dictionary(uniqueKeysWithValues: tracks.map { ($0.id, $0) })
-        var referencesByTrackIndex: [Int: TargetReference] = [:]
-        for track in tracks {
-            if let reference = await TargetRefResolver.issuedTrackReference(
-                for: track,
-                targetRegistry: targetRegistry,
-                snapshot: snapshot
-            ) {
-                referencesByTrackIndex[track.id] = reference
-            }
+        // Before the first live track read there is nothing to join a strip to. That is unknown,
+        // not "this strip has no track", so it is one reason for the whole graph.
+        if !tracksWereObserved {
+            recordPartial("track observations are unavailable: no live track read yet")
+        }
+
+        let ambiguousTrackIndices = Set(issued.ambiguousTrackIndices)
+        var stripCounts: [Int: Int] = [:]
+        for strip in strips {
+            stripCounts[strip.trackIndex, default: 0] += 1
         }
 
         var nodesByID: [String: RoutingNode] = [:]
         var edges: [RoutingEdge] = []
         for strip in strips {
+            let trackIndex = strip.trackIndex
             let observedLabel = nonEmptyObservedLabel(strip.output)
-            let sourceTrack = tracksByIndex[strip.trackIndex]
-            let sourceReference = referencesByTrackIndex[strip.trackIndex]
 
-            if let sourceTrack, let sourceReference {
-                addNode(
-                    reference: sourceReference,
-                    track: sourceTrack,
-                    observedOutputLabel: observedLabel,
-                    to: &nodesByID
-                )
-            } else {
-                recordPartial("unresolved source endpoint for mixer strip track_index=\(strip.trackIndex): no issued trk_ reference")
+            // Two strips claiming one track index cannot both be that track's output, and nothing
+            // observed says which one is.
+            if stripCounts[trackIndex, default: 0] > 1 {
+                recordPartial("duplicate mixer strip observations for track_index=\(trackIndex)")
+                continue
+            }
+
+            var sourceReference: TargetReference?
+            if tracksWereObserved {
+                if let reference = issued.byTrackIndex[trackIndex],
+                   let sourceTrack = tracks.first(where: { $0.id == trackIndex }) {
+                    sourceReference = reference
+                    addNode(
+                        reference: reference,
+                        track: sourceTrack,
+                        observedOutputLabel: observedLabel,
+                        to: &nodesByID
+                    )
+                } else if ambiguousTrackIndices.contains(trackIndex) {
+                    recordPartial("ambiguous track observation: track_index=\(trackIndex) appears more than once")
+                } else if tracks.contains(where: { $0.id == trackIndex }) {
+                    recordPartial("track_index=\(trackIndex) is not live-identity-backed: no reference can be issued")
+                } else {
+                    recordPartial("no live track observation for mixer strip track_index=\(trackIndex)")
+                }
             }
 
             guard let observedLabel else {
-                recordPartial("unreadable output destination endpoint for source track_index=\(strip.trackIndex)")
+                recordPartial("unreadable output destination endpoint for source track_index=\(trackIndex)")
                 continue
             }
+            guard tracksWereObserved else { continue }
 
             let matchingDestinations = tracks.filter { $0.name == observedLabel }
-            let destinationsWithIssuedReferences = matchingDestinations.compactMap { track in
-                referencesByTrackIndex[track.id].map { (track, $0) }
-            }
-            guard destinationsWithIssuedReferences.count == 1,
-                  matchingDestinations.count == 1 else {
+            guard matchingDestinations.count == 1,
+                  let destinationReference = issued.byTrackIndex[matchingDestinations[0].id] else {
                 recordPartial(
-                    "unresolved output destination endpoint \"\(observedLabel)\" for source track_index=\(strip.trackIndex): no unique issued trk_ reference"
+                    "unresolved output destination endpoint \"\(observedLabel)\" for source track_index=\(trackIndex): no unique live track carries that name"
                 )
                 continue
             }
 
-            let (destinationTrack, destinationReference) = destinationsWithIssuedReferences[0]
             addNode(
                 reference: destinationReference,
-                track: destinationTrack,
+                track: matchingDestinations[0],
                 observedOutputLabel: nil,
                 to: &nodesByID
             )
@@ -111,14 +138,16 @@ enum RoutingGraphPublication {
         // from this graph until a real observation can distinguish those states.
         recordPartial(sendCoverageReason)
 
-        let projectReference = await targetRegistry.issuedCurrentProjectReference(snapshot: snapshot)
-        if projectReference == nil {
-            recordPartial("project reference is unavailable")
+        var projectReference: TargetReference?
+        if case .issued(let reference) = project {
+            projectReference = reference
+        } else if case .unavailable(let reason) = project {
+            recordPartial(reason)
         }
 
         return RoutingGraph(
             projectReference: projectReference,
-            projectEpoch: snapshot.projectEpoch,
+            projectEpoch: projectEpoch,
             complete: false,
             partialReason: partialReasons.joined(separator: "; "),
             nodes: nodesByID.values.sorted { $0.id < $1.id },

@@ -154,14 +154,9 @@ extension ResourceHandlers {
         } else {
             targetSnapshot = nil
         }
-        var liveTracks = await cache.getTracks()
+        let liveTracks = TrackReferenceIssuance.liveInventory(await cache.getTracks())
         let cacheFetchedAt = await cache.getTracksFetchedAt()
         let axOccluded = await cache.getAXOccluded()
-
-        // Inspector contamination guard.
-        if tracksAreInspectorContaminated(liveTracks) {
-            liveTracks = []
-        }
 
         var tracksOut: [TrackState] = []
         var source: String
@@ -191,20 +186,23 @@ extension ResourceHandlers {
 
         let body: String
         if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
+            // Only rows observed live carry an identity; the file-count tiers synthesise names.
+            var references: [TargetReference?] = Array(repeating: nil, count: tracksOut.count)
+            if source == "ax_live" {
+                guard let issued = await TrackReferenceIssuance.issue(
+                    for: tracksOut,
+                    registry: targetRegistry,
+                    snapshot: targetSnapshot
+                ) else {
+                    throw MCPError.internalError("track target snapshot became stale during resource emission")
+                }
+                references = issued.byRow
+            }
             var payload: [[String: Any]] = []
             payload.reserveCapacity(tracksOut.count)
-            for track in tracksOut {
+            for (track, reference) in zip(tracksOut, references) {
                 var object = jsonObject(track) as? [String: Any] ?? [:]
-                if canEmitTrackTargetReference(track, source: source) {
-                    let descriptor = TargetDescriptor(trackIndex: track.id, trackName: track.name)
-                    guard let reference = await targetRegistry.bind(
-                        kind: .track,
-                        descriptor: descriptor,
-                        fingerprint: descriptor.fingerprint,
-                        snapshot: targetSnapshot
-                    ) else {
-                        throw MCPError.internalError("track target snapshot became stale during resource emission")
-                    }
+                if let reference {
                     object["track_ref"] = reference.rawValue
                 }
                 payload.append(object)
@@ -358,35 +356,44 @@ extension ResourceHandlers {
             targetSnapshot = nil
         }
         let strips = await cache.getChannelStrips()
-        let tracks = await cache.getTracks()
+        let tracks = TrackReferenceIssuance.liveInventory(await cache.getTracks())
+        let tracksWereObserved = await cache.getTracksFetchedAt() > .distantPast
         let conn = await cache.getMCUConnection()
         let fetchedAt = await cache.getMixerFetchedAt()
         let axOccluded = await cache.getAXOccluded()
         let stripsJSON: String
+        var issued: IssuedTrackReferences?
+        var project = RoutingProjectBinding.unavailable(reason: "project reference is unavailable")
         if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
+            // The mixer issues through the same path as logic://tracks, so reading it first binds
+            // the same trk_ references rather than finding none (#291 R0).
+            guard let issuedReferences = await TrackReferenceIssuance.issue(
+                for: tracks,
+                registry: targetRegistry,
+                snapshot: targetSnapshot
+            ) else {
+                throw MCPError.internalError("mixer target snapshot became stale during resource emission")
+            }
+            issued = issuedReferences
             var payload: [[String: Any]] = []
             payload.reserveCapacity(strips.count)
             for strip in strips {
                 var object = jsonObject(strip) as? [String: Any] ?? [:]
-                if let track = tracks.first(where: { $0.id == strip.trackIndex }),
-                   canEmitTrackTargetReference(track) {
-                    let descriptor = TargetDescriptor(
-                        trackIndex: strip.trackIndex,
-                        trackName: track.name
-                    )
-                    guard let reference = await targetRegistry.bind(
-                        kind: .mixerStrip,
-                        descriptor: descriptor,
-                        fingerprint: descriptor.fingerprint,
-                        snapshot: targetSnapshot
-                    ) else {
-                        throw MCPError.internalError("mixer target snapshot became stale during resource emission")
-                    }
+                if let reference = try await mixerStripReference(
+                    for: strip,
+                    tracks: tracks,
+                    issued: issuedReferences,
+                    registry: targetRegistry,
+                    snapshot: targetSnapshot
+                ) {
                     object["mixer_strip_ref"] = reference.rawValue
                 }
                 payload.append(object)
             }
             stripsJSON = encodeJSONObject(payload)
+            if let projectReference = await targetRegistry.issuedCurrentProjectReference(snapshot: targetSnapshot) {
+                project = .issued(projectReference)
+            }
         } else {
             stripsJSON = encodeJSON(strips)
         }
@@ -397,12 +404,14 @@ extension ResourceHandlers {
         // can decide whether to trust the strips. `registered` is kept as a
         // one-release alias of `mcu_registered` for existing parsers.
         let dataSource = mixerDataSource(fetchedAt: fetchedAt)
-        let routingGraph = await RoutingGraphPublication.publish(
+        let routingGraph = RoutingGraphPublication.publish(
             strips: strips,
             tracks: tracks,
-            targetRegistry: targetRegistry,
-            snapshot: targetSnapshot,
-            mixerWasObserved: fetchedAt > .distantPast
+            issued: issued,
+            project: project,
+            projectEpoch: targetSnapshot?.projectEpoch ?? 0,
+            mixerWasObserved: fetchedAt > .distantPast,
+            tracksWereObserved: tracksWereObserved
         )
         let routingGraphJSON = encodeJSON(routingGraph)
         let ageMsPart = conn.lastFeedbackAgeMs().map { "\($0)" } ?? "null"
@@ -625,14 +634,10 @@ extension ResourceHandlers {
         )
     }
 
-    private static func tracksAreInspectorContaminated(_ tracks: [TrackState]) -> Bool {
-        tracks.count >= 3 && tracks.allSatisfy { $0.name.hasSuffix(":") }
-    }
-
     private static func trustedLiveTrackCount(_ tracks: [TrackState], fetchedAt: Date) -> Int? {
         guard fetchedAt > .distantPast,
               !tracks.isEmpty,
-              !tracksAreInspectorContaminated(tracks),
+              !TrackReferenceIssuance.isInspectorContaminated(tracks),
               tracks.allSatisfy({ $0.placeholder != true }) else {
             return nil
         }
@@ -748,21 +753,21 @@ extension ResourceHandlers {
         let stripJSON: String
         if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
             var object = jsonObject(strip) as? [String: Any] ?? [:]
-            let tracks = await cache.getTracks()
-            if let track = tracks.first(where: { $0.id == strip.trackIndex }),
-               canEmitTrackTargetReference(track) {
-                let descriptor = TargetDescriptor(
-                    trackIndex: strip.trackIndex,
-                    trackName: track.name
-                )
-                guard let reference = await targetRegistry.bind(
-                    kind: .mixerStrip,
-                    descriptor: descriptor,
-                    fingerprint: descriptor.fingerprint,
-                    snapshot: targetSnapshot
-                ) else {
-                    throw MCPError.internalError("mixer target snapshot became stale during resource emission")
-                }
+            let tracks = TrackReferenceIssuance.liveInventory(await cache.getTracks())
+            guard let issued = await TrackReferenceIssuance.issue(
+                for: tracks,
+                registry: targetRegistry,
+                snapshot: targetSnapshot
+            ) else {
+                throw MCPError.internalError("mixer target snapshot became stale during resource emission")
+            }
+            if let reference = try await mixerStripReference(
+                for: strip,
+                tracks: tracks,
+                issued: issued,
+                registry: targetRegistry,
+                snapshot: targetSnapshot
+            ) {
                 object["mixer_strip_ref"] = reference.rawValue
             }
             stripJSON = encodeJSONObject(object)
@@ -777,12 +782,29 @@ extension ResourceHandlers {
         )
     }
 
-    private static func canEmitTrackTargetReference(
-        _ track: TrackState,
-        source: String? = nil
-    ) -> Bool {
-        guard track.liveIdentityBacked, track.placeholder != true else { return false }
-        return source.map { $0 == "ax_live" } ?? true
+    /// A strip reference names the strip of exactly one issued track: an id two observed rows
+    /// share, or a row that could not be issued, leaves the strip without one.
+    private static func mixerStripReference(
+        for strip: ChannelStripState,
+        tracks: [TrackState],
+        issued: IssuedTrackReferences,
+        registry: TargetRegistry,
+        snapshot: TargetRegistrySnapshot
+    ) async throws -> TargetReference? {
+        guard issued.byTrackIndex[strip.trackIndex] != nil,
+              let track = tracks.first(where: { $0.id == strip.trackIndex }) else {
+            return nil
+        }
+        let descriptor = TargetDescriptor(trackIndex: strip.trackIndex, trackName: track.name)
+        guard let reference = await registry.bind(
+            kind: .mixerStrip,
+            descriptor: descriptor,
+            fingerprint: descriptor.fingerprint,
+            snapshot: snapshot
+        ) else {
+            throw MCPError.internalError("mixer target snapshot became stale during resource emission")
+        }
+        return reference
     }
 
     /// v3.1.8 (Issue #7) — markers wrapped in cache envelope with source attribution.

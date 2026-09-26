@@ -8,7 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-(No unreleased changes yet.)
+### Fixed
+
+- **`logic://mixer`'s `routing_graph` no longer depends on whether `logic://tracks` was read
+  first (#291).** In a fresh server a mixer read published no track nodes at all until
+  `logic://tracks` had been read, because only that resource issued `trk_` references; the same
+  project answered 0 or 23 nodes depending on read order. Both resources now issue references
+  through one path, so the first read of either binds the same `trk_` reference for the same
+  observed row, and every node id is the `track_ref` of that row in `logic://tracks`. States the
+  graph cannot answer are named in `partialReason` rather than returned as an empty graph: `track
+  observations are unavailable: no live track read yet`, `no live track observation for mixer strip
+  track_index=N`, `ambiguous track observation: track_index=N appears more than once`, `track_index=N
+  is not live-identity-backed: no reference can be issued` and `duplicate mixer strip observations
+  for track_index=N`. Two track rows sharing one id no longer crash the server. `mixer_strip_ref` is
+  now emitted only for a strip whose track id is unique and eligible, and `logic://mixer` drops an
+  Inspector-contaminated track list the way `logic://tracks` already did. Limits: verified on
+  fixtures, not yet re-measured against Logic; a strip is still joined to a track by position; the
+  graph's `projectReference` still appears only after `logic://project/info` has been read.
 
 ---
 
