@@ -119,6 +119,7 @@ check time   (needs nothing)   resolve a citation against what was committed
 | `absence/<source>.<locale>.u32` | the sorted 32-bit digest prefixes of **every** value in that corpus |
 | `absence/<source>.<locale>.folded.u32` | the same, over each value with decoration removed — the near-miss question below |
 | `ledger/casefold.tsv` | source, locale and the case-folded string itself, for each label-ledger string Apple ships up to case, found by string comparison at build time — whether a LabelSet member is shipped the way the product matches it (#981) |
+| `ledger/presence.tsv` | source, locale, two verdicts and the string itself, for each string a guard asked about whose 32-bit prefix is in an absence set, compared as a string by `confirm` or `build` — the only thing that says a string ships (#992) |
 | `WITHOUT-CANON.json` | records written before the rule. May only shrink. |
 | `PROSE-NUMBERS.json` | numbers this README may state that no artifact and no record carries, and why each has none. May only shrink |
 | `NOT-A-RECORD.json` | files under `docs/observations/` that are not observation records. May only shrink |
@@ -292,6 +293,20 @@ string look **present**, which refuses the absence claim and sends a person back
 Logic on it. It can never make a present string look absent, which would let a hand-typed string
 masquerade as uncitable. The rate is in `MANIFEST.json` — worst case 1.2 × 10⁻⁵ — rather than left
 for the reader to assume it is zero.
+
+That safe direction holds only for a guard that asks about ABSENCE. Eight guard sites read a
+prefix match as proof that Logic ships a string (#992). Where they refused on it, a collision
+refused a legitimate change with nothing offline that could rebut it; where they credited it, a
+collision passed a string Logic does not ship. `canon.presence` answers `ships` only from
+`ledger/presence.tsv`, where `Scripts/logic_canon.py confirm <string>` (on a machine with Logic,
+over the pinned corpus) records whether the string is a value and whether a value folds to it. A
+prefix match nobody compared is `unconfirmed`, and each guard says what that means for its own
+question: one that refuses on presence still refuses and names `confirm`, and one that credits
+presence does not credit it. `build` compares every string already in the file again.
+`MANIFEST.json` counts its rows under `ledger_presence_entries`, and `verify_presence_ledger`
+refuses a count that disagrees and a `ships` or `near` row the 32-bit sets do not match. The same
+change made `verify_derived_counts` compare `translated_en_values` and every `folded_entries`
+count with the file each describes; `build` wrote both and nothing read them back.
 
 ### Two ratchets over one population, measured
 

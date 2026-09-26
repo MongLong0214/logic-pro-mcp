@@ -379,11 +379,12 @@ def verify_buckets_offline(committed: dict) -> list:
     `nowhere` -> `strings_value` and pass in CI -- the bucket is the whole content of the file and
     nothing read it. Measured: flipping `Auto Punch` produced zero complaints.
 
-    The absence sets answer it exactly. `strings_value` means the literal is NOT absent from the
-    strings corpus in some locale; `quickhelp_title` means the same of QuickHelp; `nowhere` means
-    absent from every corpus. A 32-bit collision can only make an absent string look present, so
-    the one direction this can be wrong in is refusing a true `nowhere` -- which sends a person to
-    a machine with Logic, the safe direction.
+    `nowhere` means absent from every corpus, which the 32-bit absence sets prove. The other
+    buckets claim PRESENCE, which those sets cannot prove: a collision makes an absent string look
+    present, and reading that as `strings_value` credited a literal Logic does not ship. So a
+    bucket that claims a corpus holds the literal is credited only by `canon.presence`, from a
+    pinned string comparison (#992), and a prefix match nobody compared refuses both ways with the
+    command that settles it.
     """
     manifest = canon.load_manifest()
     corpora = [(source, locale)
@@ -402,25 +403,36 @@ def verify_buckets_offline(committed: dict) -> list:
             f"here and is NOT APPLIED -- which is a broken tree, not a clean one. Restore what is "
             f"missing, or this guard is passing them unchecked.")
     for literal, where in sorted(committed.items()):
-        present = set()
+        # `present` is what a string comparison pinned; `unconfirmed` is a 32-bit prefix match
+        # nobody compared. A bucket is credited only from the first (#992): a prefix alone passed
+        # a `strings_value` that Logic does not ship whenever it collided.
+        present, unconfirmed = set(), set()
         for source, locale in corpora:
             try:
-                if not canon.is_absent(source, locale, literal):
-                    present.add(source)
+                verdict = canon.presence(source, locale, literal)
             except canon.CanonError:
                 continue
+            if verdict == canon.SHIPS:
+                present.add(source)
+            elif verdict == canon.UNCONFIRMED:
+                unconfirmed.add(source)
+        settle = (f" Its 32-bit prefix is in {sorted(unconfirmed)} and nobody compared the "
+                  f"string: run `Scripts/logic_canon.py confirm {literal!r}` on a machine with "
+                  f"Logic." if unconfirmed else "")
         if where == "nowhere" and present:
             problems.append(f"{literal!r} is classified `nowhere` and the pinned corpus holds it "
                             f"in {sorted(present)}. The classification is false.")
+        elif where == "nowhere" and unconfirmed:
+            problems.append(f"{literal!r} is classified `nowhere` and is not proved absent.{settle}")
         elif where == "strings_value" and "strings" not in present:
             problems.append(f"{literal!r} is classified `strings_value` and no .strings corpus "
-                            f"holds it. The classification is false.")
+                            f"holds it. The classification is false{settle}")
         elif where == "quickhelp_title" and "quickhelp" not in present:
             problems.append(f"{literal!r} is classified `quickhelp_title` and no QuickHelp corpus "
-                            f"holds it. The classification is false.")
+                            f"holds it. The classification is false{settle}")
         elif where == "nibstrings_value" and "nibstrings" not in present:
             problems.append(f"{literal!r} is classified `nibstrings_value` and no Base.lproj nib "
-                            f"holds it. The classification is false.")
+                            f"holds it. The classification is false{settle}")
         elif where == "composed_value" and not _composed_offline(literal):
             problems.append(
                 f"{literal!r} is classified `composed_value` and no committed template composes "
@@ -547,10 +559,10 @@ def _declared_composition_members() -> frozenset:
 def _composed_offline(literal: str) -> bool:
     """Re-derive a `composed_value` classification with no Logic, from the committed templates.
 
-    The noun is checked against the ABSENCE sets rather than against a value list, because that is
-    what CI has. A 32-bit collision can only make an absent noun look present, so the direction
-    this can be wrong in is accepting a composition that is not real -- which leaves the literal
-    unexplained rather than refusing a true one, and the tree still has to name where it came from.
+    The noun is checked with `canon.presence`, because that is what CI has. It used to ask the
+    32-bit absence sets, where a collision makes an absent noun look present and a composition
+    that is not real was accepted (#992). Now a noun counts only when a string comparison pinned
+    it; an unconfirmed one leaves the literal unexplained, which refuses rather than credits.
     """
     try:
         with open(TEMPLATES, encoding="utf-8") as handle:
@@ -566,7 +578,9 @@ def _composed_offline(literal: str) -> bool:
                 continue
             for source in ("strings", "nibstrings"):
                 try:
-                    if not canon.is_absent(source, locale, noun):
+                    # Credited only from a string comparison (#992). A noun whose prefix merely
+                    # collided composed a literal Apple never draws.
+                    if canon.presence(source, locale, noun) == canon.SHIPS:
                         return True
                 except canon.CanonError:
                     continue
@@ -601,20 +615,38 @@ def near_miss_canonicals(manifest: dict) -> list:
     for name, literal in sorted(all_named_canonicals().items()):
         if not literal:
             continue
+        literal = canon.normalize(literal)
+        if not literal:
+            continue
         kind = kind_of(name, rules)
         allowed = set(((rules.get("kinds") or {}).get(kind) or {}).get("allows_trailing")
                       or default_allows)
         trailing = literal[-1] if literal[-1] in _ALL_DECORATION else None
-        near = []
+        near, unconfirmed, ships = [], [], False
         for source, locale in corpora:
             try:
-                if not canon.is_absent(source, locale, literal):
-                    near = []
+                verdict = canon.presence(source, locale, literal)
+                if verdict == canon.SHIPS:
+                    ships = True
                     break
+                if verdict == canon.UNCONFIRMED:
+                    # Only a string comparison clears a near miss (#992). A colliding prefix
+                    # cleared it, so `Input Port:` passed whenever its digest met another value's.
+                    unconfirmed.append(f"{source}/{locale}")
+                    continue
                 if canon.differs_only_by_decoration(source, locale, literal):
                     near.append(f"{source}/{locale}")
             except canon.CanonError:
                 continue
+        if ships:
+            continue
+        if unconfirmed:
+            found.append(
+                f"{name}: canonical {literal!r} has its 32-bit prefix in {unconfirmed[0]} and "
+                f"nobody compared the string, so whether Logic ships it or only a near miss of it "
+                f"is not known. Run `Scripts/logic_canon.py confirm {literal!r}` on a machine with "
+                f"Logic.")
+            continue
         if not near:
             continue
         if trailing and trailing in allowed:

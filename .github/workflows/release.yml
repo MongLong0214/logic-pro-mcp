@@ -37,6 +37,12 @@ jobs:
             exit 1
           fi
 
+      - name: Refuse a tag with no live qualification named
+        # Runners lack permissioned Logic Pro (#985); release scripts record their qualified commit in the tag.
+        run: |
+          git fetch --quiet --no-tags --depth=1 origin "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          Scripts/release-tag-is-qualified.sh "${GITHUB_REF_NAME}"
+
       - name: Select Xcode and say which toolchain this is
         # Xcode 16.4, required by swift-sdk 0.11.0+ short-form withThrowingTaskGroup syntax. Keep
         # in sync with .github/workflows/ci.yml.

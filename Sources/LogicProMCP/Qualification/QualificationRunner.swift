@@ -452,8 +452,10 @@ package struct QualificationRunner: Sendable {
                 // checked for internal consistency and never compared to any case, so a passing
                 // mutating case with no record at all -- or a record naming an operation no case
                 // mentions -- went through.
-                mutationRestoreRecordSHA256: operationResult?.mutationRestore
-                    .flatMap { try? Self.recordDigest($0) }
+                //
+                // Read from `restore`, the value the case carries, so the two cannot name
+                // different records: `evidence(_:binds:)` compares them.
+                mutationRestoreRecordSHA256: operationResult?.restore?.recordSHA256
             )
             let evidenceData = try Self.encoded(evidence)
             try evidenceData.write(
@@ -521,7 +523,8 @@ package struct QualificationRunner: Sendable {
                 operationRequestID: operationResult?.requestID,
                 verificationKind: verificationKind,
                 deferral: operationResult?.deferral,
-                readback: operationResult?.readback
+                readback: operationResult?.readback,
+                restore: operationResult?.restore
             ))
         }
 
@@ -1847,9 +1850,9 @@ package struct QualificationRunner: Sendable {
             guard let record = byOperation.removeValue(forKey: operationID) else {
                 return "mutation restore binding: no record for \(operationID)"
             }
-            guard record.readingThatDidNotHappen == nil else {
+            guard record.verifiedCycleShape else {
                 return "mutation restore binding: \(operationID) cites a record whose "
-                    + "\(record.readingThatDidNotHappen ?? "reading") did not happen"
+                    + "write cycle or restore did not verify"
             }
             guard (try? recordDigest(record)) == digest else {
                 return "mutation restore binding: \(operationID) cites a record that is not this one"
@@ -1974,17 +1977,15 @@ package struct QualificationRunner: Sendable {
             return false
         }
         return artifact.records.allSatisfy { record in
-            !record.operationID.isEmpty
-                && !record.preState.isEmpty
-                && !record.mutation.isEmpty
-                && record.preState != record.mutation
-                && record.mutation == record.readback
-                && record.preState == record.restore
-                && record.preState == record.restoreReadback
+            record.verifiedCycleShape
         }
     }
 
-    private static func evidence(
+    /// Whether a case says what its evidence file says.
+    ///
+    /// `internal`, not `private`, for the reason `evidenceShapeIsValid` is: #984 added the
+    /// restore conjunct, and the only other way to reach it is a whole signed bundle.
+    static func evidence(
         _ evidence: CaseEvidence,
         binds qualificationCase: QualificationCase
     ) -> Bool {
@@ -2001,6 +2002,9 @@ package struct QualificationRunner: Sendable {
             && evidence.verificationKind == qualificationCase.verificationKind
             && evidence.deferral == qualificationCase.deferral
             && evidence.readback == qualificationCase.readback
+            // #984: the case's restore names the record the evidence binds. Without this the
+            // attestation's `restore` -- which the credit rule reads -- was bound to nothing.
+            && evidence.mutationRestoreRecordSHA256 == qualificationCase.restore?.recordSHA256
             && evidence.availabilityReason == qualificationCase.availabilityReason
             && evidence.availabilityObservation == qualificationCase.availabilityObservation
     }
