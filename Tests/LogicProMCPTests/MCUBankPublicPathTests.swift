@@ -25,8 +25,10 @@ private func lcdRow(_ names: [String]) -> String {
 
 private let bank0Names = ["Kick", "Snare", "HiHat", "Bass", "Keys", "Gtr L", "Gtr R", "Vox"]
 private let bank1Names = ["Bass 2", "Synth", "Pad", "Lead", "Strngs", "Brass", "Perc", "FX"]
+private let bank2Names = ["Choir", "Organ", "Piano", "Rhodes", "Clav", "Sub", "Arp", "Ride"]
 private let bank0Row = lcdRow(bank0Names)
 private let bank1Row = lcdRow(bank1Names)
+private let bank2Row = lcdRow(bank2Names)
 /// What Logic draws on the LOWER row: values, not names. Offset 0x38 is the first lower-row cell.
 private let lowerRowValues = lcdRow(["-3.0dB", "-6.0dB", "0.0dB", "-inf", "-1.5dB", "-2.0dB", "-2.0dB", "-4.5dB"])
 private let lowerRowOffset: UInt8 = 0x38
@@ -103,14 +105,14 @@ struct MCUBankPublicPathTests {
 
         let sent = await rig.surface.sentBytes
         #expect(sent == [bankRightPress, bankRightRelease])
-        #expect(await rig.sleeper.count(of: .milliseconds(1)) == 1)
         #expect(await rig.sleeper.count(of: .milliseconds(25)) == 2)
+        #expect(await rig.sleeper.requested.count == 2)
     }
 
     // The dispatcher stringifies `count`; the channel parses it back. DispatcherTests shows the string
-    // reaching a mock; this shows the real channel pressing that many times.
+    // reaching a mock; this shows the real channel walking that many witnessed steps.
     @Test func countThroughTheDispatcherIsThatManyPresses() async throws {
-        let rig = await makePublicPathRig(response: .redraw(row: bank1Row))
+        let rig = await makePublicPathRig(response: .windows([bank0Row, bank1Row, bank2Row]))
         await rig.surface.seedUpperRow(bank0Row)
 
         let result = await publicBank(rig, params: ["direction": .string("right"), "count": .int(2)])
@@ -120,11 +122,15 @@ struct MCUBankPublicPathTests {
         let obj = try envelope(result)
         #expect(obj["state"] as? String == "A")
         #expect(obj["bank_presses_sent"] as? Int == 2)
+        #expect(obj["banks_moved"] as? Int == 2)
+        #expect(obj["banks_requested"] as? Int == 2)
+        #expect(obj["step_windows"] as? [String] == [bank1Row, bank2Row])
         #expect(obj["bank_bookkeeping_after"] as? Int == 2)
-        #expect(obj["strips"] as? [String] == bank1Names)
+        #expect(obj["strips"] as? [String] == bank2Names)
         let sent = await rig.surface.sentBytes
         #expect(sent == [bankRightPress, bankRightRelease, bankRightPress, bankRightRelease])
-        #expect(await rig.sleeper.count(of: .milliseconds(1)) == 2)
+        #expect(await rig.sleeper.count(of: .milliseconds(25)) == 4)
+        #expect(await rig.sleeper.requested.count == 4)
     }
 
     // Negative, pre-write: a connected surface that has drawn values but never names. The health

@@ -1027,23 +1027,34 @@ actor MCUChannel: Channel {
     /// Bank bookkeeping is clamped to the 32 banks of a 256-track project.
     static let bankIndexRange = 0...31
 
-    /// `mixer.bank`: move the MCU window `count` banks left or right and say whether Logic moved.
+    /// `mixer.bank`: move the MCU window `count` banks left or right, one press at a time, and
+    /// say how many of those presses Logic moved the window for.
     ///
     /// The press being sent proves nothing — `withBanking` sends the same bytes and measured a
-    /// miss (#862, 2026-09-11). State A here is decided by the LCD upper row alone: it must have
-    /// been WRITTEN after the press (`mcuUpperRowWriteSequence` advanced), it must READ differently
-    /// from the row snapshotted before the press, and it must have stopped moving (the sequence
-    /// unchanged across two consecutive polls — Logic may redraw a row in several partial SysEx
-    /// writes, and the first of them is not the window). A redraw that leaves the bytes identical
-    /// is State B `noop_unobservable`: at bank 0 pressing left, at the last bank pressing right,
-    /// or eight neighbours whose six-char truncations coincide all look like that, and six
-    /// characters cannot tell them apart. No redraw inside the poll budget is State B echo
-    /// timeout. A row that was never received at all is refused BEFORE anything is sent, because
-    /// with nothing to compare against there is no way to know whether Logic moved and no honest
-    /// answer to give afterwards.
+    /// miss (#862, 2026-09-11), and two presses sent back to back moved Logic 12.3 ONE bank
+    /// (#862, 2026-09-27). So every step is its own press and its own readback: snapshot the LCD
+    /// upper row, press once, then poll. A step MOVED when the row was WRITTEN after that step's
+    /// snapshot (`mcuUpperRowWriteSequence` advanced), stopped moving (the sequence unchanged
+    /// across two consecutive polls — Logic may redraw a row in several partial SysEx writes, and
+    /// the first of them is not the window), and READS differently from that step's snapshot. A
+    /// step whose redraw left the bytes identical is UNCHANGED: at bank 0 pressing left, at the
+    /// last bank pressing right, or eight neighbours whose six-char truncations coincide all look
+    /// like that, and six characters cannot tell them apart. A step with no quiescent redraw
+    /// inside the poll budget had NO REDRAW. The walk stops at the first step that did not move,
+    /// and no further press is sent.
     ///
-    /// `currentBank` is bookkeeping this file keeps about itself, never read back from Logic;
-    /// it moves only on State A, and both values are reported so drift is visible.
+    /// State A means every one of the `count` presses produced its own quiescent redraw to a row
+    /// different from the one before it. It still cannot say WHICH bank is showing — six-char
+    /// names are not an index — only that each step moved. No step moved is the single-press
+    /// answer: State B `noop_unobservable` for an unchanged row, State B echo timeout for no
+    /// redraw. Some but not all steps moved is State B too: `readback_mismatch` when the stopping
+    /// step redrew unchanged (the end of the mixer in that direction), echo timeout when it did
+    /// not redraw. `banks_moved` never exceeds the steps witnessed. A row that was never received
+    /// at all is refused BEFORE anything is sent, because with nothing to compare against there
+    /// is no way to know whether Logic moved and no honest answer to give afterwards.
+    ///
+    /// `currentBank` is bookkeeping this file keeps about itself, never read back from Logic; it
+    /// moves by the witnessed `banks_moved` only, and both values are reported so drift is visible.
     private func executeBank(_ params: [String: String]) async -> ChannelResult {
         let operation = "mixer.bank"
         let direction: String
@@ -1057,7 +1068,7 @@ actor MCUChannel: Channel {
             return Self.invalidParams("Invalid MCU parameters for \(operation)", operation: operation)
         }
         let button: MCUProtocol.ButtonFunction = direction == "right" ? .bankRight : .bankLeft
-        let signedCount = direction == "right" ? count : -count
+        let sign = direction == "right" ? 1 : -1
 
         return await withBankExclusion {
             let bookkeepingBefore = currentBank
@@ -1086,35 +1097,74 @@ actor MCUChannel: Channel {
             }
             extras["window_before"] = before.row
 
+            var banksMoved = 0
             var pressesSent = 0
-            for _ in 0..<count {
+            var writesObserved = 0
+            var stepWindows: [String] = []
+            var lastWindow = before.row
+            // nil while every step so far moved; otherwise how the stopping step ended.
+            var stoppedQuiescent: Bool?
+            var stoppedUnchanged = false
+            for step in 0..<count {
+                var stepBefore = before
+                if step > 0 { stepBefore = await cache.mcuUpperRowSnapshot() }
                 await pressButton(button)
                 pressesSent += 1
-                await sleep(.milliseconds(1))
-            }
-            extras["bank_presses_sent"] = pressesSent
 
-            // Fresh means WRITTEN after `before`, strictly. Quiescent means the write count held
-            // still for one more poll after the last fresh write.
-            var after = before
-            var quiescent = false
-            for _ in 0..<Self.bankWindowPollBudget {
-                await sleep(.milliseconds(Self.bankWindowPollMilliseconds))
-                let snapshot = await cache.mcuUpperRowSnapshot()
-                guard snapshot.sequence > before.sequence else { continue }
-                if snapshot.sequence == after.sequence {
-                    quiescent = true
+                // Fresh means WRITTEN after this step's snapshot, strictly. Quiescent means the
+                // write count held still for one more poll after the last fresh write.
+                var after = stepBefore
+                var quiescent = false
+                for _ in 0..<Self.bankWindowPollBudget {
+                    await sleep(.milliseconds(Self.bankWindowPollMilliseconds))
+                    let snapshot = await cache.mcuUpperRowSnapshot()
+                    guard snapshot.sequence > stepBefore.sequence else { continue }
+                    if snapshot.sequence == after.sequence {
+                        quiescent = true
+                        break
+                    }
+                    after = snapshot
+                }
+                let stepWrites = Int(clamping: after.sequence - stepBefore.sequence)
+                writesObserved += stepWrites
+                stepWindows.append(after.row)
+                lastWindow = after.row
+
+                guard stepWrites > 0, quiescent else {
+                    stoppedQuiescent = quiescent
                     break
                 }
-                after = snapshot
+                guard after.row != stepBefore.row else {
+                    stoppedQuiescent = true
+                    stoppedUnchanged = true
+                    break
+                }
+                banksMoved += 1
             }
-            let writesObserved = Int(clamping: after.sequence - before.sequence)
+
+            extras["bank_presses_sent"] = pressesSent
+            extras["banks_moved"] = banksMoved
+            extras["banks_requested"] = count
+            extras["step_windows"] = stepWindows
             extras["upper_row_writes_observed"] = writesObserved
-            extras["window_after"] = after.row
+            extras["window_after"] = lastWindow
             for (k, v) in await mcuConnectionExtras() { extras[k] = v }
 
-            guard writesObserved > 0, quiescent else {
-                extras["bank_bookkeeping_after"] = bookkeepingBefore
+            if banksMoved > 0 {
+                currentBank = min(
+                    max(currentBank + sign * banksMoved, Self.bankIndexRange.lowerBound),
+                    Self.bankIndexRange.upperBound
+                )
+            }
+            extras["bank_bookkeeping_after"] = currentBank
+
+            guard let quiescent = stoppedQuiescent else {
+                extras["verify_source"] = Self.bankWindowVerifySource
+                extras["strips"] = Self.bankWindowStrips(lastWindow)
+                return .success(HonestContract.encodeStateA(extras: extras))
+            }
+
+            guard stoppedUnchanged else {
                 extras["readback_source"] = Self.bankWindowVerifySource
                 extras["row_quiescent"] = quiescent
                 return .success(HonestContract.encodeStateB(
@@ -1123,8 +1173,7 @@ actor MCUChannel: Channel {
             }
 
             extras["verify_source"] = Self.bankWindowVerifySource
-            guard after.row != before.row else {
-                extras["bank_bookkeeping_after"] = bookkeepingBefore
+            guard banksMoved > 0 else {
                 let limitation = "the LCD upper row redrew with the same six-character names it held before "
                     + "the press; an identical redraw cannot confirm a bank move (bank 0 pressed left, the "
                     + "last bank pressed right, or eight neighbours whose truncated names coincide)"
@@ -1133,11 +1182,14 @@ actor MCUChannel: Channel {
                     reason: .noopUnobservable, extras: extras
                 ))
             }
-
-            currentBank = min(max(currentBank + signedCount, Self.bankIndexRange.lowerBound), Self.bankIndexRange.upperBound)
-            extras["bank_bookkeeping_after"] = currentBank
-            extras["strips"] = Self.bankWindowStrips(after.row)
-            return .success(HonestContract.encodeStateA(extras: extras))
+            let limitation = "the LCD upper row moved \(banksMoved) of \(count) requested banks, then redrew "
+                + "unchanged on the next press; an identical redraw is what the end of the mixer in that "
+                + "direction looks like (or eight neighbours whose truncated names coincide), so no further "
+                + "press was sent"
+            extras["surface_limitation"] = limitation
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch, extras: extras
+            ))
         }
     }
 

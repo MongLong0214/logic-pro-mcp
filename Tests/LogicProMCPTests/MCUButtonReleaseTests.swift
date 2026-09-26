@@ -46,15 +46,16 @@ private func releaseEnvelope(_ result: ChannelResult) throws -> [String: Any] {
 struct MCUButtonReleaseTests {
     // Site class: executeBank's press loop.
     @Test func bankMoveSendsEachPressThenItsRelease() async throws {
-        let surface = LCDBankSurface(
-            response: .redraw(row: releaseTestRow(["Bass 2", "Synth", "Pad", "Lead", "Strngs", "Brass", "Perc", "FX"]))
-        )
+        let windows = [
+            releaseTestRow(["Kick", "Snare", "HiHat", "Bass", "Keys", "Gtr L", "Gtr R", "Vox"]),
+            releaseTestRow(["Bass 2", "Synth", "Pad", "Lead", "Strngs", "Brass", "Perc", "FX"]),
+            releaseTestRow(["Choir", "Organ", "Piano", "Rhodes", "Clav", "Sub", "Arp", "Ride"]),
+        ]
+        let surface = LCDBankSurface(response: .windows(windows))
         let sleeper = CountingSleeper()
         let channel = MCUChannel(transport: surface, cache: StateCache(), sleep: sleeper.closure)
         await surface.attach(channel: channel)
-        await surface.seedUpperRow(
-            releaseTestRow(["Kick", "Snare", "HiHat", "Bass", "Keys", "Gtr L", "Gtr R", "Vox"])
-        )
+        await surface.seedUpperRow(windows[0])
 
         let result = await channel.execute(operation: "mixer.bank", params: ["direction": "right", "count": "2"])
 
@@ -66,8 +67,9 @@ struct MCUButtonReleaseTests {
         #expect(sent == expected)
         #expect(pressCount(sent) == 2)
         #expect(unreleasedPresses(sent).isEmpty)
-        // The 1 ms spacing between presses survives, one per press, after the release.
-        #expect(await sleeper.count(of: .milliseconds(1)) == 2)
+        // Presses are separated by each step's readback polls, not by a fixed spacing.
+        #expect(await sleeper.count(of: .milliseconds(1)) == 0)
+        #expect(await sleeper.count(of: .milliseconds(25)) == 4)
     }
 
     // Site classes: withBanking's bank loop and restore loop, plus the strip button (enabled=true).
