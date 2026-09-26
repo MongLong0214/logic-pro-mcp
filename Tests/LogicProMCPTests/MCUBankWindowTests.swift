@@ -118,6 +118,48 @@ actor CountingSleeper {
     }
 }
 
+/// Holds the FIRST wait it is asked for open until the test releases it; every later wait returns
+/// at once. At each wait it records how many messages the surface had been sent by then, so a test
+/// can say what was on the wire at each of the walk's polls — all taken under the bank lock —
+/// without reading a clock.
+private actor GatedSleeper {
+    private let surface: LCDBankSurface
+    private var released = false
+    private var held: CheckedContinuation<Void, Never>?
+    private var holdWatcher: CheckedContinuation<Void, Never>?
+    private(set) var sentCountAtEachWait: [Int] = []
+
+    init(surface: LCDBankSurface) {
+        self.surface = surface
+    }
+
+    func wait(_ duration: Duration) async {
+        sentCountAtEachWait.append(await surface.sentBytes.count)
+        guard !released, held == nil else { return }
+        await withCheckedContinuation { continuation in
+            held = continuation
+            holdWatcher?.resume()
+            holdWatcher = nil
+        }
+    }
+
+    /// Returns once a wait is being held open.
+    func untilHolding() async {
+        guard held == nil else { return }
+        await withCheckedContinuation { holdWatcher = $0 }
+    }
+
+    func release() {
+        released = true
+        held?.resume()
+        held = nil
+    }
+
+    nonisolated var closure: @Sendable (Duration) async -> Void {
+        { [self] duration in await self.wait(duration) }
+    }
+}
+
 // MARK: - Fixtures
 
 /// Eight six-character names plus a separator each: the 56-character upper row Logic draws.
@@ -141,6 +183,8 @@ private let bankRightPress = MCUProtocol.encodeButton(.bankRight, on: true)
 private let bankRightRelease = MCUProtocol.encodeButton(.bankRight, on: false)
 private let bankLeftPress = MCUProtocol.encodeButton(.bankLeft, on: true)
 private let bankLeftRelease = MCUProtocol.encodeButton(.bankLeft, on: false)
+private let muteStrip2Press = MCUProtocol.encodeButton(.mute, strip: 2, on: true)
+private let muteStrip2Release = MCUProtocol.encodeButton(.mute, strip: 2, on: false)
 
 private struct BankRig {
     let channel: MCUChannel
@@ -263,11 +307,16 @@ struct MCUBankWindowTests {
     }
 
     // T4
+    // The refusal carries the same four counters every other mixer.bank reply carries, at their
+    // true values: nothing pressed, nothing moved, the parsed count requested. Count 3 rather than
+    // the default 1 so `banks_requested` cannot be a constant that happens to match.
     @Test func neverReceivedRowRefusesBeforeSending() async throws {
         let rig = await makeBankRig(response: .redraw(row: bank1Row), seedUpperRow: nil)
         #expect(await rig.cache.mcuUpperRowWriteSequence == 0)
 
-        let result = await rig.channel.execute(operation: "mixer.bank", params: ["direction": "right"])
+        let result = await rig.channel.execute(
+            operation: "mixer.bank", params: ["direction": "right", "count": "3"]
+        )
 
         #expect(!result.isSuccess)
         let obj = try envelope(result)
@@ -282,7 +331,11 @@ struct MCUBankWindowTests {
         #expect(!writeAttempted)
         let hint = try #require(obj["hint"] as? String)
         #expect(hint.contains("never been received"))
-        #expect(obj["bank_presses_sent"] == nil)
+        #expect(obj["bank_presses_sent"] as? Int == 0)
+        #expect(obj["banks_moved"] as? Int == 0)
+        #expect(obj["banks_requested"] as? Int == 3)
+        let stepWindows = try #require(obj["step_windows"] as? [String])
+        #expect(stepWindows.isEmpty)
         #expect(await rig.channel.currentBank == 0)
 
         let sent = await rig.surface.sentBytes
@@ -534,6 +587,61 @@ struct MCUBankWindowTests {
             #expect(obj["step_windows"] as? [String] == [window], "\(response)")
             #expect(obj["bank_bookkeeping_after"] as? Int == moved, "\(response)")
         }
+    }
+
+    // A strip index names a channel only relative to the bank Logic shows, and a mixer.bank walk
+    // updates `currentBank` only after it ends. So a strip write for a track in the bank the
+    // bookkeeping holds must not go out while a walk is suspended in a poll: Logic may already be
+    // drawing the next bank, and strip 2 there is another track. The sleeper holds the walk's first
+    // poll open, the mute is started while it is held, and none of its bytes may reach the wire
+    // until the walk is done. testMCUBankingQueueDuringBank checks only that two concurrent calls
+    // both succeed; this checks the order.
+    @Test(.timeLimit(.minutes(1)))
+    func stripWriteInTheCurrentBankWaitsForABankWalkHeldInItsPoll() async throws {
+        let surface = LCDBankSurface(response: .redrawIdentical)
+        let sleeper = GatedSleeper(surface: surface)
+        let channel = MCUChannel(transport: surface, cache: StateCache(), sleep: sleeper.closure)
+        await surface.attach(channel: channel)
+        await surface.seedUpperRow(bank0Row)
+
+        let bank = Task {
+            await channel.execute(operation: "mixer.bank", params: ["direction": "right"])
+        }
+        await sleeper.untilHolding()
+        #expect(await surface.sentBytes == [bankRightPress, bankRightRelease])
+
+        // Track 2 is strip 2 of bank 0, and bank 0 is what the bookkeeping holds mid-walk.
+        #expect(await channel.currentBank == 0)
+        let mute = Task {
+            await channel.execute(operation: "track.set_mute", params: ["index": "2", "enabled": "true"])
+        }
+        // The mute either parks on the bank lock or puts bytes on the wire. Wait for whichever
+        // happens — a condition, not a clock.
+        while await channel.bankExclusionWaiterCount == 0, await surface.sentBytes.count == 2 {
+            await Task.yield()
+        }
+        #expect(
+            await surface.sentBytes == [bankRightPress, bankRightRelease],
+            "a strip write went out while the mixer.bank walk was suspended in its poll"
+        )
+        #expect(await channel.bankExclusionWaiterCount == 1)
+
+        await sleeper.release()
+        let bankResult = await bank.value
+        let muteResult = await mute.value
+
+        let bankObj = try envelope(bankResult)
+        #expect(bankObj["reason"] as? String == "noop_unobservable")
+        #expect(bankObj["bank_presses_sent"] as? Int == 1)
+        // Both polls the walk took ran under the lock, and each saw only the walk's own press.
+        #expect(await sleeper.sentCountAtEachWait == [2, 2])
+
+        #expect(muteResult.isSuccess)
+        let muteObj = try envelope(muteResult)
+        #expect(muteObj["track"] as? Int == 2)
+        #expect(await surface.sentBytes == [bankRightPress, bankRightRelease, muteStrip2Press, muteStrip2Release])
+        #expect(await channel.bankExclusionWaiterCount == 0)
+        #expect(await channel.currentBank == 0)
     }
 
     @Test func bankWindowStripsSplitsSevenCharacterCellsAndTrimsTrailingSpaces() {

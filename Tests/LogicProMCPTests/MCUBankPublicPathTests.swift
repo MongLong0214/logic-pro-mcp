@@ -145,7 +145,8 @@ struct MCUBankPublicPathTests {
         let health = await rig.channel.healthCheck()
         #expect(health.ready, "\(health.detail)")
 
-        let result = await publicBank(rig, params: ["direction": .string("right")])
+        // Count 2, so `banks_requested` is the count the dispatcher carried, not the default.
+        let result = await publicBank(rig, params: ["direction": .string("right"), "count": .int(2)])
 
         let isError = try #require(result.isError as Bool?)
         #expect(isError, "\(sharedToolText(result))")
@@ -161,7 +162,11 @@ struct MCUBankPublicPathTests {
         #expect(!writeAttempted)
         let hint = try #require(obj["hint"] as? String)
         #expect(hint.contains("never been received"))
-        #expect(obj["bank_presses_sent"] == nil)
+        #expect(obj["bank_presses_sent"] as? Int == 0)
+        #expect(obj["banks_moved"] as? Int == 0)
+        #expect(obj["banks_requested"] as? Int == 2)
+        let stepWindows = try #require(obj["step_windows"] as? [String])
+        #expect(stepWindows.isEmpty)
         #expect(obj["last_error"] == nil)
         #expect(await rig.channel.currentBank == 0)
 

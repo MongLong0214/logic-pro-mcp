@@ -1084,6 +1084,10 @@ actor MCUChannel: Channel {
             let before = await cache.mcuUpperRowSnapshot()
             guard before.sequence > 0 else {
                 extras["write_attempted"] = false
+                extras["bank_presses_sent"] = 0
+                extras["banks_moved"] = 0
+                extras["banks_requested"] = count
+                extras["step_windows"] = [String]()
                 extras["verify_source"] = Self.bankWindowVerifySource
                 for (k, v) in await mcuConnectionExtras() { extras[k] = v }
                 let hint = "\(operation) sent nothing: the MCU LCD upper row has never been received on this "
@@ -1235,9 +1239,16 @@ actor MCUChannel: Channel {
     /// silently did not.
     static let bankSettleMilliseconds = 250
 
-    /// Serialises everything that moves the bank. `withBanking` moves it and moves it back;
-    /// `executeBank` moves it and leaves it. Interleaving the two would restore a bank neither
-    /// asked for, so both hold this one lock (#862).
+    /// Serialises everything that moves the bank AND everything that addresses a strip. `withBanking`
+    /// moves it and moves it back; `executeBank` moves it and leaves it. Interleaving the two would
+    /// restore a bank neither asked for. A strip index names a channel only relative to the bank
+    /// Logic is showing, and `executeBank` updates `currentBank` only after its walk, so a strip
+    /// write that read `currentBank` while a walk was suspended in a poll would land in whatever
+    /// bank the walk had already drawn (#862). Every strip-relative operation therefore holds this
+    /// lock too, including the one whose track is in the bank the bookkeeping holds.
+    ///
+    /// Not re-entrant: nothing running under it may call `withBanking`, `withBankExclusion` or
+    /// `executeBank`, or it waits for itself.
     private func withBankExclusion(_ body: () async -> ChannelResult) async -> ChannelResult {
         // Wait if another banking operation is in progress (loop to handle spurious wakeups)
         while isBanking {
@@ -1256,6 +1267,10 @@ actor MCUChannel: Channel {
         return await body()
     }
 
+    /// Test-only observation: how many callers are parked waiting for `withBankExclusion`. A test
+    /// that holds the lock open needs to know a second caller reached it without reading a clock.
+    var bankExclusionWaiterCount: Int { bankingQueue.count }
+
     private func withBanking(targetTrack: Int, operation: @escaping (Int) async -> ChannelResult) async -> ChannelResult {
         // Sanity cap: real Logic projects rarely exceed 256 tracks (32 MCU banks).
         // A `track.select {index: 99999}` was seen to spend 25 s walking 12499
@@ -1267,11 +1282,13 @@ actor MCUChannel: Channel {
         let targetBank = targetTrack / 8
         let strip = targetTrack % 8
 
-        if targetBank == currentBank {
-            return await operation(strip)
-        }
-
         return await withBankExclusion {
+            // Decided under the lock: read outside it, `currentBank` can be the bank a suspended
+            // `executeBank` walk has already left.
+            if targetBank == currentBank {
+                return await operation(strip)
+            }
+
             let originalBank = currentBank
 
             // Bank to target
