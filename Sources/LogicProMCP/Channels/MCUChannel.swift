@@ -179,17 +179,30 @@ actor MCUChannel: Channel {
         let readPan: @Sendable (Int) async -> Double?
         let readAutomationMode: @Sendable (Int) async -> AutomationMode?
         let readSelectedTrack: @Sendable () async -> Int?
+        /// Whether a track's Mute / Solo / Record button reads as on in its AX track header
+        /// (#1020). The MCU strip buttons toggle, so `track.set_mute` / `set_solo` / `set_arm`
+        /// compare against these before pressing. `nil` is "could not read" and is never taken
+        /// for `false`: a press on an unread state is a write in an unknown direction.
+        let readMuted: @Sendable (Int) async -> Bool?
+        let readSoloed: @Sendable (Int) async -> Bool?
+        let readArmed: @Sendable (Int) async -> Bool?
 
         init(
             readVolume: @escaping @Sendable (Int) async -> Double?,
             readPan: @escaping @Sendable (Int) async -> Double?,
             readAutomationMode: @escaping @Sendable (Int) async -> AutomationMode? = { _ in nil },
-            readSelectedTrack: @escaping @Sendable () async -> Int? = { nil }
+            readSelectedTrack: @escaping @Sendable () async -> Int? = { nil },
+            readMuted: @escaping @Sendable (Int) async -> Bool? = { _ in nil },
+            readSoloed: @escaping @Sendable (Int) async -> Bool? = { _ in nil },
+            readArmed: @escaping @Sendable (Int) async -> Bool? = { _ in nil }
         ) {
             self.readVolume = readVolume
             self.readPan = readPan
             self.readAutomationMode = readAutomationMode
             self.readSelectedTrack = readSelectedTrack
+            self.readMuted = readMuted
+            self.readSoloed = readSoloed
+            self.readArmed = readArmed
         }
     }
 
@@ -796,29 +809,129 @@ actor MCUChannel: Channel {
             return Self.invalidParams("Invalid MCU parameters for \(operation)", operation: operation)
         }
 
-        return await withBanking(targetTrack: track) { strip in
-            if enabled {
+        guard function != .select else {
+            return await withBanking(targetTrack: track) { strip in
                 await self.pressButton(function, strip: strip)
-            } else {
-                // Deliberately unchanged by #862: this bare velocity-0 byte is not a press, and what
-                // `enabled: false` should mean for a toggle button is a separate question.
-                await self.transport.send(MCUProtocol.encodeButton(function, strip: strip, on: false))
+                // v3.1.2 (P0-1) — MCU button echo is LED-only, no AX-side mirror
+                // wired into StateCache yet. The press lands but cannot be read
+                // back, so honestly: State B `readback_unavailable`. Wrapping
+                // here also closes the only remaining raw-string responder on
+                // mute / solo / arm / select that v3.1.1's audit caught.
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: [
+                        "function": "\(function)",
+                        "track": track,
+                        "enabled": enabled,
+                        "write_source": "mcu",
+                        "verification_source": "mcu_led_echo"
+                    ]
+                ))
             }
-            // v3.1.2 (P0-1) — MCU button echo is LED-only, no AX-side mirror
-            // wired into StateCache yet. The press lands but cannot be read
-            // back, so honestly: State B `readback_unavailable`. Wrapping
-            // here also closes the only remaining raw-string responder on
-            // mute / solo / arm / select that v3.1.1's audit caught.
-            return .success(HonestContract.encodeStateB(
-                reason: .readbackUnavailable,
-                extras: [
-                    "function": "\(function)",
-                    "track": track,
-                    "enabled": enabled,
-                    "write_source": "mcu",
-                    "verification_source": "mcu_led_echo"
-                ]
+        }
+        return await executeStripButtonSet(function, operation: operation, track: track, enabled: enabled)
+    }
+
+    // MARK: - Strip buttons as a set (#1020)
+
+    /// How many AX reads a strip-button press is given to show the new state, and the wait between
+    /// them. A COUNT through the injected sleeper, as the bank window's polls are, so a test counts
+    /// the waits instead of timing them (#804).
+    static let stripButtonReadbackPollBudget = 10
+    static let stripButtonReadbackPollMilliseconds = 50
+
+    /// What confirms a strip-button set: the track-header button `AXValue` that the Accessibility
+    /// channel reads for its own `track.set_mute` / `set_solo` / `set_arm`, and names the same way.
+    /// The MCU LED echo is wired into no track state and cannot say which way a toggle went.
+    static let stripButtonVerifySource = "ax_value"
+
+    /// The AX read that answers whether a strip button's track state is on, or nil for a button
+    /// this channel has no reading for. `.select` is not a toggle and has no state to compare.
+    private func stripButtonStateReader(
+        _ function: MCUProtocol.ButtonFunction
+    ) -> (@Sendable (Int) async -> Bool?)? {
+        guard let axReadback else { return nil }
+        switch function {
+        case .mute: return axReadback.readMuted
+        case .solo: return axReadback.readSoloed
+        case .recArm: return axReadback.readArmed
+        default: return nil
+        }
+    }
+
+    /// Mute, Solo and Record are TOGGLE buttons on the MCU: a press flips whatever Logic holds, and
+    /// a release on its own is not a press (#1020, following the #862 measurement of how Logic
+    /// handles a button). `enabled` therefore cannot be sent, only compared: read the track's state
+    /// from its AX header, press once only when it differs, and confirm by reading again. Before
+    /// this, `enabled: true` on an already-muted track unmuted it, and `enabled: false` sent a bare
+    /// velocity-0 note that Logic ignored.
+    ///
+    /// With no reading before the press there is no way to know which way a press would move the
+    /// track, so nothing is sent and the refusal carries a NON-terminal code: `ChannelRouter` walks
+    /// past it to the next channel, where a terminal one would end the walk with nothing done.
+    /// After a press the readback did not confirm, nothing is pressed again — a second press on a
+    /// toggle is the opposite write — and the answer is State B with `write_attempted: true`.
+    private func executeStripButtonSet(
+        _ function: MCUProtocol.ButtonFunction,
+        operation: String,
+        track: Int,
+        enabled: Bool
+    ) async -> ChannelResult {
+        var extras: [String: Any] = [
+            "function": "\(function)",
+            "track": track,
+            "enabled": enabled,
+            "write_source": "mcu",
+            "verification_source": Self.stripButtonVerifySource,
+        ]
+        let read = stripButtonStateReader(function)
+        guard let read, let before = await read(track) else {
+            extras["write_attempted"] = false
+            extras["observed"] = NSNull()
+            extras["operation"] = operation
+            extras["channel"] = "MCU"
+            return .error(HonestContract.encodeStateC(
+                error: .trackStateUnreadable,
+                hint: "\(operation) sent nothing: the MCU \(function) button toggles, and track \(track)'s "
+                    + "\(function) state could not be read from its track header, so one press could set "
+                    + "it or clear it. Another channel may still set it.",
+                extras: extras
             ))
+        }
+        if before == enabled {
+            extras["observed"] = before
+            extras["write_attempted"] = false
+            return .success(HonestContract.encodeStateA(extras: extras))
+        }
+
+        return await withBanking(targetTrack: track) { strip in
+            await self.pressButton(function, strip: strip)
+            extras["write_attempted"] = true
+            var observed: Bool?
+            for attempt in 0..<Self.stripButtonReadbackPollBudget {
+                observed = await read(track)
+                // ADR-005: every verification poll attempt is a traced phase (no-op without an
+                // active mutation trace).
+                await OperationTraceContext.record(.verificationPoll, attributes: [
+                    "outcome": observed == enabled ? "matched" : "pending",
+                ])
+                if observed == enabled { break }
+                if attempt < Self.stripButtonReadbackPollBudget - 1 {
+                    await self.sleep(.milliseconds(Self.stripButtonReadbackPollMilliseconds))
+                }
+            }
+            if let observed {
+                extras["observed"] = observed
+            } else {
+                extras["observed"] = NSNull()
+            }
+            guard observed == enabled else {
+                return .success(HonestContract.encodeStateB(
+                    reason: observed == nil ? .readbackUnavailable : .readbackMismatch,
+                    extras: extras
+                ))
+            }
+            return .success(HonestContract.encodeStateA(extras: extras))
         }
     }
 

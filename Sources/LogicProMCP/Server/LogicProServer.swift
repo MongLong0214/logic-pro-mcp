@@ -395,6 +395,22 @@ actor LogicProServer {
                         : nil
                 }
                 return selected.count == 1 ? selected[0] : nil
+            },
+            // #1020: the same track-header button the Accessibility channel reads for its own
+            // mute / solo / arm. `extractButtonState` answers nil for a failed read and for a mixed
+            // value alike; `readTrackStates()` would fold both into `false`, which is why the
+            // reader is the button and not the track list.
+            readMuted: { track in
+                guard let button = AXLogicProElements.findTrackMuteButton(trackIndex: track) else { return nil }
+                return AXValueExtractors.extractButtonState(button)
+            },
+            readSoloed: { track in
+                guard let button = AXLogicProElements.findTrackSoloButton(trackIndex: track) else { return nil }
+                return AXValueExtractors.extractButtonState(button)
+            },
+            readArmed: { track in
+                guard let button = AXLogicProElements.findTrackArmButton(trackIndex: track) else { return nil }
+                return AXValueExtractors.extractButtonState(button)
             }
         )
         self.mcuChannel = MCUChannel(transport: mcuTransport, cache: cache, axReadback: mcuAXReadback)

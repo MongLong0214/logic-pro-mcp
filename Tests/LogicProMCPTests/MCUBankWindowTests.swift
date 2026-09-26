@@ -604,7 +604,19 @@ struct MCUBankWindowTests {
     func stripWriteInTheCurrentBankWaitsForABankWalkHeldInItsPoll() async throws {
         let surface = LCDBankSurface(response: .redrawIdentical)
         let sleeper = GatedSleeper(surface: surface)
-        let channel = MCUChannel(transport: surface, cache: StateCache(), sleep: sleeper.closure)
+        let channel = MCUChannel(
+            transport: surface,
+            cache: StateCache(),
+            // #1020: the mute reads track 2 before pressing and confirms after. The reading
+            // follows the press onto the wire, so the confirm takes no poll of its own and the
+            // sleeper still sees only the walk's polls.
+            axReadback: MCUChannel.AXReadback(
+                readVolume: { _ in nil },
+                readPan: { _ in nil },
+                readMuted: { _ in await surface.sentBytes.contains(muteStrip2Press) }
+            ),
+            sleep: sleeper.closure
+        )
         await surface.attach(channel: channel)
         await surface.seedUpperRow(bank0Row)
 

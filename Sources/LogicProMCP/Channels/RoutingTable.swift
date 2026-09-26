@@ -67,10 +67,10 @@ extension ChannelRouter {
         // may substitute a different reorder semantics.
         "track.sort_verified":        [.accessibility],
         // AX first: reads current checkbox state and only presses when it
-        // differs from desired — idempotent. MCU fallback is last-resort because
-        // its buttons are press-only (release is ignored by Logic), so
-        // `enabled:false` on MCU becomes a silent no-op, and repeated `enabled:true`
-        // toggles instead of setting. (Same bug class as track.select.)
+        // differs from desired — idempotent. MCU is the fallback, and its Mute / Solo / Rec
+        // buttons TOGGLE on a press, so the MCU handler reads the same track-header state
+        // first, presses only when it differs, confirms by reading again, and with no reading
+        // sends nothing and refuses non-terminally so the router walks on (#1020).
         "track.set_mute":             [.accessibility, .mcu, .cgEvent],
         "track.set_solo":             [.accessibility, .mcu, .cgEvent],
         "track.set_arm":              [.accessibility, .mcu, .cgEvent],

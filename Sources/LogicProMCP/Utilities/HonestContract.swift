@@ -70,6 +70,12 @@ enum HonestContract {
         case consentRequired = "consent_required"
         case readbackUnavailable = "readback_unavailable"
         case readbackMismatch = "readback_mismatch"
+        /// `track.set_mute` / `set_solo` / `set_arm` on the MCU channel read the track's state
+        /// before pressing, because the strip button toggles, and that read failed: nothing was
+        /// sent (#1020). NOT terminal on purpose — the state is unreadable to this channel's
+        /// readback, not unsettable, and `ChannelRouter` walks on to the next channel where
+        /// `readback_unavailable` would stop it with nothing done.
+        case trackStateUnreadable = "track_state_unreadable"
         /// Operation explicitly not implemented via this channel / build of
         /// Logic. Distinct from `.elementNotFound` (target absent) and
         /// `.axWriteFailed` (write attempt rejected): the surface itself does

@@ -75,7 +75,18 @@ struct MCUButtonReleaseTests {
     // Site classes: withBanking's bank loop and restore loop, plus the strip button (enabled=true).
     @Test func bankedStripButtonReleasesTheBankTheStripAndTheRestorePresses() async {
         let transport = MockMCUTransport()
-        let channel = MCUChannel(transport: transport, cache: StateCache())
+        // #1020: the strip button is a set, so it reads the track before pressing and confirms
+        // after; the reading follows the press onto the wire.
+        let mutePress = MCUProtocol.encodeButton(.mute, strip: 3, on: true)
+        let channel = MCUChannel(
+            transport: transport,
+            cache: StateCache(),
+            axReadback: MCUChannel.AXReadback(
+                readVolume: { _ in nil },
+                readPan: { _ in nil },
+                readMuted: { _ in await transport.sentBytes.contains(mutePress) }
+            )
+        )
 
         // Track 11 → bank 1, strip 3.
         let result = await channel.execute(operation: "track.set_mute", params: ["index": "11", "enabled": "true"])
@@ -91,7 +102,16 @@ struct MCUButtonReleaseTests {
     // Site class: strip button, enabled=true, no banking.
     @Test func stripButtonEnabledIsAPressThenARelease() async {
         let transport = MockMCUTransport()
-        let channel = MCUChannel(transport: transport, cache: StateCache())
+        let soloPress = MCUProtocol.encodeButton(.solo, strip: 2, on: true)
+        let channel = MCUChannel(
+            transport: transport,
+            cache: StateCache(),
+            axReadback: MCUChannel.AXReadback(
+                readVolume: { _ in nil },
+                readPan: { _ in nil },
+                readSoloed: { _ in await transport.sentBytes.contains(soloPress) }
+            )
+        )
 
         let result = await channel.execute(operation: "track.set_solo", params: ["index": "2", "enabled": "true"])
 
@@ -102,17 +122,29 @@ struct MCUButtonReleaseTests {
         #expect(unreleasedPresses(sent).isEmpty)
     }
 
-    // Strip button, enabled=false: deliberately unchanged by #862 — one bare velocity-0 byte.
-    @Test func stripButtonDisabledStillSendsTheSingleVelocityZeroByte() async {
+    // Site class: strip button, enabled=false. Until #1020 this sent one bare velocity-0 byte,
+    // which is not a press; clearing a lit toggle is the same press as setting it.
+    @Test func stripButtonDisabledIsAPressThenARelease() async {
         let transport = MockMCUTransport()
-        let channel = MCUChannel(transport: transport, cache: StateCache())
+        let mutePress = MCUProtocol.encodeButton(.mute, strip: 3, on: true)
+        let channel = MCUChannel(
+            transport: transport,
+            cache: StateCache(),
+            axReadback: MCUChannel.AXReadback(
+                readVolume: { _ in nil },
+                readPan: { _ in nil },
+                // Muted until the press is on the wire, unmuted after it.
+                readMuted: { _ in await !transport.sentBytes.contains(mutePress) }
+            )
+        )
 
         let result = await channel.execute(operation: "track.set_mute", params: ["index": "3", "enabled": "false"])
 
         #expect(result.isSuccess)
         let sent = await transport.sentBytes
         // Mute strip 3 is note 0x13.
-        #expect(sent == [[0x90, 0x13, 0x00]])
+        #expect(sent == [[0x90, 0x13, 0x7F], [0x90, 0x13, 0x00]])
+        #expect(unreleasedPresses(sent).isEmpty)
     }
 
     // Site classes: executeAutomation's select press and its automation-mode press, inside

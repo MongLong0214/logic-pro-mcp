@@ -178,7 +178,19 @@ import Testing
 
 @Test func testMCUChannelPanMasterAndStripButtonCommands() async {
     let transport = MockMCUTransport()
-    let channel = MCUChannel(transport: transport, cache: StateCache())
+    // #1020: solo and arm read the track before pressing and confirm after; select does not.
+    let soloPress = MCUProtocol.encodeButton(.solo, strip: 3, on: true)
+    let armPress = MCUProtocol.encodeButton(.recArm, strip: 4, on: true)
+    let channel = MCUChannel(
+        transport: transport,
+        cache: StateCache(),
+        axReadback: MCUChannel.AXReadback(
+            readVolume: { _ in nil },
+            readPan: { _ in nil },
+            readSoloed: { _ in await transport.sentBytes.contains(soloPress) },
+            readArmed: { _ in await transport.sentBytes.contains(armPress) }
+        )
+    )
 
     let panClockwise = await channel.execute(
         operation: "mixer.set_pan",
@@ -404,15 +416,21 @@ private func decodeMCUJSON(_ s: String) -> [String: Any] {
     // not a toggle); the envelope mirrors that decision so callers can audit.
     #expect((obj["enabled"] as? Bool)!)
 
-    // Mute / Solo / Arm honor the inbound enabled flag.
+    // Mute / Solo / Arm honor the inbound enabled flag — and since #1020 they are sets, not
+    // toggles: with no track reading this channel sends nothing and refuses non-terminally,
+    // instead of the old State B behind a press that could have cleared the flag it was asked
+    // to set.
     let mute = await channel.execute(
         operation: "track.set_mute",
         params: ["index": "3", "enabled": "false"]
     )
+    #expect(!mute.isSuccess)
     let muteObj = decodeMCUJSON(mute.message)
     #expect(muteObj["function"] as? String == "mute")
     #expect(!((muteObj["enabled"] as? Bool)!))
-    #expect(muteObj["reason"] as? String == "readback_unavailable")
+    #expect(muteObj["state"] as? String == "C")
+    #expect(muteObj["error"] as? String == "track_state_unreadable")
+    #expect(!((muteObj["write_attempted"] as? Bool)!))
 }
 
 @Test func testSendTransportReturnsHonestContractEnvelope() async {
