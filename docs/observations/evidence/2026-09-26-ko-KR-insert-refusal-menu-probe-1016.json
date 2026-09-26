@@ -1,10 +1,10 @@
 {
   "name": "probe_1016_refusal_leaves_no_menu",
-  "head": "0b945912f1f8b46e8d24f784946031b6cf6e0ae0",
+  "head": "29282c14f5469e21909c5aac0f7ab1e3b625d195",
   "artifact": {
     "path": "<candidate-binary>",
     "sha256": "216304b8e3d3515281a3f56d6cc6faaa352458017828cb21d6a42decf6c51ffd",
-    "built_from": "0b945912f1f8b46e8d24f784946031b6cf6e0ae0",
+    "built_from": "29282c14f5469e21909c5aac0f7ab1e3b625d195",
     "worktree_clean": true,
     "built_from_is_measured": false,
     "artifact_older_than_sources": false
@@ -195,7 +195,7 @@
         },
         "menus_open_after_response": [
           {
-            "id": 9167,
+            "id": 9185,
             "layer": 101,
             "bounds": {
               "X": 738,
@@ -240,7 +240,7 @@
     {
       "kind": "capture",
       "tag": "1016/control-0-mixer-before",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-before.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-before.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -287,7 +287,7 @@
     {
       "kind": "capture",
       "tag": "1016/control-0-mixer-after",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-after.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-after.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -321,8 +321,8 @@
         689
       ],
       "subject": "믹서",
-      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-before.png",
-      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-after.png",
+      "before": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-0-mixer-after.png",
       "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
       "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
       "passed": true
@@ -385,7 +385,7 @@
         },
         "menus_open_after_response": [
           {
-            "id": 9169,
+            "id": 9187,
             "layer": 101,
             "bounds": {
               "X": 738,
@@ -436,7 +436,7 @@
     {
       "kind": "capture",
       "tag": "1016/candidate-0-mixer-before",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-before.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-before.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -483,7 +483,7 @@
     {
       "kind": "capture",
       "tag": "1016/candidate-0-mixer-after",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-after.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-after.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -517,8 +517,8 @@
         689
       ],
       "subject": "믹서",
-      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-before.png",
-      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-after.png",
+      "before": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-0-mixer-after.png",
       "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
       "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
       "passed": true
@@ -622,7 +622,7 @@
     {
       "kind": "capture",
       "tag": "1016/control-1-mixer-before",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-before.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-before.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -669,7 +669,7 @@
     {
       "kind": "capture",
       "tag": "1016/control-1-mixer-after",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-after.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-after.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -703,8 +703,8 @@
         689
       ],
       "subject": "믹서",
-      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-before.png",
-      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-after.png",
+      "before": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-1-mixer-after.png",
       "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
       "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
       "passed": true
@@ -767,7 +767,7 @@
         },
         "menus_open_after_response": [
           {
-            "id": 9173,
+            "id": 9191,
             "layer": 101,
             "bounds": {
               "X": 738,
@@ -818,7 +818,7 @@
     {
       "kind": "capture",
       "tag": "1016/candidate-1-mixer-before",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-before.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-before.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -865,7 +865,7 @@
     {
       "kind": "capture",
       "tag": "1016/candidate-1-mixer-after",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-after.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-after.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -899,8 +899,8 @@
         689
       ],
       "subject": "믹서",
-      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-before.png",
-      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-after.png",
+      "before": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-1-mixer-after.png",
       "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
       "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
       "passed": true
@@ -1004,7 +1004,7 @@
     {
       "kind": "capture",
       "tag": "1016/control-2-mixer-before",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-before.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-before.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -1051,7 +1051,7 @@
     {
       "kind": "capture",
       "tag": "1016/control-2-mixer-after",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-after.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-after.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -1085,8 +1085,8 @@
         689
       ],
       "subject": "믹서",
-      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-before.png",
-      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-after.png",
+      "before": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_control-2-mixer-after.png",
       "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
       "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
       "passed": true
@@ -1149,7 +1149,7 @@
         },
         "menus_open_after_response": [
           {
-            "id": 9177,
+            "id": 9195,
             "layer": 101,
             "bounds": {
               "X": 738,
@@ -1200,7 +1200,7 @@
     {
       "kind": "capture",
       "tag": "1016/candidate-2-mixer-before",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-before.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-before.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -1247,7 +1247,7 @@
     {
       "kind": "capture",
       "tag": "1016/candidate-2-mixer-after",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-after.png",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-after.png",
       "window": {
         "id": 9142,
         "title": "lpm-locale-campaign - 트랙",
@@ -1281,8 +1281,8 @@
         689
       ],
       "subject": "믹서",
-      "before": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-before.png",
-      "after": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-after.png",
+      "before": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-before.png",
+      "after": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__1016_candidate-2-mixer-after.png",
       "expected": "region does not change — the request is refused before any plug-in is chosen, so nothing is inserted",
       "observed": "before fbef972ebc336d4c after fbef972ebc336d4c changed=False",
       "passed": true
@@ -1357,9 +1357,9 @@
     },
     {
       "kind": "recording",
-      "file": "<LPM_EVIDENCE_ROOT>/0b945912f1f8b46e8d24f784946031b6cf6e0ae0/probe_1016_refusal_leaves_no_menu__run.mov",
+      "file": "<LPM_EVIDENCE_ROOT>/29282c14f5469e21909c5aac0f7ab1e3b625d195/probe_1016_refusal_leaves_no_menu__run.mov",
       "exists": true,
-      "bytes": 140630851
+      "bytes": 228411705
     },
     {
       "kind": "check",
@@ -1373,7 +1373,7 @@
             "menu_failure": "leaf_not_offered_by_this_strip",
             "menus": [
               {
-                "id": 9169,
+                "id": 9187,
                 "layer": 101,
                 "bounds": {
                   "X": 738,
@@ -1388,7 +1388,7 @@
             "menu_failure": "leaf_not_offered_by_this_strip",
             "menus": [
               {
-                "id": 9173,
+                "id": 9191,
                 "layer": 101,
                 "bounds": {
                   "X": 738,
@@ -1403,7 +1403,7 @@
             "menu_failure": "leaf_not_offered_by_this_strip",
             "menus": [
               {
-                "id": 9177,
+                "id": 9195,
                 "layer": 101,
                 "bounds": {
                   "X": 738,
