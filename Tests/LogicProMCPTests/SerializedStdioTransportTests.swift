@@ -57,7 +57,10 @@ struct SerializedStdioTransportTests {
         // Wait for the reader to hit EOF (async-safe poll — no semaphore.wait).
         for _ in 0..<600 where !collected.isDone { try await Task.sleep(nanoseconds: 5_000_000) }
         #expect(collected.isDone)
-        close(readEnd)
+        // A reader that has not reached EOF may still read this number, and closing it under the
+        // reader hands the number to whatever this process opens next (#995, the #947 class). So the
+        // read end closes only after the reader finished, and is leaked otherwise.
+        if collected.isDone { close(readEnd) }
 
         let all = collected.snapshot()
         let lines = all.split(separator: UInt8(ascii: "\n")).filter { !$0.isEmpty }
@@ -139,7 +142,8 @@ struct SerializedStdioTransportTests {
         close(writeEnd)
         for _ in 0..<600 where !collected.isDone { try await Task.sleep(nanoseconds: 5_000_000) }
         #expect(collected.isDone)
-        close(readEnd)
+        // Closed only after the reader finished, as in `concurrentSendsAreAtomic` (#995).
+        if collected.isDone { close(readEnd) }
 
         let lines = collected.snapshot().split(separator: UInt8(ascii: "\n")).filter { !$0.isEmpty }
         #expect(lines.count == frames.count)

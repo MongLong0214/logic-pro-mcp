@@ -155,18 +155,28 @@ def _apple_ships(canon, text: str):
 
     The same walk `locale_labels._apple_ships` does, and for the same reason: a string present in
     ANY locale's corpus is Apple's, whatever script it is written in.
+
+    Only a pinned string comparison says a corpus holds it (#992). A 32-bit prefix match nobody
+    compared is returned marked `unconfirmed`, so the literal is still refused -- the direction
+    that asks for work -- and the refusal names the command that settles a collision.
     """
     manifest = canon.load_manifest()
+    unconfirmed = None
     for source, block in (manifest.get("sources") or {}).items():
         for locale in (block.get("locales") or []):
             if locale == "-":
                 continue
             try:
-                if not canon.is_absent(source, locale, text):
-                    return f"{source}/{locale}"
+                verdict = canon.presence(source, locale, text)
             except canon.CanonError:
                 continue
-    return None
+            if verdict == canon.SHIPS:
+                return f"{source}/{locale}"
+            if verdict == canon.UNCONFIRMED and unconfirmed is None:
+                unconfirmed = (f"{source}/{locale} unconfirmed: its 32-bit prefix matches and "
+                               f"nobody compared the string; `Scripts/logic_canon.py confirm` "
+                               f"settles it")
+    return unconfirmed
 
 
 def translated_offenders() -> tuple:
@@ -217,7 +227,9 @@ def translated_offenders() -> tuple:
                 locale = _apple_ships(canon, text)
                 if locale:
                     problems.append(
-                        f"{name}:{number}: {text!r} is a value Apple ships ({locale})")
+                        f"{name}:{number}: {text!r} is a value Apple ships ({locale})"
+                        if "unconfirmed" not in locale else
+                        f"{name}:{number}: {text!r} may be a value Apple ships ({locale})")
     return problems, None
 
 

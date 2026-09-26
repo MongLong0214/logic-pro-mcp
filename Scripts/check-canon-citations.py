@@ -587,11 +587,22 @@ def check_not_applicable(rel: str, record: dict, manifest: dict, failures: list)
     for text in _observation_strings(record):
         for source, locale in corpora:
             try:
-                if not canon.is_absent(source, locale, text):
+                # A 32-bit prefix match is not a string Logic ships (#992). A pinned comparison
+                # that found a collision lets the declaration stand; one nobody ran still refuses,
+                # and says how to settle it.
+                verdict = canon.presence(source, locale, text)
+                if verdict == canon.SHIPS:
                     failures.append(
                         f"{rel}: declares the canon axis does not apply, and its readings contain "
                         f"{text[:60]!r}, which resolves in {source}/{locale}. A citation was "
                         f"available, so the declaration is false.")
+                    return
+                if verdict == canon.UNCONFIRMED:
+                    failures.append(
+                        f"{rel}: declares the canon axis does not apply, and its readings contain "
+                        f"{text[:60]!r}, whose 32-bit prefix is in {source}/{locale}. Logic ships "
+                        f"it, or it collides with a value Logic ships; run `Scripts/logic_canon.py "
+                        f"confirm {text[:60]!r}` on a machine with Logic to pin which.")
                     return
                 if canon.differs_only_by_decoration(source, locale, text):
                     # Same reason as the `canon_absent` rule below: exact absence is not absence
@@ -866,10 +877,19 @@ def check_record(path: str, failures: list, without_canon: set, manifest: dict,
             # corpus that happened not to hold the string.
             for source, corpus_locale in sorted(searched):
                 try:
-                    if not canon.is_absent(source, corpus_locale, text):
+                    verdict = canon.presence(source, corpus_locale, text)
+                    if verdict == canon.SHIPS:
                         failures.append(
                             f"{where}: {text!r} is PRESENT in {source}/{corpus_locale}. It can be "
                             f"cited, so it must be, and a measurement is not the only route to it.")
+                    elif verdict == canon.UNCONFIRMED:
+                        # Not proof of presence (#992), and not an absence either: the claim is
+                        # held until a string comparison pins which.
+                        failures.append(
+                            f"{where}: {text!r} has its 32-bit prefix in {source}/{corpus_locale}. "
+                            f"Logic ships it, or it collides with a value Logic ships; run "
+                            f"`Scripts/logic_canon.py confirm {text!r}` on a machine with Logic "
+                            f"to pin which.")
                     elif (canon.differs_only_by_decoration(source, corpus_locale, text)
                           and not folded_is_cited):
                         # Absent AS BYTES, and a shipped label folds to it -- a colon, an ellipsis,
@@ -1303,7 +1323,8 @@ def check_exceptions_state_no_fact(failures: list) -> None:
             failures.append(
                 f"{rel} is excepted from the Logic-facing prefixes and quotes "
                 f"{len(quoted)} string(s) the pinned corpus holds, first {quoted[0][:40]!r}. "
-                f"Quoting a value Logic ships is stating a fact about Logic.")
+                f"Quoting a value Logic ships is stating a fact about Logic. (A 32-bit prefix "
+                f"that only collides is settled by `Scripts/logic_canon.py confirm`.)")
 
 
 def logic_facing(changed):
@@ -1585,7 +1606,8 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
                     f"{label}: says {NO_FACT_OPT_OUT!r} and quotes {len(quoted)} string(s) the "
                     f"corpus holds, first {quoted[0][:50]!r}.\n"
                     f"  A body that quotes a string Logic ships is stating a fact about Logic. "
-                    f"Cite it."))])
+                    f"Cite it. (A 32-bit prefix that only collides is settled by "
+                    f"`Scripts/logic_canon.py confirm`.)"))])
             return Diagnosis(SATISFIED)
         # WHICH of the two is wrong decides what to say. A declaration typed into a code block or
         # an HTML comment is a contributor who followed the instruction and got the rendering
@@ -1754,7 +1776,10 @@ def _citable_strings_in(body: str, strict: bool = False) -> list:
             continue
         for source, locale in corpora:
             try:
-                if not canon.is_absent(source, locale, text):
+                # A pinned comparison that found a collision is not a quote of Logic (#992). A
+                # prefix match nobody compared still counts: it is the body's author who can
+                # settle it, with `Scripts/logic_canon.py confirm`.
+                if canon.presence(source, locale, text) != canon.ABSENT:
                     found.append(text)
                     break
             except canon.CanonError as exc:
@@ -1959,6 +1984,8 @@ def main() -> int:
     failures.extend(canon.verify_artifacts(manifest))
     failures.extend(canon.verify_absence_counts(manifest))
     failures.extend(canon.verify_ledger_counts(manifest))
+    failures.extend(canon.verify_derived_counts(manifest))
+    failures.extend(canon.verify_presence_ledger(manifest))
     failures.extend(canon.verify_index_against_absence())
     check_build_agrees_with_the_ledger(manifest, failures)
     check_waivers_only_shrink(failures)

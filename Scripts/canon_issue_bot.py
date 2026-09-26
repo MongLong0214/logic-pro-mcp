@@ -158,16 +158,41 @@ def state_of(body: str):
     return None
 
 
+#: The whole note the workflow before #959 posted, minus the checker output it pasted between
+#: these two halves. It carried no marker, so a body repaired after it never withdrew it and a
+#: body edited again got a second one. Matched exactly, and only from the bot's own account: a
+#: contributor quoting that text keeps their comment, as with the marker.
+LEGACY_HEAD = (
+    "This issue states something about Logic without citing Logic's own data, or\n"
+    "cites it in a form that does not resolve. See `docs/canon/README.md`.\n\n```\n")
+LEGACY_TAIL = (
+    "\n```\n\nNothing is blocked -- an issue has no merge to stop. This is a note for whoever\n"
+    "triages it.\n")
+
+
+def _ours(comment: dict, expected_login: str) -> bool:
+    user = comment.get("user") or {}
+    return user.get("login") == expected_login and user.get("type") == "Bot"
+
+
 def owned(comment: dict, expected_login: str) -> bool:
     """Whether this workflow wrote that comment.
 
     BOTH the marker and the identity. The marker says what the comment is for; the identity says
     who wrote it. A contributor who pastes the marker into their own comment keeps their comment.
     """
-    user = comment.get("user") or {}
-    if user.get("login") != expected_login or user.get("type") != "Bot":
+    if not _ours(comment, expected_login):
         return False
     return state_of(comment.get("body") or "") is not None
+
+
+def legacy(comment: dict, expected_login: str) -> bool:
+    """Whether this is an unmarked note the workflow before #959 wrote, in its exact format."""
+    if not _ours(comment, expected_login):
+        return False
+    body = comment.get("body") or ""
+    return (MARKER not in body and body.startswith(LEGACY_HEAD) and body.endswith(LEGACY_TAIL)
+            and len(body) >= len(LEGACY_HEAD) + len(LEGACY_TAIL))
 
 
 def decide(category: str, rendered: str, note):
@@ -186,6 +211,8 @@ def decide(category: str, rendered: str, note):
 
     if (note.get("body") or "") == rendered:
         return "none", "the note already says exactly this"
+    if state_of(note.get("body") or "") is None:
+        return "edit", f"the pre-#959 note is adopted and moves to {state_of(rendered)}"
     return "edit", f"the note moves to {state_of(rendered)}"
 
 
@@ -334,9 +361,15 @@ def active_note(comments: list, expected_login: str):
     Deterministic by comment id, so two runs that race pick the same one. Unowned comments are
     never touched, and an owned note already marked superseded is left alone -- otherwise this
     would rewrite the same comments on every run.
+
+    A pre-#959 note is a candidate too, after every managed one: an issue that already has a
+    managed note keeps it and the old notes are superseded, and an issue with only old notes has
+    its oldest adopted. Otherwise a repaired body left the old warning standing and a failing edit
+    added a managed note beside it.
     """
     ours = sorted((c for c in comments if owned(c, expected_login)), key=lambda c: c["id"])
     live = [c for c in ours if state_of(c["body"]) != SUPERSEDED]
+    live += sorted((c for c in comments if legacy(c, expected_login)), key=lambda c: c["id"])
     if not live:
         return None, []
     return live[0], live[1:]

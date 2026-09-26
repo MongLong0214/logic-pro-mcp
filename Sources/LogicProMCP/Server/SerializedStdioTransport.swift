@@ -50,11 +50,25 @@ actor SerializedStdioTransport: Transport {
     /// write on this serial queue (#683).
     private let writeDeadline: TimeInterval
 
+    /// Where this transport reports a frame still being written at its deadline. Injectable so a
+    /// test can observe the report without redirecting the process's stderr: a test that dup2s over
+    /// `STDERR_FILENO` changes it for every other test running beside it, and the claim being checked
+    /// ("ordinary traffic writes no stall line") is about whether the report HAPPENED, not about
+    /// which file it landed in.
+    ///
+    /// Per instance, not a process-wide static. The static version was a sink every test replaced
+    /// and restored on return, so two tests running at once took each other's reports: one restored
+    /// the stderr sink while the other was still waiting for its report (#1003).
+    private let reportMidFrameStall: @Sendable (Int, TimeInterval) -> Void
+
     init(input: Int32 = STDIN_FILENO, output: Int32 = STDOUT_FILENO, logger: Logger? = nil,
-         writeDeadline: TimeInterval = 30) {
+         writeDeadline: TimeInterval = 30,
+         reportMidFrameStall: @escaping @Sendable (Int, TimeInterval) -> Void
+            = SerializedStdioTransport.reportMidFrameStallToStderr) {
         self.inputFD = input
         self.outputFD = output
         self.writeDeadline = writeDeadline
+        self.reportMidFrameStall = reportMidFrameStall
         self.logger = logger ?? Logger(label: "logic-pro-mcp.serialized-stdio") { _ in
             SwiftLogNoOpLogHandler()
         }
@@ -155,24 +169,12 @@ actor SerializedStdioTransport: Transport {
         }
     }
 
-    /// Where the mid-frame stall report goes. Replaceable so a test can observe it without
-    /// redirecting the process's stderr — a test that dup2s over `STDERR_FILENO` changes it for
-    /// every other test running beside it, and the claim being checked ("ordinary traffic writes no
-    /// stall line") is about whether the report HAPPENED, not about which file it landed in.
-    /// Guarded, because the watchdog reads it from a global queue while a test may be replacing it.
-    /// An unsynchronised `nonisolated(unsafe) var` raced on both sides: a report could be charged to
-    /// whichever sink happened to be installed. Found by review 2026-09-09.
-    private static let stallReportLock = NSLock()
-    nonisolated(unsafe) private static var stallReporter: @Sendable (Int, TimeInterval) -> Void = {
-        bytes, seconds in
+    /// Where the mid-frame stall report goes unless a caller supplies another sink: one line on
+    /// stderr, which is the operator's channel while stdout carries the protocol.
+    static let reportMidFrameStallToStderr: @Sendable (Int, TimeInterval) -> Void = { bytes, seconds in
         let line = "[stdio] a \(bytes)-byte frame has been writing for more than "
             + "\(String(format: "%.1f", seconds))s; the reader is stalling mid-frame\n"
         FileHandle.standardError.write(Data(line.utf8))
-    }
-
-    static var reportMidFrameStall: @Sendable (Int, TimeInterval) -> Void {
-        get { stallReportLock.lock(); defer { stallReportLock.unlock() }; return stallReporter }
-        set { stallReportLock.lock(); stallReporter = newValue; stallReportLock.unlock() }
     }
 
     func send(_ data: Data) async throws {
@@ -181,6 +183,7 @@ actor SerializedStdioTransport: Transport {
         let frame = mutableFrame  // immutable snapshot ⇒ compiler-provable Sendable capture
         let fd = outputFD
         let deadline = writeDeadline
+        let report = reportMidFrameStall
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Swift.Error>) in
             // Serial queue + blocking write ⇒ each frame is flushed atomically,
             // start-to-finish, before the next send's bytes touch the fd.
@@ -211,7 +214,7 @@ actor SerializedStdioTransport: Transport {
                 // seconds of retained work items and captured frames on a busy server, growing with
                 // throughput. A `DispatchWorkItem` is cancelled the moment the write returns.
                 let watchdog = DispatchWorkItem {
-                    SerializedStdioTransport.reportMidFrameStall(frame.count, deadline)
+                    report(frame.count, deadline)
                 }
                 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + deadline,
                                                                execute: watchdog)

@@ -34,7 +34,6 @@ struct SerializedStdioTransportStallTests {
     @Test("a reader that stopped draining is OutputStalled, and the suite does not hang")
     func aStalledReaderIsReportedRatherThanWaitedOnForever() {
         let p = Self.fullPipe()
-        defer { close(p.read); close(p.write) }
         let transport = SerializedStdioTransport(input: p.read, output: p.write, writeDeadline: 0.2)
 
         // The send is raced against a bound. Without one, DELETING the deadline does not fail this
@@ -55,6 +54,15 @@ struct SerializedStdioTransportStallTests {
             }
         }
         #expect(outcome == "stalled")
+
+        // The transport's queued block polls and writes the descriptor number it captured, and it is
+        // done with that number only once `send` has returned. When the bound fires first the block
+        // may not even have started, and closing the pipe then hands the number to whatever this
+        // process opens next: a regular file polls writable, so the frame lands in it (#995). So the
+        // pipe closes only after `send` returned, and is leaked otherwise.
+        guard outcome != "unbounded" else { return }
+        close(p.read)
+        close(p.write)
     }
 
     /// Runs `body` and answers `"unbounded"` if it has not finished within `seconds`.
@@ -144,13 +152,22 @@ struct SerializedStdioTransportStallTests {
     /// first thing that opens a file takes the number back and the test then measures a live fd.
     /// That is how the first version of this case failed — it reported a stall on a descriptor that
     /// had already been recycled.
+    ///
+    /// Calling it directly is not enough on its own, because the other tests in this process run in
+    /// parallel and open descriptors of their own: one of them can take the number between the
+    /// `close` and the `poll`, which then answers ready (#995, measured on main at load). So the
+    /// number closed here is the process's highest. Descriptors are handed out lowest-free first,
+    /// and a concurrent opener reaches the top only when every number below it is in use.
     @Test("a closed descriptor is EBADF through POLLNVAL, not a stall")
-    func aClosedDescriptorIsEBADFThroughPOLLNVAL() {
+    func aClosedDescriptorIsEBADFThroughPOLLNVAL() throws {
         var fds: [Int32] = [0, 0]
         #expect(pipe(&fds) == 0)
-        let closed = fds[1]
+        let top = getdtablesize() - 1
+        let closed = fcntl(fds[1], F_DUPFD, top)
         close(fds[0])
         close(fds[1])
+        try #require(closed == top, "the highest descriptor number was already in use")
+        close(closed)
         let verdict = SerializedStdioTransport.waitUntilWritable(closed, deadline: 0.2)
         #expect(verdict == .failed(EBADF))
     }
@@ -242,11 +259,12 @@ struct SerializedStdioTransportStallTests {
     func ordinaryTrafficIsUnaffected() async throws {
         var fds: [Int32] = [0, 0]
         #expect(pipe(&fds) == 0)
-        defer { close(fds[0]); close(fds[1]) }
         // Immutable copies: the closures below run concurrently and cannot capture the `var`.
         let readEnd = fds[0]
         let writeEnd = fds[1]
+        let readerReturned = Counter()
         let drained = Thread {
+            defer { readerReturned.bump() }
             var buf = [UInt8](repeating: 0, count: 65536)
             while true {
                 let n = buf.withUnsafeMutableBytes { Darwin.read(readEnd, $0.baseAddress, $0.count) }
@@ -255,15 +273,29 @@ struct SerializedStdioTransportStallTests {
         }
         drained.start()
         let reports = Counter()
-        let original = SerializedStdioTransport.reportMidFrameStall
-        SerializedStdioTransport.reportMidFrameStall = { _, _ in reports.bump() }
-        defer { SerializedStdioTransport.reportMidFrameStall = original }
-
-        let transport = SerializedStdioTransport(input: STDIN_FILENO, output: writeEnd, writeDeadline: 5)
-        for i in 0..<200 {
-            try await transport.send(Data(String(repeating: "\(i % 10)", count: 4096).utf8))
+        let transport = SerializedStdioTransport(
+            input: STDIN_FILENO, output: writeEnd, writeDeadline: 5,
+            reportMidFrameStall: { _, _ in reports.bump() }
+        )
+        var failure: (any Error)?
+        do {
+            for i in 0..<200 {
+                try await transport.send(Data(String(repeating: "\(i % 10)", count: 4096).utf8))
+            }
+        } catch {
+            failure = error
         }
         #expect(reports.value == 0)
+
+        // The reader may still be draining the last frames when the sends return, and closing the
+        // read end under it hands the number to whatever this process opens next (#995, the #947
+        // class). The write end is free once the last send has returned, by throwing or not; closing
+        // it gives the reader its EOF, and the read end closes after the reader has returned. If it
+        // does not return, the read end is leaked.
+        close(writeEnd)
+        for _ in 0..<600 where readerReturned.value == 0 { try await Task.sleep(nanoseconds: 5_000_000) }
+        if readerReturned.value == 1 { close(readEnd) }
+        if let failure { throw failure }
     }
 
     /// The watchdog's own case: a write that is still going when the deadline passes reports WHILE
@@ -274,21 +306,21 @@ struct SerializedStdioTransportStallTests {
     func theMidFrameWatchdogFiresDuringTheStall() {
         var fds: [Int32] = [0, 0]
         #expect(pipe(&fds) == 0)
-        defer { close(fds[0]); close(fds[1]) }
         let readEnd = fds[0]
 
         // The report has to arrive WHILE the write is stuck. Counting it after `send` returns is
         // satisfied by an implementation that reports afterwards — which is the shape this replaced,
         // so the test would not have told the two apart. The sink signals, and the test waits for
         // that signal BEFORE the send completes. Found by review 2026-09-09.
+        // The sink belongs to this transport. A process-wide sink swapped per test lost this
+        // report whenever the test above restored stderr while this one waited (#1003).
         let reported = DispatchSemaphore(value: 0)
-        let original = SerializedStdioTransport.reportMidFrameStall
-        SerializedStdioTransport.reportMidFrameStall = { _, _ in reported.signal() }
-        defer { SerializedStdioTransport.reportMidFrameStall = original }
 
         // A reader that sleeps first, so the write blocks mid-frame past the deadline and then
         // completes. 256KB is comfortably past a pipe buffer.
+        let readerReturned = DispatchSemaphore(value: 0)
         let late = Thread {
+            defer { readerReturned.signal() }
             Thread.sleep(forTimeInterval: 3.0)
             var buf = [UInt8](repeating: 0, count: 65536)
             while true {
@@ -298,7 +330,10 @@ struct SerializedStdioTransportStallTests {
         }
         late.start()
 
-        let transport = SerializedStdioTransport(input: STDIN_FILENO, output: fds[1], writeDeadline: 0.3)
+        let transport = SerializedStdioTransport(
+            input: STDIN_FILENO, output: fds[1], writeDeadline: 0.3,
+            reportMidFrameStall: { _, _ in reported.signal() }
+        )
         let sent = DispatchSemaphore(value: 0)
         Task.detached {
             try? await transport.send(Data(String(repeating: "z", count: 262_144).utf8))
@@ -307,7 +342,18 @@ struct SerializedStdioTransportStallTests {
         // The reader wakes at 3s; a report seen before then happened while the write was blocked.
         #expect(reported.wait(timeout: .now() + 2.0) == .success,
                 "no stall report arrived while the write was still blocked")
-        #expect(sent.wait(timeout: .now() + 10.0) == .success, "the frame never completed")
+        let frameCompleted = sent.wait(timeout: .now() + 10.0) == .success
+        #expect(frameCompleted, "the frame never completed")
+
+        // Each end has a late user: the transport's queued write holds the write end until `send`
+        // returns, and the reader thread reads the read end until it sees EOF. Closing either under
+        // its user hands the number to whatever this process opens next (#995, the #947 class). The
+        // write end closes once the frame is out, which gives the reader its EOF; the read end closes
+        // once the reader has returned. An end whose user may still come back is leaked.
+        guard frameCompleted else { return }
+        close(fds[1])
+        guard readerReturned.wait(timeout: .now() + 10.0) == .success else { return }
+        close(fds[0])
     }
 
     /// Criterion 3 of the ticket, which had no test. After a frame is refused, what reached the pipe
