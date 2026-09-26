@@ -463,6 +463,140 @@ extension AXLogicProElements {
         slotDescription(in: strip, matching: AXLocalePolicy.inputSlotHelpKeyword, runtime: runtime)
     }
 
+    // MARK: - Send slots (#291 R1)
+
+    /// Each send slot on a channel strip and whether it is OCCUPIED, or `nil` when the strip's
+    /// descendants could not be read.
+    ///
+    /// Measured 2026-09-13 on Logic 12.3 (6674), en
+    /// (`docs/observations/2026-09-13-the-send-slot-menu-does-not-mark-its-assignment-but-an-assigned-send-grows-a-level-knob.json`):
+    /// an empty send slot is an `AXButton` whose help begins `Send slot.` and which names no
+    /// destination anywhere; an ASSIGNED send adds an `AXSlider` described `send knob` whose help
+    /// begins `Send Level knob.`, and it appears immediately after its button in the pre-order walk
+    /// `findAllDescendants` makes. The slot's own menu still marked `No Send` while the send
+    /// existed, so the knob is the only evidence of occupancy this tree offers — and the
+    /// destination is not in it. Every occupied slot therefore reads
+    /// `occupiedUnknownDestination`; `occupiedKnownDestination` is declared so a later reader can
+    /// tell the two apart and is produced by nothing here.
+    ///
+    /// Occupancy is decided by the PRESENCE of that knob, never by its level: a send at minus
+    /// infinity or under automation is still a send. `levelRaw` is the knob's `AXValue` when it is
+    /// a finite number and `levelDescription` its `AXValueDescription` when readable; neither
+    /// decides anything.
+    ///
+    /// Three answers are kept apart. `nil`: a children read at or below the strip failed with a
+    /// status that is not an answer (-25205 and -25212 are answers and read as no children). `[]`:
+    /// the walk completed and met no send-slot button. `.unreadable` on one slot: its button
+    /// matched but the element after it would not say its role or help, so whether a knob follows
+    /// is unknown for that slot alone; the slot keeps its ordinal so the next is not renumbered.
+    ///
+    /// The ordinal is the index among send-slot buttons in this walk — the same pre-order, the
+    /// same depth, as `slotDescription` — and not a slot number Logic assigns. A button whose own
+    /// role or help does not read is passed over exactly as the output reader passes it over; the
+    /// status-preserving reads are spent on the SUCCESSOR, where a failed read would otherwise be
+    /// filed as "no knob, so empty".
+    static func sendSlotObservations(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> [SendSlotObservation]? {
+        guard let elements = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else {
+            return nil
+        }
+        var observations: [SendSlotObservation] = []
+        for (index, element) in elements.enumerated() {
+            guard AXHelpers.getRole(element, runtime: runtime) == (kAXButtonRole as String) else {
+                continue
+            }
+            let help = AXHelpers.getHelp(element, runtime: runtime) ?? ""
+            guard AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: help.lowercased()) else {
+                continue
+            }
+            let successor = index + 1 < elements.count ? elements[index + 1] : nil
+            observations.append(
+                sendSlotObservation(ordinal: observations.count, following: successor, runtime: runtime)
+            )
+        }
+        return observations
+    }
+
+    /// One slot's reading from the element that follows its button, if any.
+    private static func sendSlotObservation(
+        ordinal: Int,
+        following successor: AXUIElement?,
+        runtime: AXHelpers.Runtime
+    ) -> SendSlotObservation {
+        guard let successor else {
+            return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
+        }
+        let role: Result<String?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(successor, kAXRoleAttribute as String, runtime: runtime)
+        switch role {
+        case let .failure(error) where !error.isDefinitiveAbsence:
+            return SendSlotObservation(ordinal: ordinal, state: .unreadable)
+        case .failure:
+            return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
+        case let .success(value):
+            guard value == (kAXSliderRole as String) else {
+                return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
+            }
+        }
+        let help: Result<String?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(successor, kAXHelpAttribute as String, runtime: runtime)
+        switch help {
+        case let .failure(error) where !error.isDefinitiveAbsence:
+            return SendSlotObservation(ordinal: ordinal, state: .unreadable)
+        case .failure:
+            return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
+        case let .success(value):
+            guard AXLocalePolicy.sendLevelKnobHelpKeyword.containsAny(in: (value ?? "").lowercased()) else {
+                return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
+            }
+        }
+        // From here the slot IS occupied. The level is carried when it can be, and a failed or
+        // non-numeric or non-finite read of it changes nothing above.
+        var levelRaw: Double?
+        let value: Result<AnyObject?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(successor, kAXValueAttribute as String, runtime: runtime)
+        if case let .success(raw) = value, let number = raw as? NSNumber, number.doubleValue.isFinite {
+            levelRaw = number.doubleValue
+        }
+        var levelDescription: String?
+        let description: Result<String?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(successor, kAXValueDescriptionAttribute as String, runtime: runtime)
+        if case let .success(text) = description, let text, !text.isEmpty {
+            levelDescription = text
+        }
+        return SendSlotObservation(
+            ordinal: ordinal,
+            state: .occupiedUnknownDestination,
+            levelRaw: levelRaw,
+            levelDescription: levelDescription
+        )
+    }
+
+    /// Every descendant of `element` to `maxDepth`, in the order `AXHelpers.findAllDescendants`
+    /// visits them, or `nil` when a children read at any level failed with a status that is not an
+    /// answer. The one way this differs from the output reader's walk: that one flattens a failed
+    /// read into "no children", which is the absence-as-claim an absent `send_slots` exists to
+    /// refuse.
+    private static func preOrderDescendants(
+        of element: AXUIElement,
+        maxDepth: Int,
+        runtime: AXHelpers.Runtime
+    ) -> [AXUIElement]? {
+        guard maxDepth > 0 else { return [] }
+        guard let children = childrenIfRead(element, runtime: runtime) else { return nil }
+        var visited: [AXUIElement] = []
+        for child in children {
+            visited.append(child)
+            guard let below = preOrderDescendants(of: child, maxDepth: maxDepth - 1, runtime: runtime) else {
+                return nil
+            }
+            visited.append(contentsOf: below)
+        }
+        return visited
+    }
+
     /// The leading sentence of every direct child's `AXHelp` on a channel strip, or `nil` when the
     /// child list could not be read (#766).
     ///

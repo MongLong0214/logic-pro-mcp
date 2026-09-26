@@ -2477,10 +2477,23 @@ enum AXLocalePolicy {
     /// Until that reading existed the list was empty and this reader returned nil on every strip of
     /// a Korean Logic. `live_291_output_slot_is_read` is what surfaced it: the product published no
     /// output while a second instrument read four off the same screen.
+    ///
+    /// Widened on 2026-09-27 (#291 R1) to every locale Logic ships by DERIVATION: the help's first
+    /// sentence is the Title of QuickHelp row `INS_014_OutputSlot`, and Apple pins that row in all
+    /// ten languages. Italian, Portuguese and Traditional Chinese keep the English title, so six
+    /// members cover ten. Apple's French value carries a trailing space; the match is a substring,
+    /// so it is stored without one. The Korean member stays the 2026-09-04 live reading, which is
+    /// also the row's value; the other eight are Apple's bytes and have not been watched on a
+    /// running Logic in those languages yet.
     static let outputSlotHelpKeyword = LabelSet(
         canonical: "output slot",
-        variants: ["출력 슬롯"],
+        variants: ["출력 슬롯", "出力スロット", "Output-Slot", "Ranura de salida", "Slot de sortie",
+                   "输出插槽"],
         rationale: "Detects a channel strip's output slot by its AXHelp string; read-only classifier."
+            + " Widened on 2026-09-27 to every locale Logic ships by reading the QuickHelp row whose"
+            + " Title is the help's first sentence; it, pt and zh_TW keep the English title, so six"
+            + " members cover ten languages. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_014_OutputSlot#Title"
     )
 
     /// Identifies a channel strip's INPUT slot by its AXHelp string (#291).
@@ -2501,10 +2514,145 @@ enum AXLocalePolicy {
     /// button's help reads `입력 모니터링 버튼. 녹음 활성화가 되지 않은…`, which shares its first word
     /// with `입력 슬롯` exactly as `Input Monitoring` shares one with `Input slot`. Matching the full
     /// phrase rather than the word is what keeps the toggle from being published as a source.
+    ///
+    /// Widened on 2026-09-27 (#291 R1) from QuickHelp row `INS_012_InputSlot`, the same way and with
+    /// the same three English-keeping locales as the output slot. The neighbour hazard above holds
+    /// in every language the row was read for as far as the title goes: `Output-Slot` does not
+    /// contain `Input-Slot`, `Ranura de salida` does not contain `Ranura de entrada`; whether each
+    /// locale's Input Monitoring help shares more than its first word is unmeasured outside en/ko.
     static let inputSlotHelpKeyword = LabelSet(
         canonical: "input slot",
-        variants: ["입력 슬롯"],
+        variants: ["입력 슬롯", "入力スロット", "Input-Slot", "Ranura de entrada", "Slot d’entrée",
+                   "输入插槽"],
         rationale: "Detects a channel strip's input slot by its AXHelp string; read-only classifier."
+            + " Widened on 2026-09-27 to every locale Logic ships by reading the QuickHelp row whose"
+            + " Title is the help's first sentence; it, pt and zh_TW keep the English title."
+            + " Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_012_InputSlot#Title"
+    )
+
+    /// Identifies a channel strip's SEND slot by its AXHelp string (#291 R1).
+    ///
+    /// Measured 2026-09-13 on Logic 12.3 (6674), en: an `AXButton` whose help begins `Send slot.`
+    /// and which is described only as `send button`. Empty or assigned, it names no destination in
+    /// any attribute, and its own menu marked `No Send` while a send existed on it — so this set
+    /// finds the SLOT and nothing about it says where the send goes. What says whether a send is
+    /// there at all is the knob the next set identifies.
+    ///
+    /// Ten locales by derivation from QuickHelp row `INS_010_SendSlot`; it, pt and zh_TW keep the
+    /// English title. Only the English rendering has been watched live.
+    static let sendSlotHelpKeyword = LabelSet(
+        canonical: "Send slot",
+        variants: ["센드 슬롯", "センドスロット", "Send-Slot", "Ranura de envío", "Slot d’envoi",
+                   "发送插槽"],
+        rationale: "Detects a channel strip's send slot by its AXHelp string; read-only classifier."
+            + " Ten locales derived on 2026-09-27 from the QuickHelp row whose Title is the help's"
+            + " first sentence. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_010_SendSlot#Title"
+    )
+
+    /// Identifies the level knob Logic grows beside an ASSIGNED send (#291 R1).
+    ///
+    /// Measured 2026-09-13 on Logic 12.3 (6674), en: before a send is assigned the strip has no
+    /// such element; after one is, an `AXSlider` described `send knob` whose help begins `Send
+    /// Level knob.` appears immediately after the slot's button in pre-order. Its presence is the
+    /// only evidence of occupancy the tree offers; its VALUE decides nothing, because a send at
+    /// minus infinity or under automation is still a send.
+    ///
+    /// Ten locales by derivation from QuickHelp row `INS_011_SendLevelKnob`; it, pt and zh_TW keep
+    /// the English title. The Spanish and Simplified Chinese titles carry Apple's typographic
+    /// quotes, which are part of the string and stored as such.
+    static let sendLevelKnobHelpKeyword = LabelSet(
+        canonical: "Send Level knob",
+        variants: ["센드 레벨 노브", "センドレベルノブ", "Send-Drehregler", "Botón “Nivel de envío”",
+                   "Potentiomètre Niveau d’envoi", "“发送电平”旋钮"],
+        rationale: "Detects the send level knob that appears beside an assigned send; read-only"
+            + " classifier of send-slot occupancy. Ten locales derived on 2026-09-27 from the"
+            + " QuickHelp row whose Title is the help's first sentence. Checked offline by"
+            + " Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_011_SendLevelKnob#Title"
+    )
+
+    /// The output slot's description when the strip goes to the main output (#291 R1).
+    ///
+    /// Measured en 2026-09-04 and ko-KR the same day: the ko slot was described `Stereo Output` in
+    /// English while its help was Korean. That is not a gap in the reading — Apple's own row leaves
+    /// the value in English for ko and ja and translates it for the other seven, which is exactly
+    /// what this set carries. Matched whole (`.exact`), never as a prefix: `Output` alone is the
+    /// PHYSICAL prefix below, and `Stereo Output` must not classify as one.
+    static let stereoOutputLabel = LabelSet(
+        canonical: "Stereo Output",
+        variants: ["Stereo-Ausgabe", "Salida estéreo", "Sortie stéréo", "Uscita stereo", "Saída Estéreo",
+                   "立体声输出", "立體聲輸出"],
+        rationale: "Classifies an output slot description as the main stereo output; read-only"
+            + " classifier consumed by the routing graph. Ten locales derived on 2026-09-27 from"
+            + " Apple's row, which keeps English for ko and ja. Checked offline by"
+            + " Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Stereo%20Output#value"
+    )
+
+    /// The output slot's description when the strip is routed nowhere (#291 R1).
+    ///
+    /// Measured en 2026-09-11 on the output experiment: `No Output` is a real destination Logic
+    /// draws, and a strip left there has no output menu to recover through — which is why this is
+    /// an OBSERVED state and not the absence of one. Four of Apple's tables carry this string and
+    /// all four agree in every one of the ten languages; MAMixer's row is cited because the slot is
+    /// the Mixer's, and no member would change under any of the other three.
+    static let noOutputLabel = LabelSet(
+        canonical: "no output",
+        variants: ["출력 없음", "出力なし", "Kein Ausgang", "Sin salida", "Pas de sortie", "Nessuna uscita",
+                   "Sem Saída", "没有输出", "沒有輸出"],
+        rationale: "Classifies an output slot description as routed to no output; read-only"
+            + " classifier consumed by the routing graph. Ten locales derived on 2026-09-27 from"
+            + " Apple's row; the four tables carrying this string agree in every locale. Checked"
+            + " offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMixer.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/No%20Output#value"
+    )
+
+    /// The word an output slot's description BEGINS with when the strip goes to a bus (#291 R1).
+    ///
+    /// Logic composes the label from the template `Bus %d` in the same table as the cited row, and
+    /// that template's prefix is this row's value in every one of the ten languages — which is what
+    /// makes a plain-word row the right citation for a prefix. Two things the template also says
+    /// and this set cannot: Japanese composes `バス%d` with NO space before the number, and
+    /// Traditional Chinese `匯流排 %d` with one, so a consumer parsing the number after this prefix
+    /// must accept either. Matched as a prefix (`.prefix`); the number is the consumer's to parse.
+    ///
+    /// MAMixer's own `Bus` row keeps English for ko where this one says `버스`; the canonical
+    /// covers a ko `Bus 3` case-insensitively and the row's value is carried beside it, so a Korean
+    /// Logic drawing either is recognised. Which it draws is unmeasured: the 2026-09-04 ko-KR
+    /// record saw only strips on the stereo output.
+    static let busOutputLabelPrefix = LabelSet(
+        canonical: "bus",
+        variants: ["버스", "バス", "总线", "匯流排"],
+        rationale: "Classifies an output slot description as a bus by its leading word; read-only"
+            + " prefix classifier consumed by the routing graph. Ten locales derived on 2026-09-27"
+            + " from Apple's row, whose values are the prefixes of the `Bus %d` template in the same"
+            + " table. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Bus#value"
+    )
+
+    /// The word an output slot's description BEGINS with when the strip goes to a physical output
+    /// pair or channel (#291 R1): `Output 3-4`, measured en 2026-09-11.
+    ///
+    /// Logic composes these from `Output %d-%d` and `Output %d` in Logic.framework's
+    /// Localizable.strings. The cited row `Output#mix` is the one whose values are those
+    /// templates' prefixes in nine languages; Japanese is the exception, where the row keeps
+    /// `Output` and both templates say `出力` — so `出力` is carried as the template's own prefix,
+    /// not as a reading. Italian composes the pair as `Uscita %d-%d` and a single channel as
+    /// `Output %d`, so both words are members. Japanese again puts no space before the number.
+    ///
+    /// A PREFIX, and the reason `Stereo Output` is matched whole by its own set: `output` is inside
+    /// it, and a containment match here would file the main output as a physical one.
+    static let physicalOutputLabelPrefix = LabelSet(
+        canonical: "output",
+        variants: ["출력", "出力", "Salida", "Sortie", "Uscita", "Saída", "输出", "輸出"],
+        rationale: "Classifies an output slot description as a physical output by its leading word;"
+            + " read-only prefix classifier consumed by the routing graph. Ten locales derived on"
+            + " 2026-09-27 from Apple's `Output#mix` row, the prefixes of the `Output %d-%d` and"
+            + " `Output %d` templates; `出力` is the Japanese template's prefix where the row keeps"
+            + " English. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output%23mix#value"
     )
 
     /// en measured 2026-09-09 on Logic 12.3 (6674), inspector channel strip: an `AXButton` whose
@@ -3095,6 +3243,12 @@ enum AXLocalePolicy {
         regionKindAudio,
         outputSlotHelpKeyword,
         inputSlotHelpKeyword,
+        sendSlotHelpKeyword,
+        sendLevelKnobHelpKeyword,
+        stereoOutputLabel,
+        noOutputLabel,
+        busOutputLabelPrefix,
+        physicalOutputLabelPrefix,
         midiEffectSlotHelpKeyword,
         inspectorChannelStripHelpPrefix,
         assignControlHelpKeyword,

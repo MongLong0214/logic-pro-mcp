@@ -140,6 +140,16 @@ struct ChannelStripState: Sendable, Codable {
     /// `AXTitle`, so there is nothing to read a destination from — and a send list cannot be
     /// published until there is.
     var sends: [SendState]?
+    /// Per-slot send OCCUPANCY, when the strip's descendants were read (#291 R1).
+    ///
+    /// Three answers, kept apart on the wire. Key absent: nobody could look — a children read
+    /// below the strip failed with a status that is not an answer. `[]`: the strip was read and
+    /// carries no send slot. A list: one entry per send-slot button in tree order, each saying
+    /// whether the level knob Logic grows beside an assigned send follows it. Measured 2026-09-13,
+    /// the assigned slot's own menu still marked `No Send`, so that knob is the only evidence of
+    /// occupancy in the tree and the destination is not in it — which is why this is occupancy and
+    /// not a send list, and why `sends` above stays absent.
+    var sendSlots: [SendSlotObservation]?
     var input: String?
     var output: String?
     var eqEnabled: Bool = false
@@ -154,6 +164,7 @@ struct ChannelStripState: Sendable, Codable {
 
     enum CodingKeys: String, CodingKey {
         case trackIndex, volume, pan, sends, input, output, eqEnabled, plugins
+        case sendSlots = "send_slots"
         case pluginsSource = "plugins_source"
         case pluginsReadError = "plugins_read_error"
     }
@@ -165,6 +176,38 @@ struct SendState: Sendable, Codable {
     var destination: String
     var level: Double
     var isPreFader: Bool
+}
+
+/// What one send slot was seen to be (#291 R1, ADR-008 §5 R1).
+///
+/// `occupiedKnownDestination` is declared and produced by nothing this increment: the source slot
+/// exposes no destination, so a consumer that later learns one can say so without the unknown case
+/// silently changing meaning. `unreadable` is a slot whose button was found but whose successor
+/// would not say its role or help — unknown for that slot alone, not for the strip.
+enum SendSlotState: String, Sendable, Codable {
+    case observedEmpty = "observed_empty"
+    case occupiedUnknownDestination = "occupied_unknown_destination"
+    case occupiedKnownDestination = "occupied_known_destination"
+    case unreadable = "unreadable"
+}
+
+/// One send slot on a channel strip, by its position among the strip's send-slot buttons.
+///
+/// `levelRaw` is the knob's `AXValue` when it read as a finite number and `levelDescription` its
+/// `AXValueDescription` when readable. Neither decides `state`: a send at minus infinity or under
+/// automation is still a send, and minus infinity cannot be written as JSON, so it is carried as
+/// no raw level beside whatever the description says.
+struct SendSlotObservation: Sendable, Codable, Equatable {
+    var ordinal: Int
+    var state: SendSlotState
+    var levelRaw: Double?
+    var levelDescription: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ordinal, state
+        case levelRaw = "level_raw"
+        case levelDescription = "level_description"
+    }
 }
 
 /// A plugin slot.
