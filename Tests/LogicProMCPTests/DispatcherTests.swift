@@ -1153,6 +1153,56 @@ private func liveTransportJSON(
     ])
 }
 
+/// #862: `bank` settles both params before the trace starts and before the router is asked, so a
+/// refusal leaves the MCU channel untouched; a valid request reaches the MCU channel exactly once
+/// with the string params the channel contract names.
+@Test func testMixerDispatcherBankValidatesBeforeRouting() async throws {
+    let router = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    await router.register(mcu)
+    let cache = StateCache()
+
+    let badDirection = await MixerDispatcher.handle(
+        command: "bank",
+        params: ["direction": .string("up")],
+        router: router,
+        cache: cache
+    )
+    let badDirectionIsError = try #require(badDirection.isError as Bool?)
+    #expect(badDirectionIsError)
+    let badDirectionObject = try #require(parseDispatcherObject(dispatcherText(badDirection)))
+    #expect(badDirectionObject["error"] as? String == "invalid_params")
+    #expect(badDirectionObject["operation"] as? String == "mixer.bank")
+    let opsAfterBadDirection = await mcu.executedOps
+    #expect(opsAfterBadDirection.isEmpty)
+
+    let badCount = await MixerDispatcher.handle(
+        command: "bank",
+        params: ["direction": .string("left"), "count": .int(32)],
+        router: router,
+        cache: cache
+    )
+    let badCountIsError = try #require(badCount.isError as Bool?)
+    #expect(badCountIsError)
+    let badCountObject = try #require(parseDispatcherObject(dispatcherText(badCount)))
+    #expect(badCountObject["error"] as? String == "invalid_params")
+    let opsAfterBadCount = await mcu.executedOps
+    #expect(opsAfterBadCount.isEmpty)
+
+    let routed = await MixerDispatcher.handle(
+        command: "bank",
+        params: ["direction": .string("right"), "count": .int(2)],
+        router: router,
+        cache: cache
+    )
+    let routedIsError = try #require(routed.isError as Bool?)
+    #expect(!routedIsError, "\(dispatcherText(routed))")
+    let mcuOps = await mcu.executedOps
+    expectExecutedOps(mcuOps, equals: [
+        ("mixer.bank", ["count": "2", "direction": "right"]),
+    ])
+}
+
 @Test func testMixerDispatcherInsertPluginRequiresConfirmation() async {
     let router = ChannelRouter()
     let ax = MockChannel(id: .accessibility)
@@ -1270,6 +1320,7 @@ private func liveTransportJSON(
     #expect(description.contains("set_plugin_param"))
     _ = tool.inputSchema
     #expect(description.contains("set_master_volume"))
+    #expect(description.contains("bank -> { direction"))
     #expect(!description.contains("set_output"))
     #expect(!description.contains("set_input"))
     #expect(!description.contains("set_send"))

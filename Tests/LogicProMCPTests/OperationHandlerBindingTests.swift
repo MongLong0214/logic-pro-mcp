@@ -142,7 +142,7 @@ struct OperationHandlerBindingTests {
         let specKeys = Set(specs.map { "\($0.tool.rawValue):\($0.command)" })
         let bindingKeys = bindings.map { "\($0.tool):\($0.command)" }
 
-        #expect(specs.count == 114)   // #884 registered system.setup_control_surface
+        #expect(specs.count == 115)   // #884 system.setup_control_surface, #862 mixer.bank
         #expect(bindings.count == specs.count)
         #expect(Set(bindingIDs).count == bindings.count, "duplicate handler IDs")
         #expect(Set(bindingKeys).count == bindings.count, "duplicate handler keys")

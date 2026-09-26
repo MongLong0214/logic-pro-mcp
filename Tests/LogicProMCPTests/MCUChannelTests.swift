@@ -149,24 +149,31 @@ import Testing
     let transport = MockMCUTransport()
     let channel = MCUChannel(transport: transport, cache: StateCache())
 
-    let cases: [(String, [UInt8])] = [
-        ("transport.play", MCUProtocol.encodeTransport(.play)),
-        ("transport.stop", MCUProtocol.encodeTransport(.stop)),
-        ("transport.record", MCUProtocol.encodeTransport(.record)),
-        ("transport.rewind", MCUProtocol.encodeTransport(.rewind)),
-        ("transport.fast_forward", MCUProtocol.encodeTransport(.fastForward)),
-        ("transport.toggle_cycle", MCUProtocol.encodeTransport(.cycle)),
+    // Each transport command is one press and its release (#862): a press alone is a held button.
+    let cases: [(String, MCUProtocol.ButtonFunction)] = [
+        ("transport.play", .play),
+        ("transport.stop", .stop),
+        ("transport.record", .record),
+        ("transport.rewind", .rewind),
+        ("transport.fast_forward", .fastForward),
+        ("transport.toggle_cycle", .cycle),
     ]
 
-    for (operation, expected) in cases {
+    for (operation, function) in cases {
         let result = await channel.execute(operation: operation, params: [:])
         #expect(result.isSuccess)
         let sent = await transport.sentBytes
-        #expect(sent.last == expected)
+        #expect(Array(sent.suffix(2)) == [
+            MCUProtocol.encodeButton(function, on: true),
+            MCUProtocol.encodeButton(function, on: false),
+        ])
     }
 
     let sent = await transport.sentBytes
-    #expect(sent == cases.map { $0.1 })
+    #expect(sent == cases.flatMap { [
+        MCUProtocol.encodeButton($0.1, on: true),
+        MCUProtocol.encodeButton($0.1, on: false),
+    ] })
 }
 
 @Test func testMCUChannelPanMasterAndStripButtonCommands() async {
@@ -194,7 +201,7 @@ import Testing
         params: ["index": "4", "enabled": "true"]
     )
     // track.select ignores the enabled flag by design — it's not a toggle,
-    // so the channel always emits on: true (making the track selected).
+    // so the channel always presses select (making the track selected).
     // The explicit "enabled:false" here verifies the override is applied.
     let select = await channel.execute(
         operation: "track.select",
@@ -214,8 +221,11 @@ import Testing
         MCUProtocol.encodeVPot(strip: 2, direction: .counterClockwise, speed: 6),
         MCUProtocol.encodeFader(track: 8, value: 0.75),
         MCUProtocol.encodeButton(.solo, strip: 3, on: true),
+        MCUProtocol.encodeButton(.solo, strip: 3, on: false),
         MCUProtocol.encodeButton(.recArm, strip: 4, on: true),
+        MCUProtocol.encodeButton(.recArm, strip: 4, on: false),
         MCUProtocol.encodeButton(.select, strip: 5, on: true),
+        MCUProtocol.encodeButton(.select, strip: 5, on: false),
     ])
 }
 
@@ -253,7 +263,10 @@ import Testing
         )
         #expect(result.isSuccess)
         let sent = await transport.sentBytes
-        #expect(sent.last == MCUProtocol.encodeButton(function, on: true))
+        #expect(Array(sent.suffix(2)) == [
+            MCUProtocol.encodeButton(function, on: true),
+            MCUProtocol.encodeButton(function, on: false),
+        ])
     }
 
     let invalidAutomation = await channel.execute(

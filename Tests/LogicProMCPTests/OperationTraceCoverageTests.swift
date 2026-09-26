@@ -211,8 +211,8 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 114)
-        #expect(mutatingSpecs.count == 91)   // #884 registered system.setup_control_surface
+        #expect(OperationRegistry.specs.count == 115)
+        #expect(mutatingSpecs.count == 92)   // #884 system.setup_control_surface, #862 mixer.bank
 
         // A mutating op that refuses BEFORE dispatch starts its trace starts no trace with the
         // coverage params (which carry no consent), so it is asserted to claim NO trace coverage
@@ -326,7 +326,7 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 114)
+        #expect(OperationRegistry.specs.count == 115)
         #expect(readOnlySpecs.count == 23)
         // Mutability is total: the mutating census (87) and this inverse gate
         // (23) together account for every registered spec, so a new operation
@@ -685,6 +685,8 @@ private func operationTraceCoverageParams(
         return ["track": .int(0), "value": .double(0)]
     case .mixerSetMasterVolume:
         return ["value": .double(0.5)]
+    case .mixerBank:
+        return ["direction": .string("right")]
     case .mixerSetPluginParam:
         return ["track": .int(0), "insert": .int(0), "param": .int(0), "value": .double(0.5)]
     case .mixerInsertPlugin:
