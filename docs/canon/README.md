@@ -186,11 +186,14 @@ they must be complete, because proving absence needs the whole corpus.
 
 ### The corpus is bounded, and the bound is the claim's bound
 
-The absence sets cover five sources: `QuickHelp.plist`, every `.strings` file, MADSP's parameter
-tables, nib runtime attributes, and the English compiled into `Base.lproj` nibs. They do **not**
-cover strings compiled into the Logic binary, the labels in the 1,007 nibs Apple does not
-base-internationalise, AppKit strings in the dyld shared cache, or the Help Book, which Logic serves
-over the network rather than shipping.
+The absence sets cover six sources: `QuickHelp.plist`, every `.strings` file, MADSP's parameter
+tables, nib runtime attributes, the English compiled into `Base.lproj` nibs, and the labels in the
+1,007 nibs Apple does not base-internationalise, read only at the (class, key) sites AppKit draws as
+text (#902). They do **not** cover strings compiled into the Logic binary, text a plug-in screen
+sets through a custom class's runtime attribute (`text` and `labelString`, which `niblabels` does
+not read because nothing says what they mean), strings a designer typed into a nib and a class
+cannot tell from a label, AppKit strings in the dyld shared cache, or the Help Book, which Logic
+serves over the network rather than shipping.
 
 The bound is the denominator of every absence proof here, so it is ratcheted: `MANIFEST.json`'s
 (source, locale) set is compared against the merge base and may only grow. It was not, and the
@@ -198,7 +201,7 @@ consequence was measured rather than argued — deleting `madsp` and `nib` from 
 index and absence files from disk, and the entries records named, left a tree where all 48 guards
 passed and every absence proof searched half the corpus it claimed. Each check verified the
 manifest against artefacts the same build wrote, so consistency was preserved while the claim
-shrank. Growing is free, and #895 did exactly that: it added `nibstrings`.
+shrank. Growing is free, and #895 did exactly that: it added `nibstrings`. #902 added `niblabels`.
 
 Its SIZE is ratcheted separately, because that comparison is a number rather than a membership.
 `verify_absence_counts` already reads the counts and its own docstring says what that is worth —
@@ -208,10 +211,11 @@ the same way: twelve sets truncated to 50 entries each, counts and digests rewri
 `logic_canon.py absent strings es 'Pista'` answering ABSENT for a string Logic ships.
 `verify_index_against_absence` is the one check that could have seen it, and what it sees is
 bounded by CITATION: it checks every committed index row against its corpus's absence set, and a
-value nobody has cited has no row to check. This paragraph used to say "only six of the
-twenty-three corpora carry a committed index row … blind to the other seventeen"; measured
-2026-09-19 that is wrong twice over — the manifest carries TWENTY-FOUR corpora and TWENTY-THREE of
-them carry at least one row, `strings/-` being the only one that carries none. Number WORDS are
+value nobody has cited has no row to check. This paragraph used to say only six carried a
+committed index row, "blind to the other seventeen" of twenty-three; measured 2026-09-19 that is
+wrong twice over. Re-measured after #902, the manifest carries THIRTY-FIVE corpora and THIRTY-FOUR
+of them carry at least one row; `strings/-` is the only one that carries none, and the eleven
+`niblabels` sets carry only the rows the #902 record cites. Number WORDS are
 invisible to `check-canon-prose-numbers.py`, which reads digits, which is how it rotted unnoticed.
 A set may not lose entries while `MANIFEST.json` names the same Logic; a different Logic is allowed to hold different
 strings, and the rule says so on stderr instead of passing quietly.
@@ -230,7 +234,7 @@ claim — and the exemption is declared, so a structural number added later is r
 ### Absent as bytes is not the same as uncitable
 
 `absent` proves a BYTE STRING is not in the corpus. That is exactly true and half an answer:
-`Input Port:` is absent from all 24 corpora and Logic ships `Input Port` — measured 2026-09-20, it
+`Input Port:` is absent from all 35 corpora (re-measured after #902) and Logic ships `Input Port` — measured 2026-09-20, it
 is in `strings/en` and in no other — so adding a colon proves anything uncitable. Three literals on the control-surface branch were proved absent that way and
 all three are shipped labels.
 
@@ -277,9 +281,13 @@ So `absent` means *not in this corpus*, never *not in Logic*. Two consequences w
   English lives in `Base.lproj` nibs rather than in `.strings` overlays — measured: of the 162
   tables whose labels live in a nib, **zero** ship an `en.lproj` file. `nibstrings` (#895) reads
   them, keyed the way their own translations are keyed, so English is now cited at the same address
-  as its Korean. What remains uncovered is the other direction of the same fact: 1,007 nibs are not
-  base-internationalised at all, their labels are plain `NSString` mixed with Interface Builder's
-  defaults, and no filter over them has been measured;
+  as its Korean. The other direction of the same fact is the 1,007 nibs that are not
+  base-internationalised at all. `niblabels` (#902) reads them by what each (class, key) means
+  rather than by what the string looks like, excludes Interface Builder's own default titles and
+  counts what every rule drops (`Scripts/logic_canon.py census`). An old-style translated nib meets
+  its `en.lproj` twin by object path, because the object index moves in 20 of the 60. What it
+  still cannot hold is text a plug-in screen sets through a custom runtime attribute, and a
+  placeholder a designer typed that no class separates from a label;
 - the one live AXHelp value this repository cannot cite is most plausibly an AppKit string, and
   that plausibility is recorded as unverified rather than as a finding.
 
