@@ -1,0 +1,88 @@
+{
+  "schema": 3,
+  "id": "2026-09-27-pt-BR-a-mixer-read-before-tracks-publishes-the-same-graph",
+  "date": "2026-09-27",
+  "subject": "logic://mixer routing_graph, and the trk_ and prj_ references it carries, read before and after logic://tracks and logic://project/info",
+  "question": "Does the routing graph logic://mixer publishes still depend on whether the client read logic://tracks or logic://project/info first?",
+  "verdict": "works",
+  "surface": "mixer.routing",
+  "issues": [
+    291
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "pt-BR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_291_mixer_graph_does_not_depend_on_read_order.py <worktree> <full-40-char-head> [binary]",
+    "expected": "all four checks pass: a mixer read before any tracks read publishes the same track nodes as the read after it, under the trk_ references logic://tracks issues, with the same node kinds and names as a tracks-first server, and carries the prj_ that logic://project/info issues afterwards",
+    "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository and a running Logic with a project open; starts two servers in turn; presses X to show the Mixer if it is hidden and presses it again afterwards; about one minute"
+  },
+  "depends": [
+    "Sources/LogicProMCP/State/TrackReferenceIssuance.swift:TrackReferenceIssuance",
+    "Sources/LogicProMCP/State/ProjectReferenceIssuance.swift:ProjectReferenceIssuance",
+    "Sources/LogicProMCP/Routing/RoutingGraphPublication.swift:RoutingGraphPublication"
+  ],
+  "evidence": [
+    "evidence/2026-09-27-pt-BR-mixer-read-order-291.json"
+  ],
+  "method": "The release binary at b434364ad0d1e9f8a6e30eeba64d0507e6bccd3d was started twice against the same open project, one server after the other, with nothing else talking to Logic. Session A: refresh_cache, logic://mixer, logic://tracks, logic://mixer again, then logic://project/info. Session B: refresh_cache, logic://tracks, then logic://mixer. If the product's own mixer read did not report a fresh poll, the harness pressed X (Logic's Mixer key, the same in every language) and asked again, and it pressed X once more at the end. Before this run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
+  "observations": [
+    {
+      "binary": "b434364ad0d1e9f8a6e30eeba64d0507e6bccd3d",
+      "session_a_mixer_then_tracks": {
+        "mixer_before_any_tracks_read": {
+          "strips": 21,
+          "nodes": 19,
+          "track_nodes": 19,
+          "edges": 0,
+          "complete": false,
+          "carries_a_project_reference": true,
+          "names_a_strip_without_an_issued_trk_reference": false
+        },
+        "tracks_rows": 19,
+        "mixer_after_tracks": {
+          "strips": 21,
+          "nodes": 19,
+          "track_nodes": 19,
+          "edges": 0,
+          "complete": false,
+          "carries_a_project_reference": true,
+          "names_a_strip_without_an_issued_trk_reference": false
+        },
+        "same_trk_references_in_both_mixer_reads": true,
+        "mixer_trk_references_all_issued_by_tracks": true,
+        "project_info_issued_a_reference": true,
+        "mixer_project_reference_is_the_one_project_info_issued": true
+      },
+      "session_b_tracks_then_mixer": {
+        "tracks_rows": 19,
+        "mixer_after_tracks": {
+          "strips": 21,
+          "nodes": 19,
+          "track_nodes": 19,
+          "edges": 0,
+          "complete": false,
+          "carries_a_project_reference": true,
+          "names_a_strip_without_an_issued_trk_reference": false
+        },
+        "same_node_kinds_and_names_as_session_a_first_read": true
+      }
+    }
+  ],
+  "conclusion": "A logic://mixer read taken before any logic://tracks read published 19 track nodes, the same number as the read after logic://tracks, under the same trk_ references, all of them among the ones logic://tracks handed out. A server that read logic://tracks first published the same nodes by kind and name. The mixer's projectReference, read before logic://project/info, was the prj_ that logic://project/info then issued.",
+  "limits": [
+    "Edges stayed at 0 and complete stayed false in every read, and every output destination was left unresolved. This says nothing about edges, destinations or sends, which are R1/#965 and later.",
+    "One project (lpm-locale-campaign, 19 track rows, 21 mixer strips), one run, one host. References are compared within one server only, because every server mints its own.",
+    "The reads that bring the Mixer pane up are logic://mixer reads too, so 'before tracks' means before any logic://tracks read, not before any mixer read.",
+    "The binary from before this change was run only in Korean; in this language there is only the reading after it."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states a fact about the server's BEHAVIOUR -- which references a resource read issues and in what order -- not about a string Logic ships. There is no key to cite and nothing to prove absent."
+  }
+}

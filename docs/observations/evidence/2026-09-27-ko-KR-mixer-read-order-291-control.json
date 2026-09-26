@@ -1,0 +1,593 @@
+{
+  "name": "live_291_mixer_graph_does_not_depend_on_read_order",
+  "head": "3147d410740b16573f0690379c4053af3e9ede95",
+  "artifact": {
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin291/LogicProMCP-3147d410740b16573f0690379c4053af3e9ede95",
+    "sha256": "f12a5b6594ba925ae987d25920516c92182631579d99f2c4e21ec719bc797181",
+    "built_from": "b434364ad0d1e9f8a6e30eeba64d0507e6bccd3d",
+    "worktree_clean": true,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": false
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "non_ui"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "291/precondition-the-product-can-see-the-mixer",
+      "passed": true,
+      "expected": "the mixer resource reports a fresh poll, so the reads below are real reads of a visible Mixer and not the cold-cache answer",
+      "observed": {
+        "x_presses": 0
+      },
+      "mutation": null,
+      "mutation_claimed": false,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/a-mixer-first",
+      "payload": {
+        "data_source": "ax_poll",
+        "strips": 21,
+        "nodes": 0,
+        "track_nodes": 0,
+        "track_refs": [],
+        "edges": 0,
+        "complete": false,
+        "partial_reason": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=0: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=1: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=1: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=2: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=2: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=3: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=3: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=4: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=4: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=5: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=5: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=6: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=6: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=7: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=7: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=8: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=8: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=9: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=9: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=10: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=10: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=11: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=11: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=12: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=12: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=13: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=13: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=14: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=14: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=15: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=15: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=16: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=16: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=17: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=17: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=18: no issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+        "project_ref": null,
+        "shape": []
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/a-tracks",
+      "payload": {
+        "readable": true,
+        "rows": 19,
+        "track_refs": [
+          "trk_1FEC17F8-3982-43E4-8DF4-BCC33B37F209",
+          "trk_7F4A253B-B1F2-4AE0-A6F6-4526DF2128F6",
+          "trk_9DD898E4-8143-4CFF-A1ED-356A81623D7D",
+          "trk_F327611C-650C-4551-8EBC-B6DF4AC1DAC9",
+          "trk_9AD0818E-70E5-4514-8810-EF5B073CF7FB",
+          "trk_00502AE7-EF49-4BF6-810D-74047E7C70F3",
+          "trk_8A7251D6-EA7D-4FBE-90B4-0AB5127C6EF2",
+          "trk_54512AE1-D666-42FB-BE87-317552A7F2B5",
+          "trk_4EF4D113-3A60-4D1C-A42A-AE6558A91F2B",
+          "trk_0D10F08F-A6F8-4D80-B26C-84AC5AF4964B",
+          "trk_39F7DAEE-DCFE-43B7-86C3-AB36A2CB38E0",
+          "trk_55D112E3-66AF-4F1D-835F-33C2DCB2721C",
+          "trk_25970739-0B19-4030-803A-3DF009C811D8",
+          "trk_A8E8DF71-F378-4B5E-9B7F-49C86FC35B39",
+          "trk_6C6021D0-E5AB-49FA-A8D5-5DD9494BFEC1",
+          "trk_C76DE836-6884-49BF-BF0D-696DA2E420DD",
+          "trk_539DE1ED-C411-4E97-A30A-4A40C62AEDDD",
+          "trk_CA5CBA77-0F3D-4E78-8098-0D6563573F74",
+          "trk_507A17CD-2C9D-4570-AD5B-D5CFC7C26F59"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/a-mixer-after-tracks",
+      "payload": {
+        "data_source": "ax_poll",
+        "strips": 21,
+        "nodes": 19,
+        "track_nodes": 19,
+        "track_refs": [
+          "trk_00502AE7-EF49-4BF6-810D-74047E7C70F3",
+          "trk_0D10F08F-A6F8-4D80-B26C-84AC5AF4964B",
+          "trk_1FEC17F8-3982-43E4-8DF4-BCC33B37F209",
+          "trk_25970739-0B19-4030-803A-3DF009C811D8",
+          "trk_39F7DAEE-DCFE-43B7-86C3-AB36A2CB38E0",
+          "trk_4EF4D113-3A60-4D1C-A42A-AE6558A91F2B",
+          "trk_507A17CD-2C9D-4570-AD5B-D5CFC7C26F59",
+          "trk_539DE1ED-C411-4E97-A30A-4A40C62AEDDD",
+          "trk_54512AE1-D666-42FB-BE87-317552A7F2B5",
+          "trk_55D112E3-66AF-4F1D-835F-33C2DCB2721C",
+          "trk_6C6021D0-E5AB-49FA-A8D5-5DD9494BFEC1",
+          "trk_7F4A253B-B1F2-4AE0-A6F6-4526DF2128F6",
+          "trk_8A7251D6-EA7D-4FBE-90B4-0AB5127C6EF2",
+          "trk_9AD0818E-70E5-4514-8810-EF5B073CF7FB",
+          "trk_9DD898E4-8143-4CFF-A1ED-356A81623D7D",
+          "trk_A8E8DF71-F378-4B5E-9B7F-49C86FC35B39",
+          "trk_C76DE836-6884-49BF-BF0D-696DA2E420DD",
+          "trk_CA5CBA77-0F3D-4E78-8098-0D6563573F74",
+          "trk_F327611C-650C-4551-8EBC-B6DF4AC1DAC9"
+        ],
+        "edges": 0,
+        "complete": false,
+        "partial_reason": "unresolved output destination endpoint \"Stereo Output\" for source track_index=0: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=1: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=2: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=3: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=4: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=5: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=6: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=7: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=8: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=9: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=10: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=11: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=12: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=13: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=14: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=15: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=16: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=17: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+        "project_ref": null,
+        "shape": [
+          [
+            "track",
+            "Absolute Zero"
+          ],
+          [
+            "track",
+            "Audio 1"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://project/info",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/a-project-info",
+      "payload": {
+        "project_ref": "prj_A70A7E7C-4451-4162-AADD-DB47FA8ACB1E",
+        "name": "lpm-locale-campaign - 트랙",
+        "envelope_keys": [
+          "ax_occluded",
+          "cache_age_sec",
+          "data",
+          "fetched_at",
+          "identity_fetched_at",
+          "identity_source",
+          "source"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/b-tracks-first",
+      "payload": {
+        "readable": true,
+        "rows": 19,
+        "track_refs": [
+          "trk_23D4D7FD-CF42-439B-9BAD-EA907F5FD737",
+          "trk_15A9827C-7586-462D-83C4-AC85BB47FD05",
+          "trk_8E674810-0BEC-4C8B-A1FE-CFF3ABAE8F81",
+          "trk_329A3F4B-5B52-45E9-9DC4-443D3651CA3A",
+          "trk_DAC92F17-0081-4E93-874F-AE6882A23D87",
+          "trk_E9CB0193-222C-4469-99A0-FDB89A30DE24",
+          "trk_F316ED5E-3D22-41E7-AD85-2F22A671836E",
+          "trk_F7096CF9-9B06-4CF3-8B2D-DBD031E0522D",
+          "trk_C38E9465-2D66-4A5B-9B07-7D23EC59ACFF",
+          "trk_89B15D32-AD33-4305-A937-4507AC03B2C1",
+          "trk_21FB1D09-D135-455E-B535-8FDA2AFB3276",
+          "trk_FC9092ED-D0D2-4782-9F06-931FC87E9B6F",
+          "trk_ACBA32DF-640C-4AC5-AAC3-5F07D6C362E0",
+          "trk_03264FDC-23B7-4CCC-9930-0417A0FFC7AC",
+          "trk_D4171BC8-8DB8-4410-8629-422AAADE2F2A",
+          "trk_A67E64B1-F74F-41FA-A24D-9F2E2967EF24",
+          "trk_FE36A0D1-BECF-4E06-B00A-8D3B2321A1AF",
+          "trk_F6B381A5-133D-4E6D-9EAC-600FB5C293EA",
+          "trk_5D459DF3-B4BE-4108-ABC3-5BE82EEEC87D"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/b-mixer-after-tracks",
+      "payload": {
+        "data_source": "ax_poll",
+        "strips": 21,
+        "nodes": 19,
+        "track_nodes": 19,
+        "track_refs": [
+          "trk_03264FDC-23B7-4CCC-9930-0417A0FFC7AC",
+          "trk_15A9827C-7586-462D-83C4-AC85BB47FD05",
+          "trk_21FB1D09-D135-455E-B535-8FDA2AFB3276",
+          "trk_23D4D7FD-CF42-439B-9BAD-EA907F5FD737",
+          "trk_329A3F4B-5B52-45E9-9DC4-443D3651CA3A",
+          "trk_5D459DF3-B4BE-4108-ABC3-5BE82EEEC87D",
+          "trk_89B15D32-AD33-4305-A937-4507AC03B2C1",
+          "trk_8E674810-0BEC-4C8B-A1FE-CFF3ABAE8F81",
+          "trk_A67E64B1-F74F-41FA-A24D-9F2E2967EF24",
+          "trk_ACBA32DF-640C-4AC5-AAC3-5F07D6C362E0",
+          "trk_C38E9465-2D66-4A5B-9B07-7D23EC59ACFF",
+          "trk_D4171BC8-8DB8-4410-8629-422AAADE2F2A",
+          "trk_DAC92F17-0081-4E93-874F-AE6882A23D87",
+          "trk_E9CB0193-222C-4469-99A0-FDB89A30DE24",
+          "trk_F316ED5E-3D22-41E7-AD85-2F22A671836E",
+          "trk_F6B381A5-133D-4E6D-9EAC-600FB5C293EA",
+          "trk_F7096CF9-9B06-4CF3-8B2D-DBD031E0522D",
+          "trk_FC9092ED-D0D2-4782-9F06-931FC87E9B6F",
+          "trk_FE36A0D1-BECF-4E06-B00A-8D3B2321A1AF"
+        ],
+        "edges": 0,
+        "complete": false,
+        "partial_reason": "unresolved output destination endpoint \"Stereo Output\" for source track_index=0: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=1: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=2: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=3: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=4: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=5: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=6: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=7: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=8: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=9: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=10: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=11: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=12: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=13: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=14: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=15: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=16: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=17: no unique issued trk_ reference; unresolved output destination endpoint \"Stereo Output\" for source track_index=18: no unique issued trk_ reference; unresolved source endpoint for mixer strip track_index=19: no issued trk_ reference; unreadable output destination endpoint for source track_index=19; unresolved source endpoint for mixer strip track_index=20: no issued trk_ reference; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle; project reference is unavailable",
+        "project_ref": null,
+        "shape": [
+          [
+            "track",
+            "Absolute Zero"
+          ],
+          [
+            "track",
+            "Audio 1"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "291/a-mixer-read-before-any-tracks-read-publishes-the-track-nodes",
+      "passed": false,
+      "expected": "a logic://mixer read taken in a fresh server before any logic://tracks read publishes as many track nodes as the read after logic://tracks, and names no strip as lacking an issued trk_ reference. THE COUNTEREXAMPLE is the 2026-09-14 reading: 0 nodes first, 23 after a tracks read",
+      "observed": {
+        "observation": "{'first_mixer_track_nodes': 0, 'after_tracks_track_nodes': 19, 'first_read_names_unissued_sources': True}",
+        "accepted_the_observation": false,
+        "counterexample": "{'first_mixer_track_nodes': 0, 'after_tracks_track_nodes': 23, 'first_read_names_unissued_sources': True}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "make RoutingGraphPublication look track references up instead of receiving the issued map (3147d410's TargetRefResolver.issuedTrackReference)",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "291/the-mixer-and-tracks-name-each-track-by-one-reference",
+      "passed": false,
+      "expected": "in one server, the trk_ references the first mixer read published are the ones the mixer publishes after logic://tracks and are all among the ones logic://tracks hands out. THE COUNTEREXAMPLE is two issuers minting different references for the same rows",
+      "observed": {
+        "observation": "{'first_mixer_refs': [], 'after_tracks_mixer_refs': ['trk_00502AE7-EF49-4BF6-810D-74047E7C70F3', 'trk_0D10F08F-A6F8-4D80-B26C-84AC5AF4964B', 'trk_1FEC17F8-3982-43E4-8DF4-BCC33B37F209', 'trk_25970739-0B19-4030-803A-3DF009C811D8', 'trk_39F7DAEE-DCFE-43B7-86C3-AB36A2CB38E0', 'trk_4EF4D113-3A60-4D1C-A42A-AE6558A91F2B', 'trk_507A17CD-2C9D-4570-AD5B-D5CFC7C26F59', 'trk_539DE1ED-C411-4E97-A30A-4A40C62AED",
+        "accepted_the_observation": false,
+        "counterexample": "{'first_mixer_refs': [], 'after_tracks_mixer_refs': ['trk_00502AE7-EF49-4BF6-810D-74047E7C70F3', 'trk_0D10F08F-A6F8-4D80-B26C-84AC5AF4964B', 'trk_1FEC17F8-3982-43E4-8DF4-BCC33B37F209', 'trk_25970739-0B19-4030-803A-3DF009C811D8', 'trk_39F7DAEE-DCFE-43B7-86C3-AB36A2CB38E0', 'trk_4EF4D113-3A60-4D1C-A42A-AE6558A91F2B', 'trk_507A17CD-2C9D-4570-AD5B-D5CFC7C26F59', 'trk_539DE1ED-C411-4E97-A30A-4A40C62AED",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "bind track references in readMixer with a descriptor that differs from readTracks'",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "291/tracks-first-and-mixer-first-publish-the-same-graph",
+      "passed": false,
+      "expected": "the graph a mixer-first server publishes has the same nodes, by kind and display name, and the same edge count as the graph a tracks-first server publishes. THE COUNTEREXAMPLE is the empty mixer-first graph",
+      "observed": {
+        "observation": "{'mixer_first': {'shape': [], 'edges': 0}, 'tracks_first': {'shape': [('track', 'Absolute Zero'), ('track', 'Audio 1'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Studio G",
+        "accepted_the_observation": false,
+        "counterexample": "{'mixer_first': {'shape': [], 'edges': 0}, 'tracks_first': {'shape': [('track', 'Absolute Zero'), ('track', 'Audio 1'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Studio G",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "make RoutingGraphPublication look track references up instead of receiving the issued map",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "291/the-mixer-carries-the-project-ref-project-info-issues",
+      "passed": false,
+      "expected": "the first mixer read's projectReference, taken before any logic://project/info read, is the prj_ that logic://project/info issues afterwards in the same server; the tracks-first server's mixer carries one too. THE COUNTEREXAMPLE is the pre-change shape: no project reference until project/info has been read",
+      "observed": {
+        "observation": "{'mixer_project_ref': None, 'project_info_ref': 'prj_A70A7E7C-4451-4162-AADD-DB47FA8ACB1E', 'tracks_first_mixer_project_ref': None}",
+        "accepted_the_observation": false,
+        "counterexample": "{'mixer_project_ref': None, 'project_info_ref': 'prj_A70A7E7C-4451-4162-AADD-DB47FA8ACB1E', 'tracks_first_mixer_project_ref': None}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "have readMixer look the project reference up instead of issuing it",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "291/the-mixer-pane-is-as-it-was",
+      "restored": true,
+      "detail": "{\"x_presses\": 0}"
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    }
+  ]
+}
