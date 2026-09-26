@@ -1,0 +1,34 @@
+Limit: keyboardOwnerIsLogic answers nil where ProcessUtils.logicOwnsTheKeyboard answers false (unreadable first layer-0 owner); the decision refuses on both
+Ruled-out: reporting an unreadable or unidentified dialog under the withheld policy as dialog_present_escape_withheld | it names a dialog nobody read; those readings refuse under their own reasons
+Ruled-out: a second pid reader in LogicOnScreenWindows | ProcessUtils.pidValue(from:) reads the same three shapes and is now shared
+Warn: popupMenuCount restates logicOwnedPopupMenuWindowCount's exact-level count; t2 should make one call the other after #1017 merges
+Record-Id: r-15dad0654e1c
+Provenance: inherited 010d0e22e184aa0c3447aff12fbfe37aca1443cc
+
+Limit: one menu (Navigate, top level) over one dialog, Korean only; submenu-expanded and plug-in popup unmeasured; ten-locale rerun pending
+Ruled-out: flipping the policy on a System Events keystroke measurement | the server posts its Escape at the HID tap; the probe posts key 53 there
+Ruled-out: calling the dialog surviving on the first read after the menu closed | the dialog alone leaves in about 0.23 s; survival is read for max(1.5 s, 5x the control)
+Warn: no server path acts on the policy yet; the post-leaf loop must re-read the popup count before every Escape
+Record-Id: r-1f4ec97a33e6
+Provenance: inherited 384e27595aaa3548469f785a320e708a160361d5
+
+Limit: kCGWindowName needs Screen Recording and the server's access is unmeasured; a nil name leaves every left-behind dialog unidentified, so dialogCancel cannot fire until a live receipt shows names
+Limit: none of the fourteen results reproduces on demand; the wired path is fixture-proven only
+Ruled-out: a System Events click on the dialog's Cancel button as dialogCancel | no live record shows it working under the modal; the measured action is key 53 at the HID tap, which needs the keyboard
+Ruled-out: reporting the settlement through menu_state or dialog_cleanup | those say what the script observed; menu_state in a goto refusal is not a reading
+Warn: the baseline is read before the script on every route call; a test runtime reaching the goto lock without both window seams reads the live window server and can post a live Escape
+Warn: Issue572 transportIsReadFirst still uses the production frontmost check and real AppleScript; with Logic frontmost it drives the real Go To Position dialog
+Record-Id: r-e54ed0d9a6ab
+Provenance: inherited 997bf86e15b429cc56683b335871fcb1d976ba9b
+
+Ruled-out: witnessing baseline-before-script through runMenuRefusal | its script seam never changes the window list, so the ordering could not go red
+Warn: route fixtures must own windows under FakeAXRuntimeBuilder pid 4242, not 7174, or every Logic row reads as another process's
+Warn: a pipe inside a roadmap table cell splits the row while the roadmap guard still passes; write filters as prose
+Record-Id: r-a17ad24a0cf1
+Provenance: inherited 41b44998dc1f67b962f9826053ba81dc32dc6523
+
+Limit: kCGWindowName for the server still depends on its host holding Screen Recording; the names were read by python3 under the same shell, not by the server
+Limit: no new ko-KR record: the 2026-09-26 one stands; the 1af88701 Korean run is local evidence only
+Warn: live_993.switch_to needs logic_canon injected into the module when called from outside its main
+Record-Id: r-851a5f993e14
+Provenance: inherited 0ad5f5a182e5e387e96a706dc1425441a02654bc
