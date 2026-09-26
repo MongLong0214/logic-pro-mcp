@@ -1,0 +1,690 @@
+{
+  "name": "live_291_mixer_graph_does_not_depend_on_read_order",
+  "head": "85d77e3277b281741c826501a43fc92b6c608ab3",
+  "artifact": {
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin291/LogicProMCP-85d77e3277b281741c826501a43fc92b6c608ab3",
+    "sha256": "0d0ffed01ce4555ffb2b016d660c29c3a59433951a06a5babbfa00733d1128ff",
+    "built_from": "85d77e3277b281741c826501a43fc92b6c608ab3",
+    "worktree_clean": true,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": false
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "non_ui"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "291/precondition-the-product-can-see-the-mixer",
+      "passed": true,
+      "expected": "the mixer resource reports a fresh poll, so the reads below are real reads of a visible Mixer and not the cold-cache answer",
+      "observed": {
+        "x_presses": 0
+      },
+      "mutation": null,
+      "mutation_claimed": false,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/a-mixer-first",
+      "payload": {
+        "data_source": "ax_poll",
+        "strips": 21,
+        "nodes": 19,
+        "track_nodes": 19,
+        "track_refs": [
+          "trk_0A33AA6D-5778-4AD3-BC1C-F32DD0A9968B",
+          "trk_11765278-E1D0-4C66-9BA4-3441D01978CC",
+          "trk_207A2824-D328-4DA1-8E37-695636540401",
+          "trk_306D7846-4450-4A55-B5CA-E6F62A6CA2DD",
+          "trk_4A75FD45-96FC-4E4A-9ECA-615473B549CE",
+          "trk_4EC59A9D-4A22-4EF6-B05A-34733F1D01FC",
+          "trk_638A20C4-616B-46A5-B3A1-CF7014B01AD6",
+          "trk_6A48FB4A-13F7-480D-97E8-47FED98CDF1D",
+          "trk_76B726C1-3CB9-4FC4-B824-8B8ACE2E3BC1",
+          "trk_7AD6CD77-3365-49F6-A5F0-A09B80335B99",
+          "trk_86A92C9B-EA81-4868-9FC2-4D54501F57C5",
+          "trk_9046C9C0-F8AD-4373-A5DE-672D2EED6E4A",
+          "trk_C46878E7-D4BB-4C9F-9AE7-DBC5FE52090F",
+          "trk_DDC780EC-1886-4451-81D9-4BB3EF404C87",
+          "trk_E0B0704F-8251-4A64-98C5-F98C43127F47",
+          "trk_E0F689CE-5DEF-469C-8B45-5A9ED80CFB97",
+          "trk_E5D8B354-AEA3-43B6-B056-0D0903B99734",
+          "trk_ED9C82FB-DC6F-44B1-BF01-97B31D5B3F58",
+          "trk_FC54E7BB-7402-406E-87B5-2F385C6AC77A"
+        ],
+        "edges": 0,
+        "complete": false,
+        "partial_reason": "unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique live track carries that name; no live track observation for mixer strip track_index=19; unreadable output destination endpoint for source track_index=19; no live track observation for mixer strip track_index=20; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle",
+        "project_ref": "prj_423FA0D2-F334-41B0-892B-C3BC50DED74A",
+        "shape": [
+          [
+            "track",
+            "Absolute Zero"
+          ],
+          [
+            "track",
+            "Audio 1"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/a-tracks",
+      "payload": {
+        "readable": true,
+        "rows": 19,
+        "track_refs": [
+          "trk_E5D8B354-AEA3-43B6-B056-0D0903B99734",
+          "trk_7AD6CD77-3365-49F6-A5F0-A09B80335B99",
+          "trk_C46878E7-D4BB-4C9F-9AE7-DBC5FE52090F",
+          "trk_E0F689CE-5DEF-469C-8B45-5A9ED80CFB97",
+          "trk_306D7846-4450-4A55-B5CA-E6F62A6CA2DD",
+          "trk_4A75FD45-96FC-4E4A-9ECA-615473B549CE",
+          "trk_9046C9C0-F8AD-4373-A5DE-672D2EED6E4A",
+          "trk_E0B0704F-8251-4A64-98C5-F98C43127F47",
+          "trk_ED9C82FB-DC6F-44B1-BF01-97B31D5B3F58",
+          "trk_76B726C1-3CB9-4FC4-B824-8B8ACE2E3BC1",
+          "trk_DDC780EC-1886-4451-81D9-4BB3EF404C87",
+          "trk_4EC59A9D-4A22-4EF6-B05A-34733F1D01FC",
+          "trk_11765278-E1D0-4C66-9BA4-3441D01978CC",
+          "trk_207A2824-D328-4DA1-8E37-695636540401",
+          "trk_0A33AA6D-5778-4AD3-BC1C-F32DD0A9968B",
+          "trk_638A20C4-616B-46A5-B3A1-CF7014B01AD6",
+          "trk_FC54E7BB-7402-406E-87B5-2F385C6AC77A",
+          "trk_86A92C9B-EA81-4868-9FC2-4D54501F57C5",
+          "trk_6A48FB4A-13F7-480D-97E8-47FED98CDF1D"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/a-mixer-after-tracks",
+      "payload": {
+        "data_source": "ax_poll",
+        "strips": 21,
+        "nodes": 19,
+        "track_nodes": 19,
+        "track_refs": [
+          "trk_0A33AA6D-5778-4AD3-BC1C-F32DD0A9968B",
+          "trk_11765278-E1D0-4C66-9BA4-3441D01978CC",
+          "trk_207A2824-D328-4DA1-8E37-695636540401",
+          "trk_306D7846-4450-4A55-B5CA-E6F62A6CA2DD",
+          "trk_4A75FD45-96FC-4E4A-9ECA-615473B549CE",
+          "trk_4EC59A9D-4A22-4EF6-B05A-34733F1D01FC",
+          "trk_638A20C4-616B-46A5-B3A1-CF7014B01AD6",
+          "trk_6A48FB4A-13F7-480D-97E8-47FED98CDF1D",
+          "trk_76B726C1-3CB9-4FC4-B824-8B8ACE2E3BC1",
+          "trk_7AD6CD77-3365-49F6-A5F0-A09B80335B99",
+          "trk_86A92C9B-EA81-4868-9FC2-4D54501F57C5",
+          "trk_9046C9C0-F8AD-4373-A5DE-672D2EED6E4A",
+          "trk_C46878E7-D4BB-4C9F-9AE7-DBC5FE52090F",
+          "trk_DDC780EC-1886-4451-81D9-4BB3EF404C87",
+          "trk_E0B0704F-8251-4A64-98C5-F98C43127F47",
+          "trk_E0F689CE-5DEF-469C-8B45-5A9ED80CFB97",
+          "trk_E5D8B354-AEA3-43B6-B056-0D0903B99734",
+          "trk_ED9C82FB-DC6F-44B1-BF01-97B31D5B3F58",
+          "trk_FC54E7BB-7402-406E-87B5-2F385C6AC77A"
+        ],
+        "edges": 0,
+        "complete": false,
+        "partial_reason": "unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique live track carries that name; no live track observation for mixer strip track_index=19; unreadable output destination endpoint for source track_index=19; no live track observation for mixer strip track_index=20; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle",
+        "project_ref": "prj_423FA0D2-F334-41B0-892B-C3BC50DED74A",
+        "shape": [
+          [
+            "track",
+            "Absolute Zero"
+          ],
+          [
+            "track",
+            "Audio 1"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://project/info",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/a-project-info",
+      "payload": {
+        "project_ref": "prj_423FA0D2-F334-41B0-892B-C3BC50DED74A",
+        "name": "lpm-locale-campaign - 音軌",
+        "envelope_keys": [
+          "ax_occluded",
+          "cache_age_sec",
+          "data",
+          "fetched_at",
+          "identity_fetched_at",
+          "identity_source",
+          "source"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/b-tracks-first",
+      "payload": {
+        "readable": true,
+        "rows": 19,
+        "track_refs": [
+          "trk_40F4F9CD-2F39-4C99-8FE8-4235809A55BA",
+          "trk_2067868C-6388-4642-9AAE-B6FF3FF82375",
+          "trk_B66D8392-A771-454C-9992-226D5E8EC1D5",
+          "trk_DFB080C6-6526-480E-92B9-73485DFA6779",
+          "trk_B1FAD62C-F089-450B-8813-DC0B976CE6DB",
+          "trk_2A8BC51B-48A3-46E6-B850-F3593D9F3C34",
+          "trk_26108B73-22B8-4368-AFCE-2ACC5F455B8F",
+          "trk_6B1CBCF0-512D-4B75-A9B0-399A983759B5",
+          "trk_E3F77BC5-D474-4C9F-ACF9-5BE96939CF12",
+          "trk_E3A79435-14DF-4068-A021-C250AC7EAE61",
+          "trk_148194AF-706F-40BA-B186-295ABBADB246",
+          "trk_0B8272B3-A9C6-4104-A9A5-BDAA324711AF",
+          "trk_BA750AA2-10F7-4FC1-93F9-712C93F58B56",
+          "trk_2C770264-57EA-4F95-9471-8617190EF94D",
+          "trk_BC37D51C-D42B-4F4E-8B20-F16051ECC8C7",
+          "trk_DE8469FC-AF6A-4A5E-B86C-7F177DF8CEEE",
+          "trk_569C6546-3C6F-4A79-BE6E-65180AF2D8E3",
+          "trk_CBB9B1A7-CF99-4DD0-BB37-178BA77D4AAF",
+          "trk_8294944C-CC61-4360-B4F0-A0D2A2CA8A9F"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "291/b-mixer-after-tracks",
+      "payload": {
+        "data_source": "ax_poll",
+        "strips": 21,
+        "nodes": 19,
+        "track_nodes": 19,
+        "track_refs": [
+          "trk_0B8272B3-A9C6-4104-A9A5-BDAA324711AF",
+          "trk_148194AF-706F-40BA-B186-295ABBADB246",
+          "trk_2067868C-6388-4642-9AAE-B6FF3FF82375",
+          "trk_26108B73-22B8-4368-AFCE-2ACC5F455B8F",
+          "trk_2A8BC51B-48A3-46E6-B850-F3593D9F3C34",
+          "trk_2C770264-57EA-4F95-9471-8617190EF94D",
+          "trk_40F4F9CD-2F39-4C99-8FE8-4235809A55BA",
+          "trk_569C6546-3C6F-4A79-BE6E-65180AF2D8E3",
+          "trk_6B1CBCF0-512D-4B75-A9B0-399A983759B5",
+          "trk_8294944C-CC61-4360-B4F0-A0D2A2CA8A9F",
+          "trk_B1FAD62C-F089-450B-8813-DC0B976CE6DB",
+          "trk_B66D8392-A771-454C-9992-226D5E8EC1D5",
+          "trk_BA750AA2-10F7-4FC1-93F9-712C93F58B56",
+          "trk_BC37D51C-D42B-4F4E-8B20-F16051ECC8C7",
+          "trk_CBB9B1A7-CF99-4DD0-BB37-178BA77D4AAF",
+          "trk_DE8469FC-AF6A-4A5E-B86C-7F177DF8CEEE",
+          "trk_DFB080C6-6526-480E-92B9-73485DFA6779",
+          "trk_E3A79435-14DF-4068-A021-C250AC7EAE61",
+          "trk_E3F77BC5-D474-4C9F-ACF9-5BE96939CF12"
+        ],
+        "edges": 0,
+        "complete": false,
+        "partial_reason": "unresolved output destination endpoint \"立體聲輸出\" for source track_index=0: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=1: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=2: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=3: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=4: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=5: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=6: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=7: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=8: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=9: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=10: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=11: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=12: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=13: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=14: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=15: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=16: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=17: no unique live track carries that name; unresolved output destination endpoint \"立體聲輸出\" for source track_index=18: no unique live track carries that name; no live track observation for mixer strip track_index=19; unreadable output destination endpoint for source track_index=19; no live track observation for mixer strip track_index=20; unreadable output destination endpoint for source track_index=20; sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle",
+        "project_ref": "prj_ACFF3779-D390-427F-AE6B-026C4A726995",
+        "shape": [
+          [
+            "track",
+            "Absolute Zero"
+          ],
+          [
+            "track",
+            "Audio 1"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Deluxe Classic"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ],
+          [
+            "track",
+            "Studio Grand"
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "291/a-mixer-read-before-any-tracks-read-publishes-the-track-nodes",
+      "passed": true,
+      "expected": "a logic://mixer read taken in a fresh server before any logic://tracks read publishes as many track nodes as the read after logic://tracks, and names no strip as lacking an issued trk_ reference. THE COUNTEREXAMPLE is the 2026-09-14 reading: 0 nodes first, 23 after a tracks read",
+      "observed": {
+        "observation": "{'first_mixer_track_nodes': 19, 'after_tracks_track_nodes': 19, 'first_read_names_unissued_sources': False}",
+        "accepted_the_observation": true,
+        "counterexample": "{'first_mixer_track_nodes': 0, 'after_tracks_track_nodes': 23, 'first_read_names_unissued_sources': True}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "make RoutingGraphPublication look track references up instead of receiving the issued map (3147d410's TargetRefResolver.issuedTrackReference)",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "291/the-mixer-and-tracks-name-each-track-by-one-reference",
+      "passed": true,
+      "expected": "in one server, the trk_ references the first mixer read published are the ones the mixer publishes after logic://tracks and are all among the ones logic://tracks hands out. THE COUNTEREXAMPLE is two issuers minting different references for the same rows",
+      "observed": {
+        "observation": "{'first_mixer_refs': ['trk_0A33AA6D-5778-4AD3-BC1C-F32DD0A9968B', 'trk_11765278-E1D0-4C66-9BA4-3441D01978CC', 'trk_207A2824-D328-4DA1-8E37-695636540401', 'trk_306D7846-4450-4A55-B5CA-E6F62A6CA2DD', 'trk_4A75FD45-96FC-4E4A-9ECA-615473B549CE', 'trk_4EC59A9D-4A22-4EF6-B05A-34733F1D01FC', 'trk_638A20C4-616B-46A5-B3A1-CF7014B01AD6', 'trk_6A48FB4A-13F7-480D-97E8-47FED98CDF1D', 'trk_76B726C1-3CB9-4FC4-B8",
+        "accepted_the_observation": true,
+        "counterexample": "{'first_mixer_refs': ['trk_0A33AA6D-5778-4AD3-BC1C-F32DD0A9968B', 'trk_11765278-E1D0-4C66-9BA4-3441D01978CC', 'trk_207A2824-D328-4DA1-8E37-695636540401', 'trk_306D7846-4450-4A55-B5CA-E6F62A6CA2DD', 'trk_4A75FD45-96FC-4E4A-9ECA-615473B549CE', 'trk_4EC59A9D-4A22-4EF6-B05A-34733F1D01FC', 'trk_638A20C4-616B-46A5-B3A1-CF7014B01AD6', 'trk_6A48FB4A-13F7-480D-97E8-47FED98CDF1D', 'trk_76B726C1-3CB9-4FC4-B8",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "bind track references in readMixer with a descriptor that differs from readTracks'",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "291/tracks-first-and-mixer-first-publish-the-same-graph",
+      "passed": true,
+      "expected": "the graph a mixer-first server publishes has the same nodes, by kind and display name, and the same edge count as the graph a tracks-first server publishes. THE COUNTEREXAMPLE is the empty mixer-first graph",
+      "observed": {
+        "observation": "{'mixer_first': {'shape': [('track', 'Absolute Zero'), ('track', 'Audio 1'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Studio Grand'), ('track', 'Studio Grand'), ('track'",
+        "accepted_the_observation": true,
+        "counterexample": "{'mixer_first': {'shape': [], 'edges': 0}, 'tracks_first': {'shape': [('track', 'Absolute Zero'), ('track', 'Audio 1'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Deluxe Classic'), ('track', 'Studio G",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "make RoutingGraphPublication look track references up instead of receiving the issued map",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "291/the-mixer-carries-the-project-ref-project-info-issues",
+      "passed": true,
+      "expected": "the first mixer read's projectReference, taken before any logic://project/info read, is the prj_ that logic://project/info issues afterwards in the same server; the tracks-first server's mixer carries one too. THE COUNTEREXAMPLE is the pre-change shape: no project reference until project/info has been read",
+      "observed": {
+        "observation": "{'mixer_project_ref': 'prj_423FA0D2-F334-41B0-892B-C3BC50DED74A', 'project_info_ref': 'prj_423FA0D2-F334-41B0-892B-C3BC50DED74A', 'tracks_first_mixer_project_ref': 'prj_ACFF3779-D390-427F-AE6B-026C4A726995'}",
+        "accepted_the_observation": true,
+        "counterexample": "{'mixer_project_ref': None, 'project_info_ref': 'prj_423FA0D2-F334-41B0-892B-C3BC50DED74A', 'tracks_first_mixer_project_ref': 'prj_ACFF3779-D390-427F-AE6B-026C4A726995'}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "have readMixer look the project reference up instead of issuing it",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "291/the-mixer-pane-is-as-it-was",
+      "restored": true,
+      "detail": "{\"x_presses\": 0}"
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    }
+  ]
+}

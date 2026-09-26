@@ -55,7 +55,9 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Three raises in two days is not churn: each names the harness that made the number true. This one
 # was a MERGE conflict, both sides having raised the same constant for different harnesses, and the
 # resolution is the union rather than either side.
-FLOOR = 23
+# 23 -> 24 on 2026-09-27, the same shape again: #862's bank harness and #291's read-order harness
+# were each the 23rd on their own branch.
+FLOOR = 24
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

@@ -207,19 +207,6 @@ actor TargetRegistry {
         })?.reference
     }
 
-    /// The project reference when it was previously issued for this exact
-    /// snapshot. Resource reads may report its absence, but must not manufacture
-    /// a project identity as a side effect of publishing another resource.
-    func issuedCurrentProjectReference(snapshot: TargetRegistrySnapshot) -> TargetReference? {
-        guard let descriptor = currentProjectDescriptor else { return nil }
-        return issuedReference(
-            kind: .project,
-            descriptor: descriptor,
-            fingerprint: descriptor.fingerprint,
-            snapshot: snapshot
-        )
-    }
-
     func resolveCurrentProject(_ reference: TargetReference) -> TargetBinding? {
         guard let binding = resolve(reference),
               binding.kind == .project,
