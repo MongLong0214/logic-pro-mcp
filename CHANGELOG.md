@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **`logic://project/info` reports the project's own name, not Logic's window title (#1022).**
+  `name` was the whole title of the arrange window, and Logic appends the view to that title in
+  its own UI language: the same project read `lpm-locale-campaign - Tracks` in English,
+  `… - Spuren` in German, `… - トラック` in Japanese, and the `prj_` descriptor built from the name
+  changed with the language. Exactly one trailing ` - <view>` is now removed, for the spellings
+  `AXLocalePolicy.arrangeWindowTitleSuffix` already carried, and only when a non-empty name stands
+  in front of it; a title with no known suffix is reported as it reads. `project.new`'s
+  created-window witness and this name now read the title through one rule
+  (`AccessibilityChannel.arrangeWindowTitleComponents`). Limits: a project whose own name ends in
+  ` - Tracks` is titled `… - Tracks - Tracks` and only the last suffix is taken; the live
+  harness (`Scripts/livekit/live_1022_project_name_has_no_view_suffix.py`) measures one language
+  per run.
 - **`logic://mixer`'s `routing_graph` no longer depends on whether `logic://tracks` was read
   first (#291).** In a fresh server a mixer read published no track nodes at all until
   `logic://tracks` had been read, because only that resource issued `trk_` references; the same

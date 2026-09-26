@@ -55,7 +55,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Three raises in two days is not churn: each names the harness that made the number true. This one
 # was a MERGE conflict, both sides having raised the same constant for different harnesses, and the
 # resolution is the union rather than either side.
-FLOOR = 23
+# 23 -> 24 on 2026-09-27: live_1022_project_name_has_no_view_suffix, whose counterexample for every
+# check is the arrange window's raw title read through System Events — the value `name` held before
+# the change — so a predicate that would still accept the old reading fails in the same run.
+FLOOR = 24
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )
