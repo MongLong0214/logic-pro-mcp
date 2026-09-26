@@ -5316,3 +5316,75 @@ private func makeTempoFixtureWithAlert(
     #expect(obj["blocker_scan_before_write"] as? String == "unreadable")
     #expect(obj["verified"] == nil)
 }
+
+/// #904: the qualification oracles for Cycle and Count In read the receipt this channel emits, so
+/// they are checked against that receipt rather than against a fixture written from the oracle.
+/// The control is titled in English and in Korean; the receipt's `button` and `control` carry the
+/// operation's `reportAs` token either way, and the oracle must accept both runs and refuse the
+/// same receipt once its `control` carries the Korean label instead.
+@Test(arguments: [
+    ("transport.toggle_cycle", "Cycle"),
+    ("transport.toggle_cycle", "사이클"),
+    ("transport.toggle_count_in", "Count In"),
+    ("transport.toggle_count_in", "카운트 인"),
+])
+func semanticOracleAcceptsTheControlBarToggleReceipt(operation: String, title: String) async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(190)
+    let window = builder.element(191)
+    let controlBar = builder.element(192)
+    let checkbox = builder.element(193)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [checkbox])
+    builder.setAttribute(checkbox, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(checkbox, kAXTitleAttribute as String, title)
+    builder.setAttribute(checkbox, kAXValueAttribute as String, NSNumber(value: false))
+
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if element == checkbox && action == kAXPressAction as String {
+                builder.setAttribute(checkbox, kAXValueAttribute as String, NSNumber(value: true))
+            }
+            return true
+        }
+    )
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        logicRuntime: logicRuntime,
+        controlBarMouseRuntime: ControlBarMouseRecorder().runtime()
+    )
+
+    let result = await channel.execute(operation: operation, params: [:])
+    let object = decodeAccessibilityJSON(result.message)
+    #expect(result.isSuccess)
+    #expect(object["state"] as? String == "A")
+
+    let oracle = operation == "transport.toggle_cycle"
+        ? SemanticOracleTable.transportToggleCycle
+        : SemanticOracleTable.transportToggleCountIn
+    let verdict = try #require(
+        oracle.evaluate(responseData: Data(result.message.utf8), readbackData: Data("{}".utf8))
+    )
+    #expect(verdict)
+
+    // The same receipt with `control` set to the label the oracle used to expect must be refused,
+    // so accepting the honest receipt is not the oracle having stopped reading the field.
+    var forged = try #require(
+        try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+    forged["control"] = operation == "transport.toggle_cycle" ? "사이클" : "카운트 인"
+    let forgedVerdict = try #require(
+        oracle.evaluate(
+            responseData: try JSONSerialization.data(withJSONObject: forged),
+            readbackData: Data("{}".utf8)
+        )
+    )
+    #expect(!forgedVerdict)
+}
