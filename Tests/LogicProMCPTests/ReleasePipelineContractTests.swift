@@ -11,18 +11,33 @@ import Testing
     #expect(script.contains("git rev-parse HEAD"))
     #expect(script.contains("git rev-parse origin/main"))
     #expect(script.contains("HEAD must match origin/main"))
-    #expect(script.contains("swift test --no-parallel"))
+    #expect(script.contains("run \"Scripts/release-qualify.sh\""))
     #expect(script.contains("git diff --exit-code Package.resolved"))
 
     let branchGate = try #require(script.range(of: "git branch --show-current"))
     let headGate = try #require(script.range(of: "git rev-parse HEAD"))
-    let testGate = try #require(script.range(of: "swift test --no-parallel"))
+    let testGate = try #require(script.range(of: "run \"Scripts/release-qualify.sh\""))
     let lockfileGate = try #require(script.range(of: "git diff --exit-code Package.resolved"))
+    let tag = try #require(script.range(of: "run \"git tag $VERSION"))
     let tagPush = try #require(script.range(of: "git push origin $VERSION"))
     #expect(branchGate.lowerBound < tagPush.lowerBound)
     #expect(headGate.lowerBound < tagPush.lowerBound)
-    #expect(testGate.lowerBound < tagPush.lowerBound)
+    #expect(testGate.lowerBound < lockfileGate.lowerBound)
+    #expect(testGate.lowerBound < tag.lowerBound)
+    #expect(tag.lowerBound < tagPush.lowerBound)
     #expect(lockfileGate.lowerBound < tagPush.lowerBound)
+}
+
+@Test func release_qualification_gate_builds_and_requires_live_logic_before_full_suite() throws {
+    let gate = try scriptContents("Scripts/release-qualify.sh")
+
+    let build = try #require(gate.range(of: "\nswift build -c release\n"))
+    let logic = try #require(gate.range(of: "if ! pgrep -xq \"Logic Pro\"; then"))
+    let permission = try #require(gate.range(of: "if ! .build/release/LogicProMCP --check-permissions; then"))
+    let suite = try #require(gate.range(of: "\nswift test --no-parallel\n"))
+    #expect(build.lowerBound < logic.lowerBound)
+    #expect(logic.lowerBound < permission.lowerBound)
+    #expect(permission.lowerBound < suite.lowerBound)
 }
 
 @Test func release_workflow_runs_tests_before_packaging() throws {

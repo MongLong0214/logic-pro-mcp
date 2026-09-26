@@ -58,22 +58,44 @@ if [ -n "$changed" ] && [ "$changed" != "Formula/logic-pro-mcp.rb" ]; then
     exit 1
 fi
 
-# Scripts/release.sh rewrites only the Formula's `sha256 "..."` literal after qualification, so every changed line
-# in that file must be one; any other Formula edit after the live run is a change nobody qualified.
-if [ -n "$changed" ]; then
+# Scripts/release.sh rewrites one existing Formula `sha256 "..."` literal after qualification.
+# Require one old and one new line, with the rest of that line unchanged.
+if [ "$changed" = "Formula/logic-pro-mcp.rb" ]; then
     if ! formula_diff=$(git diff -U0 "$qualified" "$tag_ref^{commit}" -- Formula/logic-pro-mcp.rb 2>/dev/null); then
         echo "Error: cannot read the Formula change in $tag (#985)." >&2
         exit 1
     fi
+    removed=0
+    added=0
+    removed_shape=""
+    added_shape=""
+    in_hunk=0
     while IFS= read -r line; do
-        case "$line" in
-            "" | "+++ "* | "--- "* | "diff "* | "index "* | "@@"*) continue ;;
-        esac
-        if ! [[ "$line" =~ ^[-+][[:space:]]*sha256\ \"[0-9a-f]{64}\"[[:space:]]*$ ]]; then
+        if [[ "$line" == "@@"* ]]; then
+            in_hunk=1
+            continue
+        fi
+        if [ "$in_hunk" -eq 0 ]; then
+            case "$line" in
+                "diff "* | "index "* | "--- "* | "+++ "*) continue ;;
+            esac
+        fi
+        if ! [[ "$line" =~ ^[-+]([[:space:]]*sha256\ \")[0-9a-f]{64}(\"[[:space:]]*)$ ]]; then
             echo "Error: $tag changes Formula/logic-pro-mcp.rb beyond its sha256 line after qualification (#985)." >&2
             exit 1
         fi
+        if [[ "$line" == -* ]]; then
+            removed=$((removed + 1))
+            removed_shape="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+        else
+            added=$((added + 1))
+            added_shape="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+        fi
     done <<< "$formula_diff"
+    if [ "$removed" -ne 1 ] || [ "$added" -ne 1 ] || [ "$removed_shape" != "$added_shape" ]; then
+        echo "Error: $tag must replace exactly one existing Formula sha256 literal after qualification (#985)." >&2
+        exit 1
+    fi
 fi
 
 echo "$tag: qualified at $qualified"

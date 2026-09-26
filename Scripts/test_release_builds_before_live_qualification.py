@@ -144,19 +144,35 @@ def workflow_problems(text):
     return problems
 
 
+SHA_LINE = '  sha256 "' + "a" * 64 + '"\n'
 FORMULA = ('class LogicProMcp < Formula\n  url "https://example.invalid/v1.2.2.tar.gz"\n'
-           '  sha256 "' + "a" * 64 + '"\nend\n')
-#: What `Scripts/release.sh` does after qualification (the sha256 literal), and two edits it never makes.
+           + SHA_LINE + 'end\n')
+TWO_SHA_FORMULA = FORMULA.replace(SHA_LINE, SHA_LINE + '  sha256 "' + "c" * 64 + '"\n')
+HEADER_LIKE_FORMULA = FORMULA.replace("end\n", "-- extra\nend\n")
+#: The release.sh checksum rewrite and Formula edits it must never make after qualification.
 FORMULA_CHANGES = {
     "formula-checksum": ("Formula/logic-pro-mcp.rb", FORMULA.replace("a" * 64, "b" * 64)),
     "formula-url": ("Formula/logic-pro-mcp.rb", FORMULA.replace("v1.2.2", "v9.9.9")),
     "formula-checksum-and-url": ("Formula/logic-pro-mcp.rb",
                                  FORMULA.replace("a" * 64, "b" * 64).replace("v1.2.2", "v9.9.9")),
+    "formula-checksum-deleted": ("Formula/logic-pro-mcp.rb", FORMULA.replace(SHA_LINE, "")),
+    "formula-checksum-added": ("Formula/logic-pro-mcp.rb",
+                               FORMULA.replace(SHA_LINE, SHA_LINE + '  sha256 "' + "b" * 64 + '"\n')),
+    "formula-checksum-and-indent": ("Formula/logic-pro-mcp.rb",
+                                   FORMULA.replace(SHA_LINE, '    sha256 "' + "b" * 64 + '"\n')),
+    "formula-checksum-and-header-like-addition": ("Formula/logic-pro-mcp.rb",
+                                                  FORMULA.replace("a" * 64, "b" * 64)
+                                                  .replace("end\n", "++ extra\nend\n")),
+    "formula-checksum-and-header-like-deletion": ("Formula/logic-pro-mcp.rb",
+                                                  HEADER_LIKE_FORMULA.replace("a" * 64, "b" * 64)
+                                                  .replace("-- extra\n", "")),
+    "formula-two-checksums-replaced": ("Formula/logic-pro-mcp.rb",
+                                       TWO_SHA_FORMULA.replace("a" * 64, "b" * 64).replace("c" * 64, "d" * 64)),
 }
 
 
 def run_tag_check(check_text, *, qualified="tagged", changes=(), tag_kind="annotated",
-                  message_lines=None, commit_live_line=False):
+                  message_lines=None, commit_live_line=False, formula_before=FORMULA):
     """Run the tag checker in a real, isolated scratch git repo; return its exit code."""
     with tempfile.TemporaryDirectory(prefix="release-tag-") as root:
         env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
@@ -172,7 +188,7 @@ def run_tag_check(check_text, *, qualified="tagged", changes=(), tag_kind="annot
                                   text=True, check=True).stdout.strip()
 
         git("init", "-q")
-        for name, text in (("Formula/logic-pro-mcp.rb", FORMULA), ("Sources/Example.swift", "before\n")):
+        for name, text in (("Formula/logic-pro-mcp.rb", formula_before), ("Sources/Example.swift", "before\n")):
             path = os.path.join(root, name)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
@@ -218,6 +234,17 @@ def tag_checker_problems(check_text):
         ("Formula checksum change", {"qualified": "parent", "changes": ("formula-checksum",)}, 0),
         ("Formula url change", {"qualified": "parent", "changes": ("formula-url",)}, 1),
         ("Formula checksum and url change", {"qualified": "parent", "changes": ("formula-checksum-and-url",)}, 1),
+        ("Formula checksum deletion", {"qualified": "parent", "changes": ("formula-checksum-deleted",)}, 1),
+        ("Formula second checksum addition", {"qualified": "parent", "changes": ("formula-checksum-added",)}, 1),
+        ("Formula checksum and indentation change", {"qualified": "parent",
+                                                     "changes": ("formula-checksum-and-indent",)}, 1),
+        ("Formula checksum and header-like addition", {"qualified": "parent",
+                                                       "changes": ("formula-checksum-and-header-like-addition",)}, 1),
+        ("Formula checksum and header-like deletion", {"qualified": "parent",
+                                                       "changes": ("formula-checksum-and-header-like-deletion",),
+                                                       "formula_before": HEADER_LIKE_FORMULA}, 1),
+        ("Formula two checksum replacements", {"qualified": "parent", "changes": ("formula-two-checksums-replaced",),
+                                               "formula_before": TWO_SHA_FORMULA}, 1),
         ("source change", {"qualified": "parent", "changes": ("Sources/Example.swift",)}, 1),
         ("lightweight tag", {"qualified": "parent", "changes": ("formula-checksum",),
                              "tag_kind": "lightweight", "commit_live_line": True}, 1),
@@ -308,7 +335,7 @@ class TagsNameTheLiveQualifiedCommit(unittest.TestCase):
 
     def test_checker_allowing_any_formula_edit_is_refused(self):
         text = _read(TAG_CHECKER)
-        broken = text.replace('if ! [[ "$line" =~ ^[-+][[:space:]]*sha256\\ \\"[0-9a-f]{64}\\"[[:space:]]*$ ]]; then',
+        broken = text.replace('if [ "$changed" = "Formula/logic-pro-mcp.rb" ]; then',
                               'if false; then', 1)
         self.assertNotEqual(broken, text)
         self.assertIn("tag checker: Formula url change exited 0", tag_checker_problems(broken))
