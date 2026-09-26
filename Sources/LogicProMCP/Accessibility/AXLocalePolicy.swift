@@ -1082,9 +1082,17 @@ enum AXLocalePolicy {
     /// Every string here is a value Apple ships at the row below; the German carries a non-breaking
     /// space and the Traditional Chinese a U+22EF midline ellipsis, neither of which survives being
     /// typed.
+    ///
+    /// The German therefore appears TWICE, and the two differ only in two invisible characters. The
+    /// first is Apple's row, with U+00A0 after `Session` and before `…`. The Track menu does not
+    /// render it that way: its AXTitle on a German Logic 12.3 read 2026-09-26 has U+0020 in both
+    /// places, and no `.strings` file in Logic's `de.lproj` carries that spelling. The menu match is
+    /// exact, so with only the row the drummer create never found its item in German and fell
+    /// through to a key command that created nothing (#883). The row stays, because it is what
+    /// `derivedFrom` cites and what the offline check pins.
     static let newSessionPlayerTrackMenuItem = LabelSet(
         canonical: "New Session Player SI Track…",
-        variants: ["새로운 Session Player SI 트랙…", "新規Session Playerソフトウェア音源トラック…", "Neue Session Player SI-Spur …", "Nueva pista SI de Session Player…", "Nouvelle piste SI Session Player…", "Nuova traccia SI Session Player…", "Nova Pista de IS de Session Player…", "新建伴奏乐手 SI 轨道…", "新增 Session Player SI 音軌⋯"],
+        variants: ["새로운 Session Player SI 트랙…", "新規Session Playerソフトウェア音源トラック…", "Neue Session Player SI-Spur …", "Neue Session Player SI-Spur …", "Nueva pista SI de Session Player…", "Nouvelle piste SI Session Player…", "Nuova traccia SI Session Player…", "Nova Pista de IS de Session Player…", "新建伴奏乐手 SI 轨道…", "新增 Session Player SI 音軌⋯"],
         rationale: "Track menu leaf for this track type, derived from the row Apple keys it under "
             + "so every language Logic ships is covered. Checked offline by "
             + "Scripts/check-labelsets-are-derived.py.",
@@ -1260,9 +1268,17 @@ enum AXLocalePolicy {
     /// reconciler clicks it to un-wedge Logic, then verifies via track-count
     /// readback — the click itself gates no State-A success. KO live-confirmed
     /// (Logic 12.3: `생성`); JA live-confirmed (Logic 12.3: `作成`).
+    ///
+    /// Spanish appears TWICE because the cited row is not the one the sheet draws in Spanish. The
+    /// row is `Create#und`, and its Spanish is `creación`, a noun. A Spanish Logic 12.3 read on
+    /// 2026-09-26 titles the sheet's button `Crear`, which is Apple's plain `Create` row. So in
+    /// Spanish the reconciler found no button to press, and `project.new` left the sheet up (#883).
+    /// Neither row fits every language: the plain `Create` row reads `Erstellen` in German, but the
+    /// German sheet was read the same day as `Erzeugen`. The row stays, because it is what
+    /// `derivedFrom` cites and what the offline check pins.
     static let createButton = LabelSet(
         canonical: "Create",
-        variants: ["생성", "作成", "Erzeugen", "creación", "Créer", "Crea", "Criar", "创建", "製作"],
+        variants: ["생성", "作成", "Erzeugen", "creación", "Crear", "Créer", "Crea", "Criar", "创建", "製作"],
         rationale: "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`)."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#und` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Create%23und#value"

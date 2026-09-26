@@ -916,12 +916,317 @@ def _nib_localizable_pairs(archive, rel_path: str):
         yield (key, english)
 
 
+#: The (class, key) pairs whose string AppKit DRAWS, each with what the class means by it. A string
+#: at any other site is an identifier, a format or a geometry, and is not read. The class is the
+#: AppKit class, so an `NSClassSwapper` -- Interface Builder's record of a custom subclass such as
+#: `MAButtonCell` -- is read as its `NSOriginalClassName`: the subclass inherits the property, and
+#: the swapper is where 3,503 of the plug-in screens' cells live.
+#:
+#: Chosen by meaning rather than by what the strings look like, because the sites that are NOT
+#: labels hold strings that look exactly like labels: `NSTableColumn.NSIdentifier` holds `Rec`,
+#: `NSTabViewItem.NSIdentifier` holds `Audio`, `NSNibOutletConnector.NSLabel` holds `content`.
+#: Every one of those is a name the code uses and no screen shows.
+NIB_LABEL_SITES = {
+    ("NSTextFieldCell", "NSContents"): "the text a label or a text field shows",
+    ("NSTextFieldCell", "NSPlaceholderString"): "the text an empty field shows in grey",
+    ("NSButtonCell", "NSContents"): "a button's title",
+    ("NSButtonCell", "NSAlternateContents"): "a toggle's title in its on state",
+    ("NSMenuItem", "NSTitle"): "a menu item's title",
+    ("NSTableHeaderCell", "NSContents"): "a column's header",
+    ("NSTableColumn", "NSHeaderToolTip"): "a column header's tool tip",
+    ("NSWindowTemplate", "NSWindowTitle"): "a window's title",
+    ("NSTabViewItem", "NSLabel"): "a tab's label",
+    ("NSSegmentItem", "NSSegmentItemLabel"): "a segment's label",
+    # A tool tip is a help connector whose `NSFile` is `NSToolTipHelpKey`; its `NSMarker` is the
+    # text. Checked below, because a help connector of any other kind names a help-book anchor.
+    ("NSIBHelpConnector", "NSMarker"): "a control's tool tip",
+    # The accessibility attributes Interface Builder sets directly. Checked below against
+    # `NIB_AX_ATTRIBUTES`, because the connector's other string is the attribute's NAME.
+    ("NSNibAXAttributeConnector", "AXAttributeValueArchiveKey"): "an accessibility attribute's value",
+}
+
+#: The accessibility attributes whose value is text an assistive client reads out.
+NIB_AX_ATTRIBUTES = frozenset({"AXDescription", "AXHelp", "AXTitle"})
+
+#: The one user-defined runtime attribute AppKit gives a meaning to. `accessibilityLabel` is the
+#: `NSAccessibility` property behind AXDescription, on any view. Every other key path a plug-in
+#: screen sets -- `labelString`, `text`, `title`, `onTitle` -- is a property of an `MA*` class this
+#: repository has no definition of, so what it means is not something the class can tell us.
+NIB_AX_KEY_PATHS = frozenset({"accessibilityLabel"})
+
+#: The title Interface Builder's object library gives a new object of each class, which a nib keeps
+#: when the code sets the real text at run time. Scoped to the site, because the same word at
+#: another site can be real: `Window` is Logic's own menu title and only `NSWindowTemplate`'s
+#: default. Measured: localizers translate these too (`Item 3` is `항목 3` in ko.lproj), so a
+#: translation is no evidence a string is shown.
+IB_DEFAULT_TITLES = {
+    # `Title` and the three `System Font Text` sizes are the older Interface Builder's defaults for
+    # a box and a text field; `Box` and `Label` are the current one's.
+    ("NSTextFieldCell", "NSContents"): frozenset({
+        "Label", "Multi-line Label", "Wrapping Label", "Text Cell", "Box", "Title",
+        "Table View Cell", "System Font Text", "Small System Font Text", "Mini System Font Text"}),
+    ("NSButtonCell", "NSContents"): frozenset({"Button", "Button Cell", "Check", "Radio", "Push"}),
+    ("NSMenuItem", "NSTitle"): frozenset({"Item", "Item 1", "Item 2", "Item 3", "Menu Item"}),
+    ("NSTabViewItem", "NSLabel"): frozenset({"Tab", "View"}),
+    ("NSWindowTemplate", "NSWindowTitle"): frozenset({"Window", "Panel"}),
+}
+
+#: Interface Builder's main-menu template names the application `NewApplication`; Logic's menu bar
+#: is built in code and the template's items keep the placeholder.
+_IB_TEMPLATE_APP_NAME = "NewApplication"
+
+# Numeric text-field contents are readout examples filled by the running code. The same bytes at
+# title sites are static labels: KeyAssign.nib's symbol headers and old-style time-signature menus
+# have no letters, for example. An arrow in a text field can also be a static label.
+_NUMERIC_READOUT = re.compile(r"(?:[+-]?\d[\d:.,%/ +-]*|[+-])")
+_DO_NOT_LOCALIZE = re.compile(r"(?:NOT|N['’]T)\s+LOCALI[SZ]E", re.IGNORECASE)
+
+#: `nibarchive.T_OBJECT`, repeated so the rules above read without importing the parser.
+_NIB_T_OBJECT = 10
+
+
+def _nib_label_exclusion(site, text: str):
+    """Why a string at a label site is not a label Apple shows, or None when it is one."""
+    if not text.strip():
+        # A blank title is not a label at any site.
+        return "no_letter"
+    if site in (("NSTextFieldCell", "NSContents"),
+                ("NSTextFieldCell", "NSPlaceholderString")) and \
+            _NUMERIC_READOUT.fullmatch(text.strip()):
+        # `0`, `-12`, `1234`, `00:38`: numeric readout examples on text fields.
+        return "no_letter"
+    if _DO_NOT_LOCALIZE.search(text):
+        # `DO NOT LOCALIZE`, `DOT NOT LOCALIZE` and `DON'T LOCALIZE THIS WINDOW !`: Apple's own
+        # marker for a field the running code fills in, or a screen no customer sees.
+        return "do_not_localize"
+    if text in IB_DEFAULT_TITLES.get(site, ()) or _IB_TEMPLATE_APP_NAME in text:
+        return "ib_default"
+    if text.startswith("Lorem ipsum") or text.startswith("Lorem Ipsum"):
+        return "ib_default"
+    return None
+
+
+def _nib_object_paths(archive):
+    """{object index: path from the root}, breadth first over object references.
+
+    The path is how a label in `de.lproj/X.nib` finds its twin in `en.lproj/X.nib`. The object
+    INDEX cannot do it: measured, 20 of the 60 old-style nibs have a different object sequence in
+    at least one locale, because a localizer's edit adds or drops objects. The path -- which key of
+    which parent, and which occurrence of that key -- is what Interface Builder does not renumber.
+    """
+    objects, values, keys = archive["objects"], archive["values"], archive["keys"]
+    paths = {0: ""} if objects else {}
+    queue = [0] if objects else []
+    while queue:
+        index = queue.pop(0)
+        obj = objects[index]
+        seen = collections.Counter()
+        for value in values[obj["first_value"]:obj["first_value"] + obj["value_count"]]:
+            if value["type"] != _NIB_T_OBJECT or value["value"] >= len(objects):
+                continue
+            key = keys[value["key"]] if value["key"] < len(keys) else "?"
+            occurrence = seen[key]
+            seen[key] += 1
+            target = value["value"]
+            if target not in paths:
+                paths[target] = f"{paths[index]}/{key}[{occurrence}]"
+                queue.append(target)
+    return paths
+
+
+
+def _nib_labels(archive, stats=None):
+    """Yield (key, text, exclusion) for every string at a label site of one non-base nib.
+
+    `exclusion` is None for a label and names the rule otherwise; the caller drops those, and has
+    to see them, because a translated nib's twin of an excluded English default is excluded too.
+    `stats`, when given, counts what the site rules drop, so the choice is reported with its cost
+    instead of asserted.
+    """
+    import nibarchive  # noqa: E402
+
+    classes, objects, keys, values = (archive["classes"], archive["objects"], archive["keys"],
+                                      archive["values"])
+    texts = nibarchive.strings_by_object(archive)
+    paths = _nib_object_paths(archive)
+
+    def class_of(index):
+        return classes[objects[index]["class"]] if objects[index]["class"] < len(classes) else "?"
+
+    def fields_of(index):
+        obj = objects[index]
+        out = {}
+        for value in values[obj["first_value"]:obj["first_value"] + obj["value_count"]]:
+            if value["key"] < len(keys):
+                out.setdefault(keys[value["key"]], value)
+        return out
+
+    def text_of(index):
+        """The string an object holds, through an attributed string, or None."""
+        if index is None or index >= len(objects):
+            return None
+        name = class_of(index)
+        if name in ("NSString", "NSMutableString", "NSLocalizableString"):
+            return texts.get(index, {}).get("NS.bytes")
+        if name in ("NSAttributedString", "NSMutableAttributedString"):
+            inner = fields_of(index).get("NSString")
+            if inner is not None and inner["type"] == _NIB_T_OBJECT:
+                return text_of(inner["value"])
+        return None
+
+    def appkit_class(index):
+        name = class_of(index)
+        if name == "NSClassSwapper":
+            original = fields_of(index).get("NSOriginalClassName")
+            if original is not None and original["type"] == _NIB_T_OBJECT:
+                return text_of(original["value"]) or name
+        return name
+
+    def count(what):
+        if stats is not None:
+            stats[what] += 1
+
+    for index in range(len(objects)):
+        if index not in paths:
+            continue
+        owner = appkit_class(index)
+        fields = fields_of(index)
+        if owner == "NSIBUserDefinedRuntimeAttributesConnector":
+            yield from _runtime_labels(archive, index, paths[index], fields, text_of, count)
+            continue
+        seen = collections.Counter()
+        obj = objects[index]
+        for value in values[obj["first_value"]:obj["first_value"] + obj["value_count"]]:
+            if value["type"] != _NIB_T_OBJECT:
+                continue
+            # Counted over object references only, exactly as `_nib_object_paths` counts them, so
+            # a label's key and its cell's path are written in one numbering.
+            key = keys[value["key"]] if value["key"] < len(keys) else "?"
+            occurrence = seen[key]
+            seen[key] += 1
+            text = text_of(value["value"])
+            if text is None:
+                continue
+            site = (owner, key)
+            if site not in NIB_LABEL_SITES:
+                count(f"site {owner}.{key}")
+                continue
+            if owner == "NSIBHelpConnector":
+                kind = fields.get("NSFile")
+                if kind is None or kind["type"] != _NIB_T_OBJECT or \
+                        text_of(kind["value"]) != "NSToolTipHelpKey":
+                    count("help connector that is not a tool tip")
+                    continue
+            if owner == "NSNibAXAttributeConnector":
+                kind = fields.get("AXAttributeTypeArchiveKey")
+                if kind is None or kind["type"] != _NIB_T_OBJECT or \
+                        text_of(kind["value"]) not in NIB_AX_ATTRIBUTES:
+                    count("ax connector whose attribute is not text")
+                    continue
+            yield (f"{paths[index]}/{key}[{occurrence}]", text,
+                   _nib_label_exclusion(site, text))
+
+
+def _runtime_labels(archive, index, path, fields, text_of, count):
+    """The `accessibilityLabel` runtime attributes one connector sets, addressed by key path."""
+    import nibarchive  # noqa: E402
+
+    names, settings = fields.get("NSKeyPaths"), fields.get("NSValues")
+    if names is None or settings is None or names["type"] != _NIB_T_OBJECT \
+            or settings["type"] != _NIB_T_OBJECT:
+        return
+    name_children = nibarchive._array_children(archive, names["value"])
+    value_children = nibarchive._array_children(archive, settings["value"])
+    for position, name_index in enumerate(name_children):
+        key_path = text_of(name_index)
+        text = text_of(value_children[position]) if position < len(value_children) else None
+        if key_path is None or text is None:
+            continue
+        if key_path not in NIB_AX_KEY_PATHS:
+            count(f"runtime attribute {key_path}")
+            continue
+        yield (f"{path}/{key_path}", text, _nib_label_exclusion(("runtime", key_path), text))
+
+
+def extract_niblabels(app: str, stats=None):
+    """The labels in every nib Apple does NOT base-internationalise. Issue #902.
+
+    `nibstrings` reads the 162 `Base.lproj` nibs, where Interface Builder marks each English label
+    as an `NSLocalizableString`. The other 1,007 nibs hold ZERO of those: 60 per locale are the
+    older style, one fully translated copy of the nib in each `.lproj` including `en.lproj`, and
+    407 sit in no `.lproj` at all -- one copy for every language, 312 of them plug-in screens in
+    `MAPlugInGUI.framework`. Their labels are plain strings under a cell's title, so this reads the
+    sites `NIB_LABEL_SITES` names and nothing else.
+
+    Addressed so the translations meet: the unit is the nib with its `.lproj` taken out, the key is
+    the object path from `_nib_object_paths`, and the locale is the `.lproj` -- so `en` and `de` of
+    one label land in one row and `derive_translated_english` can see that Apple translated it. A
+    nib in no `.lproj` is locale `-`, as a `.strings` file outside every `.lproj` already is.
+    """
+    sys.path.insert(0, os.path.join(REPO, "Scripts"))
+    import nibarchive  # noqa: E402  -- resolved from Scripts/, which is this file's own directory
+
+    failures: list[str] = []
+    units: dict[str, dict[str, str]] = {}
+    for root, dirs, files in os.walk(app):
+        dirs.sort()
+        if os.path.basename(root) == "Base.lproj":
+            continue
+        for name in dirs:
+            if name.endswith(".nib"):
+                raise CanonDecodeError(
+                    f"{_rel(app, os.path.join(root, name))} is a .nib DIRECTORY. This extractor "
+                    f"reads files only, so the corpus would silently be short.")
+        in_lproj = os.path.basename(root).endswith(".lproj")
+        locale = os.path.basename(root)[: -len(".lproj")] if in_lproj else "-"
+        for name in sorted(files):
+            if name.endswith(".nib"):
+                path = os.path.join(root, name)
+                unit = (os.path.join(_rel(app, os.path.dirname(root)), name) if in_lproj
+                        else _rel(app, path))
+                units.setdefault(unit, {})[locale] = path
+
+    def count(what):
+        if stats is not None:
+            stats[what] += 1
+
+    for unit in sorted(units):
+        # English first, because a translated copy's twin of an English Interface Builder default
+        # is that default translated -- `Item 2` is `Objekt 2` in de.lproj -- and nothing in the
+        # German says so. Measured: 923 rows at 150 addresses were exactly that before this order.
+        excluded: set[str] = set()
+        for locale in sorted(units[unit], key=lambda name: (name not in ("en", "-"), name)):
+            path = units[unit][locale]
+            try:
+                with open(path, "rb") as handle:
+                    archive = nibarchive.parse(handle.read())
+            except Exception as exc:
+                failures.append(f"{_rel(app, path)}: {exc}")
+                continue
+            for key, value, reason in _nib_labels(archive, stats):
+                if locale in ("en", "-"):
+                    if reason is not None:
+                        excluded.add(key)
+                        count(reason)
+                        continue
+                elif key in excluded:
+                    count("translation of an excluded English string")
+                    continue
+                elif reason is not None:
+                    count(reason)
+                    continue
+                count("label")
+                yield (unit, locale, key, "value", value)
+    if failures:
+        raise CanonDecodeError(f"{len(failures)} nib(s) did not parse; first: {failures[0]}")
+
 EXTRACTORS = {
     "quickhelp": extract_quickhelp,
     "strings": extract_strings,
     "madsp": extract_madsp,
     "nib": extract_nib_runtime_attributes,
     "nibstrings": extract_nibstrings,
+    "niblabels": extract_niblabels,
 }
 
 #: The field suffix under which a cited row's CASE-FOLDED digest is pinned beside its exact one.
@@ -1807,6 +2112,13 @@ def corpus_files(app: str, source: str) -> list[str]:
     elif source == "nibstrings":
         for root, _dirs, files in os.walk(app):
             if os.path.basename(root) != "Base.lproj":
+                continue
+            for name in files:
+                if name.endswith(".nib"):
+                    out.append(_rel(app, os.path.join(root, name)))
+    elif source == "niblabels":
+        for root, _dirs, files in os.walk(app):
+            if os.path.basename(root) == "Base.lproj":
                 continue
             for name in files:
                 if name.endswith(".nib"):
@@ -2856,6 +3168,39 @@ def _cmd_census(args) -> int:
         index = QuickHelpIndex.from_app(app, locale, min_anchor=DEFAULT_MIN_ANCHOR)
         suffix[locale] = {"compositions": len(index.by_composed),
                           "suffix_pairs": len(index.suffix_collisions())}
+    # What each `niblabels` rule keeps and drops, so the choice of sites is reported with its cost.
+    # `site C.K` is a string at a (class, key) that is not a label site; `runtime attribute K` is a
+    # user-defined runtime attribute other than `accessibilityLabel`.
+    rules = collections.Counter()
+    by_address: dict = {}
+    plugin_rows, plugin_nibs, plugin_bare = 0, set(), set()
+    for unit, locale, key, _field, value in extract_niblabels(app, rules):
+        if locale != "-":
+            by_address.setdefault((unit, key), {})[locale] = value
+        if "/MAPlugInGUI.framework/" in unit:
+            plugin_rows += 1
+            plugin_nibs.add(unit)
+            if locale == "-":
+                plugin_bare.add(unit)
+    out["niblabels_rules"] = dict(sorted(rules.items()))
+    english = [row for row in by_address.values() if "en" in row]
+    translated = sum(1 for row in english
+                     if any(value != row["en"] for locale, value in row.items() if locale != "en"))
+    # Whether the old-style nibs' translations land on their English twin: an address carrying all
+    # ten locales joined, and the rest are named rather than rounded away.
+    out["niblabels_join"] = {
+        "addresses": len(by_address),
+        "all_ten_locales": sum(1 for row in by_address.values()
+                               if len(row) == len(EXPECTED_LOCALES)),
+        "no_english_twin": sum(1 for row in by_address.values() if "en" not in row),
+        "english_missing_a_locale": sum(1 for row in english if len(row) < len(EXPECTED_LOCALES)),
+        "english_translated": translated,
+        "english_untranslated": len(english) - translated,
+    }
+    # A plug-in unit is either one nib in no `.lproj` or one old-style nib copied per locale, and
+    # "how many of the bare plug-in nibs carry a label" is only answered by the first kind.
+    out["niblabels_plugin_gui"] = {"rows": plugin_rows, "nibs_with_a_label": len(plugin_nibs),
+                                   "nibs_in_no_lproj_with_a_label": len(plugin_bare)}
     out["quickhelp_suffix_pairs"] = suffix
     out["quickhelp_suffix_pairs_total"] = sum(v["suffix_pairs"] for v in suffix.values())
     print(json.dumps(out, ensure_ascii=False, indent=2))
