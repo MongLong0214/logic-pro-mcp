@@ -1,0 +1,14 @@
+Limit: no real 32-bit collision exists in this tree (0 of 1887 rows), so every collision case in the tests is a fixture
+Limit: a new string that matches a prefix is refused until someone runs confirm on a machine with Logic, even when Logic ships it; a pull request body cannot be confirmed ahead of time
+Limit: with no row, the near-miss fold still reads the folded 32-bit set, which errs toward reporting a near miss
+Ruled-out: widening the absence prefix to 64 bits to answer presence | the review of #991 refused a 48-bit digest for presence for the same reason at a smaller rate; any width only lowers the rate
+Ruled-out: having build harvest every guard's questions | it couples build to four guards' enumerators; confirm takes the strings and build compares the pinned ones again
+Warn: a guard asking whether Logic ships a string must call canon.presence and decide what unconfirmed means in its own direction; reading anything but ships as present brings #992 back
+Record-Id: r-692bffb7553f
+Provenance: inherited f995263f58675f28547d49cba2b55fbe8df9fa9f
+
+Limit: the non-normalized question is a fixture; no real 32-bit collision is known in this tree
+Ruled-out: checking the translated count only while translated.en.u32 exists | removing the file and its count together left no complaint
+Warn: presence questions must be normalized before hashing, comparing, writing or lookup; the absence sets hash normalized text, and a raw question pinned a shipped value absent
+Record-Id: r-8e4b769114d6
+Provenance: inherited 52e621662c028bf26c69a07e4e548394a8cafd54
