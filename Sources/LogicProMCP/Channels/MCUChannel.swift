@@ -1062,10 +1062,17 @@ actor MCUChannel: Channel {
         do {
             direction = try Self.requiredBankDirection(params["direction"], operation: operation)
             count = try Self.optionalBankCount(params["count"], operation: operation)
-        } catch let failure as ValidationFailure {
-            return Self.invalidParams(failure.hint, operation: operation)
         } catch {
-            return Self.invalidParams("Invalid MCU parameters for \(operation)", operation: operation)
+            let hint = (error as? ValidationFailure)?.hint ?? "Invalid MCU parameters for \(operation)"
+            // Every reply this handler gives says how far it got; a refused parameter got nowhere.
+            return .error(HonestContract.encodeStateC(
+                error: .invalidParams,
+                hint: hint,
+                extras: [
+                    "operation": operation, "channel": "MCU",
+                    "bank_presses_sent": 0, "banks_moved": 0, "step_windows": [String](),
+                ]
+            ))
         }
         let button: MCUProtocol.ButtonFunction = direction == "right" ? .bankRight : .bankLeft
         let sign = direction == "right" ? 1 : -1

@@ -145,11 +145,22 @@ ev.note("862/mcu-state-at-start", start)
 pre = None
 if not start["isConnected"] or not (start["upperRow"] or "").strip():
     pre = bank(d, "bank-right-before-any-upper-row", {"direction": "right"})
-    ev.check("862/no-upper-row-refuses-before-sending",
-             pre.get("state") == "C" and pre.get("bank_presses_sent") is None,
-             "State C with no bank press sent, before the surface ever drew an upper row",
-             {k: pre.get(k) for k in ("state", "error", "write_attempted", "bank_presses_sent")},
-             "remove the `before.sequence > 0` guard in MCUChannel.executeBank")
+    observed = {k: pre.get(k) for k in ("state", "error", "write_attempted", "bank_presses_sent", "banks_moved")}
+    if not start["isConnected"]:
+        # No MCU feedback: the router's health gate answers before any MCU handler runs.
+        ev.check("862/no-feedback-refuses-before-sending",
+                 pre.get("state") == "C" and pre.get("error") == "channels_exhausted"
+                 and pre.get("bank_presses_sent") is None,
+                 "State C channels_exhausted from the router, before any MCU handler ran",
+                 observed, "exempt mixer.bank from ChannelRouter's MCU health gate")
+    else:
+        # Feedback, but no upper row yet: the handler refuses and says it sent nothing.
+        ev.check("862/no-upper-row-refuses-before-sending",
+                 pre.get("state") == "C" and pre.get("error") == "readback_unavailable"
+                 and pre.get("write_attempted") is False and pre.get("bank_presses_sent") == 0
+                 and pre.get("banks_moved") == 0,
+                 "State C readback_unavailable with bank_presses_sent 0, before the surface ever drew an upper row",
+                 observed, "remove the `before.sequence > 0` guard in MCUChannel.executeBank")
     setup = d.tool("logic_system", "setup_control_surface", {"consent": True}) or {}
     ev.note("862/setup-control-surface", setup)
     time.sleep(8)

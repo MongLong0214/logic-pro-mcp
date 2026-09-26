@@ -363,6 +363,10 @@ struct MCUBankWindowTests {
             #expect(obj["error"] as? String == "invalid_params", "\(params)")
             #expect(obj["operation"] as? String == "mixer.bank", "\(params)")
             #expect(obj["channel"] as? String == "MCU", "\(params)")
+            #expect(obj["bank_presses_sent"] as? Int == 0, "\(params)")
+            #expect(obj["banks_moved"] as? Int == 0, "\(params)")
+            let stepWindows = try #require(obj["step_windows"] as? [String], "\(params)")
+            #expect(stepWindows.isEmpty, "\(params)")
             let hint = try #require(obj["hint"] as? String)
             #expect(hint.contains("mixer.bank requires"), "\(params): \(hint)")
         }
