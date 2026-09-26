@@ -5,7 +5,7 @@ import Testing
 // #965 O1, cache-only increment. Every case here drives `build` on a hand-built Capture and asserts
 // on the encoded JSON, because the wire document is what a consumer reads.
 //
-// #965 §5 cases that do not apply to a cache-only report and are therefore not tested here:
+// The #965 required cases (its tests section) that do not apply to a cache-only report and are therefore not tested here:
 // - a missing middle page: the cache is read in one actor hop, there is no paging;
 // - cancellation mid-scan: there is no scan to cancel;
 // - a restoration conflict: nothing is navigated, so nothing is restored;
