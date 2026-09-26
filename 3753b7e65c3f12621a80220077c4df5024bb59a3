@@ -1,0 +1,24 @@
+Limit: the es, fr and ko progress-window readings are recorded but not credited as measured, because locale-propose.py writes one provenance block per member string
+Warn: the German Install item and the progress window title each carry two spellings that differ only in one space; the row Apple ships stays because derivedFrom cites it, and the drawn spelling beside it is what Logic 12.3 showed on 2026-09-26
+Unverified: progressWindowTitleMatches folds whitespace, so by its code it matched the NBSP title before this change; the product's export driver was not run
+Unverified: in es the probe found no New button in the Setup window, so the Spanish Install item was not read and why is not known
+Record-Id: r-d5802e7702ce
+Provenance: inherited 125994610c15297b52983c1a93e90cfc42596195
+
+Limit: at this commit the zh_TW root menu is shown recognised by unit tests over the ten menus read live, not by driving an insert; live_993_plugin_root_menu_in_every_locale.py drives it, and only for Gain
+Ruled-out: recognising the plug-in root menu by pluginMenuAudioUnits alone | zh_TW has no such item; with only that clause the unit case built from the zh_TW menu read live is red
+Warn: the plug-in menu's Audio Units entry comes from Apple's `Audio Units:` row split on the ASCII colon; a locale whose row carries another colon (zh_TW U+FF1A) gets flat manufacturer items and no Audio Units submenu
+Warn: check-labelsets-are-derived.py decodes Swift escapes with locale_labels.py; a fixture copying the guard into a temporary tree must copy locale_labels.py too, or declared compositions read as unaccounted for
+Record-Id: r-ac825b8ed29e
+Provenance: inherited e2a6c35d55740d928cdef96518f4b759c23c10b1
+
+Limit: the live insert covers Gain only, reached through the Utility category; no Audio Units plug-in was inserted through a per-manufacturer item, so that path through the flat zh_TW menu is unit-tested only
+Warn: the record's evidence file is the harness's zh_TW evidence filtered to its own observations, checks, restorations and environment; captures and the screen recording stay under LPM_EVIDENCE_ROOT for head b1e55721
+Record-Id: r-72f8c2442fd2
+Provenance: inherited 70ed4f9d0ff8843f033128ed1702709233d344fc
+
+Limit: the guard is driven with canned osascript results, not against a live Logic with a second project open; an untitled, never-saved project has no AXDocument and is not refused
+Ruled-out: answering the save prompt only when its text names the fixture | the prompt text was not read live in all ten locales in this change, and the window-document rule is the one Scripts/observations/locale-campaign.sh already runs
+Warn: quit_logic in the #993 harness and probe answers Logic's save prompt with don't-save only after unidentified_documents() reads every window's AXDocument and finds nothing but the fixture; an unread list or any other document makes it refuse, and a new quit path must go through the same check
+Record-Id: r-ec6057796b61
+Provenance: inherited 591e2af37e5d1af38b9a96fd3a024e62c38bae9d
