@@ -29,6 +29,11 @@ poller fills from the track list, not from the handler's own readback.
 Before #1020, `enabled: false` sent a lone velocity-0 release, which Logic ignores, so a disarm through
 the MCU left the track armed. That is the counterexample for the disarm check.
 
+While the track is armed the harness also reads `logic://tracks` thirty times, 100 ms apart, WITHOUT a
+refresh. Logic blinks the Rec LED of an armed track, and before #1020 `MCUFeedbackParser` wrote each
+frame into the cache, so the reads came back `FFFTTTTTTTFFFFFFFTTTTTTTFFFFFF` on an armed track
+(measured 2026-09-27, en-US). That pattern is the counterexample for the hold check.
+
 Restoring: the run ends by disarming through a second server started WITHOUT the bad variable, so the
 restore does not depend on the code under test.
 """
@@ -45,6 +50,7 @@ COVERS = [
     "Sources/LogicProMCP/Channels/MCUChannel.swift",
     "Sources/LogicProMCP/Server/LogicProServer.swift",
     "Sources/LogicProMCP/Channels/RoutingTable.swift",
+    "Sources/LogicProMCP/MIDI/MCUFeedbackParser.swift",
 ]
 
 WT = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -64,6 +70,11 @@ ARM_KEYCODE_ENV = "LOGIC_PRO_MCP_ARM_KEYCODE"
 UNPARSEABLE_KEYCODE = "not-a-keycode"
 # The tracks tried, in order, before giving up on finding one the MCU rung answers for.
 CANDIDATE_LIMIT = 4
+# Unrefreshed reads of the armed track: 30 x 100 ms spans two blink cycles and one poller tick.
+HOLD_SAMPLES = 30
+HOLD_INTERVAL_S = 0.1
+# The reads measured on 2026-09-27 (en-US) before the parser stopped writing the Rec LED into the cache.
+MEASURED_BLINK = "FFFTTTTTTTFFFFFFFTTTTTTTFFFFFF"
 
 
 def mcu_state(d):
@@ -84,6 +95,15 @@ def armed_of(d, index):
     """`isArmed` for one track as the refreshed track list reports it, or None when it is not listed."""
     for r in track_rows(d)["rows"]:
         if r["id"] == index:
+            return r.get("isArmed")
+    return None
+
+
+def armed_unrefreshed(d, index):
+    """`isArmed` for one track straight from the cache, with no refresh first; None when not listed."""
+    tracks = d.resource("logic://tracks") or {}
+    for r in tracks.get("data") or []:
+        if r.get("id") == index:
             return r.get("isArmed")
     return None
 
@@ -137,6 +157,11 @@ ev.check("1020/precondition-the-arm-reached-the-mcu-rung",
          "give the Accessibility arm rung a working chord: it answers and the MCU rung is never reached")
 
 armed_after_on = armed_of(d, chosen) if chosen is not None else None
+held = []
+if chosen is not None:
+    for _ in range(HOLD_SAMPLES):
+        held.append(armed_unrefreshed(d, chosen))
+        time.sleep(HOLD_INTERVAL_S)
 off = arm(d, f"disarm-track-{chosen}", chosen, False) if chosen is not None else {}
 armed_after_off = armed_of(d, chosen) if chosen is not None else None
 
@@ -152,6 +177,17 @@ ev.falsifiable(
     "true, and the refreshed track list shows the track armed. THE COUNTEREXAMPLE is the reply before "
     "#1020: State B readback_unavailable from the LED echo, with no reading of the track",
     mutation="drop the confirming read in MCUChannel.executeStripButtonSet and answer State B after the press",
+)
+
+ev.falsifiable(
+    "1020/the-cached-arm-holds-through-the-rec-led-blink",
+    lambda o: len(o["reads"]) == HOLD_SAMPLES and all(v is True for v in o["reads"]),
+    {"track": chosen, "reads": held},
+    {"track": chosen, "reads": [c == "T" for c in MEASURED_BLINK]},
+    f"while the track is armed, {HOLD_SAMPLES} reads of logic://tracks {int(HOLD_INTERVAL_S * 1000)} ms "
+    "apart with no refresh all report it armed. THE COUNTEREXAMPLE is what they read before #1020, when "
+    "every dark frame of Logic's blinking Rec LED was written into the cache as a disarm",
+    mutation="write isArmed from the Rec LED frame in MCUFeedbackParser.handleButton, as before #1020",
 )
 
 disarm_reading = {**summary(off), "track": chosen, "armed_in_track_list_after": armed_after_off}

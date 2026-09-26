@@ -102,7 +102,12 @@ actor MCUFeedbackParser {
         case .solo:
             await cache.updateTrack(at: trackIndex) { $0.isSoloed = button.on }
         case .recArm:
-            await cache.updateTrack(at: trackIndex) { $0.isArmed = button.on }
+            // Not written. Logic BLINKS the Rec LED of an armed track: measured 2026-09-27 on 12.3 with
+            // one track armed and nothing else writing, `logic://tracks` read isArmed
+            // FFFTTTTTTTFFFFFFFTTTTTTTFFFFFF at 100 ms, so each dark frame reported a disarm that never
+            // happened (#1020). A single frame cannot tell a blink from a disarm, and the poller reads
+            // the steady record-enable checkbox, so the arm state comes from there alone.
+            break
         case .select:
             // Logic Pro enforces single-track selection. A strip going
             // "on" implicitly deselects every other strip; we model that
