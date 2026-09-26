@@ -1119,7 +1119,7 @@ struct Issue529MenuValidationTests {
             #"{"result":"MENU_PICK_FAILED: AXPress failed"}"#
         )
 
-        #expect(classification == .failure(.menuPickFailed))
+        #expect(classification == .failure(.menuPickFailed(menuActuationAttempted: nil)))
     }
 
     /// #921. The forced revalidation pass can fail to open the menu at all (unlike `MENU_DISABLED`,
@@ -1393,11 +1393,11 @@ struct Issue529MenuValidationTests {
             (.failure(.menuValidationUnreadable(menuActuationAttempted: true)), true),
             (.failure(.malformedPayload), true),
             (.failure(.unexpectedResult), true),
-            (.failure(.menuPickFailed), false),
+            (.failure(.menuPickFailed(menuActuationAttempted: nil)), false),
             (.failure(.menuCouldNotBeClosed(menuActuationAttempted: false, reconciledMenuClosed: false)), true),
             (.failure(.menuCouldNotBeClosed(menuActuationAttempted: true, reconciledMenuClosed: true)), true),
-            (.failure(.dialogPreexisting), true),
-            (.failure(.dialogPreexistenceUnreadable), true),
+            (.failure(.dialogPreexisting(menuActuationAttempted: nil)), true),
+            (.failure(.dialogPreexistenceUnreadable(menuActuationAttempted: nil)), true),
             (.failure(.dialogUnidentifiedNewWindow), true),
             (.failure(.dialogAppearanceUnreadable), true),
             (.failure(.dialogActuationIssued(cleanup: .dialogNotObservedClosed)), true),
@@ -2576,7 +2576,7 @@ struct Issue529MenuValidationTests {
         )
 
         #expect(disabled == .failure(.menuDisabled))
-        #expect(preexisting == .failure(.dialogPreexisting))
+        #expect(preexisting == .failure(.dialogPreexisting(menuActuationAttempted: nil)))
 
         // This was a classifier-only legacy sentinel. The script does not emit it, so it must not
         // survive outside the generator/classifier parity set; it now takes the terminal unparsed

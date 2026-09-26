@@ -133,15 +133,76 @@ import Testing
         #expect(run.envelope["menu_actuation_indeterminate"] == nil)
     }
 
-    /// The pre-leaf refusals are the control: the leaf was never clicked, and they still say so.
-    @Test(arguments: [
+    /// NOT_ISSUED and an unreadable ledger can still follow the menu-bar revalidation click.
+    /// Neither marker proves whether that earlier click happened.
+    @Test(arguments: ["NOT_ISSUED", "UNKNOWN"])
+    func aDeadChildWithoutMenuEvidenceIsIndeterminate(_ stage: String) async throws {
+        let site = try Harness.site("dialog_not_ready")
+        let run = try await Harness.runMenuRefusal(
+            site, reconcilerAnswer: "OPEN", executionFailureStage: stage)
+        let state = try #require(run.envelope["state"] as? String)
+        if stage == "UNKNOWN" {
+            #expect(state == "B")
+        } else {
+            #expect(state == "C")
+        }
+        #expect(run.envelope["menu_actuation_attempted"] == nil)
+        #expect(try #require(run.envelope["menu_actuation_indeterminate"] as? Bool))
+    }
+
+    /// The leaf was not clicked on these paths, but the forced menu-bar revalidation may have
+    /// clicked earlier. The script's flag records either menu actuation.
+    static let preLeafResults = [
         "DIALOG_PREEXISTING: Go To Position dialog was already present before leaf click",
+        "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot was unreadable before leaf click",
+        "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window count was unreadable before leaf click",
         "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot could not be persisted before leaf click",
-    ])
-    func aPreLeafRefusalStillSaysTheLeafWasNotClicked(_ result: String) async throws {
+        "MENU_PICK_FAILED: could not persist dialog issuance before leaf click",
+    ]
+
+    @Test(arguments: preLeafResults, [true, false])
+    func aPreLeafRefusalCarriesTheMenuBarAttempt(_ result: String, _ attempted: Bool) async throws {
+        let site = try Harness.site("dialog_not_ready")
+        let run = try await Harness.runMenuRefusal(
+            site, reconcilerAnswer: "CLOSED",
+            result: "\(result) menu_actuation_attempted=\(attempted)")
+        let envelope = run.envelope
+        #expect(try #require(envelope["state"] as? String) == "C")
+        let reported = try #require(envelope["menu_actuation_attempted"] as? Bool)
+        if attempted {
+            #expect(reported, "\(result)")
+        } else {
+            #expect(!reported, "\(result)")
+        }
+        #expect(envelope["menu_actuation_indeterminate"] == nil)
+        if !result.hasPrefix("MENU_PICK_FAILED") {
+            #expect(!(try #require(envelope["dialog_actuation_attempted"] as? Bool)))
+        }
+    }
+
+    @Test(arguments: preLeafResults)
+    func aPreLeafResultWithoutTheFlagIsIndeterminate(_ result: String) async throws {
         let site = try Harness.site("dialog_not_ready")
         let run = try await Harness.runMenuRefusal(site, reconcilerAnswer: "CLOSED", result: result)
-        #expect(try #require(run.envelope["state"] as? String) == "C")
-        #expect(!(try #require(run.envelope["dialog_actuation_attempted"] as? Bool)))
+        #expect(run.envelope["menu_actuation_attempted"] == nil)
+        #expect(try #require(run.envelope["menu_actuation_indeterminate"] as? Bool))
+    }
+
+    @Test(arguments: preLeafResults)
+    func aPreLeafResultWithAnUnreadableFlagIsIndeterminate(_ result: String) async throws {
+        let site = try Harness.site("dialog_not_ready")
+        let run = try await Harness.runMenuRefusal(
+            site, reconcilerAnswer: "CLOSED", result: "\(result) menu_actuation_attempted=garbage")
+        #expect(run.envelope["menu_actuation_attempted"] == nil)
+        #expect(try #require(run.envelope["menu_actuation_indeterminate"] as? Bool))
+    }
+
+    @Test func everyPreLeafReturnEmitsTheRecordedFlag() {
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 999)
+        for result in Self.preLeafResults {
+            #expect(script.contains(
+                "return \"\(result) menu_actuation_attempted=\" & (menuActuationAttempted as text)"
+            ), "\(result)")
+        }
     }
 }
