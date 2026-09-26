@@ -210,11 +210,11 @@ the same way: twelve sets truncated to 50 entries each, counts and digests rewri
 `logic_canon.py absent strings es 'Pista'` answering ABSENT for a string Logic ships.
 `verify_index_against_absence` is the one check that could have seen it, and what it sees is
 bounded by CITATION: it checks every committed index row against its corpus's absence set, and a
-value nobody has cited has no row to check. This paragraph used to say "only six of the
-twenty-three corpora carry a committed index row … blind to the other seventeen"; measured
-2026-09-19 that is wrong twice over. Re-measured after #902, the manifest carries THIRTY-FIVE
-corpora and TWENTY-THREE of them carry at least one row; `strings/-` and the eleven `niblabels`
-sets carry none. Number WORDS are
+value nobody has cited has no row to check. This paragraph used to say only six carried a
+committed index row, "blind to the other seventeen" of twenty-three; measured 2026-09-19 that is
+wrong twice over. Re-measured after #902, the manifest carries THIRTY-FIVE corpora and THIRTY-FOUR
+of them carry at least one row; `strings/-` is the only one that carries none, and the eleven
+`niblabels` sets carry only the rows the #902 record cites. Number WORDS are
 invisible to `check-canon-prose-numbers.py`, which reads digits, which is how it rotted unnoticed.
 A set may not lose entries while `MANIFEST.json` names the same Logic; a different Logic is allowed to hold different
 strings, and the rule says so on stderr instead of passing quietly.

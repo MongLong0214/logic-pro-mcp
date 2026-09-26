@@ -75,7 +75,7 @@
     "index/madsp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nib.tsv": "b93ad8637d21efa0dd4a376f66209b3a68e514707191d42c1fd27c4fd372d3d5",
     "index/nib.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/niblabels.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
+    "index/niblabels.tsv": "b78d3501fd42cdff6a47c857a48cddd2912e78961ed111cdb6acf16dacb23928",
     "index/niblabels.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nibstrings.tsv": "ac732bc853eb32faf7d61ad3665bcd1805dbb1e325fb12bfe9cceb3fa3ec2ef4",
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
@@ -204,7 +204,7 @@
         "zh_CN": 9.7556e-08,
         "zh_TW": 9.7323e-08
       },
-      "cited_rows": 0,
+      "cited_rows": 26,
       "cited_values": 0,
       "corpus_digest": "4b33113b014a85e773a4add45b605325f93dd38b56b9e13c3abfe5acb4fcaa1d",
       "entries": 8992,

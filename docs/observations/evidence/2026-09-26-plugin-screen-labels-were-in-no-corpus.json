@@ -1,0 +1,149 @@
+{
+  "logic": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674"
+  },
+  "nib_populations": {
+    "Base.lproj": 162,
+    "de.lproj": 60,
+    "en.lproj": 60,
+    "es.lproj": 60,
+    "fr.lproj": 60,
+    "it.lproj": 60,
+    "ja.lproj": 60,
+    "ko.lproj": 60,
+    "no .lproj": 407,
+    "pt.lproj": 60,
+    "zh_CN.lproj": 60,
+    "zh_TW.lproj": 60
+  },
+  "niblabels": {
+    "files": 1007,
+    "entries": 8992,
+    "locales": {
+      "-": 2796,
+      "de": 620,
+      "en": 620,
+      "es": 620,
+      "fr": 620,
+      "it": 620,
+      "ja": 620,
+      "ko": 620,
+      "pt": 616,
+      "zh_CN": 620,
+      "zh_TW": 620
+    }
+  },
+  "rules": {
+    "do_not_localize": 43,
+    "ib_default": 810,
+    "label": 8992,
+    "no_letter": 333,
+    "translation of an excluded English string": 2493
+  },
+  "dropped_at_non_label_sites": {
+    "strings": 402921,
+    "sites": 300,
+    "named": {
+      "NSNibOutletConnector.NSLabel": 17313,
+      "NSTableColumn.NSIdentifier": 1266,
+      "NSPopUpButtonCell.NSContents": 506,
+      "NSTabViewItem.NSIdentifier": 330,
+      "NSMenu.NSTitle": 259,
+      "NSTokenAttachmentCell.NSContents": 102
+    }
+  },
+  "dropped_runtime_attributes": {
+    "values": 42305,
+    "named": {
+      "text": 862,
+      "labelString": 816
+    }
+  },
+  "join": {
+    "addresses": 623,
+    "all_ten_locales": 613,
+    "no_english_twin": 3,
+    "english_missing_a_locale": 7,
+    "english_translated": 467,
+    "english_untranslated": 153
+  },
+  "plugin_gui": {
+    "rows": 1116,
+    "nibs_with_a_label": 69,
+    "nibs_in_no_lproj_with_a_label": 68,
+    "nibs_in_no_lproj": 312
+  },
+  "corpora": {
+    "before": 24,
+    "after": 35
+  },
+  "translated_en_values": {
+    "before": 68417,
+    "after": 68548
+  },
+  "de_DE_compressor_titles": {
+    "record": "docs/observations/2026-09-25-977-de-DE-plugin-editor-is-not-a-blocking-modal.json",
+    "titles": {
+      "-12 dB": {
+        "present_in_earlier_corpora": [],
+        "present_in_niblabels": [
+          "niblabels/-"
+        ]
+      },
+      "Meter": {
+        "present_in_earlier_corpora": [],
+        "present_in_niblabels": [
+          "niblabels/-"
+        ]
+      },
+      "Vintage Opto": {
+        "present_in_earlier_corpora": [],
+        "present_in_niblabels": [
+          "niblabels/-"
+        ]
+      },
+      "Vintage FET": {
+        "present_in_earlier_corpora": [],
+        "present_in_niblabels": [
+          "niblabels/-"
+        ]
+      },
+      "Vintage VCA": {
+        "present_in_earlier_corpora": [],
+        "present_in_niblabels": [
+          "niblabels/-"
+        ]
+      },
+      "Classic VCA": {
+        "present_in_earlier_corpora": [],
+        "present_in_niblabels": [
+          "niblabels/-"
+        ]
+      },
+      "Studio FET": {
+        "present_in_earlier_corpora": [],
+        "present_in_niblabels": [
+          "niblabels/-"
+        ]
+      },
+      "Studio VCA": {
+        "present_in_earlier_corpora": [],
+        "present_in_niblabels": [
+          "niblabels/-"
+        ]
+      },
+      "Platinum Digital": {
+        "present_in_earlier_corpora": [],
+        "present_in_niblabels": [
+          "niblabels/-"
+        ]
+      }
+    }
+  },
+  "policy_literals_nowhere": {
+    "total": 85,
+    "present_in_niblabels": []
+  }
+}

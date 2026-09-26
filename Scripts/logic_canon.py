@@ -2846,13 +2846,15 @@ def _cmd_census(args) -> int:
     # user-defined runtime attribute other than `accessibilityLabel`.
     rules = collections.Counter()
     by_address: dict = {}
-    plugin_rows, plugin_nibs = 0, set()
+    plugin_rows, plugin_nibs, plugin_bare = 0, set(), set()
     for unit, locale, key, _field, value in extract_niblabels(app, rules):
         if locale != "-":
             by_address.setdefault((unit, key), {})[locale] = value
         if "/MAPlugInGUI.framework/" in unit:
             plugin_rows += 1
             plugin_nibs.add(unit)
+            if locale == "-":
+                plugin_bare.add(unit)
     out["niblabels_rules"] = dict(sorted(rules.items()))
     english = [row for row in by_address.values() if "en" in row]
     translated = sum(1 for row in english
@@ -2868,7 +2870,10 @@ def _cmd_census(args) -> int:
         "english_translated": translated,
         "english_untranslated": len(english) - translated,
     }
-    out["niblabels_plugin_gui"] = {"rows": plugin_rows, "nibs_with_a_label": len(plugin_nibs)}
+    # A plug-in unit is either one nib in no `.lproj` or one old-style nib copied per locale, and
+    # "how many of the bare plug-in nibs carry a label" is only answered by the first kind.
+    out["niblabels_plugin_gui"] = {"rows": plugin_rows, "nibs_with_a_label": len(plugin_nibs),
+                                   "nibs_in_no_lproj_with_a_label": len(plugin_bare)}
     out["quickhelp_suffix_pairs"] = suffix
     out["quickhelp_suffix_pairs_total"] = sum(v["suffix_pairs"] for v in suffix.values())
     print(json.dumps(out, ensure_ascii=False, indent=2))

@@ -1,0 +1,170 @@
+{
+  "id": "2026-09-26-plugin-screen-labels-were-in-no-corpus",
+  "date": "2026-09-26",
+  "schema": 3,
+  "subject": "The labels in the 1,007 nibs Apple does not base-internationalise, and what a live plug-in reading gains from them",
+  "question": "Can the labels in Logic's old-style and unlocalized nibs be read by what each class means, can a translated copy be joined to its English twin, and does the result cite anything a running Logic showed?",
+  "verdict": "works",
+  "issues": [
+    902,
+    895
+  ],
+  "surface": "system.bundle",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "python3 Scripts/logic_canon.py census",
+    "expected": "niblabels: files 1007, entries 8992; niblabels_join: addresses 623, all_ten_locales 613",
+    "cost": "~40s; reads the app bundle, launches nothing"
+  },
+  "depends": [
+    "Scripts/logic_canon.py",
+    "Scripts/nibarchive.py"
+  ],
+  "method": "Ran `Scripts/logic_canon.py build` and `census` against the installed Logic. The new `niblabels` extractor walks every nib outside Base.lproj, reads a string only at a (class, key) listed in `NIB_LABEL_SITES`, reads an NSClassSwapper as its NSOriginalClassName, and keys each label by its object path from the archive root. Then asked the committed absence sets whether each of the nine Compressor button titles in the de-DE record 2026-09-25-977-de-DE-plugin-editor-is-not-a-blocking-modal is present in any earlier corpus and in `niblabels`, and whether any policy literal classified `nowhere` is present in `niblabels`. Ran the build twice and compared MANIFEST.json byte for byte. The rows cited here: the Compressor buttons `Meter`, `Vintage Opto` (U+2028 between the words, as the live title has it) and `-12 dB` in GCompressorViewController.nib, which sits in no .lproj; and `Invert Selection` in EXSSampleEditor.nib's en.lproj copy, whose de.lproj copy holds `Auswahl umkehren` at the same object path.",
+  "canon": [
+    {
+      "ref": "logic-canon://niblabels/Contents%2FFrameworks%2FMAPlugInGUI.framework%2FVersions%2FA%2FResources%2FGCompressorViewController.nib/-/%2FIB.objectdata%5B0%5D%2FNSObjectsKeys%5B0%5D%2FUINibEncoderEmptyKey%5B112%5D%2FNSContents%5B0%5D#value",
+      "value": "Meter",
+      "used_for": "a Compressor button a German Logic showed in English, absent from all 24 earlier corpora",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/Contents%2FFrameworks%2FMAPlugInGUI.framework%2FVersions%2FA%2FResources%2FGCompressorViewController.nib/-/%2FIB.objectdata%5B0%5D%2FNSObjectsKeys%5B0%5D%2FUINibEncoderEmptyKey%5B95%5D%2FNSContents%5B0%5D#value",
+      "value": "Vintage Opto",
+      "used_for": "a Compressor circuit button, the same reading; the line separator is in Apple's bytes and in the live title",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/Contents%2FFrameworks%2FMAPlugInGUI.framework%2FVersions%2FA%2FResources%2FGCompressorViewController.nib/-/%2FIB.objectdata%5B0%5D%2FNSObjectsKeys%5B0%5D%2FUINibEncoderEmptyKey%5B78%5D%2FNSContents%5B0%5D#value",
+      "value": "-12 dB",
+      "used_for": "a Compressor button with a unit, kept by the no-letter rule because it has letters",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FEXSSampleEditor.nib/en/%2FIB.objectdata%5B0%5D%2FNSObjectsKeys%5B0%5D%2FUINibEncoderEmptyKey%5B267%5D%2FNSTitle%5B0%5D#value",
+      "value": "Invert Selection",
+      "used_for": "an old-style en.lproj label at its object path",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FEXSSampleEditor.nib/de/%2FIB.objectdata%5B0%5D%2FNSObjectsKeys%5B0%5D%2FUINibEncoderEmptyKey%5B267%5D%2FNSTitle%5B0%5D#value",
+      "value": "Auswahl umkehren",
+      "used_for": "the de.lproj twin at the same object path, which is what lets the build call the English translated",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "observations": [
+    {
+      "what": "nibs outside Base.lproj",
+      "count": 1007
+    },
+    {
+      "what": "label rows read from them",
+      "count": 8992
+    },
+    {
+      "what": "rows in no .lproj (locale -)",
+      "count": 2796
+    },
+    {
+      "what": "strings dropped at non-label (class, key) sites",
+      "count": 402921
+    },
+    {
+      "what": "runtime attribute values dropped, all but accessibilityLabel",
+      "count": 42305
+    },
+    {
+      "what": "Interface Builder default titles dropped",
+      "count": 810
+    },
+    {
+      "what": "translated rows dropped because their English twin was dropped",
+      "count": 2493
+    },
+    {
+      "what": "strings dropped for having no letter",
+      "count": 333
+    },
+    {
+      "what": "strings dropped for Apple's DO NOT LOCALIZE marker",
+      "count": 43
+    },
+    {
+      "what": "addresses carrying a translated-locale row",
+      "count": 623
+    },
+    {
+      "what": "of them, carrying all ten locales",
+      "count": 613
+    },
+    {
+      "what": "English addresses Apple translates",
+      "count": 467
+    },
+    {
+      "what": "English addresses shipped untranslated in every locale",
+      "count": 153
+    },
+    {
+      "what": "MAPlugInGUI nibs in no .lproj, and of them the ones with a label at these sites",
+      "values": [
+        312,
+        68
+      ]
+    },
+    {
+      "what": "corpora the manifest pins, before and after",
+      "values": [
+        24,
+        35
+      ]
+    },
+    {
+      "what": "translated English values, before and after",
+      "values": [
+        68417,
+        68548
+      ]
+    },
+    {
+      "what": "de-DE Compressor titles absent from every earlier corpus and present in niblabels/-",
+      "count": 9
+    },
+    {
+      "what": "policy literals classified nowhere",
+      "count": 85
+    },
+    {
+      "what": "policy literals classified nowhere that niblabels holds",
+      "count": 0
+    }
+  ],
+  "conclusion": "Logic's 1007 non-base nibs yield 8992 label rows when read only at the (class, key) sites AppKit draws as text. An old-style translated nib meets its en.lproj twin by object path: 613 of 623 translated addresses carry all ten locales, and 467 English addresses are shown to be translated, which grows the translated set from 68417 to 68548. The nine Compressor button titles a German Logic showed are present in niblabels/- and in none of the 24 earlier corpora, so a live reading of a plug-in screen can now be cited to Apple's bytes. It closes 0 of the 85 policy literals classified nowhere.",
+  "limits": [
+    "Only 68 of the 312 MAPlugInGUI nibs in no .lproj carry a label at these sites; the rest set their text through `text` and `labelString` runtime attributes, which are not read.",
+    "That a nib in no .lproj is shown untranslated on every locale is measured for the Compressor on de-DE only.",
+    "Designer placeholders such as `Header Text` and `Text here` are in the corpus, because no class separates them from a label. Presence is not use."
+  ],
+  "evidence": [
+    "evidence/2026-09-26-plugin-screen-labels-were-in-no-corpus.json"
+  ],
+  "supersedes": null
+}
