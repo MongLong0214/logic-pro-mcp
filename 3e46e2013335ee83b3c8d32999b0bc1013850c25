@@ -1,0 +1,15 @@
+Limit: menu_actuation_attempted stays false on DIALOG_PREEXISTING, DIALOG_PREEXISTENCE_UNREADABLE and executionFailed with issuance notIssued; whether the top-level menu was clicked before those returns was not checked
+Ruled-out: renaming the dialog_route_outcome labels such as dialog_actuation_issued_cleanup_closed_false | they name the route's combined cleanup, the receipt now carries both halves beside them, and two test files pin the strings
+Record-Id: r-66a1a72d596f
+Provenance: inherited c7f5cc786f4c8b46aba3f71ac459af1b6ce2b6c2
+
+Ruled-out: reporting menu_actuation_attempted false when the outcome is unknown | a dead child at LEAF_ARMED may or may not have clicked, so the receipt says menu_actuation_indeterminate
+Warn: menuActuationAttempted is an exhaustive switch on purpose; a new classification or ledger stage must state whether the leaf click had happened, and LEAF_ARMED stays indeterminate because it is written before the click
+Record-Id: r-538a61593aba
+Provenance: inherited e83a9d3ea1beb3b211edcb2ffffcd3110982dbd2
+
+Limit: the five pre-leaf returns are driven with canned script results through the route; the generated AppleScript was not run against Logic
+Ruled-out: defaulting a missing or unreadable suffix to false | a legacy or malformed result cannot show that no menu click was attempted, so it is reported as indeterminate
+Warn: a pre-leaf return that can follow the forced menu-bar click must append " menu_actuation_attempted=" and the script's flag; the parser reads that suffix, and a return without it is reported menu_actuation_indeterminate
+Record-Id: r-10906c3a0c45
+Provenance: inherited 6ce91b54859504bb8435ce1bb3f66a466ab956cf
