@@ -1,0 +1,5 @@
+Ruled-out: adding Barra de Controle to transportContainerMetadata | it is a value of Control Bar#acc, not of the row this set cites
+Warn: canon artefacts reach a fixed point only as build, reclassify, confirm, locale_labels --write, build again; build reads ui-labels.json for its case-folded wants
+Warn: German Project or Section: Apple's value has a no-break space before the ellipsis, the live-read member an ASCII space; both are kept
+Record-Id: r-a51d870539c0
+Provenance: inherited 96c15970b81521479a2571c79ca1a7a4daeb064f
