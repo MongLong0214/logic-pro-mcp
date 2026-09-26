@@ -716,6 +716,56 @@ struct QualificationRunnerTests {
         #expect(result.exitCode == 0, "\(result.stdout)")
     }
 
+    @Test func trustedVerifierRejectsNoOpReadbackInMutationArtifact() async throws {
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let artifactURL = fixture.directory.appendingPathComponent(
+            "mutation-restore-compensation.json"
+        )
+        var artifact = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: artifactURL)) as? [String: Any]
+        )
+        var records = try #require(artifact["records"] as? [[String: Any]])
+        let recordIndex = try #require(records.firstIndex {
+            $0["operation_id"] as? String == OperationID.tracksRename.rawValue
+        })
+        let preState = try #require(records[recordIndex]["pre_state"] as? String)
+        records[recordIndex]["readback"] = preState
+        artifact["records"] = records
+        let artifactData = try JSONSerialization.data(withJSONObject: artifact, options: [.sortedKeys])
+        try artifactData.write(to: artifactURL, options: .atomic)
+
+        // Keep the artifact entry's digest current so the schema check sees the no-op record.
+        // The signed bundle's other bindings may also reject this tampering; this witness checks
+        // that the trusted artifact validator itself rejects the recipe shape.
+        var manifest = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: fixture.manifestURL)) as? [String: Any]
+        )
+        var entries = try #require(manifest["files"] as? [[String: Any]])
+        let entryIndex = try #require(entries.firstIndex {
+            $0["path"] as? String == "mutation-restore-compensation.json"
+        })
+        entries[entryIndex]["sha256"] = SupportBundleBuilder.sha256(artifactData)
+        manifest["files"] = entries
+        try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
+            .write(to: fixture.manifestURL, options: .atomic)
+
+        let result = QualificationRunner.verifyTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            trustedPublicKeyData: fixture.trustedPublicKeyData
+        )
+        #expect(result.exitCode != 0)
+        let json = try Self.resultObject(result)
+        let rejections = try #require(json["rejections"] as? [[String: Any]])
+        #expect(rejections.contains {
+            $0["reason"] as? String == "requiredArtifactSchemaInvalid"
+                && $0["name"] as? String == "mutation-restore-compensation.json"
+        })
+    }
+
     @Test func promotionVerifierRejectsUnrestoredOrMalformedCycle() async throws {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
         let invalid = [

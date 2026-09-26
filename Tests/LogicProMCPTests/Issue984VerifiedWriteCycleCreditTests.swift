@@ -242,6 +242,94 @@ struct Issue984VerifiedWriteCycleCreditTests {
             .verifiedCycleShape)
     }
 
+    private static func trackRecord(
+        operation: OperationID, field: String, before: String, changed: String,
+        changedRef: String = "track-1", restoredRef: String = "track-2"
+    ) -> QualificationMutationRestoreRecord {
+        func reading(_ ref: String, _ value: String) -> String {
+            #"{"source":"ax_live","data":[{"track_ref":"\#(ref)","\#(field)":\#(value)}]}"#
+        }
+        return QualificationMutationRestoreRecord(
+            operationID: operation.rawValue,
+            preState: reading("track-1", before),
+            mutation: #"{"state":"A","success":true}"#,
+            readback: reading(changedRef, changed),
+            restore: #"{"state":"A","success":true}"#,
+            restoreReadback: reading(restoredRef, before)
+        )
+    }
+
+    @Test func renameRestoreMustReadBackTheSameTrack() {
+        #expect(Self.trackRecord(
+            operation: .tracksRename, field: "name", before: #""before""#,
+            changed: #""after""#, restoredRef: "track-1"
+        ).verifiedCycleShape)
+        #expect(!Self.trackRecord(
+            operation: .tracksRename, field: "name", before: #""before""#,
+            changed: #""after""#
+        ).verifiedCycleShape)
+    }
+
+    @Test func flagRestoreMustReadBackTheSameTrack() {
+        #expect(Self.trackRecord(
+            operation: .tracksMute, field: "isMuted", before: "false", changed: "true",
+            restoredRef: "track-1"
+        ).verifiedCycleShape)
+        #expect(!Self.trackRecord(
+            operation: .tracksMute, field: "isMuted", before: "false", changed: "true"
+        ).verifiedCycleShape)
+    }
+
+    @Test func historyRestoreMustReadBackTheSameTrack() {
+        #expect(Self.trackRecord(
+            operation: .editUndo, field: "name", before: #""before""#,
+            changed: #""after""#, restoredRef: "track-1"
+        ).verifiedCycleShape)
+        #expect(!Self.trackRecord(
+            operation: .editUndo, field: "name", before: #""before""#,
+            changed: #""after""#
+        ).verifiedCycleShape)
+    }
+
+    @Test func selectionRestoreMustReadBackTheSameTracks() {
+        func record(_ restoredFirstRef: String) -> QualificationMutationRestoreRecord {
+            QualificationMutationRestoreRecord(
+                operationID: OperationID.tracksSelect.rawValue,
+                preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true},{"track_ref":"track-2","isSelected":false}]}"#,
+                mutation: #"{"state":"A","success":true}"#,
+                readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":false},{"track_ref":"track-2","isSelected":true}]}"#,
+                restore: #"{"state":"A","success":true}"#,
+                restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"\#(restoredFirstRef)","isSelected":true},{"track_ref":"track-2","isSelected":false}]}"#
+            )
+        }
+        #expect(record("track-1").verifiedCycleShape)
+        #expect(!record("track-3").verifiedCycleShape)
+    }
+
+    @Test func aNoOpReadbackNeverEarnsWriteCycleCredit() throws {
+        let before = Self.record().preState
+        let record = QualificationMutationRestoreRecord(
+            operationID: OperationID.tracksRename.rawValue,
+            preState: before,
+            mutation: #"{"state":"A","success":true}"#,
+            readback: before,
+            restore: #"{"state":"A","success":true}"#,
+            restoreReadback: before
+        )
+        #expect(!record.verifiedCycleShape)
+        let cycle = try Self.result(record: record)
+        let restore = try #require(cycle.restore)
+        #expect(!restore.verified)
+        #expect(cycle.status == .notQualified)
+        let operationCase = Self.qualificationCase(cycle)
+        #expect(!PromotionGate.operationIsLiveCredited(operationCase))
+        #expect(Self.readers(operationCase) == Self.notCredited)
+        #expect(!Self.trackRecord(
+            operation: .tracksRename, field: "name", before: #""before""#,
+            changed: #""after""#, changedRef: "track-2", restoredRef: "track-1"
+        ).verifiedCycleShape)
+    }
+
     /// Read credit is what it was: `.semanticReadback` does not consult `restore`.
     @Test func semanticReadbackCreditIsUnchanged() {
         func readCase(

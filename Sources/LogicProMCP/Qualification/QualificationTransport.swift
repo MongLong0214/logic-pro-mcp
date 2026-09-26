@@ -109,67 +109,7 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
               let before = Self.envelope(preState),
               let after = Self.envelope(restoreReadback) else { return false }
 
-        if let field = QualificationTransport.valueRestoreReadbackField[operation] {
-            guard let old = Self.track(before, index: 0),
-                  let restored = Self.track(after, index: 0),
-                  let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
-                  let restoredRef = restored["track_ref"] as? String,
-                  let oldValue = old[field] as? Double,
-                  let restoredValue = restored[field] as? Double else { return false }
-            return oldRef == restoredRef && oldValue == restoredValue
-        }
-        if let field = QualificationTransport.booleanToggleReadbackField[operation] {
-            guard let old = Self.track(before, index: 0)?[field] as? Bool,
-                  let restored = Self.track(after, index: 0)?[field] as? Bool else { return false }
-            return old == restored
-        }
-        if operation == .tracksRename || QualificationTransport.historyRestoreDirection[operation] != nil {
-            guard let old = Self.track(before, index: 0)?["name"] as? String,
-                  let restored = Self.track(after, index: 0)?["name"] as? String else { return false }
-            return old == restored
-        }
-        if operation == .tracksSelect {
-            guard let oldRows = before["data"] as? [[String: Any]],
-                  let restoredRows = after["data"] as? [[String: Any]],
-                  oldRows.count > 1, restoredRows.count > 1,
-                  let firstWasSelected = oldRows[0]["isSelected"] as? Bool
-            else { return false }
-            let original = firstWasSelected ? 0 : 1
-            let oldSelection = oldRows.enumerated().compactMap {
-                ($0.element["isSelected"] as? Bool) == true ? $0.offset : nil
-            }
-            let restoredSelection = restoredRows.enumerated().compactMap {
-                ($0.element["isSelected"] as? Bool) == true ? $0.offset : nil
-            }
-            return oldSelection.contains(original) && restoredSelection == oldSelection
-        }
-        if QualificationTransport.transportExpectedPlaying[operation] != nil {
-            guard let old = Self.transportState(before)?["isPlaying"] as? Bool,
-                  let restored = Self.transportState(after)?["isPlaying"] as? Bool else { return false }
-            return old == restored
-        }
-        if let field = QualificationTransport.parameterlessToggleField[operation] {
-            guard let old = Self.transportState(before)?[field] as? Bool,
-                  let restored = Self.transportState(after)?[field] as? Bool else { return false }
-            return old == restored
-        }
-        if operation == .transportSetTempo {
-            guard let old = Self.transportState(before)?["tempo"] as? Double,
-                  let restored = Self.transportState(after)?["tempo"] as? Double else { return false }
-            return old == restored
-        }
-        if QualificationTransport.playheadRestoreOperations.contains(operation)
-            || operation == .navigateGotoMarker {
-            guard let old = Self.bar(before), let restored = Self.bar(after) else { return false }
-            return old == restored
-        }
-        if operation == .navigateCreateMarker || QualificationTransport.markerStagedRestoreMode[operation] != nil {
-            guard let old = Self.markerNames(before),
-                  let restored = Self.markerNames(after) else { return false }
-            return old == restored
-        }
-        // Phase C creates are disabled in the live sweep. Their recorded restore is an inventory
-        // comparison; staged deletion replaces its own track, so its reference must change.
+        // Phase C deletion stages a track and recreates it with a new reference.
         if QualificationTransport.trackCreateRestoreOperations.contains(operation) {
             guard let old = Self.trackRefs(before), let restored = Self.trackRefs(after) else { return false }
             return before["complete"] as? Bool == after["complete"] as? Bool
@@ -181,11 +121,103 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
                 && old.count == restored.count
                 && Set(old).intersection(restored).count == old.count - 1
         }
-        return false
+        return Self.sameRecipeValue(operation, before, after) == true
+    }
+
+    /// A successful-looking write is not proof of a mutation. Compare the recipe's observable
+    /// before and after the write, with the same track identity where the recipe addresses one.
+    private var mutationMovedRecipeValue: Bool {
+        guard let operation = OperationID(rawValue: operationID),
+              let before = Self.envelope(preState),
+              let after = Self.envelope(readback) else { return false }
+        if QualificationTransport.trackCreateRestoreOperations.contains(operation)
+            || operation == .tracksDelete {
+            guard let old = Self.trackRefs(before), let changed = Self.trackRefs(after) else { return false }
+            return before["complete"] as? Bool == after["complete"] as? Bool
+                && old.count != changed.count && Set(old) != Set(changed)
+        }
+        return Self.sameRecipeValue(operation, before, after) == false
+    }
+
+    /// nil means the observation is malformed or belongs to another track, not a value change.
+    private static func sameRecipeValue(
+        _ operation: OperationID, _ before: [String: Any], _ after: [String: Any]
+    ) -> Bool? {
+        if let field = QualificationTransport.valueRestoreReadbackField[operation] {
+            guard let old = Self.track(before, index: 0),
+                  let observed = Self.track(after, index: 0),
+                  let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
+                  let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
+                  let oldValue = old[field] as? Double,
+                  let observedValue = observed[field] as? Double else { return nil }
+            return oldValue == observedValue
+        }
+        if let field = QualificationTransport.booleanToggleReadbackField[operation] {
+            guard let old = Self.track(before, index: 0),
+                  let observed = Self.track(after, index: 0),
+                  let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
+                  let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
+                  let oldValue = old[field] as? Bool,
+                  let observedValue = observed[field] as? Bool else { return nil }
+            return oldValue == observedValue
+        }
+        if operation == .tracksRename || QualificationTransport.historyRestoreDirection[operation] != nil {
+            guard let old = Self.track(before, index: 0),
+                  let observed = Self.track(after, index: 0),
+                  let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
+                  let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
+                  let oldValue = old["name"] as? String,
+                  let observedValue = observed["name"] as? String else { return nil }
+            return oldValue == observedValue
+        }
+        if operation == .tracksSelect {
+            guard let oldRows = before["data"] as? [[String: Any]],
+                  let observedRows = after["data"] as? [[String: Any]],
+                  oldRows.count > 1, observedRows.count > 1,
+                  let oldFirstRef = oldRows[0]["track_ref"] as? String, !oldFirstRef.isEmpty,
+                  let oldSecondRef = oldRows[1]["track_ref"] as? String, !oldSecondRef.isEmpty,
+                  let observedFirstRef = observedRows[0]["track_ref"] as? String,
+                  let observedSecondRef = observedRows[1]["track_ref"] as? String,
+                  oldFirstRef == observedFirstRef, oldSecondRef == observedSecondRef,
+                  let firstWasSelected = oldRows[0]["isSelected"] as? Bool
+            else { return nil }
+            let originalRef = firstWasSelected ? oldFirstRef : oldSecondRef
+            guard let oldSelection = Self.selectedTrackRefs(oldRows),
+                  let observedSelection = Self.selectedTrackRefs(observedRows),
+                  oldSelection.contains(originalRef) else { return nil }
+            return observedSelection == oldSelection
+        }
+        if QualificationTransport.transportExpectedPlaying[operation] != nil {
+            guard let old = Self.transportState(before)?["isPlaying"] as? Bool,
+                  let observed = Self.transportState(after)?["isPlaying"] as? Bool else { return nil }
+            return old == observed
+        }
+        if let field = QualificationTransport.parameterlessToggleField[operation] {
+            guard let old = Self.transportState(before)?[field] as? Bool,
+                  let observed = Self.transportState(after)?[field] as? Bool else { return nil }
+            return old == observed
+        }
+        if operation == .transportSetTempo {
+            guard let old = Self.transportState(before)?["tempo"] as? Double,
+                  let observed = Self.transportState(after)?["tempo"] as? Double else { return nil }
+            return old == observed
+        }
+        if QualificationTransport.playheadRestoreOperations.contains(operation)
+            || operation == .navigateGotoMarker {
+            guard let old = Self.bar(before), let observed = Self.bar(after) else { return nil }
+            return old == observed
+        }
+        if operation == .navigateCreateMarker || QualificationTransport.markerStagedRestoreMode[operation] != nil {
+            guard let old = Self.markerNames(before),
+                  let observed = Self.markerNames(after) else { return nil }
+            return old == observed
+        }
+        return nil
     }
 
     var verifiedCycleShape: Bool {
         readingThatDidNotHappen == nil
+            && mutationMovedRecipeValue
             && restoreMatchesPreState
             && Self.writeResponse(mutation)
             && Self.writeResponse(restore)
@@ -201,6 +233,15 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
             return nil
         }
         return rows[index]
+    }
+
+    private static func selectedTrackRefs(_ rows: [[String: Any]]) -> [String]? {
+        var selected: [String] = []
+        for row in rows where (row["isSelected"] as? Bool) == true {
+            guard let ref = row["track_ref"] as? String, !ref.isEmpty else { return nil }
+            selected.append(ref)
+        }
+        return selected.sorted()
     }
 
     private static func transportState(_ envelope: [String: Any]) -> [String: Any]? {
