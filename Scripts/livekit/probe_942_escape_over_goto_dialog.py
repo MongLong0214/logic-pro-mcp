@@ -406,7 +406,20 @@ def main():
         "check fails")
     out = ev.write()
     print(json.dumps({"written": out, "is_clean": E.is_clean(out)}))
-    return 0 if complete and out.get("passed") == out.get("checks") else 1
+    return exit_status(complete, out)
+
+
+def exit_status(complete, summary):
+    """0 only when every sample completed and `is_clean` holds on everything this probe can earn.
+
+    `is_clean` stays the authority. The one clause waived is `operations_driven`, which this probe
+    cannot earn because it drives Logic and never the server (see WHAT IS NOT JUDGED). Round 1 of
+    #1019's review fed the earlier exit, `passed == checks`, two passing checks and one failed
+    visual, and it returned 0.
+    """
+    if not complete or not isinstance(summary, dict):
+        return 1
+    return 0 if E.is_clean({**summary, "operations_driven": 1}) else 1
 
 
 if __name__ == "__main__":

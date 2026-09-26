@@ -193,8 +193,9 @@ extension AccessibilityChannel {
         var settled: Bool { finalAction == .none }
 
         /// The `post_leaf_settlement` object, keyed and ready to merge into a receipt. The tokens
-        /// are the decision's own; `after` appears only when something was sent, so a receipt with
-        /// no `after` is a receipt of a pass that typed nothing.
+        /// are the decision's own. `after` is always the last reading, the one `final_action` was
+        /// decided from: the loop re-reads before it acts, so a settlement with no Escape can still
+        /// end on a reading that differs from `read`, and that reading is what proves the result.
         var receiptFields: [String: Any] {
             var object: [String: Any] = [
                 "policy": policy.rawValue,
@@ -208,9 +209,7 @@ extension AccessibilityChannel {
             if case let .refuseToAct(reason) = decided {
                 object["refusal_reason"] = reason
             }
-            if !escapeTargets.isEmpty {
-                object["after"] = Self.readingFields(final, appeared: finalAppeared)
-            }
+            object["after"] = Self.readingFields(final, appeared: finalAppeared)
             if case let .refuseToAct(reason) = finalAction {
                 object["final_refusal_reason"] = reason
             }

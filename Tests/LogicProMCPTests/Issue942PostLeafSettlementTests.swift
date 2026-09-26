@@ -311,6 +311,30 @@ final class Issue942ScriptedWindowServer: @unchecked Sendable {
         #expect(try Self.token(run.receipt, "policy") == Policy.current.rawValue)
     }
 
+    // MARK: - T_after: a settlement that sent nothing still carries the reading that settled it
+
+    /// Round 1 of #1019's review: `after` was encoded only when an Escape went out, so these two
+    /// receipts said `settled: true` over a reading they did not carry. Mutation seen red: the
+    /// `after` field gated on `!escapeTargets.isEmpty` again.
+    @Test(arguments: [
+        (Screen.menuOpen, "menu_escape_loop", "open|absent|logic"),
+        (Screen.unreadable, "refuse_to_act", "unreadable|unreadable|unread"),
+    ])
+    func aSettlementWithNoEscapeCarriesItsSettlingReading(
+        first: Screen, action: String, read: String
+    ) throws {
+        let run = try Self.settle([first, .logicFront])
+        #expect(run.server.escapeCount == 0)
+        #expect(run.server.readCount == 2)
+        #expect(try Self.summary(Self.reading(run.receipt, "read")) == read)
+        #expect(try Self.token(run.receipt, "action") == action)
+        #expect(try #require(run.receipt["escapes_sent"] as? Int) == 0)
+        #expect(try Self.token(run.receipt, "final_action") == "none")
+        #expect(try Self.summary(Self.reading(run.receipt, "after")) == "closed|absent|logic")
+        let settled = try Self.settled(run.receipt)
+        #expect(settled)
+    }
+
     // MARK: - T_unread: an unreadable re-read stops the loop with nothing sent
 
     /// Mutation seen red: the loop decides over the initial reading instead of its own re-read,
@@ -323,7 +347,8 @@ final class Issue942ScriptedWindowServer: @unchecked Sendable {
         #expect(try Self.token(run.receipt, "action") == "menu_escape_loop")
         #expect(try Self.escapeTargets(run.receipt).isEmpty)
         #expect(try #require(run.receipt["escapes_sent"] as? Int) == 0)
-        #expect(run.receipt["after"] == nil, "nothing was sent, so there is no after")
+        #expect(try Self.summary(Self.reading(run.receipt, "after")) == "unreadable|unreadable|unread",
+                "the re-read that refused is the reading the receipt carries")
         #expect(try Self.token(run.receipt, "final_action") == "refuse_to_act")
         #expect(try Self.token(run.receipt, "final_refusal_reason") == "window_list_unreadable")
         let settled = try Self.settled(run.receipt)
@@ -445,7 +470,7 @@ final class Issue942ScriptedWindowServer: @unchecked Sendable {
         #expect(try Self.token(run.receipt, "action") == "refuse_to_act")
         #expect(try Self.token(run.receipt, "refusal_reason") == "dialog_present_escape_withheld")
         #expect(try Self.token(run.receipt, "final_refusal_reason") == "dialog_present_escape_withheld")
-        #expect(run.receipt["after"] == nil)
+        #expect(try Self.summary(Self.reading(run.receipt, "after")) == "open|identified_ours|logic")
         let settled = try Self.settled(run.receipt)
         #expect(!settled)
     }
@@ -623,13 +648,13 @@ final class Issue942ScriptedWindowServer: @unchecked Sendable {
         #expect(!(try #require(settled.envelope["safe_to_retry"] as? Bool)), "\(c.label)")
         #expect(try #require(settled.envelope["menu_actuation_attempted"] as? Bool), "\(c.label)")
 
-        // The unreadable run's own object: nothing sent, nothing settled, no `after`.
+        // The unreadable run's own object: nothing sent, nothing settled, `after` the unread re-read.
         let receipt = try #require(unread.envelope["post_leaf_settlement"] as? [String: Any], "\(c.label)")
         #expect(unread.server.escapeCount == 0)
         #expect(try Self.summary(Self.reading(receipt, "read")) == "unreadable|unreadable|unread")
         #expect(try Self.token(receipt, "action") == "refuse_to_act")
         #expect(try Self.token(receipt, "refusal_reason") == "window_list_unreadable")
-        #expect(receipt["after"] == nil)
+        #expect(try Self.summary(Self.reading(receipt, "after")) == "unreadable|unreadable|unread")
         let unreadSettled = try Self.settled(receipt)
         #expect(!unreadSettled)
     }
