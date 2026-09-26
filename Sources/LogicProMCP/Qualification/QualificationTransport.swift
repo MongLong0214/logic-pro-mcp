@@ -136,6 +136,14 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
             return before["complete"] as? Bool == after["complete"] as? Bool
                 && old.count != changed.count && Set(old) != Set(changed)
         }
+        // transportRestoreCycle records its pre-state from BEFORE its precondition stage: when the
+        // transport already sits where the operation puts it, the recipe first moves it the other
+        // way and throws if that did not happen. So a genuine readback can equal the pre-state, and
+        // the write's movement is shown by the readback being where the operation puts the
+        // transport, which the state just before the write never is.
+        if let expected = QualificationTransport.transportExpectedPlaying[operation] {
+            return Self.transportState(after)?["isPlaying"] as? Bool == expected
+        }
         return Self.sameRecipeValue(operation, before, after) == false
     }
 

@@ -330,6 +330,39 @@ struct Issue984VerifiedWriteCycleCreditTests {
         ).verifiedCycleShape)
     }
 
+    private static func transportRecord(
+        _ operation: OperationID, pre: Bool, readback: Bool, restored: Bool
+    ) -> QualificationMutationRestoreRecord {
+        func state(_ playing: Bool) -> String {
+            #"{"source":"ax_live","data":{"state":{"isPlaying":\#(playing)}}}"#
+        }
+        return QualificationMutationRestoreRecord(
+            operationID: operation.rawValue,
+            preState: state(pre),
+            mutation: #"{"state":"A","success":true}"#,
+            readback: state(readback),
+            restore: #"{"state":"A","success":true}"#,
+            restoreReadback: state(restored)
+        )
+    }
+
+    /// `transportRestoreCycle` records its pre-state before its precondition stage, so a transport
+    /// already where the operation puts it gives pre-state == readback on a genuine cycle.
+    @Test func aStagedTransportCycleEarnsCreditAndAMisplacedReadbackDoesNot() {
+        #expect(QualificationTransport.transportExpectedPlaying.count == 3)
+        for (operation, expected) in QualificationTransport.transportExpectedPlaying {
+            #expect(Self.transportRecord(
+                operation, pre: expected, readback: expected, restored: expected
+            ).verifiedCycleShape, "staged \(operation.rawValue)")
+            #expect(Self.transportRecord(
+                operation, pre: !expected, readback: expected, restored: !expected
+            ).verifiedCycleShape, "unstaged \(operation.rawValue)")
+            #expect(!Self.transportRecord(
+                operation, pre: expected, readback: !expected, restored: expected
+            ).verifiedCycleShape, "misplaced \(operation.rawValue)")
+        }
+    }
+
     /// Read credit is what it was: `.semanticReadback` does not consult `restore`.
     @Test func semanticReadbackCreditIsUnchanged() {
         func readCase(
