@@ -1,0 +1,35 @@
+Limit: State A proves the upper row redrew to a different row and held still, not that it moved exactly count banks; a rename or Logic re-banking in the same window also reads as State A
+Limit: not driven against a live Logic; the redraw is a fake surface answering the press through handleFeedback
+Ruled-out: an absolute bank index | currentBank is bookkeeping never compared with Logic, and six-character LCD names cannot confirm which bank is showing
+Ruled-out: withBanking's Date-based polling | tests may not read the wall clock; the new path polls a bounded count through an injected sleeper
+Warn: withBanking and executeBank share withBankExclusion; a third bank mover must take the same lock
+Record-Id: r-ac3f83ce1a1f
+Provenance: inherited 4541e5bfd8ec8d711c37002e3c425c14ab120716
+
+Ruled-out: defaulting a malformed count to 1 | intParamOrNil returns nil for missing and malformed alike, and pressing the bank button on garbage is the wrong default
+Ruled-out: pinning a mixer.bank oracle now | no State A has been seen on a Logic host; it stays an audited exclusion until a live record exists
+Warn: the HC route case for bank holds only because RoutingTable routes mixer.bank; the HC router is the real ChannelRouter and answers an unknown operation in plain text
+Record-Id: r-e59016716a1f
+Provenance: inherited f18d6ee93c77f0df6b8b355d4fd7e9420dd59b42
+
+Limit: fake surface only: no Logic host has produced a mixer.bank State A, so these tests show the dispatch path carries the channel decision, not that Logic redraws the upper row
+Ruled-out: seeding isConnected into the cache for the router health gate | a live server earns health from a received feedback frame, so the rig does the same
+Record-Id: r-6004d8ef26d7
+Provenance: inherited 4e799b5892880d2e23a8cedf49e9c24f0663b666
+
+Limit: readback_mismatch after a partial walk cannot tell the end of the mixer from eight neighbours whose truncated names coincide; both redraw unchanged.
+Ruled-out: keeping the batched presses with one readback | at a48a5cb5 two presses sent 1 ms apart moved Logic 12.3 one bank while count 2 still answered State A, so a changed row cannot say how many presses landed.
+Ruled-out: spacing the presses by a fixed settle delay and reading once at the end | a delay is a guess about Logic's rate and still leaves one readback for several presses; a readback per press measures each move.
+Warn: State A still does not say which bank is showing; six-character names are not an index, and a row that changes for another reason (a rename, Logic re-banking on selection) reads as a move.
+Record-Id: r-c8f0ec6bdd66
+Provenance: inherited b08d560d9ed88bbad225b43651b4c9573dce8e18
+
+Limit: an entry whose AXRole cannot be read stays in the scan, so a tooltip whose role read fails still turns the snapshot cannot-tell.
+Ruled-out: treating AXModal -25205 as not modal for every window | the product and Scripts/logic_ui_snapshot.swift deliberately fail closed on an absent AXModal whatever the subrole, and only a role read as a help tag says the entry cannot hold input.
+Ruled-out: moving the pointer off Logic before each run | the tooltip comes back whenever the pointer rests on a control, and the next run's snapshots would be cannot-tell again.
+Record-Id: r-c67518470b85
+Provenance: inherited de0407d39aeb190ba924270698650cb6457b9011
+
+Ruled-out: pinning the mixer.bank oracle in this change | an oracle brings phase-set membership and the #409 coverage-credit rule with it, which deserve their own review, and this change is the step walk and its live records.
+Record-Id: r-0c10edc8df5e
+Provenance: inherited 10f56550581a2feae1986f1ac27854277dfdc74d
