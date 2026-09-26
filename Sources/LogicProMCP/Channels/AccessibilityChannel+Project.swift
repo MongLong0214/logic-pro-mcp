@@ -437,7 +437,8 @@ extension AccessibilityChannel {
         selection: String,
         observationAttempts: Int = 80,
         observationDelayNanoseconds: UInt64 = 250_000_000,
-        newTrackSheetCleanupAttempts: Int = 10
+        newTrackSheetCleanupAttempts: Int = 10,
+        zeroTrackSettleObservations: Int = 12
     ) async -> ChannelResult {
         // Some Creator Studio builds open a zero-track Project directly, while
         // others expose Logic's mandatory New Track sheet. Reuse the existing
@@ -469,6 +470,10 @@ extension AccessibilityChannel {
         // #883: the last COMPLETE observation saw this operation's New Track sheet. If the budget
         // then runs out on unreadable polls, that sheet may still be up at the give-up point.
         var lastCompleteObservationWasNewTrackSheet = false
+        // #883: whether any complete observation has seen the New Track sheet, and how many
+        // complete observations have since found the new window with no track and no sheet.
+        var newTrackSheetSeen = false
+        var zeroTrackSettlePolls = 0
         let attempts = max(1, observationAttempts)
         for attempt in 0..<attempts {
             try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
@@ -498,6 +503,7 @@ extension AccessibilityChannel {
 
             switch outcome.kind {
             case .mandatoryNewTrack:
+                newTrackSheetSeen = true
                 if let observedWitnessSummary = outcome.witnessSummary {
                     witnessSummary = observedWitnessSummary
                 }
@@ -676,6 +682,16 @@ extension AccessibilityChannel {
                     reason: .readbackUnavailable,
                     extras: extras
                 ))
+            }
+            // #883: Logic can publish the new window before it attaches the mandatory New Track
+            // sheet. On a zh_TW Logic 12.3, 2026-09-26, the first poll found the window with no
+            // sheet at 250 ms, this returned the project as open, and the sheet then came up and
+            // refused the next create. A window with no track and no sheet seen yet is that moment
+            // as much as it is a finished zero-track project, so it must stay so for a settle span.
+            if !newTrackSheetSeen, observedTrackCount == 0,
+               zeroTrackSettlePolls < zeroTrackSettleObservations, attempt + 1 < attempts {
+                zeroTrackSettlePolls += 1
+                continue
             }
             if let current = exactCreatedProjectWindow(runtime: runtime) {
                 var extras: [String: Any] = [

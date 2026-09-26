@@ -211,10 +211,18 @@ private final class OwnedSheetFixture: @unchecked Sendable {
     let pressed = PressedTitles()
     let dismissalRemovesSheet: Bool
     let afterCancel: AfterCancel
+    /// The sheet is not up when the first poll reads the window; it arrives when the product first
+    /// counts the new project's tracks, which it does only after a poll found no sheet.
+    let sheetArrivesLate: Bool
+    private var sheetArrived = false
+    /// Set by a test whose Create press closes the sheet, as a real Create does.
+    var sheetGoneByCreate = false
 
-    init(base: Int, dismissalRemovesSheet: Bool, afterCancel: AfterCancel = .projectStays) {
+    init(base: Int, dismissalRemovesSheet: Bool, afterCancel: AfterCancel = .projectStays,
+         sheetArrivesLate: Bool = false) {
         self.dismissalRemovesSheet = dismissalRemovesSheet
         self.afterCancel = afterCancel
+        self.sheetArrivesLate = sheetArrivesLate
         app = builder.element(base)
         window = builder.element(base + 1)
         menuBar = builder.element(base + 2)
@@ -256,7 +264,7 @@ private final class OwnedSheetFixture: @unchecked Sendable {
 
     var cancelPresses: Int { pressed.current().filter { $0 == spanishCancel }.count }
     var createPresses: Int { pressed.current().filter { $0 == unidentifiableCreate }.count }
-    private var sheetDismissed: Bool { dismissalRemovesSheet && cancelPresses > 0 }
+    private var sheetDismissed: Bool { sheetGoneByCreate || (dismissalRemovesSheet && cancelPresses > 0) }
     private var projectClosed: Bool { sheetDismissed && afterCancel != .projectStays }
 
     func showSheet() {
@@ -284,6 +292,10 @@ private final class OwnedSheetFixture: @unchecked Sendable {
             // come through their own seam, so without this the dead window still lists its children
             // and a scan of it reads as complete.
             childrenResultHandler: { [self] element in
+                if sheetArrivesLate, !sheetArrived, CFEqual(element, headers) {
+                    sheetArrived = true
+                    showSheet()
+                }
                 if sheetDismissed, CFEqual(element, sheet) { return .failure(destroyed) }
                 if projectClosed, CFEqual(element, window) { return .failure(destroyed) }
                 return nil
@@ -396,6 +408,63 @@ struct Issue883OwnedNewTrackSheetCleanupTests {
                 "a read of the window Cancel destroyed is not a read of what is on screen: \(cleanup)")
         #expect(cleanup["post_cleanup_modal"] as? String == "none")
         #expect(cleanup["result"] as? String == "observed_closed")
+    }
+
+    @Test("project.new does not call a trackless window open before its New Track sheet had time to arrive")
+    func projectNewWaitsForASheetThatArrivesAfterTheWindow() async throws {
+        let fixture = OwnedSheetFixture(base: 8890, dismissalRemovesSheet: true, sheetArrivesLate: true)
+        fixture.builder.setChildren(fixture.window, [fixture.headers])
+        fixture.builder.setChildren(fixture.headers, [])
+        fixture.builder.setAttribute(fixture.create, kAXTitleAttribute as String, "Crear")
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime(extraPress: { [fixture] element in
+                guard CFEqual(element, fixture.create) else { return nil }
+                fixture.pressed.append("Crear")
+                fixture.sheetGoneByCreate = true
+                fixture.builder.setChildren(fixture.window, [fixture.headers])
+                fixture.builder.setChildren(fixture.headers, [fixture.existing])
+                return true
+            }),
+            selection: "Empty Project",
+            observationAttempts: 20,
+            observationDelayNanoseconds: 0,
+            zeroTrackSettleObservations: 4
+        )
+        let envelope = try decodeEnvelope(result)
+
+        #expect(fixture.pressed.current().filter { $0 == "Crear" }.count == 1,
+                "the sheet arrived after the first poll and was never confirmed: \(result.message)")
+        #expect(result.isSuccess)
+        #expect(envelope["phase"] as? String == "created_project_window_observed")
+        let trackCreated = try #require(envelope["mandatory_track_created"] as? Bool)
+        #expect(trackCreated, "the window was called open before its mandatory track: \(result.message)")
+    }
+
+    @Test("a trackless project that never raises the sheet is still reported open once the settle has passed")
+    func projectNewReportsATracklessProjectAfterTheSettle() async throws {
+        let fixture = OwnedSheetFixture(base: 8900, dismissalRemovesSheet: true)
+        fixture.builder.setChildren(fixture.window, [fixture.headers])
+        fixture.builder.setChildren(fixture.headers, [])
+
+        // 1 ms per poll only so that `observation_elapsed_ms` counts polls: (attempt + 1) × 1.
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime(),
+            selection: "Empty Project",
+            observationAttempts: 20,
+            observationDelayNanoseconds: 1_000_000,
+            zeroTrackSettleObservations: 4
+        )
+        let envelope = try decodeEnvelope(result)
+
+        #expect(result.isSuccess)
+        #expect(envelope["phase"] as? String == "created_project_window_observed",
+                "a settle that never ends turns every sheet-less build into a timeout: \(result.message)")
+        let trackCreated = try #require(envelope["mandatory_track_created"] as? Bool)
+        #expect(!trackCreated)
+        #expect(fixture.pressed.current().isEmpty)
+        #expect(envelope["observation_elapsed_ms"] as? Int == 5,
+                "four settle polls, then the fifth reports the project; waiting out the whole budget would add twenty seconds to every build that never raises the sheet: \(result.message)")
     }
 
     @Test(

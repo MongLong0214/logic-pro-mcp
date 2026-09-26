@@ -374,6 +374,8 @@ for lproj, code in LOCALES:
     d = E.Driver()
     tracks(d)  # the first read of a new server can answer before the rail is read at all
     created = d.tool("logic_project", "new", {})
+    # The operation record keeps six fields; the phase that says which exit answered is in the rest.
+    ev.note(f"{tag}/project-new-response", created)
     time.sleep(6)
     names = window_names()
     arrange = [n for n in names if n.endswith(f" - {suffix}")]
