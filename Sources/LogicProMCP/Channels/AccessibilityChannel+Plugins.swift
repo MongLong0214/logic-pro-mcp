@@ -455,6 +455,24 @@ extension AccessibilityChannel {
         }
     }
 
+    /// Whether a menu's item titles are the plug-in menu an empty insert slot opens.
+    ///
+    /// `titles.contains("Audio Units")` plus a hand-written `|| "유틸리티"` recognised this menu in
+    /// two languages. Both labels go through AXLocalePolicy now: Audio Units is derived from
+    /// Apple's own data, Utility is measured because Apple ships no key for it. `Channel EQ` stays
+    /// a literal -- it is a plug-in NAME and Logic does not translate it in any locale.
+    ///
+    /// #993 -- a zh_TW Logic has no Audio Units item: its menu ends in one `音訊單元：<maker>` item
+    /// per manufacturer (see `pluginMenuAudioUnitsManufacturerItem`), so either form is accepted.
+    static func isAudioPluginRootMenu(titles: [String]) -> Bool {
+        titles.contains(where: {
+            AXLocalePolicy.pluginMenuAudioUnits.matches($0)
+                || AXLocalePolicy.pluginMenuAudioUnitsManufacturerItem.matches($0, mode: .prefix)
+        })
+            && titles.contains(where: { AXLocalePolicy.pluginMenuUtility.matches($0) })
+            && titles.contains("Channel EQ")
+    }
+
     private static func findAudioPluginRootMenu(
         in element: AXUIElement,
         runtime: AXHelpers.Runtime,
@@ -462,17 +480,10 @@ extension AccessibilityChannel {
     ) -> AXUIElement? {
         guard depth <= 8 else { return nil }
         if (AXHelpers.getRole(element, runtime: runtime) ?? "") == (kAXMenuRole as String) {
-            let titles = Set(AXHelpers.getChildren(element, runtime: runtime).compactMap {
+            let titles = AXHelpers.getChildren(element, runtime: runtime).compactMap {
                 AXHelpers.getTitle($0, runtime: runtime)
-            })
-            // `titles.contains("Audio Units")` plus a hand-written `|| "유틸리티"` recognised this
-            // menu in two languages. Both labels go through AXLocalePolicy now: Audio Units is
-            // derived from Apple's own data, Utility is measured because Apple ships no key for
-            // it. `Channel EQ` stays a literal -- it is a plug-in NAME and Logic does not
-            // translate it in any locale.
-            if titles.contains(where: { AXLocalePolicy.pluginMenuAudioUnits.matches($0) }),
-               titles.contains(where: { AXLocalePolicy.pluginMenuUtility.matches($0) }),
-               titles.contains("Channel EQ") {
+            }
+            if isAudioPluginRootMenu(titles: titles) {
                 return element
             }
         }

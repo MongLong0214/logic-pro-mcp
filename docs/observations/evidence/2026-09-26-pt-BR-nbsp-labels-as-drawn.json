@@ -1,0 +1,758 @@
+{
+ "probe": "Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py",
+ "locale": "pt-BR",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "pt-BR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "language": {
+  "switched": true,
+  "arrange_window": "lpm-locale-campaign - Pistas",
+  "windows": [
+   "lpm-locale-campaign - Pistas"
+  ]
+ },
+ "setup_install": {
+  "item": "controlSurfaceInstallMenuItem",
+  "open_setup": "pressed",
+  "menu_outcome": "read",
+  "new_button": {
+   "description": "Novo",
+   "description_scalars": [
+    "U+004E",
+    "U+006F",
+    "U+0076",
+    "U+006F"
+   ],
+   "enabled": true,
+   "help": null,
+   "help_scalars": null,
+   "role": "AXMenuButton",
+   "subrole": "AXSegment",
+   "title": null,
+   "title_scalars": null
+  },
+  "press_rc": 0,
+  "menu_items": [
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": true,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXMenuItem",
+    "subrole": null,
+    "title": "Instalar…",
+    "title_scalars": [
+     "U+0049",
+     "U+006E",
+     "U+0073",
+     "U+0074",
+     "U+0061",
+     "U+006C",
+     "U+0061",
+     "U+0072",
+     "U+2026"
+    ]
+   },
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": true,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXMenuItem",
+    "subrole": null,
+    "title": "Analisar Todos os Modelos",
+    "title_scalars": [
+     "U+0041",
+     "U+006E",
+     "U+0061",
+     "U+006C",
+     "U+0069",
+     "U+0073",
+     "U+0061",
+     "U+0072",
+     "U+0020",
+     "U+0054",
+     "U+006F",
+     "U+0064",
+     "U+006F",
+     "U+0073",
+     "U+0020",
+     "U+006F",
+     "U+0073",
+     "U+0020",
+     "U+004D",
+     "U+006F",
+     "U+0064",
+     "U+0065",
+     "U+006C",
+     "U+006F",
+     "U+0073"
+    ]
+   },
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": false,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXMenuItem",
+    "subrole": null,
+    "title": "",
+    "title_scalars": []
+   },
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": true,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXMenuItem",
+    "subrole": null,
+    "title": "Instalação Automática",
+    "title_scalars": [
+     "U+0049",
+     "U+006E",
+     "U+0073",
+     "U+0074",
+     "U+0061",
+     "U+006C",
+     "U+0061",
+     "U+00E7",
+     "U+00E3",
+     "U+006F",
+     "U+0020",
+     "U+0041",
+     "U+0075",
+     "U+0074",
+     "U+006F",
+     "U+006D",
+     "U+00E1",
+     "U+0074",
+     "U+0069",
+     "U+0063",
+     "U+0061"
+    ]
+   }
+  ],
+  "reading": {
+   "surface": "system.midi",
+   "path": "AXWindow[Configuração de Superfície de Controle]/AXMenuButton{Novo}/AXMenu/AXMenuItem[Instalar…]",
+   "role": "AXMenuItem",
+   "subrole": null,
+   "title": "Instalar…",
+   "title_scalars": [
+    "U+0049",
+    "U+006E",
+    "U+0073",
+    "U+0074",
+    "U+0061",
+    "U+006C",
+    "U+0061",
+    "U+0072",
+    "U+2026"
+   ],
+   "description": null,
+   "help": null,
+   "value": null,
+   "identifier": null
+  },
+  "menus_open_after_cancel": 0,
+  "close_setup": "closed"
+ },
+ "plugin_menu": {
+  "item": "pluginMenuAudioUnits",
+  "slot_description": "plug-in de áudio",
+  "menu_outcome": "read",
+  "slot_candidates": 36,
+  "press_rc": -25204,
+  "menu_items": [
+   {
+    "title": null,
+    "title_scalars": null,
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Recentes",
+    "title_scalars": [
+     "U+0052",
+     "U+0065",
+     "U+0063",
+     "U+0065",
+     "U+006E",
+     "U+0074",
+     "U+0065",
+     "U+0073"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Compressor",
+    "title_scalars": [
+     "U+0043",
+     "U+006F",
+     "U+006D",
+     "U+0070",
+     "U+0072",
+     "U+0065",
+     "U+0073",
+     "U+0073",
+     "U+006F",
+     "U+0072"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Channel EQ",
+    "title_scalars": [
+     "U+0043",
+     "U+0068",
+     "U+0061",
+     "U+006E",
+     "U+006E",
+     "U+0065",
+     "U+006C",
+     "U+0020",
+     "U+0045",
+     "U+0051"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Gain",
+    "title_scalars": [
+     "U+0047",
+     "U+0061",
+     "U+0069",
+     "U+006E"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Raum",
+    "title_scalars": [
+     "U+0052",
+     "U+0061",
+     "U+0075",
+     "U+006D"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Tremolo",
+    "title_scalars": [
+     "U+0054",
+     "U+0072",
+     "U+0065",
+     "U+006D",
+     "U+006F",
+     "U+006C",
+     "U+006F"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "",
+    "title_scalars": [],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Amps and Pedals",
+    "title_scalars": [
+     "U+0041",
+     "U+006D",
+     "U+0070",
+     "U+0073",
+     "U+0020",
+     "U+0061",
+     "U+006E",
+     "U+0064",
+     "U+0020",
+     "U+0050",
+     "U+0065",
+     "U+0064",
+     "U+0061",
+     "U+006C",
+     "U+0073"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Delay",
+    "title_scalars": [
+     "U+0044",
+     "U+0065",
+     "U+006C",
+     "U+0061",
+     "U+0079"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Distortion",
+    "title_scalars": [
+     "U+0044",
+     "U+0069",
+     "U+0073",
+     "U+0074",
+     "U+006F",
+     "U+0072",
+     "U+0074",
+     "U+0069",
+     "U+006F",
+     "U+006E"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Dynamics",
+    "title_scalars": [
+     "U+0044",
+     "U+0079",
+     "U+006E",
+     "U+0061",
+     "U+006D",
+     "U+0069",
+     "U+0063",
+     "U+0073"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "EQ",
+    "title_scalars": [
+     "U+0045",
+     "U+0051"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Filter",
+    "title_scalars": [
+     "U+0046",
+     "U+0069",
+     "U+006C",
+     "U+0074",
+     "U+0065",
+     "U+0072"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Imaging",
+    "title_scalars": [
+     "U+0049",
+     "U+006D",
+     "U+0061",
+     "U+0067",
+     "U+0069",
+     "U+006E",
+     "U+0067"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Metering",
+    "title_scalars": [
+     "U+004D",
+     "U+0065",
+     "U+0074",
+     "U+0065",
+     "U+0072",
+     "U+0069",
+     "U+006E",
+     "U+0067"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Modulation",
+    "title_scalars": [
+     "U+004D",
+     "U+006F",
+     "U+0064",
+     "U+0075",
+     "U+006C",
+     "U+0061",
+     "U+0074",
+     "U+0069",
+     "U+006F",
+     "U+006E"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Multi Effects",
+    "title_scalars": [
+     "U+004D",
+     "U+0075",
+     "U+006C",
+     "U+0074",
+     "U+0069",
+     "U+0020",
+     "U+0045",
+     "U+0066",
+     "U+0066",
+     "U+0065",
+     "U+0063",
+     "U+0074",
+     "U+0073"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Pitch",
+    "title_scalars": [
+     "U+0050",
+     "U+0069",
+     "U+0074",
+     "U+0063",
+     "U+0068"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Reverb",
+    "title_scalars": [
+     "U+0052",
+     "U+0065",
+     "U+0076",
+     "U+0065",
+     "U+0072",
+     "U+0062"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Specialized",
+    "title_scalars": [
+     "U+0053",
+     "U+0070",
+     "U+0065",
+     "U+0063",
+     "U+0069",
+     "U+0061",
+     "U+006C",
+     "U+0069",
+     "U+007A",
+     "U+0065",
+     "U+0064"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Utility",
+    "title_scalars": [
+     "U+0055",
+     "U+0074",
+     "U+0069",
+     "U+006C",
+     "U+0069",
+     "U+0074",
+     "U+0079"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "",
+    "title_scalars": [],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "Audio Units",
+    "title_scalars": [
+     "U+0041",
+     "U+0075",
+     "U+0064",
+     "U+0069",
+     "U+006F",
+     "U+0020",
+     "U+0055",
+     "U+006E",
+     "U+0069",
+     "U+0074",
+     "U+0073"
+    ],
+    "role": "AXMenuItem"
+   },
+   {
+    "title": "",
+    "title_scalars": [],
+    "role": "AXMenuItem"
+   }
+  ],
+  "reading": {
+   "surface": "mixer.inserts",
+   "path": "AXButton{plug-in de áudio}/AXMenu/AXMenuItem[Audio Units]",
+   "role": "AXMenuItem",
+   "subrole": null,
+   "title": "Audio Units",
+   "title_scalars": [
+    "U+0041",
+    "U+0075",
+    "U+0064",
+    "U+0069",
+    "U+006F",
+    "U+0020",
+    "U+0055",
+    "U+006E",
+    "U+0069",
+    "U+0074",
+    "U+0073"
+   ],
+   "description": null,
+   "help": null,
+   "value": null,
+   "identifier": null
+  },
+  "menus_open_after_cancel": 0
+ },
+ "stem_progress": {
+  "item": "stemExportProgressWindowTitle",
+  "open_export": "pressed",
+  "panel_open": true,
+  "destination_field": {
+   "outcome": "set",
+   "read_back": "<scratch>/stems-pt/",
+   "set_rc": 0
+  },
+  "export_press": {
+   "candidates": 1,
+   "outcome": "pressed",
+   "press_rc": 0,
+   "pressed": {
+    "description": null,
+    "description_scalars": null,
+    "enabled": true,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXButton",
+    "subrole": null,
+    "title": "Exportar",
+    "title_scalars": [
+     "U+0045",
+     "U+0078",
+     "U+0070",
+     "U+006F",
+     "U+0072",
+     "U+0074",
+     "U+0061",
+     "U+0072"
+    ]
+   }
+  },
+  "windows_during_export": [
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": null,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXWindow",
+    "subrole": "AXDialog",
+    "title": "Logic Pro",
+    "title_scalars": [
+     "U+004C",
+     "U+006F",
+     "U+0067",
+     "U+0069",
+     "U+0063",
+     "U+0020",
+     "U+0050",
+     "U+0072",
+     "U+006F"
+    ]
+   },
+   {
+    "description": null,
+    "description_scalars": null,
+    "enabled": null,
+    "help": null,
+    "help_scalars": null,
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "title": "lpm-locale-campaign - Pistas",
+    "title_scalars": [
+     "U+006C",
+     "U+0070",
+     "U+006D",
+     "U+002D",
+     "U+006C",
+     "U+006F",
+     "U+0063",
+     "U+0061",
+     "U+006C",
+     "U+0065",
+     "U+002D",
+     "U+0063",
+     "U+0061",
+     "U+006D",
+     "U+0070",
+     "U+0061",
+     "U+0069",
+     "U+0067",
+     "U+006E",
+     "U+0020",
+     "U+002D",
+     "U+0020",
+     "U+0050",
+     "U+0069",
+     "U+0073",
+     "U+0074",
+     "U+0061",
+     "U+0073"
+    ]
+   }
+  ],
+  "files_during_export": 9,
+  "cancel": [
+   "sent"
+  ],
+  "watch": {
+   "polls": 235,
+   "interval_ms": 20,
+   "titles": [
+    {
+     "description": null,
+     "description_scalars": null,
+     "enabled": null,
+     "first_poll": 1,
+     "help": null,
+     "help_scalars": null,
+     "last_poll": 45,
+     "polls_seen": 45,
+     "role": "AXWindow",
+     "subrole": "AXDialog",
+     "title": "Abrir",
+     "title_scalars": [
+      "U+0041",
+      "U+0062",
+      "U+0072",
+      "U+0069",
+      "U+0072"
+     ]
+    },
+    {
+     "description": null,
+     "description_scalars": null,
+     "enabled": null,
+     "first_poll": 1,
+     "help": null,
+     "help_scalars": null,
+     "last_poll": 235,
+     "polls_seen": 235,
+     "role": "AXWindow",
+     "subrole": "AXStandardWindow",
+     "title": "lpm-locale-campaign - Pistas",
+     "title_scalars": [
+      "U+006C",
+      "U+0070",
+      "U+006D",
+      "U+002D",
+      "U+006C",
+      "U+006F",
+      "U+0063",
+      "U+0061",
+      "U+006C",
+      "U+0065",
+      "U+002D",
+      "U+0063",
+      "U+0061",
+      "U+006D",
+      "U+0070",
+      "U+0061",
+      "U+0069",
+      "U+0067",
+      "U+006E",
+      "U+0020",
+      "U+002D",
+      "U+0020",
+      "U+0050",
+      "U+0069",
+      "U+0073",
+      "U+0074",
+      "U+0061",
+      "U+0073"
+     ]
+    },
+    {
+     "description": null,
+     "description_scalars": null,
+     "enabled": null,
+     "first_poll": 47,
+     "help": null,
+     "help_scalars": null,
+     "last_poll": 49,
+     "polls_seen": 3,
+     "role": "AXWindow",
+     "subrole": "AXDialog",
+     "title": "Logic Pro",
+     "title_scalars": [
+      "U+004C",
+      "U+006F",
+      "U+0067",
+      "U+0069",
+      "U+0063",
+      "U+0020",
+      "U+0050",
+      "U+0072",
+      "U+006F"
+     ]
+    },
+    {
+     "description": null,
+     "description_scalars": null,
+     "enabled": null,
+     "first_poll": 50,
+     "help": null,
+     "help_scalars": null,
+     "last_poll": 50,
+     "polls_seen": 1,
+     "role": "AXWindow",
+     "subrole": null,
+     "title": "Logic Pro",
+     "title_scalars": [
+      "U+004C",
+      "U+006F",
+      "U+0067",
+      "U+0069",
+      "U+0063",
+      "U+0020",
+      "U+0050",
+      "U+0072",
+      "U+006F"
+     ]
+    }
+   ]
+  },
+  "dialogs_after_cancel": [],
+  "export_directory_exists_after_cleanup": false,
+  "reading": {
+   "surface": "project.export",
+   "path": "AXWindow[Logic Pro]",
+   "role": "AXWindow",
+   "subrole": "AXDialog",
+   "title": "Logic Pro",
+   "title_scalars": [
+    "U+004C",
+    "U+006F",
+    "U+0067",
+    "U+0069",
+    "U+0063",
+    "U+0020",
+    "U+0050",
+    "U+0072",
+    "U+006F"
+   ],
+   "description": null,
+   "help": null,
+   "value": null,
+   "identifier": null
+  }
+ }
+}

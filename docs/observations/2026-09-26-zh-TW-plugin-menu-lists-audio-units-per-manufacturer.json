@@ -1,0 +1,87 @@
+{
+ "schema": 3,
+ "id": "2026-09-26-zh-TW-plugin-menu-lists-audio-units-per-manufacturer",
+ "date": "2026-09-26",
+ "subject": "The plug-in menu of a mixer insert slot on a zh_TW Logic: where the Audio Units entry is",
+ "question": "Does the plug-in menu an empty insert slot opens on a zh-TW Logic hold an Audio Units item, as it does in the other nine languages?",
+ "verdict": "works",
+ "surface": "mixer.inserts",
+ "issues": [
+  993
+ ],
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "zh-TW",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "/usr/bin/python3 Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py . <out.json> <scratch-dir> zh_TW",
+  "expected": "the zh_TW plugin_menu reading has no menu_items and its open_menus_titles end in one `音訊單元：<manufacturer>` item per installed Audio Units manufacturer, with no `音訊單元` item",
+  "cost": "needs Logic with the lpm-locale-campaign fixture; switches Logic's language, relaunches it, and restores Korean at the end; about one minute"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:pluginMenuAudioUnitsManufacturerItem",
+  "Sources/LogicProMCP/Channels/AccessibilityChannel+Plugins.swift:isAudioPluginRootMenu"
+ ],
+ "method": "An empty insert slot was found by its AXDescription, which is Apple's MAMixer `audio plug-in` row for this language read from the installed bundle, and pressed. The popup menu was read from under the slot or one of its nearest six ancestors, then closed with AXCancel. No item's folded title matched the Audio Units label, so the probe recorded every title of every menu open under the slot, in order; the row below is that list. No plug-in was inserted.",
+ "observations": [
+  {
+   "surface": "mixer.inserts",
+   "role": "AXMenu",
+   "path": "AXButton{音訊外掛模組}/AXMenu",
+   "locale": "zh-TW",
+   "titles": [
+    null,
+    "最近項目",
+    "Compressor",
+    "Channel EQ",
+    "Gain",
+    "Raum",
+    "Tremolo",
+    "",
+    "Amps and Pedals",
+    "Delay",
+    "Distortion",
+    "Dynamics",
+    "EQ",
+    "Filter",
+    "Imaging",
+    "Metering",
+    "Modulation",
+    "Multi Effects",
+    "Pitch",
+    "Reverb",
+    "Specialized",
+    "Utility",
+    "",
+    "音訊單元：Apple",
+    "音訊單元：iZotope",
+    "音訊單元：Native Instruments",
+    ""
+   ]
+  }
+ ],
+ "evidence": [
+  "evidence/2026-09-26-zh-TW-nbsp-labels-as-drawn.json"
+ ],
+ "conclusion": "The menu's tail is `音訊單元：Apple`, `音訊單元：iZotope`, `音訊單元：Native Instruments`: one flat item per manufacturer, and no `音訊單元` item. Apple's zh_TW `Audio Units:` row is `音訊單元：`, ending in U+FF1A, where the other nine languages' rows end in an ASCII colon, which is where Logic splits this path into a submenu. `findAudioPluginRootMenu` required an item matching `pluginMenuAudioUnits`, so it could not recognise this menu and `insert_plugin` would refuse with the root menu not found; it now also accepts an item that begins with the `Audio Units:` row's value.",
+ "limits": [
+  "One build of Logic: Logic Pro 12.3 (6674) on macOS 26.3 (25D125).",
+  "Three manufacturers were installed on this host. The per-manufacturer form is read; how the menu looks with none but Apple's is not.",
+  "The menu was read by the probe, not driven by the product. That insert_plugin refused here before the change is inferred from its code; the live run of the product in zh_TW is separate."
+ ],
+ "supersedes": null,
+ "canon": [
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/zh_TW/Audio%20Units%3A#value",
+   "value": "音訊單元：",
+   "used_for": "Apple's zh_TW row for the Audio Units path, whose full-width colon is why no submenu is made",
+   "binding": {
+    "kind": "record"
+   }
+  }
+ ]
+}
