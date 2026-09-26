@@ -103,6 +103,12 @@ private func pressPair(_ function: MCUProtocol.ButtonFunction, strip: Int) -> [[
     ]
 }
 
+/// A Boolean, or its absence, as text. On this toolchain `#expect(<Bool> == <Bool>)` passes
+/// whatever the operands are (#393), so two states are compared through this projection.
+private func bit(_ value: Bool?) -> String {
+    value.map { $0 ? "on" : "off" } ?? "unread"
+}
+
 private func setEnvelope(_ result: ChannelResult) throws -> [String: Any] {
     try #require(JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any])
 }
@@ -145,13 +151,14 @@ struct Issue1020MCUStripButtonSetTests {
         let attempted = try #require(obj["write_attempted"] as? Bool)
         #expect(!attempted)
         let observed = try #require(obj["observed"] as? Bool)
-        #expect(observed == enabled)
+        #expect(bit(observed) == bit(enabled))
         #expect(obj["track"] as? Int == 2)
-        #expect(obj["enabled"] as? Bool == enabled)
+        let echoed = try #require(obj["enabled"] as? Bool)
+        #expect(bit(echoed) == bit(enabled))
         #expect(obj["verification_source"] as? String == "ax_value")
         #expect(await rig.sleeper.requested.isEmpty)
         // The surface still holds what it held: nothing toggled it.
-        #expect(await rig.surface.read(toggle.function, track: 2) == enabled)
+        #expect(bit(await rig.surface.read(toggle.function, track: 2)) == bit(enabled))
     }
 
     @Test(arguments: toggles, [true, false])
@@ -172,12 +179,12 @@ struct Issue1020MCUStripButtonSetTests {
         let attempted = try #require(obj["write_attempted"] as? Bool)
         #expect(attempted)
         let observed = try #require(obj["observed"] as? Bool)
-        #expect(observed == enabled)
+        #expect(bit(observed) == bit(enabled))
         #expect(obj["write_source"] as? String == "mcu")
         #expect(obj["verification_source"] as? String == "ax_value")
         // The first read after the press confirmed it, so no wait was taken.
         #expect(await rig.sleeper.requested.isEmpty)
-        #expect(await rig.surface.read(toggle.function, track: 2) == enabled)
+        #expect(bit(await rig.surface.read(toggle.function, track: 2)) == bit(enabled))
     }
 
     /// The bytes of the case #1020 named: clearing a lit mute is a press with its release, not
