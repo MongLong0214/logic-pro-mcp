@@ -25,7 +25,10 @@
   "depends": [
     "Sources/LogicProMCP/Workflows/SessionPopulationObservation.swift:SessionPopulationObservation",
     "Sources/LogicProMCP/State/ProjectReferenceIssuance.swift:ProjectReferenceIssuance",
-    "Sources/LogicProMCP/State/TrackReferenceIssuance.swift:TrackReferenceIssuance"
+    "Sources/LogicProMCP/State/TrackReferenceIssuance.swift:TrackReferenceIssuance",
+    "Scripts/livekit/live_965_inspect_session_reports_the_cached_population.py:rows_are_the_issued_rows",
+    "Scripts/livekit/live_965_inspect_session_reports_the_cached_population.py:strips_are_the_mixers",
+    "Scripts/livekit/live_965_inspect_session_reports_the_cached_population.py:no_association_is_claimed"
   ],
   "evidence": [
     "evidence/2026-09-27-es-ES-inspect-session-965.json"
