@@ -16,8 +16,11 @@ every sample to show slot 0 is still free.
 
 Right after each response the window server's on-screen list is read for Logic windows at or above the
 pop-up menu level. That reading is the measurement, and a list the window server did not hand back is
-unknown, never empty. A menu found open is photographed, then closed with System Events Escapes,
-outside the measured bracket, so the next sample starts with no menu open. The Mixer is captured
+unknown, never empty. A menu found open is closed with System Events Escapes, outside the measured
+bracket, so the next sample starts with no menu open. It is not photographed on its own: measured
+2026-09-26, `screencapture -l` with the plug-in popup's window number returned a 3840x2100 image while
+the window server listed the popup at 230x527 points, so no region inside it could be placed and the
+capture never settled. The screen recording is its picture. The Mixer is captured
 before and after every sample, and the two captures must match: the refusal inserts nothing.
 
 The control and the candidate alternate, control first, on the same strip.
@@ -151,14 +154,6 @@ def mixer_band(ev):
     return None, None
 
 
-def capture_menu(ev, tag, menu):
-    """Photograph a popup window by its window-server id; a title lookup cannot reach it."""
-    bounds = menu.get("bounds") or {}
-    ev.shot(tag, window={"id": menu["id"], "title": "",
-                         "x": bounds.get("X", 0), "y": bounds.get("Y", 0),
-                         "w": bounds.get("Width", 0), "h": bounds.get("Height", 0)})
-
-
 def sample(ev, binary, track, tag, band, subject, photographed=True):
     """One refusal. `photographed=False` is the warm-up, which records no capture or comparison."""
     driver = E.Driver(binary=binary)
@@ -171,8 +166,6 @@ def sample(ev, binary, track, tag, band, subject, photographed=True):
             "track": track, "slot": 0, "plugin_name": "Gain",
             "configuration": CONFIGURATION, "confirmed": True}) or {}
         menus = open_logic_menus()
-        for number, menu in enumerate((menus or []) if photographed else []):
-            capture_menu(ev, f"{tag}-menu-left-open-{number}", menu)
         # Unknown is cleaned up too; only a reading of none skips it.
         closed = [] if menus == [] else close_menus()
         if photographed:
