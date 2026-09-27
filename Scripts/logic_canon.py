@@ -101,7 +101,7 @@ EXPECTED_LOCALES = LOCALE_NAMES
 
 #: Which `.lproj` locales each source must carry, and whether it may also carry `-` (data in no
 #: `.lproj`). "ten" means `EXPECTED_LOCALES`. `nibstrings` is English by construction -- it reads
-#: `Base.lproj` -- and `madsp` and `nib` are not localised at all.
+#: `Base.lproj` -- and `madsp`, `nib` and `plugin_names` are not localised at all.
 SOURCE_LOCALES = {
     "quickhelp": ("ten", False),
     "strings": ("ten", True),
@@ -110,7 +110,15 @@ SOURCE_LOCALES = {
     "nibstrings": (("en",), False),
     "madsp": ((), True),
     "nib": ((), True),
+    "plugin_names": ((), True),
 }
+
+#: Sources small enough that `build` pins EVERY row, not only the cited ones. `plugin_names` is 242
+#: rows, and pinning all of it is what lets an offline guard answer "does Apple ship this plug-in
+#: name, and where" with a row citation and a 48-bit digest instead of a 32-bit absence probe
+#: (ADR-027 (#1028), audit B D5: `Channel EQ` was "in no corpus" only because this file was not
+#: pinned).
+PIN_EVERY_ROW = frozenset({"plugin_names"})
 
 #: What an index row holds in place of a digest, and what resolving it answers, when the file the
 #: row lives in is the ENGLISH file for that locale -- byte for byte, or row for row. It is a state,
@@ -996,6 +1004,39 @@ def _walk_madsp(node):
         yield node
 
 
+PLUGIN_NAMES_PATH = ("Contents", "Frameworks", "MAContentTagging.framework", "Versions", "A",
+                     "Resources", "DefaultPluginMapping.plist")
+
+
+def extract_plugin_names(app: str):
+    """Logic's own map from an Audio Unit identity to the plug-in's display name.
+
+    `DefaultPluginMapping.plist` (MAContentTagging) is one flat dict of 242 entries on Logic 12.3
+    (6674), e.g. `EMAG|0236|0000` -> `Channel EQ`. The unit is the AU identity exactly as the file
+    writes it, the key is `name`, the field is `value`. It sits in no `.lproj`, so the locale is
+    `-`: a fact about the file. That the plug-in menu SHOWS these names untranslated is read on a
+    Korean Logic only (f4b8d5a0); this source says Apple ships the string, not where it is drawn.
+
+    Anything but a dict of strings stops the build naming the file: a shape this does not read
+    would otherwise pin a partial list as the whole one.
+    """
+    path = os.path.join(app, *PLUGIN_NAMES_PATH)
+    if not os.path.exists(path):
+        return
+    try:
+        loaded = load_plist(path)
+    except Exception as exc:
+        raise CanonDecodeError(f"{_rel(app, path)}: plist did not load: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise CanonDecodeError(f"{_rel(app, path)}: expected a dict, found {type(loaded).__name__}")
+    for identity in sorted(loaded):
+        name = loaded[identity]
+        if not isinstance(identity, str) or not isinstance(name, str):
+            raise CanonDecodeError(f"{_rel(app, path)}: entry {identity!r} -> {name!r} is not a "
+                                   f"string to a string")
+        yield (identity, "-", "name", "value", name)
+
+
 def extract_nib_runtime_attributes(app: str):
     """`qhid` and its siblings, from the user-defined runtime attributes baked into every nib.
 
@@ -1438,6 +1479,7 @@ EXTRACTORS = {
     "nibstrings": extract_nibstrings,
     "niblabels": extract_niblabels,
     "stringsdict": extract_stringsdict,
+    "plugin_names": extract_plugin_names,
 }
 
 #: The field suffix under which a cited row's CASE-FOLDED digest is pinned beside its exact one.
@@ -2488,6 +2530,26 @@ def is_absent(source: str, locale: str, text: str) -> bool:
     return not (position < len(table) and table[position] == needle)
 
 
+def locale_independent_citations(text: str) -> list[str]:
+    """Every pinned row, in a source no locale translates, whose value is exactly `text`.
+
+    Over the committed key index, by the 12-hex digest of the exact value -- not the 32-bit absence
+    set, so a hit is a row, cited by address, and nothing collides into one. Only sources whose
+    `SOURCE_LOCALES` entry names no `.lproj` count, and only locale `-`: a string there is the same
+    string in every language because the file it comes from has no language. Only EXACT rows;
+    a case-folded match is a different claim. Sorted, so the first is stable.
+    """
+    digest = short_digest(text)
+    found = []
+    for source, (wanted, _dash) in sorted(SOURCE_LOCALES.items()):
+        if wanted or not os.path.exists(index_path(source)):
+            continue
+        for (unit, locale, key, field), pinned in load_index(source).items():
+            if locale == "-" and not derived_suffix(field) and pinned == digest:
+                found.append(str(CanonRef(source, unit, locale, key, field)))
+    return sorted(found)
+
+
 # ---------------------------------------------------------------------------
 # the manifest -- which bytes the index was taken over
 # ---------------------------------------------------------------------------
@@ -2547,6 +2609,9 @@ def corpus_files(app: str, source: str) -> list[str]:
             for name in files:
                 if name.endswith(".stringsdict"):
                     out.append(_rel(app, os.path.join(root, name)))
+    elif source == "plugin_names":
+        if os.path.exists(os.path.join(app, *PLUGIN_NAMES_PATH)):
+            out.append(os.path.join(*PLUGIN_NAMES_PATH))
     else:
         # A source with no branch here returned an EMPTY list, so its manifest entry recorded
         # `files: 0` and a corpus digest taken over nothing -- and `status` would then call the
@@ -3075,6 +3140,9 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
                     for sibling_locale in sorted(values_by_locale_by_source.get(other) or {}):
                         pin(cross_namespace.setdefault(other, {}), other,
                             (unit, sibling_locale, key, field))
+            if source in PIN_EVERY_ROW:
+                for row in by_source[source]:
+                    pin(wanted, source, row)
             if migrating:
                 # Migrate, do not drop: every row the old index held is taken again from this
                 # corpus, under this extractor. A row whose key Apple no longer ships is the only
@@ -3139,6 +3207,10 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
     if migrating:
         manifest["migration"] = migration_report(migrating_from, before_index,
                                                  {source: load_index(source) for source in EXTRACTORS})
+    elif (previous.get("migration") or {}).get("to_extractor") == EXTRACTOR_VERSION:
+        # The record of how the index CAME to this extractor stays until the next migration. A
+        # plain rebuild dropped it, so the only account of which rows moved went with it.
+        manifest["migration"] = previous["migration"]
 
     # Which English values Apple TRANSLATES, as digests, so a guard can ask offline. CI has no
     # Logic, and "does Apple translate this label" is what decides whether matching it by literal

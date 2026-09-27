@@ -126,7 +126,9 @@ def corpora_measured(repo: str = None) -> tuple:
     sources = set(manifest.get("sources") or {})
     corpora = set()
     for name in manifest.get("artifacts") or {}:
-        match = re.fullmatch(r"absence/([a-z]+)\.([^.]+)\.u32", name)
+        # The citation grammar's `[a-z0-9_-]+`: `plugin_names` (#1028) has an underscore, and
+        # `[a-z]+` left its corpus out of the count without a word.
+        match = re.fullmatch(r"absence/([a-z0-9_-]+)\.([^.]+)\.u32", name)
         if match and match.group(1) in sources:
             corpora.add((match.group(1), match.group(2)))
     with_rows = set()

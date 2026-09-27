@@ -269,6 +269,10 @@
         {
           "source": "stringsdict",
           "locale": "zh_TW"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
         }
       ],
       "why_runtime": "Each is either a label Logic composes at runtime, a label drawn from a framework outside this corpus, or a string that was typed rather than read. This record does not decide which; it establishes that no canonical source answers for them, which is the precondition for a measurement being the only route."

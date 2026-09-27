@@ -138,6 +138,22 @@
         "Nothing cites a plural form yet, so the ten sets carry no index row; they answer absence and presence questions only.",
         "The ten-locale check covers this source, and the proof of translation compares each unit with its English file; measured on this build no stringsdict is byte-identical to its English file."
       ]
+    },
+    "plugin_names": {
+      "path": "Contents/Frameworks/MAContentTagging.framework/Versions/A/Resources/DefaultPluginMapping.plist",
+      "answers": "the display NAME Logic gives an Audio Unit, by its identity: EMAG|0236|0000 is Channel EQ",
+      "fields": [
+        "value"
+      ],
+      "files": 1,
+      "entries": 242,
+      "locale_names": 1,
+      "how": "One flat dict. The unit is the AU identity exactly as the file writes it, the key is `name`, the field is `value`. Every row is pinned, not only cited ones (PIN_EVERY_ROW), so an offline guard can cite the row a plug-in name comes from. Anything but a dict of strings stops the build naming the file.",
+      "limits": [
+        "LOCALE-INDEPENDENT: the file is in no .lproj, so its locale is `-` and the ten-locale check demands no language folder for it. That says the string has no translation in Apple's data; that the plug-in menu SHOWS it untranslated is read on a Korean Logic only (f4b8d5a0).",
+        "242 entries hold 237 distinct names: a name can belong to more than one identity, so a name alone does not say which plug-in it is.",
+        "It names the plug-ins Logic maps for content tagging. A plug-in absent from it is not thereby absent from Logic."
+      ]
     }
   },
   "not_canonical": {

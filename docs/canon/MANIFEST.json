@@ -28,6 +28,8 @@
     "absence/niblabels.zh_TW.u32": "93e583c59300c520cbab52bc249d51dc3884c203169adc3c3a287daf74754bc5",
     "absence/nibstrings.en.folded.u32": "4126a61e469582b90578e149098ba1f1b9f98353530c3456295e7c720641420f",
     "absence/nibstrings.en.u32": "a417fdb909f57d7a44b43ed23ccdcd8521822c31ca55116f7e300797247b791e",
+    "absence/plugin_names.-.folded.u32": "b51e7090057a67f850c50a5363bccd258cab225c5c56dbf02cd82adca57ebfcd",
+    "absence/plugin_names.-.u32": "a5e0ee46d843c3d71175c4fb17e4ab2d4f21869eab5ac41283e48d6d6e705c5a",
     "absence/quickhelp.de.folded.u32": "b31c23794ee49f1e61b9474bcbff555985890e7958e946022d612f35d28fb00d",
     "absence/quickhelp.de.u32": "a40ae686d5d934bd5de10c5c0dd80b5571a10972e9e47fbcb1162ade3c99dec9",
     "absence/quickhelp.en.folded.u32": "6fecc00c423c199ab2f082efac4642775171339c73d919efe20cd7cd4647570c",
@@ -99,6 +101,8 @@
     "index/niblabels.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nibstrings.tsv": "d9c920078bfb70d1d6843714f0525dfd90bb5dc0149188634b698ba7e95617f8",
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
+    "index/plugin_names.tsv": "f6d22385cbe42b4e2736a1dbb2637ad10ee67b8bce79578969a473ccc3b6ec93",
+    "index/plugin_names.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/quickhelp.tsv": "1fe83236f575e507a1ed10d317cd61eeb7cab85f5083a4dfd8d0b50e36d2d392",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "fc4e9c51fe8fd5e2614bf6481a41697f1b3ea72b430afe0e64ed6313588189e0",
@@ -537,6 +541,28 @@
       },
       "locales": [
         "en"
+      ],
+      "no_english_twin": {},
+      "not_localized": {}
+    },
+    "plugin_names": {
+      "absence_entries": {
+        "-": 237
+      },
+      "absence_false_positive": {
+        "-": 5.5181e-08
+      },
+      "cited_rows": 726,
+      "cited_values": 0,
+      "corpus_digest": "05f7b82a244d334f0312e6bc4481d91571f05e87ac2477c3cbbdfcd9a9789cae",
+      "english_equal_rows_in_translated_units": {},
+      "entries": 242,
+      "files": 1,
+      "folded_entries": {
+        "-": 237
+      },
+      "locales": [
+        "-"
       ],
       "no_english_twin": {},
       "not_localized": {}

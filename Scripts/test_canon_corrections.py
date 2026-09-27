@@ -108,7 +108,8 @@ def pointed_at(tmp, locales=("de", "en", "it"), aliases=None):
         "QUICKHELP_LOCALE_ALIASES": {"it": "en"} if aliases is None else aliases,
         "SOURCE_LOCALES": {"quickhelp": ("ten", False), "strings": ("ten", True),
                            "stringsdict": ((), False), "niblabels": ((), True),
-                           "nibstrings": ((), False), "madsp": ((), True), "nib": ((), True)},
+                           "nibstrings": ((), False), "madsp": ((), True), "nib": ((), True),
+                           "plugin_names": ((), True)},
     }
     before = {name: getattr(canon, name) for name in patch if hasattr(canon, name)}
     for name, value in patch.items():
@@ -427,6 +428,48 @@ class StringsDict(unittest.TestCase):
             with self.assertRaises(canon.CanonError) as caught:
                 list(canon.extract_stringsdict(fake.app))
             self.assertIn("Bad.stringsdict", str(caught.exception))
+
+
+# ---------------------------------------------------------------------------------------------
+# plugin_names -- DefaultPluginMapping.plist, the one file that names Channel EQ
+# ---------------------------------------------------------------------------------------------
+
+PLUGIN_MAP = os.path.join(*canon.PLUGIN_NAMES_PATH)
+
+
+class PlugInNames(unittest.TestCase):
+    def test_every_entry_is_a_row_in_no_locale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = FakeLogic(tmp, {PLUGIN_MAP: plistlib.dumps(
+                {"EMAG|0236|0000": "Channel EQ", "EMAG|0001|0000": "Gain"})})
+            rows = sorted(canon.extract_plugin_names(fake.app))
+        self.assertEqual(rows, [("EMAG|0001|0000", "-", "name", "value", "Gain"),
+                                ("EMAG|0236|0000", "-", "name", "value", "Channel EQ")])
+
+    def test_a_shape_it_cannot_read_stops_naming_the_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = FakeLogic(tmp, {PLUGIN_MAP: plistlib.dumps({"EMAG|0236|0000": 7})})
+            with self.assertRaises(canon.CanonError) as caught:
+                list(canon.extract_plugin_names(fake.app))
+        self.assertIn("DefaultPluginMapping.plist", str(caught.exception))
+
+    def test_no_language_folder_is_demanded_and_every_row_is_pinned(self):
+        """Locale-independent: the ten-locale check asks it for no `.lproj`, and every row is
+        pinned, so the name can be cited offline by the row it came from."""
+        with tempfile.TemporaryDirectory() as tmp:
+            files = _strings_bundle()
+            files[PLUGIN_MAP] = plistlib.dumps({"EMAG|0236|0000": "Channel EQ",
+                                                "EMAG|0001|0000": "Gain"})
+            fake = FakeLogic(tmp, files)
+            with pointed_at(tmp), contextlib.redirect_stdout(io.StringIO()):
+                _build(fake, ["plugin_names", "strings"])
+                manifest = canon.load_manifest()
+                cited = canon.locale_independent_citations("Channel EQ")
+                made_up = canon.locale_independent_citations("Channel EQX")
+        self.assertEqual(manifest["sources"]["plugin_names"]["locales"], ["-"])
+        self.assertEqual(manifest["sources"]["plugin_names"]["entries"], 2)
+        self.assertEqual(cited, ["logic-canon://plugin_names/EMAG%7C0236%7C0000/-/name#value"])
+        self.assertEqual(made_up, [])
 
 
 # ---------------------------------------------------------------------------------------------
