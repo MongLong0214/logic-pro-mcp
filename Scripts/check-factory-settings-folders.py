@@ -19,7 +19,10 @@ WHAT IT CHECKS
 --------------
 Every 32-bit digest prefix in that set is the prefix of a seed's display name or an exclusion's
 key; the set is the size `MANIFEST.json` declares, and not empty; no name is both a seed and an
-exclusion.
+exclusion; and every exclusion's value is a reason -- one of the table's reason constructors,
+`stompbox("<variant>")`, `variant(of: "<parent>", key: "<key>")` or `unmeasuredUnit("<key>" | nil)`,
+with no empty argument. A key alone is not a reason: `"Auto-Funk": ""` names a folder and says
+nothing about why it has no seed.
 
 WHAT IT DOES NOT CLAIM
 ----------------------
@@ -67,7 +70,14 @@ SEEDS_OPEN = "private static let seeds: [Seed] = ["
 EXCLUSIONS_OPEN = "static let factorySettingsFolderExclusions: [String: String] = ["
 BLOCK_CLOSE = "\n    ]\n"
 SEED_CALL = re.compile(r'\b(?:fx|inst|midiFX)\(\s*"[a-z0-9_]+",\s*"([^"]+)"')
-EXCLUSION_KEY = re.compile(r'^\s*"([^"\n]+)":', re.M)
+EXCLUSION_ENTRY = re.compile(r'^\s*"([^"\n]+)":\s*(.*?)\s*,?\s*$', re.M)
+#: A Swift string literal with at least one non-blank character.
+_ARG = r'"[^"\n]*[^"\s][^"\n]*"'
+#: The table's three reason constructors, each with every argument filled in.
+REASON = re.compile(
+    rf'(?:stompbox\({_ARG}\)'
+    rf'|variant\(of: {_ARG}, key: {_ARG}\)'
+    rf'|unmeasuredUnit\((?:{_ARG}|nil)\))')
 
 
 def _block(text: str, opener: str):
@@ -79,7 +89,8 @@ def _block(text: str, opener: str):
 
 
 def catalog_names(text: str):
-    """(seed display names, exclusion keys), or a problem string when either list cannot be found."""
+    """(seed display names, {exclusion key: its value as written}), or a problem string when either
+    list cannot be found."""
     seeds_block = _block(text, SEEDS_OPEN)
     exclusions_block = _block(text, EXCLUSIONS_OPEN)
     if seeds_block is None or exclusions_block is None:
@@ -90,7 +101,7 @@ def catalog_names(text: str):
                             f"list it cannot find would account for nothing and fail everything, or "
                             f"account for everything if the reader were made lenient.")
     seeds = set(SEED_CALL.findall(seeds_block))
-    exclusions = set(EXCLUSION_KEY.findall(exclusions_block))
+    exclusions = dict(EXCLUSION_ENTRY.findall(exclusions_block))
     if not seeds or not exclusions:
         return None, None, ("CANNOT DETERMINE: read 0 seeds or 0 exclusions from StockPluginCatalog.swift. "
                             "Their shape changed, and an empty list here proves nothing.")
@@ -120,9 +131,19 @@ def problems(root: str = None) -> list:
         return [problem]
 
     out = []
-    both = sorted(seeds & exclusions)
+    both = sorted(seeds & exclusions.keys())
     if both:
         out.append(f"named as both a seed and an exclusion: {both}. A folder has one answer.")
+    for name, value in sorted(exclusions.items()):
+        if REASON.fullmatch(value):
+            continue
+        if value.strip('"').strip() == "":
+            out.append(f"the exclusion {name!r} has an empty reason ({value}). An exclusion says why "
+                       f"the folder has no seed; a key alone accounts for nothing.")
+        else:
+            out.append(f"the exclusion {name!r} has the reason {value!r}, which is none of the "
+                       f"table's reason constructors (stompbox, variant(of:key:), unmeasuredUnit) "
+                       f"with every argument filled in.")
 
     try:
         with open(paths["manifest"], encoding="utf-8") as handle:
@@ -145,7 +166,7 @@ def problems(root: str = None) -> list:
         return out + [f"the pinned folder set holds {len(table)} entries and MANIFEST.json declares "
                       f"{declared}. One of them was edited without the other."]
 
-    accounted = {canon._u32(canon.normalize(name)) for name in seeds | exclusions}
+    accounted = {canon._u32(canon.normalize(name)) for name in seeds | exclusions.keys()}
     unaccounted = sorted(set(table) - accounted)
     if unaccounted:
         logic = manifest.get("logic") or {}

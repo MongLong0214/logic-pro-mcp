@@ -31,10 +31,20 @@ def check(name, condition, detail=""):
         failures.append(f"{name}: {detail}")
 
 
-def catalog_text(seeds, exclusions, *, seeds_open="    private static let seeds: [Seed] = [\n"):
+#: One of each reason constructor the real table uses, so the control proves the guard reads all three.
+REASONS = {"Auto-Funk": 'stompbox("0007")',
+           "Analog Basic": 'variant(of: "ES2", key: "EMAG|0214|0067")',
+           "AVerb": 'unmeasuredUnit("EMAG|0192|0000")',
+           "Loopback": "unmeasuredUnit(nil)"}
+
+
+def catalog_text(seeds, exclusions, *, seeds_open="    private static let seeds: [Seed] = [\n",
+                 reasons=None):
     seed_lines = "".join(f'        inst("{name.lower().replace(" ", "_")}", "{name}", "Synthesizer"),\n'
                          for name in seeds)
-    exclusion_lines = "".join(f'        "{name}": stompbox("0007"),\n' for name in exclusions)
+    reasons = {**REASONS, **(reasons or {})}
+    exclusion_lines = "".join(f'        "{name}": {reasons.get(name, REASONS["Auto-Funk"])},\n'
+                              for name in exclusions)
     return (
         "enum StockPluginCatalog {\n"
         "    static let factorySettingsFolderExclusions: [String: String] = [\n"
@@ -49,13 +59,13 @@ def catalog_text(seeds, exclusions, *, seeds_open="    private static let seeds:
 
 
 def write_tree(root, *, seeds, exclusions, shipped=SHIPPED, declared=None, with_source=True,
-               catalog=None):
+               catalog=None, reasons=None):
     plugins = os.path.join(root, "Sources", "LogicProMCP", "Plugins")
     absence = os.path.join(root, "docs", "canon", "absence")
     os.makedirs(plugins)
     os.makedirs(absence)
     with open(os.path.join(plugins, "StockPluginCatalog.swift"), "w", encoding="utf-8") as handle:
-        handle.write(catalog if catalog is not None else catalog_text(seeds, exclusions))
+        handle.write(catalog if catalog is not None else catalog_text(seeds, exclusions, reasons=reasons))
     prefixes = sorted({canon._u32(canon.normalize(name)) for name in shipped})
     with open(os.path.join(absence, "pluginsettings.-.u32"), "wb") as handle:
         handle.write(b"LCA1" + struct.pack(">I", len(prefixes)))
@@ -80,6 +90,18 @@ def run(**tree):
 def main() -> int:
     code, err = run(seeds=["ES2", "Studio Piano", "Sculpture"], exclusions=["Auto-Funk"])
     check("the control passes: every shipped folder is a seed or an exclusion", code == 0, err)
+
+    code, err = run(seeds=["ES2", "Studio Piano", "Sculpture"], exclusions=list(REASONS))
+    check("the control passes with each of the three reason constructors", code == 0, err)
+
+    # #1036 F-02: the guard read the keys and never the values, so these four passed.
+    for label, reason in (("an emptied reason", '""'), ("a blank reason", '"   "'),
+                          ("a reason that is no constructor", '"no seed"'),
+                          ("a constructor with an empty argument", 'stompbox("")')):
+        code, err = run(seeds=["ES2", "Studio Piano", "Sculpture"], exclusions=["Auto-Funk"],
+                        reasons={"Auto-Funk": reason})
+        check(f"{label} is refused", code == 1, err)
+        check(f"and the refusal names the exclusion", "'Auto-Funk'" in err, err)
 
     code, err = run(seeds=["ES2", "Sculpture"], exclusions=["Auto-Funk"])
     check("the Studio Piano seed removed is refused", code == 1, err)
