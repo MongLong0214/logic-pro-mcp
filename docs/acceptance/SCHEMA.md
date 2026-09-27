@@ -42,8 +42,11 @@ reading with a key given twice is UNREADABLE, for the same reason.
 
 The same parse refuses `NaN`, `Infinity` and `-Infinity`. They are not JSON, but Python's `json`
 reads them as numbers, and a NaN equals nothing, itself included: a reading of NaN would pass
-`changed`, `ne` and `not_in` without being a reading at all. A document that holds one is refused
-(exit 2), and a raw reading that holds one is UNREADABLE. The writer refuses them too.
+`changed`, `ne` and `not_in` without being a reading at all. It refuses a number that overflows a
+float, such as `1e999` or `-1e999`, the same way: those are JSON, but Python's `json` reads them as
+infinity. A document that holds any of these is refused (exit 2), and a raw reading that holds one
+is UNREADABLE. A large finite number such as `1e308` is read. The writer refuses NaN and infinity
+too.
 
 ### Only `run` certifies clean
 
