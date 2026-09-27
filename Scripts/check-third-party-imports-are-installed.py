@@ -85,7 +85,9 @@ def _local_module(name):
     """The file a repository-local import resolves to, or None."""
     for candidate in (os.path.join(REPO, "Scripts", name + ".py"),
                       os.path.join(REPO, "Scripts", name, "__init__.py"),
-                      os.path.join(REPO, "Scripts", "livekit", name + ".py")):
+                      os.path.join(REPO, "Scripts", "livekit", name + ".py"),
+                      # The verifier's tests put Scripts/verify on sys.path and import `live`.
+                      os.path.join(REPO, "Scripts", "verify", name, "__init__.py")):
         if os.path.exists(candidate):
             return candidate
     return None

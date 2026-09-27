@@ -1,0 +1,185 @@
+{
+  "id": "2026-09-27-each-logic-window-reports-its-axdocument-read-before-the-verifier-quits",
+  "date": "2026-09-27",
+  "schema": 3,
+  "subject": "The per-window AXDocument read the verifier takes before it quits Logic without saving",
+  "question": "When the verifier reads every Logic window's AXDocument through System Events before quitting, does each window come back with a stated outcome (a document, no document, or a read error), and does the fixture window read as the fixture's own file?",
+  "verdict": "works",
+  "issues": [
+    1028,
+    1033
+  ],
+  "surface": "project.lifecycle",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/verify/live/selftest_live.py --locales ko de (holds LIVE.lock through exclusive.py); then read steps[*].observation...quit.documents in /Users/isaac/lpm-evidence/verify-live-selftest/<head>/selftest.json",
+    "expected": "every quit record's documents reading is readable, its header count equals its row count, every row's outcome is document with the fixture's file URL, and the quit proceeds",
+    "cost": "needs Logic and the lpm-locale-campaign fixture; about 20 min including a release build"
+  },
+  "depends": [
+    "Scripts/livekit/live_993_plugin_root_menu_in_every_locale.py",
+    "Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py",
+    "Scripts/verify/live/locale.py"
+  ],
+  "evidence": [
+    "evidence/2026-09-27-verifier-quit-axdocument-readings-1033.json"
+  ],
+  "method": "Read back from the live self-test at 73b5921c (/Users/isaac/lpm-evidence/verify-live-selftest/73b5921c516c08dd3396951ea88118f9366c8295/selftest.json), which quit Logic six times through locale.quit_logic. Each quit first ran locale.DOCUMENTS_SCRIPT, which prints a window count, one line per window (its AXSubrole and its AXDocument outcome) and an end marker. The readings below are that stdout and the parsed rows, copied verbatim. What was NOT done: no window with an unreadable AXDocument, no untitled project and no second project was open during these readings, so the refusal paths were exercised offline only (Scripts/verify/live/tests/test_locale_quit.py). Window titles and the save-prompt button title are left out because they are strings Logic ships.",
+  "observations": [
+    {
+      "selftest_step": "fixture_reset[ko]",
+      "logic_language_when_read": "ko",
+      "documents_stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "documents_readable": true,
+      "windows": [
+        {
+          "index": 0,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        },
+        {
+          "index": 1,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        }
+      ],
+      "quit_sent_timed_out": false,
+      "save_prompt_answers": 0,
+      "logic_quit": true
+    },
+    {
+      "selftest_step": "positive_control/routing_slots_ax[ko]",
+      "logic_language_when_read": "ko",
+      "documents_stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "documents_readable": true,
+      "windows": [
+        {
+          "index": 0,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        },
+        {
+          "index": 1,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        }
+      ],
+      "quit_sent_timed_out": true,
+      "save_prompt_answers": 1,
+      "logic_quit": true
+    },
+    {
+      "selftest_step": "switch[de]",
+      "logic_language_when_read": "ko",
+      "documents_stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "documents_readable": true,
+      "windows": [
+        {
+          "index": 0,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        },
+        {
+          "index": 1,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        }
+      ],
+      "quit_sent_timed_out": false,
+      "save_prompt_answers": 0,
+      "logic_quit": true
+    },
+    {
+      "selftest_step": "fixture_reset[de]",
+      "logic_language_when_read": "de",
+      "documents_stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "documents_readable": true,
+      "windows": [
+        {
+          "index": 0,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        },
+        {
+          "index": 1,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        }
+      ],
+      "quit_sent_timed_out": false,
+      "save_prompt_answers": 0,
+      "logic_quit": true
+    },
+    {
+      "selftest_step": "positive_control/routing_slots_ax[de]",
+      "logic_language_when_read": "de",
+      "documents_stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "documents_readable": true,
+      "windows": [
+        {
+          "index": 0,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        },
+        {
+          "index": 1,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        }
+      ],
+      "quit_sent_timed_out": true,
+      "save_prompt_answers": 1,
+      "logic_quit": true
+    },
+    {
+      "selftest_step": "restore[ko]",
+      "logic_language_when_read": "de",
+      "documents_stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "documents_readable": true,
+      "windows": [
+        {
+          "index": 0,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        },
+        {
+          "index": 1,
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/"
+        }
+      ],
+      "quit_sent_timed_out": false,
+      "save_prompt_answers": 0,
+      "logic_quit": true
+    }
+  ],
+  "conclusion": "In all six quits the documents reading was readable. Each time System Events reported 2 windows, both with subrole AXStandardWindow and outcome document, and both AXDocument values were the fixture's file URL. So the fixture window reads as the fixture's own file, and no window came back without an outcome. Each quit went ahead: four without a save prompt, and two (the reset after the routing control, in ko and de) with one prompt answered because the fixture had been edited.",
+  "limits": [
+    "Only the fixture was open. What Logic's AXDocument returns for an untitled project, an iCloud project or a window whose attribute read fails was not observed live here; those outcomes are parsed from recorded or constructed script output in the offline tests.",
+    "Both windows of the fixture carry the same document URL; which of them is the arrange window and which the other project window was not recorded, because their titles are Logic strings.",
+    "One host, Logic 12.3 (6674), read while Logic ran in Korean or German; other locales were not read, although AXDocument is a file URL and not a localized label."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record is about the read outcome of each Logic window's AXDocument attribute (whether it was read, and which file it names), not about any string Logic ships. There is no key to cite: the readings are AX subroles, file URLs and the verifier's own outcome words, and window titles are deliberately left out."
+  }
+}

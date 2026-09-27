@@ -130,8 +130,29 @@ MUTANTS = [
      "old": 'restore check to read. {BEFORE_RESTORE}"] if n else []',
      "new": 'restore check to read. {BEFORE_RESTORE}"] if False else []'},
     {"id": "restore-step-before-the-call-counts", "file": "engine.py",
-     "old": "    call, left = restore[first], set(restore[first + 1:])",
-     "new": "    call, left = restore[first], set(restore)"},
+     "old": "    call, left = restore[last], set(restore[last + 1:])",
+     "new": "    call, left = restore[last], set(restore)"},
+    {"id": "changed-alone-allowed", "file": "engine.py",
+     "old": """            for i, e in enumerate(checks) if e["op"] == "changed" and e["path"] not in pinned]""",
+     "new": """            for i, e in enumerate(checks) if False]"""},
+    {"id": "any-check-pins", "file": "engine.py",
+     "old": """              if e["op"] in PIN_OPS and ("value" in e or "canon" in (e.get("ref") or {}))}""",
+     "new": """              if e["op"] != "changed"}"""},
+    {"id": "canon-does-not-pin", "file": "engine.py",
+     "old": """              if e["op"] in PIN_OPS and ("value" in e or "canon" in (e.get("ref") or {}))}""",
+     "new": """              if e["op"] in PIN_OPS and "value" in e}"""},
+    {"id": "pin-op-unchecked", "file": "engine.py",
+     "old": """              if e["op"] in PIN_OPS and ("value" in e or "canon" in (e.get("ref") or {}))}""",
+     "new": """              if "value" in e or "canon" in (e.get("ref") or {})}"""},
+    {"id": "ne-pins", "file": "engine.py",
+     "old": 'PIN_OPS = ("eq", "in", "matches_canon")',
+     "new": 'PIN_OPS = ("eq", "in", "matches_canon", "ne")'},
+    {"id": "in-does-not-pin", "file": "engine.py",
+     "old": 'PIN_OPS = ("eq", "in", "matches_canon")',
+     "new": 'PIN_OPS = ("eq", "matches_canon")'},
+    {"id": "first-restore-call-only", "file": "engine.py",
+     "old": '    last = max((k for k, s in enumerate(row["restore"]) if is_call(s)), default=None)',
+     "new": '    last = next((k for k, s in enumerate(row["restore"]) if is_call(s)), None)'},
     {"id": "restore-call-reply-counts", "file": "engine.py",
      "old": "            elif name == call:",
      "new": "            elif False:"},
@@ -159,6 +180,14 @@ MUTANTS = [
     {"id": "null-difference-passes", "file": "predicates.py",
      "old": 'NULL_IS_UNREADABLE = ("changed", "ne", "not_in")',
      "new": "NULL_IS_UNREADABLE = ()"},
+    {"id": "null-rule-top-level-only", "file": "predicates.py",
+     "old": "    if op in NULL_IS_UNREADABLE:\n",
+     "new": ("    if op in NULL_IS_UNREADABLE:\n"
+             '        return (f"a null cannot show a difference; {op} does not pass on absence"\n'
+             "                if a is None or b is None else None)\n")},
+    {"id": "unchanged-null-passes", "file": "predicates.py",
+     "old": '    elif op == "unchanged" and same(a, b):',
+     "new": "    elif False:"},
     {"id": "restore-call-without-a-check-allowed", "file": "engine.py",
      "old": '    if not row["restore_expect"]:',
      "new": "    if False:"},
@@ -168,6 +197,18 @@ MUTANTS = [
     {"id": "duplicate-keys-kept-silently", "file": "evidence_doc.py",
      "old": "        if key in out:",
      "new": "        if False:"},
+    {"id": "nan-accepted", "file": "evidence_doc.py",
+     "old": ", parse_constant=_refuse_constant,",
+     "new": ","},
+    {"id": "overflow-accepted", "file": "evidence_doc.py",
+     "old": "parse_float=_finite_float)",
+     "new": "parse_float=float)"},
+    {"id": "large-finite-refused", "file": "evidence_doc.py",
+     "old": "    if math.isinf(value):",
+     "new": "    if math.isinf(value * 10):"},
+    {"id": "nan-written", "file": "evidence_doc.py",
+     "old": "sort_keys=False, allow_nan=False)",
+     "new": "sort_keys=False)"},
     {"id": "closed-stdout-changes-the-exit", "file": "verify.py",
      "old": "    sys.stdout = _StdoutWithoutReader(sys.stdout)\n",
      "new": ""},
@@ -785,7 +826,21 @@ def check_closed_stdout_keeps_the_exit(case: dict, where: dict):
     return None
 
 
+def check_nan_not_written(case: dict, where: dict):
+    """W02: the writer refuses a float that is not JSON rather than writing text the reader then
+    refuses. NaN, Infinity and -Infinity must each raise ValueError from `serialize`."""
+    import evidence_doc as E
+    for value in (float("nan"), float("inf"), float("-inf")):
+        try:
+            E.serialize({"reading": value})
+        except ValueError:
+            continue
+        return f"serialize wrote {value!r}, which is not JSON and which loads refuses"
+    return None
+
+
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
+          "nan_not_written": check_nan_not_written,
           "closed_stdout_keeps_the_exit": check_closed_stdout_keeps_the_exit,
           "attestation_built_only_in_process": check_attestation_built_only_in_process,
           "attestation_check_sees_the_whole_repository": check_attestation_check_sees_the_whole_repository}

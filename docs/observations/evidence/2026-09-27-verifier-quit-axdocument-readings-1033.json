@@ -1,0 +1,224 @@
+{
+  "source": "/Users/isaac/lpm-evidence/verify-live-selftest/73b5921c516c08dd3396951ea88118f9366c8295/selftest.json",
+  "source_sha256": "fa34f2a3e4498f9510c3480d5d21b899ebe66cca48de81e8b55663c8ca3d1450",
+  "head": "73b5921c516c08dd3396951ea88118f9366c8295",
+  "note": "The documents reading of every quit_logic call in that run, copied verbatim; the osascript argv is the verifier's DOCUMENTS_SCRIPT at that head and is not repeated here.",
+  "readings": [
+    {
+      "steps_index": 3,
+      "step": "fixture_reset",
+      "lproj": "ko",
+      "json_path": [
+        "steps",
+        3,
+        "observation",
+        "reset",
+        "quit",
+        "documents"
+      ],
+      "osascript_returncode": 0,
+      "osascript_timed_out": false,
+      "osascript_elapsed_s": 0.21651583299998833,
+      "stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "readable": true,
+      "rows": [
+        {
+          "index": 0,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        },
+        {
+          "index": 1,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        }
+      ]
+    },
+    {
+      "steps_index": 9,
+      "step": "positive_control/routing_slots_ax",
+      "lproj": "ko",
+      "json_path": [
+        "steps",
+        9,
+        "observation",
+        "control",
+        "reset",
+        "quit",
+        "documents"
+      ],
+      "osascript_returncode": 0,
+      "osascript_timed_out": false,
+      "osascript_elapsed_s": 0.2024749580000389,
+      "stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "readable": true,
+      "rows": [
+        {
+          "index": 0,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        },
+        {
+          "index": 1,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        }
+      ]
+    },
+    {
+      "steps_index": 11,
+      "step": "switch",
+      "lproj": "de",
+      "json_path": [
+        "steps",
+        11,
+        "observation",
+        "quit",
+        "documents"
+      ],
+      "osascript_returncode": 0,
+      "osascript_timed_out": false,
+      "osascript_elapsed_s": 0.2132618750000006,
+      "stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "readable": true,
+      "rows": [
+        {
+          "index": 0,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        },
+        {
+          "index": 1,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        }
+      ]
+    },
+    {
+      "steps_index": 12,
+      "step": "fixture_reset",
+      "lproj": "de",
+      "json_path": [
+        "steps",
+        12,
+        "observation",
+        "reset",
+        "quit",
+        "documents"
+      ],
+      "osascript_returncode": 0,
+      "osascript_timed_out": false,
+      "osascript_elapsed_s": 0.2140950830000179,
+      "stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "readable": true,
+      "rows": [
+        {
+          "index": 0,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        },
+        {
+          "index": 1,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        }
+      ]
+    },
+    {
+      "steps_index": 18,
+      "step": "positive_control/routing_slots_ax",
+      "lproj": "de",
+      "json_path": [
+        "steps",
+        18,
+        "observation",
+        "control",
+        "reset",
+        "quit",
+        "documents"
+      ],
+      "osascript_returncode": 0,
+      "osascript_timed_out": false,
+      "osascript_elapsed_s": 0.209937707999984,
+      "stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "readable": true,
+      "rows": [
+        {
+          "index": 0,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        },
+        {
+          "index": 1,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        }
+      ]
+    },
+    {
+      "steps_index": 20,
+      "step": "restore",
+      "lproj": "ko",
+      "json_path": [
+        "steps",
+        20,
+        "observation",
+        "quit",
+        "documents"
+      ],
+      "osascript_returncode": 0,
+      "osascript_timed_out": false,
+      "osascript_elapsed_s": 0.21313274999999976,
+      "stdout": "lpm:windows 2\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\ndoc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/\nlpm:end-of-documents\n",
+      "readable": true,
+      "rows": [
+        {
+          "index": 0,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        },
+        {
+          "index": 1,
+          "line": "doc\tAXStandardWindow\tfile:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "subrole": "AXStandardWindow",
+          "outcome": "document",
+          "raw": "file:///Users/isaac/Music/Logic/lpm-locale-campaign.logicx/",
+          "path": "/Users/isaac/Music/Logic/lpm-locale-campaign.logicx"
+        }
+      ]
+    }
+  ]
+}
