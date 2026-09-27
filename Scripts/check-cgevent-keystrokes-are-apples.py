@@ -44,6 +44,71 @@ models that; it is a limit, not a claim.
 ("Go to Marker Number 1 | 𝍖 1"), so a keypad row must be posted as the keypad key with
 `.maskNumericPad`, the flag hardware sets for it.
 
+LOGIC'S NAME FOR EACH COMMAND, CITED
+------------------------------------
+The web tables say which key Apple binds to a command. The bundle does not say that in any form
+read here, but it does ship each command's name, so every op whose keystroke #1029 corrected or
+removed cites the row naming the command it rests on. A citation proves the name is Logic's; it
+does not prove the binding.
+
+Corrected: the op now posts the key Apple's row gives this command (JOIN above).
+
+    transport.play and transport.resume, keypad Enter
+        logic-canon://quickhelp/QuickHelp/en/KCE_032_Play#Title
+        value: Play
+    transport.stop, keypad 0
+        logic-canon://quickhelp/QuickHelp/en/KCE_034_Stop#Title
+        value: Stop
+    transport.pause, keypad Period
+        logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Pause#value
+        value: Pause
+    transport.rewind, Comma
+        logic-canon://quickhelp/QuickHelp/en/KCE_039_Rewind#Title
+        value: Rewind
+    transport.fast_forward, Period
+        logic-canon://quickhelp/QuickHelp/en/KCE_040_Forward#Title
+        value: Forward
+    edit.quantize, Q
+        logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Quantize%20Selected%20Regions%2FCells%2FEvents#value
+        value: Quantize Selected Regions/Cells/Events
+    edit.bounce_in_place, Control-B
+        logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrToolbTooltip%7C%7C%7CBounce%20Regions%2FCells%20in%20Place#value
+        value: Bounce Regions/Cells in Place
+    view.toggle_score_editor, N
+        logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Show%2FHide%20Score%20Editor#value
+        value: Show/Hide Score Editor
+    project.close, Option-Command-W
+        logic-canon://quickhelp/QuickHelp/en/GMF_016_CloseProject#Title
+        value: Close Project
+
+Removed: the op posts nothing now. For edit.delete, view.toggle_inspector and
+view.toggle_step_editor the row is the op's own command, which Apple's tables give no default
+key. For project.save_as and nav.create_marker it is the op's own command, which no routing chain
+hands to CGEvent. For track.create_drummer and project.new no row names the op's own command, so
+the row is the command Apple binds the removed keystroke to.
+
+    edit.delete, was Delete
+        logic-canon://quickhelp/QuickHelp/en/KCE_476_Delete#Title
+        value: Delete
+    view.toggle_inspector, was I
+        logic-canon://quickhelp/QuickHelp/en/GMV_008_ShowInspector#Title
+        value: Show/Hide Inspector
+    view.toggle_step_editor, was Option-Command-I
+        logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Show%2FHide%20Step%20Editor#value
+        value: Show/Hide Step Editor
+    project.save_as, was Shift-Command-S
+        logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Save%20As%E2%80%A6#value
+        value: Save As…
+    nav.create_marker, was Option-Command-Apostrophe
+        logic-canon://quickhelp/QuickHelp/en/GMN_014_CreateMarker#Title
+        value: Create Marker
+    track.create_drummer, was Option-Command-Z
+        logic-canon://quickhelp/QuickHelp/en/KCE_521_ToggleTrackZoom#Title
+        value: Toggle Individual Track Zoom
+    project.new, was Command-N
+        logic-canon://quickhelp/QuickHelp/en/GMF_001_NewProject#Title
+        value: New from Template
+
 Exit: 0 = every keystroke is Apple's - 1 = one is not, or something could not be read
 """
 import hashlib
