@@ -11,6 +11,10 @@ folder no seed owns and why; this is the check that the seeds and that list stil
 ships, run where CI can run it -- against the folder names `Scripts/logic_canon.py build` pinned in
 `docs/canon/absence/pluginsettings.-.u32`, with no Logic installed.
 
+One of those folder names, cited so `build` pins its row:
+logic-canon://pluginsettings/Contents%2FResources%2FPlug-In%20Settings/-/ES2#folder
+value: ES2
+
 WHAT IT CHECKS
 --------------
 Every 32-bit digest prefix in that set is the prefix of a seed's display name or an exclusion's

@@ -81,7 +81,7 @@
     "index/niblabels.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nibstrings.tsv": "ac732bc853eb32faf7d61ad3665bcd1805dbb1e325fb12bfe9cceb3fa3ec2ef4",
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
-    "index/pluginsettings.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
+    "index/pluginsettings.tsv": "7a7646cd096abfb415c8fcf6503d60a866200f7e20f4b360659c62d8d25fab2b",
     "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/quickhelp.tsv": "0568c660242037aca4b2205e9049e08d4049f18b434517badf7e94b88d435630",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
@@ -313,7 +313,7 @@
       "absence_false_positive": {
         "-": 3.3295e-08
       },
-      "cited_rows": 0,
+      "cited_rows": 2,
       "cited_values": 0,
       "corpus_digest": "c450c005b7d44ec1f880c2332b9fe534a2aa459a3d5f2c6bafb2bd17036fa466",
       "entries": 147,
