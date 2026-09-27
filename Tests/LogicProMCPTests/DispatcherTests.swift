@@ -878,10 +878,12 @@ func testTransportDispatcherStillnessWithTheTempoUnreadSendsNothingAndSaysSo(
 ) async throws {
     // #1029 review round 1 (R-02): the reading's `tempo` is the model's 120 default when its tempo
     // read fails, and a gap sized from it can call a slow, moving playhead still. With the tempo
-    // slider unread, neither command may decide: nothing is sent, and the answer is unverified with
-    // the reason.
-    // Mutation killed: the gap sized from the reading's own tempo again (`observedTempo(router:)`
-    // -> `first.tempo`), which reads these equal positions as a paused transport.
+    // slider unread, neither command may decide: nothing is sent, and the answer is a State C
+    // failure with the reason. Round 2 (R-04): it was State B with `success` true, and State B
+    // means an action was attempted.
+    // Mutations killed: the gap sized from the reading's own tempo again (`observedTempo(router:)`
+    // -> `first.tempo`), which reads these equal positions as a paused transport; and the answer
+    // back to State B (`unmeasured-is-state-b`).
     let router = ChannelRouter()
     let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("key sent"))
     let readback = SequencedTransportReadbackChannel(
@@ -911,10 +913,13 @@ func testTransportDispatcherStillnessWithTheTempoUnreadSendsNothingAndSaysSo(
     #expect(writeOps.isEmpty, "\(command) sent \(writeOps.map(\.0)) with the tempo unread")
     #expect(result.isError!)
     let object = try #require(parseDispatcherObject(dispatcherText(result)))
-    #expect(object["state"] as? String == "B")
+    #expect(object["state"] as? String == "C")
+    let success = try #require(object["success"] as? Bool)
+    #expect(!success)
+    #expect(object["error"] as? String == "readback_unavailable")
     #expect(object["reason"] as? String == "tempo_unreadable")
-    let verified = try #require(object["verified"] as? Bool)
-    #expect(!verified)
+    let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
+    #expect(safeToRetry)
     let writeAttempted = try #require(object["write_attempted"] as? Bool)
     #expect(!writeAttempted)
     #expect(object["already_paused"] == nil)
@@ -932,9 +937,10 @@ func testTransportDispatcherStillnessAtFiveBPMDoesNotReadEqualPositionsAsStill(
     // equal while the playhead moves. The readings here carry the model's 120 default (their own
     // tempo read failed); the tempo slider reads 5. A 1.25-beat gap is 15 s, past the 5 s limit, so
     // neither command waits or decides, and neither calls the transport paused.
-    // Mutation killed: the gap sized from the reading's own tempo again (`observedTempo(router:)`
+    // Mutations killed: the gap sized from the reading's own tempo again (`observedTempo(router:)`
     // -> `first.tempo`): 120 gives a 1 s gap, and the equal readings become "already paused" for
-    // pause and a paused transport that gets the Play key for play.
+    // pause and a paused transport that gets the Play key for play; and the answer back to State B
+    // with `success` true (`unmeasured-is-state-b`, round 2 R-04).
     let router = ChannelRouter()
     let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("key sent"))
     let readback = SequencedTransportReadbackChannel(
@@ -964,13 +970,72 @@ func testTransportDispatcherStillnessAtFiveBPMDoesNotReadEqualPositionsAsStill(
     #expect(writeOps.isEmpty, "\(command) sent \(writeOps.map(\.0)) at 5 BPM")
     #expect(result.isError!)
     let object = try #require(parseDispatcherObject(dispatcherText(result)))
-    #expect(object["state"] as? String == "B")
+    #expect(object["state"] as? String == "C")
+    let success = try #require(object["success"] as? Bool)
+    #expect(!success)
+    #expect(object["error"] as? String == "readback_unavailable")
     #expect(object["reason"] as? String == "tempo_too_slow_to_measure")
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
     #expect(object["observed_tempo"] as? Double == 5.0)
     #expect(object["already_paused"] == nil)
     #expect(object["resumed_from_pause"] == nil)
     let slept = await sleeps.nanoseconds
     #expect(slept.isEmpty)
+}
+
+/// The other refusals pause and play make before their key, once the tempo has read: the second
+/// transport reading failed, or the playhead position did not read in either reading.
+private let stillnessPreWriteRefusals: [(command: String, write: String, failure: String)] = [
+    ("pause", "transport.pause", "second_reading_failed"),
+    ("pause", "transport.pause", "position_unread"),
+    ("play", "transport.resume", "second_reading_failed"),
+    ("play", "transport.resume", "position_unread"),
+]
+
+@Test(arguments: stillnessPreWriteRefusals)
+func testTransportDispatcherStillnessRefusalsBeforeTheKeyAreStateC(
+    command: String, write: String, failure: String
+) async throws {
+    // Round 2 (R-04 sweep): every refusal that sends nothing is State C with `success` false,
+    // never State B, which says an action was attempted.
+    // Mutation killed: `refusalBeforeWrite` answering State B (`encodeStateB(reason:
+    // .readbackUnavailable, ...)`) in either command.
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("key sent"))
+    let readings: [TransportState] = failure == "second_reading_failed"
+        ? [pauseReading(playing: true, at: "12.1")]
+        : [
+            TransportState(isPlaying: true, position: "12.1", lastUpdated: Date()),
+            TransportState(isPlaying: true, position: "12.1", lastUpdated: Date()),
+        ]
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: 120.0,
+        transportStates: readings
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+
+    let result = await TransportDispatcher.handle(
+        command: command,
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { _ in }
+    )
+
+    let writeOps = await keyWrite.executedOps
+    #expect(!writeOps.map(\.0).contains(write))
+    #expect(writeOps.isEmpty, "\(command) (\(failure)) sent \(writeOps.map(\.0))")
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "C")
+    let success = try #require(object["success"] as? Bool)
+    #expect(!success)
+    #expect(object["error"] as? String == "readback_unavailable")
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
 }
 
 @Test func testTransportDispatcherPauseAtAnObservedTempoStillDecides() async throws {

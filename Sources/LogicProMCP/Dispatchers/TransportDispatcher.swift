@@ -504,9 +504,11 @@ struct TransportDispatcher: OperationTraceDispatching {
         return tempo
     }
 
-    /// State B before any write, for pause and play: the stillness check could not be made, so
-    /// nothing was sent and the transport is called neither paused nor playing. `reason` names why
-    /// (`tempo_unreadable`, `tempo_too_slow_to_measure`).
+    /// State C before any write, for pause and play: the stillness check could not be made, so
+    /// nothing was sent and the transport is called neither paused nor playing. State B would say
+    /// an action was attempted, and none was (round 2, R-04). The shape is the pre-write refusal's
+    /// (`refusalBeforeWrite`): `readback_unavailable`, `write_attempted` false, `safe_to_retry`
+    /// true, and `reason` names why (`tempo_unreadable`, `tempo_too_slow_to_measure`).
     private static func stillnessUnmeasuredResult(
         reason: String,
         hint: String,
@@ -514,11 +516,10 @@ struct TransportDispatcher: OperationTraceDispatching {
     ) -> CallTool.Result {
         var extras = extras
         extras["reason"] = reason
-        extras["hint"] = hint
         extras["write_attempted"] = false
         extras["safe_to_retry"] = true
         return toolTextResult(
-            HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras),
+            HonestContract.encodeStateC(error: .readbackUnavailable, hint: hint, extras: extras),
             isError: true
         )
     }

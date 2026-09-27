@@ -147,6 +147,8 @@ private func pauseTestObject(_ raw: String) -> [String: Any]? {
     let object = try #require(pauseTestObject(result.message))
     #expect(object["state"] as? String == "C")
     #expect(object["state"] as? String != "A")
+    let success = try #require(object["success"] as? Bool)
+    #expect(!success)
     // The CGEvent rung's own refusal, verbatim: it names why no key was posted.
     #expect(object["error"] as? String == "ax_write_failed")
     #expect(object["frontmost_preparation"] as? String != nil)
@@ -169,6 +171,8 @@ private func pauseTestObject(_ raw: String) -> [String: Any]? {
     #expect(!result.isSuccess, "\(result.message)")
     let object = try #require(pauseTestObject(result.message))
     #expect(object["state"] as? String == "C")
+    let success = try #require(object["success"] as? Bool)
+    #expect(!success)
     #expect(object["error"] as? String == "not_supported")
     #expect(object["operation"] as? String == "transport.pause")
     let writeAttempted = try #require(object["write_attempted"] as? Bool)
