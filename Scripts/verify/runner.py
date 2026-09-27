@@ -8,9 +8,9 @@ is stored, and it holds the one place outside the self-test that builds an `engi
 
 THE FLOW, per run (plan-p0b2 section 1)
 ---------------------------------------
-    admit    engine.validate_spec, then the fixture registry (setups.py): the spec's fixture must
-             be declared there, and the lifecycle must be able to drive the declaration
-             (life.fixture_problems); any problem is exit 2 and Logic is not touched
+    admit    engine.validate_spec, which also refuses a fixture the registry (setups.py) does not
+             declare, then life.fixture_problems: the lifecycle must be able to drive the
+             declaration; any problem is exit 2 and Logic is not touched
     build    life.build(head) -> Built; a failed build is exit 2 and writes no evidence
     claim    life.claim(): the live lock and no rival server; refused is exit 2
     locales  current locale first, Korean last. Per locale: switch once; per entry: a fresh locale
@@ -219,8 +219,6 @@ def declaration(spec: dict) -> dict:
 def admit(spec, locales) -> list:
     """Why this spec cannot be run in these locales; empty when it can."""
     problems = [f"spec: {p}" for p in engine.validate_spec(spec)]
-    if not problems:
-        problems = [f"spec: {p}" for p in setups.setup_problems(spec["fixture"])]
     if problems or locales is None:
         return problems
     required = engine.required_locales(spec)

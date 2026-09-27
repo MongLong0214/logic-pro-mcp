@@ -101,7 +101,7 @@ The trust boundary, in plain words:
 | `issue` | the GitHub issue these rows decide |
 | `surface` | a surface id of `docs/observations/SURFACES.md`, carried into generated records |
 | `sources` | where the criteria come from, one quote each (below) |
-| `fixture` | `id` names the project state P0b opens or resets to; `note` says what that state is |
+| `fixture` | `id` names a fixture declared in `Scripts/verify/setups.py`, the project state P0b opens or resets to (an undeclared id is refused); `note` says what that state is |
 | `locales` | `"all"`, meaning the ten of `Scripts/logic_canon.py` `EXPECTED_LOCALES`, or `{"subset": [...], "reason": "..."}` |
 | `rows` | at least one row |
 

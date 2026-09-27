@@ -11,6 +11,8 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
   * a criterion source that is not an ADR (`docs/adr/ADR-*.md`), a PRD (`docs/prd/*.md`) or an
     issue (`issue:<n>`): not an acceptance document, an observation record, a test or product
     source (ADR-027 D1); a repository source without a 40-hex commit, or an issue source with one;
+  * a fixture whose `id` the fixture registry (`setups.SETUPS`) does not declare: the runner
+    could not open, gate or reset it, and a spec author learns that offline (P0b-2 D4);
   * any string in `fixture` or `rows` that points into product source (`Sources/`,
     `AXLocalePolicy`, `AXLocaleValues`) (ADR-027 D3);
   * a locale subset naming anything outside the ten, or without a reason;
@@ -148,6 +150,7 @@ import evidence_doc as E  # noqa: E402
 import logic_canon  # noqa: E402
 import predicates as P  # noqa: E402
 import probes  # noqa: E402
+import setups  # noqa: E402
 
 SPEC_FORMAT = "lpm-acceptance/1"
 SCHEMA_PATH = os.path.join(HERE, "acceptance_schema.json")
@@ -280,6 +283,7 @@ def validate_spec(spec, schema: dict = None) -> list:
     for i, source in enumerate(spec["sources"]):
         out += [f"sources[{i}]: {p}" for p in source_problems(source)]
     out += locale_problems(spec["locales"])
+    out += [f"fixture: {p}" for p in setups.setup_problems(spec["fixture"])]
     ids = [row["id"] for row in spec["rows"]]
     out += [f"rows: id {i!r} appears twice" for i in sorted({i for i in ids if ids.count(i) > 1})]
     for row in spec["rows"]:

@@ -168,5 +168,6 @@
  {"name": "gate-recorded-clean-passes", "check": "gate", "gate": {"walk": "track-flags-ko-clear.json", "row": "home", "baseline": ["track-flags-ko-clear.json", "home"]}, "problems": []},
  {"name": "gate-names-flag-set", "check": "gate", "gate": {"walk": "track-flags-ko-track-0-armed.json", "row": "home", "baseline": ["track-flags-ko-clear.json", "home"]}, "problems": ["track 0 armed"]},
  {"name": "gate-names-bank-off-home", "check": "gate", "gate": {"walk": "track-flags-ko-clear.json", "row": "clamped_bank", "baseline": ["track-flags-ko-clear.json", "home"]}, "problems": ["the MCU bank is off home: upper row 'StdGrn"]},
- {"name": "live-lifecycle-refuses-undriven-fixtures", "check": "live_fixtures"}
+ {"name": "live-lifecycle-refuses-undriven-fixtures", "check": "live_fixtures"},
+ {"name": "check-spec-unknown-fixture-refused", "patch": {"file": "{fixtures}/spec-base.json", "ops": [{"set": ["fixture", "id"], "value": "no-such-fixture"}]}, "cmd": ["check-spec", "{patched}"], "exit": 2, "says": "fixture: fixture 'no-such-fixture' is not in the fixture registry"}
 ]
