@@ -14,6 +14,7 @@ against every key rather than a sample, because the interesting cases are the ra
 import importlib.util
 import json
 import os
+import plistlib
 import shutil
 import sys
 import tempfile
@@ -1297,6 +1298,45 @@ class TheFactorySettingsFoldersAreEveryFolderInBothRoots(unittest.TestCase):
         files = canon.corpus_files(self.bundle, "pluginsettings")
         self.assertIn("Contents/Resources/Plug-In Settings Internal/Studio Piano/Grand.pst", files)
         self.assertIn("Contents/Resources/Plug-In Settings/ES2/01 Synth Leads/Lead.pst", files)
+
+    def test_an_empty_folder_changes_the_certificate(self):
+        """Kills: folder identities dropped from the digest input (#1036 F-04).
+
+        An empty folder is a new row with no file under it, so only its name can move the digest.
+        Checked where the digest is compared as well as where it is taken: `drift_host` must see
+        the pinned corpus is no longer the installed one.
+        """
+        with open(os.path.join(self.bundle, "Contents", "Info.plist"), "wb") as handle:
+            plistlib.dump({"CFBundleName": "Logic Pro", "CFBundleShortVersionString": "12.3",
+                           "CFBundleVersion": "6674"}, handle)
+        files_before = canon.corpus_files(self.bundle, "pluginsettings")
+        pinned = canon.source_digest(self.bundle, "pluginsettings")
+        manifest = {"logic": canon.app_build(self.bundle),
+                    "sources": {"pluginsettings": {"corpus_digest": pinned}}}
+        self.assertEqual(canon.drift_host(manifest, self.bundle), [])
+
+        os.makedirs(os.path.join(self.bundle, "Contents", "Resources", "Plug-In Settings",
+                                 "New Empty Plug-In"))
+
+        self.assertIn("New Empty Plug-In", {row[4] for row in canon.extract_pluginsettings(self.bundle)})
+        self.assertEqual(canon.corpus_files(self.bundle, "pluginsettings"), files_before,
+                         "the fixture must add a folder and no file, or this proves nothing about folders")
+        self.assertNotEqual(canon.source_digest(self.bundle, "pluginsettings"), pinned)
+        self.assertEqual(canon.drift_host(manifest, self.bundle),
+                         ["pluginsettings: the installed corpus digest differs from the pinned one"])
+
+    def test_no_other_source_digests_a_folder(self):
+        """Kills: folders added to every source's digest, which would move digests this change
+        does not rebuild. Every other source's rows come from the bytes of the files it lists."""
+        for source in sorted(canon.EXTRACTORS):
+            if source != "pluginsettings":
+                self.assertEqual(canon.corpus_folders(self.bundle, source), [], source)
+        self.assertEqual(canon.corpus_folders(self.bundle, "pluginsettings"), [
+            "Contents/Resources/Plug-In Settings Internal/Studio Bass",
+            "Contents/Resources/Plug-In Settings Internal/Studio Piano",
+            "Contents/Resources/Plug-In Settings/Auto-Funk",
+            "Contents/Resources/Plug-In Settings/ES2",
+        ])
 
 
 class EnglishAndItsTranslationsMustMeet(unittest.TestCase):

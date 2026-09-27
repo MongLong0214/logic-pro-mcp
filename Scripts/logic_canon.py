@@ -2697,9 +2697,8 @@ def corpus_files(app: str, source: str) -> list[str]:
                 if name.endswith(".nib"):
                     out.append(_rel(app, os.path.join(root, name)))
     elif source == "pluginsettings":
-        # Every file under both roots. The rows are folder names, and a folder enters the digest
-        # through the paths of the files it holds -- measured on 12.3 (6674), no folder under
-        # either root is without one.
+        # Every file under both roots. The rows are folder names, and a folder with no file in it
+        # has no path here: `corpus_folders` puts every folder into the digest by name.
         for root_name in PLUGIN_SETTINGS_ROOTS:
             for root, _dirs, files in os.walk(os.path.join(app, "Contents", "Resources", root_name)):
                 for name in files:
@@ -2723,18 +2722,44 @@ def corpus_files(app: str, source: str) -> list[str]:
     return sorted(out)
 
 
-def corpus_digest(app: str, paths: list[str]) -> str:
+def corpus_folders(app: str, source: str) -> list[str]:
+    """The directories whose NAMES a source's rows are, bundle-relative. Sorted.
+
+    Only `pluginsettings` has any. Its rows are the folders under the two settings roots, and a
+    folder holding no file has no path in `corpus_files`, so without this an empty folder added by
+    Apple is a new row under an unchanged certificate (#1036 F-04). Taken from the extractor
+    itself, so the digest covers exactly the folders the rows are read from. Every other source's
+    rows come from the bytes of files `corpus_files` lists, and it has none.
+    """
+    if source != "pluginsettings":
+        return []
+    return sorted(f"{unit}/{key}" for unit, _locale, key, _field, _value in extract_pluginsettings(app))
+
+
+def corpus_digest(app: str, paths: list[str], folders: list[str] = ()) -> str:
     """One digest over every byte the corpus is made of, taken path by path.
 
     Not a digest of the concatenation: a digest of the sorted `path\\tfiledigest` stream. That way
     a file MOVING changes the result, which a concatenation would hide, and a file being added or
     dropped changes it too. An index whose manifest digest no longer matches the installed Logic
     was taken over different bytes and nothing built on it may be trusted.
+
+    `folders` follow as one `path/` line each. A source with none digests exactly as before.
     """
     hasher = hashlib.sha256()
     for rel in paths:
         hasher.update(f"{rel}\t{_file_digest(os.path.join(app, rel))}\n".encode("utf-8"))
+    for rel in folders:
+        hasher.update(f"{rel}/\n".encode("utf-8"))
     return hasher.hexdigest()
+
+
+def source_digest(app: str, source: str, paths: list[str] | None = None) -> str:
+    """The certificate `build` pins for `source` and every drift check recomputes: its files, and
+    for `pluginsettings` its folders. `paths` is `corpus_files(app, source)` when the caller has it."""
+    if paths is None:
+        paths = corpus_files(app, source)
+    return corpus_digest(app, paths, corpus_folders(app, source))
 
 
 def app_build(app: str) -> dict:
@@ -3163,7 +3188,7 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
         manifest["sources"][source] = {
             "files": len(paths),
             "entries": len(extracted[source]),
-            "corpus_digest": corpus_digest(app, paths),
+            "corpus_digest": source_digest(app, source, paths),
             "locales": sorted(values_by_locale),
             "absence_entries": absence_counts,
             "folded_entries": folded_counts,
@@ -3453,7 +3478,7 @@ def confirm(app: str, texts) -> dict:
         extractor = EXTRACTORS.get(source)
         if extractor is None:
             raise CanonError(f"the manifest pins source {source!r} and this code cannot extract it")
-        if corpus_digest(app, corpus_files(app, source)) != block.get("corpus_digest"):
+        if source_digest(app, source) != block.get("corpus_digest"):
             raise CanonError(f"{source}: the installed corpus is not the pinned one. Run `build` "
                              f"first.")
         by_locale: dict = {}
@@ -4084,7 +4109,7 @@ def drift_host(manifest: dict, app: str) -> list:
     return [f"{source}: the installed corpus digest differs from the pinned one"
             for source, block in sorted((manifest.get("sources") or {}).items())
             if source in EXTRACTORS
-            and corpus_digest(app, corpus_files(app, source)) != block["corpus_digest"]]
+            and source_digest(app, source) != block["corpus_digest"]]
 
 
 def _cmd_status(args) -> int:
@@ -4109,7 +4134,7 @@ def _cmd_status(args) -> int:
             print(f"DRIFT: installed Logic is {here['version']} ({here['build']})", file=sys.stderr)
             return 1
         for source, block in sorted(manifest["sources"].items()):
-            now = corpus_digest(args.app, corpus_files(args.app, source))
+            now = source_digest(args.app, source)
             state = "ok" if now == block["corpus_digest"] else "DRIFT"
             print(f"  {source:10s} {state}")
             if state == "DRIFT":

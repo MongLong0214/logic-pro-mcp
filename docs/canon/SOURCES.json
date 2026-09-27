@@ -131,7 +131,7 @@
       "entries": 147,
       "locale_names": 1,
       "why": "Issue #1030. The catalog read presets from the bundle root only, one level deep, and only for folders a seed named: Studio Piano's folder ships only under `Plug-In Settings Internal` and no seed named it. `Scripts/check-factory-settings-folders.py` compares the seeds and `factorySettingsFolderExclusions` with this set in CI, where no Logic is installed.",
-      "how": "`extract_pluginsettings` lists the directories directly under both roots; a file beside them (`CSParameterOrder.plist`) is not a folder. The corpus digest covers every file under both roots, so a preset added, removed or moved inside a folder is a different corpus even when no folder name changed.",
+      "how": "`extract_pluginsettings` lists the directories directly under both roots; a file beside them (`CSParameterOrder.plist`) is not a folder. The corpus digest covers every file under both roots, so a preset added, removed or moved inside a folder is a different corpus even when no folder name changed, and every folder's path under its root, so a folder with no file in it is a different corpus too (#1036).",
       "limits": [
         "Folder names only. The presets inside a folder are not pinned; the digest says that they changed, not which.",
         "Four names ship under both roots, so the rows outnumber the distinct names the absence set holds.",
