@@ -33,10 +33,10 @@
   "evidence": [
     "evidence/2026-09-27-zh-CN-inspect-session-965.json"
   ],
-  "method": "The release binary at 04081d1acae684d109c062301e2a926dca5b5e12 was started against the open project with nothing else talking to Logic. The harness read logic://tracks, then inspect_session with default parameters; read logic://mixer (pressing X only if that read was not fresh), then inspect_session again; asked with allow_ui_navigation true; and read Logic's window titles and logic://tracks before and after three more inspections. A report whose cache moved while it was being built is retried up to three times and every attempt is kept. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
+  "method": "The release binary at 30e95e152733b879693614a60df023f0250eaa89 was started against the open project with nothing else talking to Logic. The harness read logic://tracks, then inspect_session with default parameters; read logic://mixer (pressing X only if that read was not fresh), then inspect_session again; asked with allow_ui_navigation true; and read Logic's window titles and logic://tracks before and after three more inspections. A report whose cache moved while it was being built is retried up to three times and every attempt is kept. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
   "observations": [
     {
-      "binary": "04081d1acae684d109c062301e2a926dca5b5e12",
+      "binary": "30e95e152733b879693614a60df023f0250eaa89",
       "tracks": {
         "logic_tracks_rows": 19,
         "report_rows": 19,
