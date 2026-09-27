@@ -92,9 +92,9 @@ class TheGuardActuallyRefusesSomething(unittest.TestCase):
     anything, which is the definition of a decorative guard.
 
     `LPM_AX_COMPARISON_ROOTS` points the scan at a directory the case builds, so a positive input
-    exists at all. The waiver cases use a temporary file, so the tree's own
-    `docs/canon/AX-COMPARISON-WAIVERS.json` -- which since #1028 holds the one literal the guard
-    cannot classify, with its reason -- is never what makes a case pass.
+    exists at all. The waiver cases use a temporary file, so a
+    `docs/canon/AX-COMPARISON-WAIVERS.json` in the tree -- there is none since `plugin_names` cites
+    `Channel EQ` (#1028) -- is never what makes a case pass.
     """
 
     def _scan(self, source, waiver=None):
@@ -247,6 +247,53 @@ class APlugInNameIsCitedFromApplesMap(unittest.TestCase):
     def test_only_the_exact_value_is_cited(self):
         """A case-folded match is a different claim, and the row is pinned by its exact digest."""
         self.assertEqual(guard.citation("channel eq"), None)
+
+
+class TheLiteralIsClassifiedByItsRuntimeBytes(unittest.TestCase):
+    """Review of #1034 R1-03. Every canon digest is taken over `normalize`, which strips and folds
+    U+00A0, and the scanner normalized each literal before classifying it -- so a comparison
+    against ` Channel EQ ` was cited as Apple's `Channel EQ` and passed, though it never matches
+    what Logic draws. Each spelling below differs from Apple's value by bytes a comparison sees.
+
+    Mutation killed: deleting the not-in-normal-form branch at the top of `classify`, or keying any
+    scanner branch by `canon.normalize(...)` again."""
+
+    _READ = TheGuardActuallyRefusesSomething._READ
+
+    def _scan(self, source):
+        return TheGuardActuallyRefusesSomething._scan(self, source, None)
+
+    #: (the literal at runtime, the same literal as Swift source spells it)
+    SPELLINGS = ((" Channel EQ ", '" Channel EQ "'),
+                 ("Channel\u00a0EQ", '"Channel\\u{00A0}EQ"'),
+                 ("Channel EQ\n", '"Channel EQ\\n"'))
+
+    def test_each_spelling_classifies_as_unknown_and_is_not_cited_as_a_row(self):
+        for literal, _swift in self.SPELLINGS:
+            with self.subTest(literal=literal):
+                self.assertEqual(guard.classify(literal), guard.UNKNOWN)
+        self.assertEqual(guard.classify("Channel EQ"), guard.APPLE_VALUE, "the control")
+
+    def test_each_spelling_is_refused_in_every_scanner_branch(self):
+        for literal, swift in self.SPELLINGS:
+            branches = {
+                "equality": f"if title == {swift} {{ }}\n",
+                "method": f"if title.hasPrefix({swift}) {{ }}\n",
+                "collection": f"if [{swift}].contains(title) {{ }}\n",
+                "switch": f"switch title {{\ncase {swift}: break\ndefault: break\n}}\n",
+            }
+            for branch, code in branches.items():
+                with self.subTest(literal=literal, branch=branch):
+                    problems = self._scan(self._READ + code)
+                    self.assertEqual(len(problems), 1, problems)
+                    self.assertIn(repr(literal), problems[0])
+
+    def test_a_padded_literal_in_the_folded_branch_is_refused(self):
+        """`MIDI` is an untranslated Apple value, so the unpadded control passes."""
+        self.assertEqual(self._scan(self._READ + 'if title.uppercased() == "MIDI" { }\n'), [])
+        problems = self._scan(self._READ + 'if title.uppercased() == " MIDI " { }\n')
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("' MIDI '", problems[0])
 
 
 class TheEntryPointRefuses(unittest.TestCase):

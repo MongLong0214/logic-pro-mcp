@@ -195,8 +195,17 @@ def comparisons_outside_labelsets():
     literal compared against an internal identifier is not a localisation bug however much it
     looks like one.
     """
-    inside = {canon.normalize(x) for x in policy.all_policy_literals()}
+    # Keyed by the literal's RUNTIME bytes, Swift escapes decoded and nothing else (review of #1034
+    # R1-03). Every branch below used to key by `canon.normalize`, which strips and folds U+00A0,
+    # so `title == " Channel EQ "` was recorded as `Channel EQ`, cited, and passed -- a comparison
+    # that never matches what Logic draws. `inside` is exact for the same reason: a padded copy of
+    # a LabelSet member does not go through the LabelSet.
+    inside = set(policy.all_policy_literals())
     found = collections.defaultdict(set)
+
+    def keep(literal: str) -> bool:
+        return bool(canon.normalize(literal)) and literal not in inside
+
     for path in swift_sources():
         with open(path, "r", encoding="utf-8") as handle:
             source = handle.read()
@@ -210,15 +219,15 @@ def comparisons_outside_labelsets():
                 variable = re.match(r"[\w.]+", match.group(0).lstrip('"')).group(0).split(".")[0]
                 if variable not in backed and match.group(0).lstrip()[0] != '"':
                     continue
-                literal = canon.normalize(_unescape(match.group(1)))
-                if literal and literal not in inside:
+                literal = _unescape(match.group(1))
+                if keep(literal):
                     found[literal].add(os.path.relpath(path, REPO))
         for match in _CASE_FOLDED.finditer(source):
             variable = re.match(r"[\w.]+", match.group(0)).group(0).split(".")[0]
             if variable not in backed:
                 continue
-            raw = canon.normalize(_unescape(match.group(1)))
-            if not raw or raw in inside:
+            raw = _unescape(match.group(1))
+            if not keep(raw):
                 continue
             # Report the spelling Apple ships, so the message names a label a reader can find.
             # And the literal itself otherwise: until #1028 a folded literal Apple does not
@@ -229,16 +238,16 @@ def comparisons_outside_labelsets():
             if match.group(2).split(".")[0] not in backed:
                 continue
             for raw in re.findall(r'"((?:[^"\\\n]|\\.)*)"', match.group(1)):
-                literal = canon.normalize(_unescape(raw))
-                if literal and literal not in inside:
+                literal = _unescape(raw)
+                if keep(literal):
                     found[literal].add(os.path.relpath(path, REPO))
         for match in _SWITCH.finditer(source):
             if match.group(1).split(".")[0] not in backed:
                 continue
             for group in _CASE_LITERAL.findall(match.group(2)):
                 for raw in re.findall(r'"((?:[^"\\\n]|\\.)*)"', group):
-                    literal = canon.normalize(_unescape(raw))
-                    if literal and literal not in inside:
+                    literal = _unescape(raw)
+                    if keep(literal):
                         found[literal].add(os.path.relpath(path, REPO))
     return found
 
@@ -309,6 +318,12 @@ def citation(literal: str):
 
 
 def classify(literal: str, paths=()) -> str:
+    if literal != canon.normalize(literal) and any(ch.isalnum() for ch in literal):
+        # Review of #1034 R1-03. Every digest the canon holds is taken over `normalize`, which
+        # strips and folds U+00A0, so ` Channel EQ `, `Channel\u{00A0}EQ` and `Channel EQ\n` all
+        # hash to Apple's `Channel EQ` -- and none of them equals what Logic draws. A literal whose
+        # bytes the canon cannot vouch for exactly is not Apple's value, whichever route asks.
+        return UNKNOWN
     if canon.is_translated(literal):
         return APPLE_TRANSLATED
     if not any(ch.isalnum() for ch in literal):
