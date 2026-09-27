@@ -55,9 +55,14 @@ def _quickhelp(entries) -> bytes:
 class FakeLogic:
     """A bundle with the files given, and a canon directory of its own."""
 
-    def __init__(self, tmp, files, version="12.3", build="6674"):
+    def __init__(self, tmp, files, version="12.3", build="6674", plugin_map=True):
         self.app = os.path.join(tmp, "Logic Pro.app")
         self.repo = os.path.join(tmp, "repo")
+        # Every Logic carries the plug-in map, and a missing one stops the build (#1034 R1-01),
+        # so a fake bundle carries an empty one unless the test is about its absence.
+        plugin_rel = os.path.join(*canon.PLUGIN_NAMES_PATH)
+        if plugin_map and plugin_rel not in files:
+            files = {**files, plugin_rel: plistlib.dumps({})}
         os.makedirs(os.path.join(self.app, "Contents", "Resources"), exist_ok=True)
         with open(os.path.join(self.app, "Contents", "Info.plist"), "wb") as handle:
             plistlib.dump({"CFBundleName": "Logic Pro", "CFBundleShortVersionString": version,
@@ -470,6 +475,94 @@ class PlugInNames(unittest.TestCase):
         self.assertEqual(manifest["sources"]["plugin_names"]["entries"], 2)
         self.assertEqual(cited, ["logic-canon://plugin_names/EMAG%7C0236%7C0000/-/name#value"])
         self.assertEqual(made_up, [])
+
+
+class APinnedSourceIsRebuiltNotMerged(unittest.TestCase):
+    """Review of #1034 R1-01. Two identities in Logic's map share `Vintage Mellotron`, so the
+    value-presence check cannot tell a removed one from the one that stays. A rebuild used to merge
+    the committed index back in, and the removed identity went on resolving.
+
+    Mutation killed: `merged = {} if migrating else load_index(source)` (the merge as it was) in
+    place of `retaken(...)`, and `return` in place of the raise for a missing map."""
+
+    GONE, KEPT = "CLEM|1231968114|0001", "EMAG|0312|0002"
+
+    def _two_builds(self, *, refresh_second=True):
+        files = _strings_bundle()
+        files[PLUGIN_MAP] = plistlib.dumps({self.GONE: "Vintage Mellotron",
+                                            self.KEPT: "Vintage Mellotron"})
+        with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp), \
+                contextlib.redirect_stdout(io.StringIO()):
+            fake = FakeLogic(tmp, files)
+            ref = _ref("plugin_names", self.GONE, "-", "name", "value")
+            fake.cite_value(ref, "Vintage Mellotron")
+            _build(fake, ["plugin_names", "strings"])
+            canon.check_citation(ref, "Vintage Mellotron")
+            fake.rewrite(PLUGIN_MAP, plistlib.dumps({self.KEPT: "Vintage Mellotron"}))
+            manifest = canon.build(fake.app, sources=["plugin_names", "strings"],
+                                   refresh_citations=refresh_second, repo=fake.repo)
+            units = {row[0] for row in canon.load_index("plugin_names")}
+            with self.assertRaises(canon.CanonError):
+                canon.check_citation(ref, "Vintage Mellotron")
+            return manifest, units, canon.verify_index_against_absence(), ref
+
+    def test_a_removed_identity_is_not_carried_and_its_citation_fails(self):
+        manifest, units, problems, ref = self._two_builds()
+        self.assertEqual(units, {self.KEPT})
+        self.assertEqual(manifest["sources"]["plugin_names"].get("unresolved_citations"), [ref])
+        self.assertTrue(canon.verify_citations_confirmed(manifest))
+        self.assertEqual(problems, [])
+
+    def test_a_rebuild_without_citations_drops_it_too(self):
+        _manifest, units, _problems, _ref_text = self._two_builds(refresh_second=False)
+        self.assertEqual(units, {self.KEPT})
+
+    def test_an_index_with_a_row_its_corpus_lacks_is_a_problem(self):
+        files = _strings_bundle()
+        files[PLUGIN_MAP] = plistlib.dumps({self.KEPT: "Vintage Mellotron"})
+        with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp), \
+                contextlib.redirect_stdout(io.StringIO()):
+            fake = FakeLogic(tmp, files)
+            _build(fake, ["plugin_names", "strings"])
+            index = canon.load_index("plugin_names")
+            row = (self.GONE, "-", "name", "value")
+            index[row] = index[(self.KEPT, "-", "name", "value")]
+            canon.write_index("plugin_names", index)
+            problems = canon.verify_index_against_absence()
+        self.assertTrue(any("holds 2 rows and its corpus has 1" in p for p in problems), problems)
+
+    def test_a_missing_map_fails_the_build(self):
+        with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp), \
+                contextlib.redirect_stdout(io.StringIO()):
+            fake = FakeLogic(tmp, _strings_bundle(), plugin_map=False)
+            with self.assertRaises(canon.CanonError) as caught:
+                _build(fake, ["plugin_names", "strings"])
+            self.assertIn("DefaultPluginMapping.plist is missing", str(caught.exception))
+            self.assertFalse(os.path.exists(canon.MANIFEST_PATH), "nothing is written")
+
+    def test_a_cited_key_apple_dropped_leaves_the_key_index_too(self):
+        """The same retention in every key index: `strings` carries a value under two keys, the
+        cited key goes, the value stays under the other. Mutation killed: the old merge."""
+        def bundle(keys):
+            return {f"Contents/Resources/{loc}.lproj/Main.strings":
+                    _strings([(k, {"de": "Spur", "en": "Track", "it": "Traccia"}[loc]) for k in keys])
+                    for loc in ("de", "en", "it")}
+        with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp), \
+                contextlib.redirect_stdout(io.StringIO()):
+            fake = FakeLogic(tmp, bundle(["a", "b"]))
+            ref = _ref("strings", "Contents/Resources/Main.strings", "en", "a", "value")
+            fake.cite(ref)
+            _build(fake, ["strings"])
+            canon.check_citation(ref, "Track")
+            for loc in ("de", "en", "it"):
+                fake.rewrite(f"Contents/Resources/{loc}.lproj/Main.strings",
+                             bundle(["b"])[f"Contents/Resources/{loc}.lproj/Main.strings"])
+            manifest = _build(fake, ["strings"])
+            keys = {row[2] for row in canon.load_index("strings")}
+            with self.assertRaises(canon.CanonError):
+                canon.check_citation(ref, "Track")
+        self.assertNotIn("a", keys)
+        self.assertEqual(manifest["sources"]["strings"].get("unresolved_citations"), [ref])
 
 
 # ---------------------------------------------------------------------------------------------

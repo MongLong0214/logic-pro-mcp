@@ -1022,7 +1022,11 @@ def extract_plugin_names(app: str):
     """
     path = os.path.join(app, *PLUGIN_NAMES_PATH)
     if not os.path.exists(path):
-        return
+        # Review of #1034 R1-01: a missing map returned no rows, and the locale check accepts an
+        # empty locale-independent source, so a Logic without this file rebuilt `plugin_names` as
+        # an empty corpus -- every plug-in name then read "in no corpus" with a green build.
+        raise CanonDecodeError(f"{_rel(app, path)} is missing. `plugin_names` is that one file; "
+                               f"without it the source is not empty, it is unread.")
     try:
         loaded = load_plist(path)
     except Exception as exc:
@@ -3081,6 +3085,24 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
         credited_by_locale_by_source[source] = credited
         credited_raw_by_locale_by_source[source] = credited_raw
 
+    def retaken(source: str, committed: dict) -> dict:
+        """The committed rows of one source, each taken again from the corpus just extracted.
+
+        Review of #1034 R1-01. The rebuild used to merge the committed index back in as it stood,
+        so a row survived whether or not the corpus still carried its key. The only offline check
+        on a row is that its VALUE is in the absence set, and many values are shipped under more
+        than one key -- `plugin_names` has five pairs of identities sharing a name, and 1,009 of the
+        1,583 `strings` rows share their value with another row (measured 2026-09-27, Logic 12.3
+        6674) -- so a row Apple had dropped went on resolving behind a green verify. Now the row
+        comes across only with the digest this corpus gives it, and a row whose key is gone does
+        not come across: a citation to it fails as unresolved, which is what a rebuild is for.
+        """
+        out: dict = {}
+        for row in committed:
+            if not derived_suffix(row[3]):
+                pin(out, source, row)
+        return out
+
     def pin(target: dict, source: str, sibling: tuple) -> None:
         """The exact row and both derived digests for one (unit, locale, key, field)."""
         digest = by_source[source].get(sibling)
@@ -3185,7 +3207,9 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
             # failure `docs/canon/README.md` says a rebuild exists to surface, and the code did the
             # opposite. Found by review 2026-09-15 with a synthetic two-build corpus. Nothing is
             # kept across an extractor change: a kept row would be keyed by the old fold.
-            merged = {} if migrating else load_index(source)
+            # What is kept is the ADDRESS, re-taken from this corpus (`retaken`), never the old
+            # digest -- see there for the review of #1034 R1-01.
+            merged = {} if migrating else retaken(source, load_index(source))
             merged.update(wanted)
             write_index(source, merged)
             manifest["sources"][source]["cited_rows"] = len(merged)
@@ -3203,6 +3227,17 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
             if len(merged) != before or any(merged[row] != rows_to_pin[row] for row in rows_to_pin):
                 write_index(other, merged)
             manifest["sources"][other]["cited_rows"] = len(merged)
+    else:
+        # `--no-citations` scans no new references, but it still rewrites this source's absence
+        # sets from the corpus in hand, so the index beside them is re-taken from the same corpus.
+        # Leaving it untouched kept every row of the previous build -- the retention R1-01 names.
+        for source in sources:
+            rows = retaken(source, load_index(source))
+            if source in PIN_EVERY_ROW:
+                for row in by_source[source]:
+                    pin(rows, source, row)
+            write_index(source, rows)
+            manifest["sources"][source]["cited_rows"] = len(rows)
 
     if migrating:
         manifest["migration"] = migration_report(migrating_from, before_index,
@@ -3509,6 +3544,20 @@ def verify_index_against_absence() -> list:
     """
     problems = []
     manifest = load_manifest() if os.path.exists(MANIFEST_PATH) else {}
+
+    # A source that pins every row holds exactly the rows its corpus has: one more is a row the
+    # corpus no longer carries, and its value can still be in the absence set under another
+    # identity (review of #1034 R1-01), so the digest walk below cannot see it. A missing index
+    # file is `verify_artifacts`' to report; this counts the one that is there.
+    for source in sorted(PIN_EVERY_ROW & set(manifest.get("sources") or {})):
+        if not os.path.exists(index_path(source)):
+            continue
+        exact = sum(1 for row in load_index(source) if not derived_suffix(row[3]))
+        entries = manifest["sources"][source].get("entries")
+        if exact != entries:
+            problems.append(f"index/{source}.tsv holds {exact} rows and its corpus has {entries} "
+                            f"entries. `{source}` pins every row, so the two are equal or the "
+                            f"index carries a row the corpus does not.")
 
     def in_absence(source: str, locale: str, short: str, what: str) -> None:
         try:
