@@ -1615,14 +1615,14 @@ enum SemanticOracleTable {
         ]
     )
 
-    // TransportDispatcher `verifiedPauseResult` → encodeStateA. Both State-A
-    // branches (already-paused fast path, post-write path) emit the SAME three
-    // constants: `operation:"transport.pause"`, `requested_state:"paused"`,
+    // TransportDispatcher `verifiedPauseResult` → encodeStateA. Its three State-A
+    // branches (not playing, already paused, paused after the keystroke) emit the
+    // SAME three constants: `operation:"transport.pause"`, `requested_state:"paused"`,
     // `verify_source:"transport_state"` (pause never uses the ax_transport_state
-    // tag stop's write path does). Their readback keys differ (nested
-    // `observed_after` vs flat `observed_isPlaying`), so — as with stop — the
-    // stopped-confirmation is structural (envelope), and only the shared constants
-    // are declaratively pinned.
+    // tag stop's write path does). Their readback keys differ (only the post-write
+    // branch carries flat `observed_isPlaying`/`observed_position`), so — as with
+    // stop — the pause confirmation (Play on, two equal playhead readings) is
+    // structural (envelope), and only the shared constants are declaratively pinned.
     static let transportPause = SafeMutationOracle.oracle(
         .transportPause,
         semantics: [

@@ -800,15 +800,15 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
-        // verifiedPauseResult post-write path: verify_source transport_state.
+        // verifiedPauseResult post-write path: verify_source transport_state; paused reads as
+        // Play still on with the playhead still.
         .transportPause: SemanticOracleFixture(
             response: """
                 {"success":true,"verified":true,"state":"A",\
                 "operation":"transport.pause","requested_state":"paused",\
                 "verify_source":"transport_state","write_attempted":true,\
-                "poll_attempts":1,"observed_isPlaying":false,"observed_isRecording":false,\
-                "observed_position":"5.1.1.1","observed_time_position":"00:00:08:12",\
-                "write_result":{"state":"B"}}
+                "stillness_gap_ms":1000,"observed_isPlaying":true,\
+                "observed_position":"5.1","write_result":{"state":"B"}}
                 """,
             readback: "{}"
         ),
