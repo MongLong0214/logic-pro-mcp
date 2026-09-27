@@ -109,6 +109,8 @@ private let plainNonLetterOps = ["transport.play", "transport.pause", "transport
         #expect(preparation.total == 0, "\(operation) prepared Logic \(preparation.total) times")
         let object = try #require(envelope(result.message))
         #expect(object["state"] as? String == "C")
+        let success = try #require(object["success"] as? Bool)
+        #expect(!success)
         #expect(object["error"] as? String == "not_supported")
         #expect(object["reason"] as? String == "input_source_blocks_plain_letters")
         #expect(object["input_source_id"] as? String == korean.id)
@@ -160,16 +162,45 @@ private let plainNonLetterOps = ["transport.play", "transport.pause", "transport
         #expect(recorder.snapshot().first?.keyCode == shortcut.keyCode)
     }
 
-    /// An unread source is not read as blocking: the key is posted as before.
-    /// Kills: treating an unread source as not ASCII-capable (`?.isASCIICapable != true`).
-    @Test func plainLetterPostedWhenTheSourceDoesNotRead() async {
+    /// Round 2, R-03: a source that does not read is refused like a non-ASCII one. Unread is not
+    /// ASCII-capable, and the source TIS failed to read may be 2-Set Korean, where the key runs
+    /// nothing and the send-only State B would report it as sent.
+    /// Kills: an unread source posting again (`guard let source = ... else { refusal }` back to
+    /// `if let source = ..., !source.isASCIICapable`), which is mutant `unread-source-posts`.
+    @Test("a plain letter under a source that does not read is refused and nothing is posted", arguments: plainLetterOps)
+    func plainLetterRefusedWhenTheSourceDoesNotRead(_ operation: String) async throws {
+        let recorder = CGEventRecorder()
+        let preparation = PreparationCalls()
+        let channel = CGEventChannel(runtime: runtime(recorder, source: nil, preparation: preparation))
+
+        let result = await channel.execute(operation: operation, params: [:])
+
+        #expect(!result.isSuccess, "\(operation): \(result.message)")
+        #expect(recorder.snapshot().isEmpty, "\(operation) posted \(recorder.snapshot().map(\.keyCode))")
+        #expect(preparation.total == 0, "\(operation) prepared Logic \(preparation.total) times")
+        let object = try #require(envelope(result.message))
+        #expect(object["state"] as? String == "C")
+        let success = try #require(object["success"] as? Bool)
+        #expect(!success)
+        #expect(object["error"] as? String == "not_supported")
+        #expect(object["reason"] as? String == "input_source_unreadable")
+        #expect(object["input_source_id"] == nil)
+        #expect(object["events_posted"] as? Int == 0)
+        let writeAttempted = try #require(object["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+    }
+
+    /// The unread source refuses plain letters only: a keypad key still posts.
+    /// Kills: the unread check moved ahead of `shortcut.isPlainLetter`.
+    @Test func plainNonLetterPostedWhenTheSourceDoesNotRead() async throws {
         let recorder = CGEventRecorder()
         let channel = CGEventChannel(runtime: runtime(recorder, source: nil))
+        let shortcut = try #require(CGEventChannel.keyMap["transport.play"])
 
-        let result = await channel.execute(operation: "edit.quantize", params: [:])
+        let result = await channel.execute(operation: "transport.play", params: [:])
 
         #expect(result.isSuccess, "\(result.message)")
-        #expect(recorder.snapshot().map(\.keyCode) == [12])
+        #expect(recorder.snapshot().map(\.keyCode) == [shortcut.keyCode])
     }
 
     /// Shift does not keep a letter out of the IME (Shift-Q is ㅃ under 2-Set Korean).

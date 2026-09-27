@@ -26,8 +26,9 @@ actor CGEventChannel: Channel {
         /// production path goes through AppleScript.
         let activateLogic: @Sendable () -> Bool
         /// #1029 review R-03 / #1039: the current keyboard input source, or nil when it did not
-        /// read. Defaults to nil (unread), which posts as before, for the same reason as the two
-        /// #440 defaults below.
+        /// read. A plain letter is refused under nil as under a non-ASCII source, so the default is
+        /// an ASCII-capable source with no id: the permissive one, for the same reason as the two
+        /// #440 defaults below. `.production` reads TIS.
         let currentInputSource: @Sendable () -> InputSourceReading?
 
         /// The two #440 fields default to an already-frontmost Logic so existing
@@ -44,7 +45,9 @@ actor CGEventChannel: Channel {
             sleepMicros: @escaping @Sendable (useconds_t) -> Void,
             isLogicFrontmost: @escaping @Sendable () -> Bool = { true },
             activateLogic: @escaping @Sendable () -> Bool = { true },
-            currentInputSource: @escaping @Sendable () -> InputSourceReading? = { nil }
+            currentInputSource: @escaping @Sendable () -> InputSourceReading? = {
+                InputSourceReading(id: nil, isASCIICapable: true)
+            }
         ) {
             self.isLogicProRunning = isLogicProRunning
             self.logicProPID = logicProPID
@@ -293,12 +296,15 @@ actor CGEventChannel: Channel {
         // #1029 review R-03 and #1039: under an input source that is not ASCII-capable, a plain
         // letter reaches Logic as that source's character and runs nothing, and the State B below
         // would report a keystroke that did nothing. Checked before Logic is brought forward, so a
-        // refusal changes nothing. An unread source is not called blocking: the key is posted as
-        // before.
-        if shortcut.isPlainLetter,
-           let source = runtime.currentInputSource(),
-           !source.isASCIICapable {
-            return Self.inputSourceRefusal(operation: operation, source: source)
+        // refusal changes nothing. A source that does not read is refused the same way: unread is
+        // not ASCII-capable, and the source it failed to read may be 2-Set Korean (round 2, R-03).
+        if shortcut.isPlainLetter {
+            guard let source = runtime.currentInputSource() else {
+                return Self.inputSourceRefusal(operation: operation, source: nil)
+            }
+            if !source.isASCIICapable {
+                return Self.inputSourceRefusal(operation: operation, source: source)
+            }
         }
 
         // #440 D: same gate as the sequence path. A mapped chord posted while
@@ -420,29 +426,33 @@ actor CGEventChannel: Channel {
         return seen
     }
 
-    /// State C for a plain letter under an input source that is not ASCII-capable. Not terminal, so
-    /// the router tries the next rung, and when there is none the caller gets this refusal rather
-    /// than a send-only success for a key that could not act.
-    static func inputSourceRefusal(operation: String, source: InputSourceReading) -> ChannelResult {
+    /// State C for a plain letter under an input source that is not ASCII-capable, or that did not
+    /// read (`source` nil). Not terminal, so the router tries the next rung, and when there is none
+    /// the caller gets this refusal rather than a send-only success for a key that could not act.
+    static func inputSourceRefusal(operation: String, source: InputSourceReading?) -> ChannelResult {
         var extras: [String: Any] = [
             "operation": operation,
             "method": "cgevent",
-            "reason": "input_source_blocks_plain_letters",
+            "reason": source == nil ? "input_source_unreadable" : "input_source_blocks_plain_letters",
             "events_posted": 0,
             "write_attempted": false,
             "safe_to_retry": true,
         ]
-        if let id = source.id {
+        if let id = source?.id {
             extras["input_source_id"] = id
         }
-        return .error(HonestContract.encodeStateC(
-            error: .notSupported,
-            hint: "The active input source (\(source.id ?? "unnamed")) is not ASCII-capable, so a plain "
+        let hint: String
+        if let source {
+            hint = "The active input source (\(source.id ?? "unnamed")) is not ASCII-capable, so a plain "
                 + "letter key reaches Logic as that source's character and runs no key command "
                 + "(measured under 2-Set Korean: Q, N and X ran nothing). No event was posted. Switch "
-                + "to an ASCII-capable input source such as ABC and retry.",
-            extras: extras
-        ))
+                + "to an ASCII-capable input source such as ABC and retry."
+        } else {
+            hint = "The active input source did not read, so whether a plain letter key would reach "
+                + "Logic as a letter is unknown (under 2-Set Korean, Q, N and X ran nothing). No event "
+                + "was posted. Retry, or select an ASCII-capable input source such as ABC."
+        }
+        return .error(HonestContract.encodeStateC(error: .notSupported, hint: hint, extras: extras))
     }
 
     /// State C for a refused preparation. `write_attempted` is false and
