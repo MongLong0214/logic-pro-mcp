@@ -219,6 +219,12 @@ A missing path is never FAIL and never PASS. A reading of the wrong type for its
 separate names so that a row meaning "this moved relative to the pre-state" cannot be written
 against a constant by mistake.
 
+`changed` PASSES on any difference, noise included: an indicator that blinks, a second reading a
+character apart. On its own it cannot say that the operation did what the row claims. A `changed`
+check is refused unless another check in the same list (`expect` or `restore_expect`) pins the same
+path, comparing it with a constant (`value`) or a canon row (`matches_canon`). The pin states what
+the reading became. `not_null` and `is_null` take no operand and pin nothing.
+
 `changed`, `ne` and `not_in` PASS on a difference, and null differs from every reading, so a null
 would satisfy them by absence. Under these three a null anywhere in either value, at any depth
 (`[null]`, `{"armed": null}`), is UNREADABLE, never PASS. So is a key that one value has and the

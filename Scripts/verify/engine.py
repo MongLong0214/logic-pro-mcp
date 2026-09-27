@@ -329,6 +329,7 @@ def row_problems(row: dict, n_sources: int) -> list:
         out += [f"expect[{i}]: {p}" for p in expectation_problems(e, set(steps))]
     for j, e in enumerate(row["restore_expect"]):
         out += [f"restore_expect[{j}]: {p}" for p in expectation_problems(e, set(steps) | set(after))]
+    out += unpinned_changed(expect, "expect") + unpinned_changed(row["restore_expect"], "restore_expect")
     for name in row["independence"]:
         if name not in steps:
             out.append(f"independence names {name!r}, which is not a step of this row")
@@ -574,6 +575,19 @@ def step_problems(step: dict) -> list:
     elif op not in NO_OPERAND and "value" not in until:
         out.append(f"wait.until: {op} needs a value")
     return out
+
+
+def unpinned_changed(checks: list, key: str) -> list:
+    """`changed` PASSES on any difference, noise included: an indicator that blinks, a second
+    reading a character apart. On its own it cannot say the operation did what the row claims. It
+    is admissible only when another check in the same list pins the same path, comparing it with a
+    constant (`value`) or a canon row (`ref.canon`), which states what the reading became.
+    `not_null` and `is_null` take no operand and pin nothing."""
+    pinned = {e["path"] for e in checks if "value" in e or "canon" in (e.get("ref") or {})}
+    return [f"{key}[{i}] is changed over {e['path']!r}, and no check in {key} pins that path to a "
+            f"constant or a canon row. changed passes on any difference, noise included; add a "
+            f"check that says what {e['path']!r} becomes"
+            for i, e in enumerate(checks) if e["op"] == "changed" and e["path"] not in pinned]
 
 
 def expectation_problems(e: dict, bound: set) -> list:
