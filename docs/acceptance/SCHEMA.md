@@ -12,7 +12,7 @@ This file explains both. Where it and the code disagree, the code is what runs.
 ```
 python3 Scripts/verify/verify.py check-spec docs/acceptance/<issue>.json   # admissible?
 python3 Scripts/verify/verify.py recheck <evidence.json> [--spec <doc>]    # recompute every verdict
-python3 Scripts/verify/verify.py record <evidence.json> --out docs/observations   # refused, exit 2
+python3 Scripts/verify/verify.py record <evidence.json> --out docs/observations   # refused, exit 2: `run` (P0b-2) produces records
 python3 Scripts/verify/verify.py self-test                                 # fixtures + mutants
 ```
 
@@ -27,7 +27,7 @@ python3 Scripts/verify/verify.py self-test                                 # fix
 | 2 | refused | shape, a refusal rule, or a quote that is not in its source | the evidence is malformed (an observation entry included), its `spec_sha256` is not the digest of its spec, `--spec` names a different document, or a run's locale reading names another locale |
 | 3 | incomplete | a source could not be fetched, so its quote is unchecked | the best a file can reach. Also: a row is UNREADABLE, a required locale was not run or carries no readable locale reading, the binary is `unbound`, or this host disagrees with the binary block |
 
-`record` of a file is refused with exit 2 (below).
+`record` of a file is refused with exit 2 (below). In P0a no command writes a record: the producer is `run`, in P0b-2.
 
 A failure outranks incompleteness: evidence with one FAIL and nine missing locales exits 1.
 
@@ -320,7 +320,8 @@ Writes are atomic: a temporary file in the destination directory, `fsync`, then 
 
 `verify.py record <file>` is refused with exit 2, not 3. Exit 3 says the evidence could still
 become clean with more observations; no content of a file can make `record` write, so the command
-itself is refused, as `run` and `batch` are in P0a.
+itself is refused, as `run` and `batch` are in P0a. The refusal names the producer of records:
+`verify.py run`, in P0b-2. Until it exists, no command writes a record.
 
 The recording logic is `verify.record_attested(bytes, attestation, out)`, called in process by the
 process that produced the bytes (`run`, P0b-2; in P0a, the self-test). It judges the bytes with
