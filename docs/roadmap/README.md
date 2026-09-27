@@ -189,7 +189,7 @@ Also open, outside the ADR set:
 | #1028 | OPEN | Filed 2026-09-27 as the tracking issue of ADR-027, a fixed verifier that judges completion from acceptance data written before the code, from Apple's data, in ten locales. P0a, the offline engine in `Scripts/verify/` with the #1020 pilot in `docs/acceptance/`, lands with the pull request carrying this row; P0b (the live lifecycle), P1 (canon corrections and the oracle catalogue) and P2 (acceptance rows for the open ADRs) remain. |
 | #1029 | OPEN | Filed 2026-09-27 from the Apple data census (ADR-027, #1028): CGEvent fallback keystrokes disagree with Logic's key commands, and three of them fire a different, state-changing command. |
 | #1030 | OPEN | Filed 2026-09-27 from the Apple data census (ADR-027, #1028): the stock plug-in catalog sees 2 of 257 ES2 factory presets, because it skips subfolders and the Plug-In Settings Internal root. |
-| #1031 | OPEN | Filed 2026-09-27 from the Apple data census (ADR-027, #1028): SMFReader rejects a whole MIDI file when one note has zero length. |
+| #1031 | closed | **Closed by the pull request carrying this row; the row is ahead of GitHub until it merges.** Filed 2026-09-27 from the Apple data census (ADR-027, #1028): SMFReader rejected a whole MIDI file when one note had zero length. Reproduced on the Swift reader with an Apple Loop's embedded MIDI chunk (rejected before, 110 notes after, two of length 0); the guard now refuses only a negative span, and a test pins the zero-length note with the old guard as its mutation. |
 
 ### Three reopen reasons, checked rather than inferred
 
