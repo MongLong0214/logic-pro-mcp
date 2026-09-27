@@ -1392,18 +1392,58 @@ import Testing
         }
     }
 
+    /// The record-arm command's cell as each language's Key Commands list DISPLAYS it: the
+    /// `match_identity` the setup read back on a live Logic 12.3 (6674) in each of the ten
+    /// languages on 2026-09-28, one matching row each, from the release build of 1d1db130 (sha256
+    /// 0170e59f...0195a7; the table is in #1049). Each hashes to the `value` digest that
+    /// `docs/canon/index/strings.tsv` records for `Toggle Track Record Enable` in that language's
+    /// `Logic.framework` `Localizable.strings`.
+    ///
+    /// Written as literals on purpose, unlike the rest of this file. The table the product types
+    /// from is generated, so a case that takes its expectation from that table, or builds its
+    /// fixture from the product's own answer, passes whichever row the generator picked -- German
+    /// could type the Korean member and still pass. These strings came from Logic's screen rather than
+    /// from the generator. If Apple renames the command, this table changes only with a new reading.
+    static let displayedRecordArmCell: [(locale: String, cell: String)] = [
+        ("en-US", "Toggle Track Record Enable"),
+        ("ko-KR", "트랙 녹음 활성화 토글"),
+        ("ja-JP", "トラックの録音可能を切り替え"),
+        ("de-DE", "Spur für die Aufnahme aktivieren ein-/aus"),
+        ("es-ES", "Activar/desactivar grabación de pista"),
+        ("fr-FR", "Activer/Désactiver l’enregistrement sur piste"),
+        ("it-IT", "Attiva/disattiva abilitazione registrazione traccia"),
+        ("pt-BR", "Ativar/Desativar Gravação das Pistas"),
+        ("zh-CN", "开关轨道录音启用"),
+        ("zh-TW", "切換音軌錄音啟用"),
+    ]
+
+    /// The pinned cell for a table key: an identifier names itself, a bare subtag the one
+    /// identifier that starts with it.
+    static func displayedCell(for key: String) -> String? {
+        displayedRecordArmCell.first { $0.locale == key || $0.locale.hasPrefix(key + "-") }?.cell
+    }
+
     /// What gets TYPED is chosen by the host's language; what gets MATCHED is the whole label set.
     ///
     /// The ten spellings are Apple's own, projected into `AXLocaleValues` by
-    /// `Scripts/locale_labels.py --write` from the LabelSet's row. This case is written against
-    /// that table rather than against literals for the same reason the bounce tests are: the
-    /// count and the spellings are what the generator decides, and a literal here turns Apple
-    /// renaming a command into a failing test that says nothing about the product.
+    /// `Scripts/locale_labels.py --write` from the LabelSet's row. That `searchQuery` reads the
+    /// table is checked against the table; that the table holds the row Logic displays is checked
+    /// against `displayedRecordArmCell`, because the table cannot vouch for its own row choice.
+    ///
+    /// Kills a table entry that holds another language's member (the German key given the Korean
+    /// spelling): `searchQuery` still agrees with the table, the displayed cell does not.
     @Test("the typed query is Apple's own spelling for the host's language, in every language Logic ships")
     func searchQueryFollowsTheHostLanguage() {
         for (locale, expected) in AXLocaleValues.recordArmKeyCommandName {
             #expect(ArmKeyCommandSetup.searchQuery(locale: locale) == expected,
                     "\(locale) must type Apple's own spelling")
+            let displayed = Self.displayedCell(for: locale)
+            #expect(expected == displayed,
+                    "\(locale): the table holds \(expected), Logic displays \(displayed ?? "nothing pinned")")
+        }
+        for (locale, cell) in Self.displayedRecordArmCell {
+            #expect(AXLocaleValues.recordArmKeyCommandName[locale] == cell,
+                    "\(locale): Logic displays \(cell) and the table must carry it")
         }
         // Ten identifiers plus the bare subtags that name exactly one of them. `zh` names two, so
         // it is deliberately absent -- a table that picked one would answer Simplified on a
@@ -1522,23 +1562,28 @@ import Testing
     /// #1028 P1b. Every language Logic ships has a spelling to type, and none but English types
     /// the English name. Italian, Portuguese and Traditional Chinese lost theirs when QuickHelp
     /// (byte-identical to English in those three) stopped counting as a translation; the table now
-    /// derives from `Localizable.strings`, which Apple translates in all ten. Written against the
-    /// table, not literals, for the reason the case above it gives.
+    /// derives from `Localizable.strings`, which Apple translates in all ten.
+    ///
+    /// The fixture's command cell and the expected keystrokes are the cell Logic displayed in that
+    /// language (`displayedRecordArmCell`), never the product's own answer: a fixture built from
+    /// `searchQuery` would complete whichever row the lookup chose.
     ///
     /// Kills the table losing any of the ten again (for example the pre-P1b `AXLocaleValues.swift`,
-    /// derived from QuickHelp, restored): that language then refuses instead of completing.
+    /// derived from QuickHelp, restored): that language then refuses instead of completing. Kills
+    /// a lookup that answers with another language's member: it types a string other than the cell.
     @Test("every language Logic ships types its own spelling and completes the setup",
-          arguments: ["en-US", "ko-KR", "ja-JP", "de-DE", "es-ES", "fr-FR",
-                      "it-IT", "pt-BR", "zh-CN", "zh-TW"])
+          arguments: ArmKeyCommandSetupTests.displayedRecordArmCell.map { $0.locale })
     func everyShippedLanguageTypesItsOwnSpelling(locale: String) throws {
+        let cell = try #require(Self.displayedCell(for: locale))
         let query = try #require(ArmKeyCommandSetup.searchQuery(locale: locale),
                                  "\(locale) has no spelling to type")
+        #expect(query == cell, "\(locale) types \(query); its Key Commands list displays \(cell)")
         if !locale.hasPrefix("en") {
             #expect(query != ArmKeyCommandSetup.commandName,
                     "\(locale) would type the English name into a translated search")
         }
         let fixture = Self.fixture(
-            commandValues: [query],
+            commandValues: [cell],
             uiLocale: locale,
             firstVerify: .unmapped,
             verify: .verified
@@ -1547,10 +1592,10 @@ import Testing
             Issue.record("\(locale): expected a completed assignment")
             return
         }
-        #expect(fixture.probe.typed == [query])
+        #expect(fixture.probe.typed == [cell])
         // The envelope names what went into the search, so a live run records it rather than
         // inferring it. Kills `search_query` left unset or not emitted.
-        #expect(evidence.extras["search_query"] as? String == query)
+        #expect(evidence.extras["search_query"] as? String == cell)
     }
 
 }
