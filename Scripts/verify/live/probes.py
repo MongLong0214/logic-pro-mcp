@@ -204,16 +204,32 @@ def track_flags_parse(raw):
             "children_read_failures": walk["value"]["children_read_failures"], "raw": raw}
 
 
-def track_flags_known(spec, observation):
-    """The positive control: the reset fixture's count and names, every flag found once and 0."""
+def _flags(run):
+    observation = (run or {}).get("observation") or {}
     if not observation.get("readable"):
+        return None
+    return observation
+
+
+def track_flags_known(spec, control):
+    """The positive control (controls.track_flags_control): before, every track found and at 0;
+    with the fixture's flag_track muted, soloed and armed, exactly that track reads 1/1/1 and every
+    other 0/0/0; after, every track 0 again. A probe returning zeros or nothing fails it."""
+    readings = [_flags(control.get(k)) for k in ("pre", "post", "after")]
+    if any(r is None for r in readings):
         return False
-    tracks = observation["tracks"]
-    return (observation["track_count"] == spec["track_count"]
-            and [t["name"] for t in tracks] == spec["names"]
-            and all(t["matches"] == {"arm": 1, "mute": 1, "solo": 1} for t in tracks)
-            and all(t[f] == 0 for t in tracks for f in ("arm", "mute", "solo"))
-            and not observation["children_read_failures"])
+    target = spec["flag_track"]
+    for reading in readings:
+        tracks = reading["tracks"]
+        if (reading["track_count"] != spec["track_count"]
+                or [t["name"] for t in tracks] != spec["names"]
+                or not all(t["matches"] == {"arm": 1, "mute": 1, "solo": 1} for t in tracks)
+                or reading["children_read_failures"]):
+            return False
+    pre, post, after = ([(t["arm"], t["mute"], t["solo"]) for t in r["tracks"]] for r in readings)
+    expected = [(1, 1, 1) if i == target else (0, 0, 0) for i in range(spec["track_count"])]
+    zeros = [(0, 0, 0)] * spec["track_count"]
+    return pre == zeros and post == expected and after == zeros
 
 
 # ---------------------------------------------------------------------------------------------
@@ -260,7 +276,8 @@ def _strip_witness(nodes, start, labels):
             outputs.append({"description": node["AXDescription"], "help": node["AXHelp"],
                             "global_index": global_index})
         if is_button and contains_any(node["AXHelp"], [labels["input"]]):
-            inputs.append({"description": node["AXDescription"], "global_index": global_index})
+            inputs.append({"description": node["AXDescription"], "global_index": global_index,
+                           "path": node["path"]})
         if is_knob(node):
             knobs += 1
         if is_button and contains_any(node["AXHelp"], [labels["send"]]):
@@ -270,14 +287,14 @@ def _strip_witness(nodes, start, labels):
                 attributed.add(following[0])
             sends.append({"shape": "button", "occupied": occupied,
                           "description": node["AXDescription"], "help": node["AXHelp"],
-                          "global_index": global_index})
+                          "global_index": global_index, "path": node["path"]})
         elif node["AXRole"] == AX_GROUP:
             sibling = by_path.get(tuple(node["path"][:-1] + [node["path"][-1] + 1]))
             if sibling is not None and is_knob(sibling[1]):
                 attributed.add(sibling[0])
                 sends.append({"shape": "group", "occupied": True,
                               "description": node["AXDescription"], "help": node["AXHelp"],
-                              "global_index": global_index})
+                              "global_index": global_index, "path": node["path"]})
     return {"path": path, "description": nodes[start].get("AXDescription"), "outputs": outputs,
             "inputs": inputs, "sends": sends, "knobs": knobs, "knobs_attributed": len(attributed),
             "read_errors": sum(len(node["read_errors"]) for _, node in sub)}
@@ -322,16 +339,37 @@ def routing_slots_parse(raw):
             "raw": raw}
 
 
-def routing_slots_known(spec, observation):
-    """The positive control: the fixture's Mixer, track_count strips with one output (measured: the
-    19 track strips; Stereo Out and Master carry none), no occupied send, no read failure."""
-    if not observation.get("readable") or not observation.get("mixer_found"):
+def _mixer(run):
+    observation = (run or {}).get("observation") or {}
+    if not (observation.get("readable") and observation.get("mixer_found")):
+        return None
+    return observation
+
+
+def routing_slots_known(spec, control):
+    """The positive control (controls.routing_slots_control): on the reset fixture the Mixer has
+    the declared strips, track_count of them with one output, exactly one strip with an input --
+    the fixture's input_strip, reading Apple's `Input` row + " 1" -- and no occupied send; after a
+    bus is chosen in that strip's send slot, that strip and only it has an occupied send; after the
+    reset, none has. A probe returning no inputs or no occupied send fails it."""
+    label = control.get("input_label") or {}
+    readings = [_mixer(control.get(k)) for k in ("pre", "post", "after")]
+    if not label.get("readable") or any(r is None for r in readings):
         return False
-    strips = observation["strips"]
-    return (len(strips) == spec["mixer_strips"]
-            and sum(1 for s in strips if len(s["outputs"]) == 1) == spec["track_count"]
-            and all(not s["sends"] or not any(x["occupied"] for x in s["sends"]) for s in strips)
-            and observation["read_failures"] == 0)
+    pre, post, after = readings
+    strip = spec["input_strip"]
+
+    def occupied(reading):
+        return [i for i, s in enumerate(reading["strips"]) if any(x["occupied"] for x in s["sends"])]
+
+    inputs = [(i, [x["description"] for x in s["inputs"]])
+              for i, s in enumerate(pre["strips"]) if s["inputs"]]
+    return (len(pre["strips"]) == spec["mixer_strips"]
+            and sum(1 for s in pre["strips"] if len(s["outputs"]) == 1) == spec["track_count"]
+            and inputs == [(strip, [label["value"]])]
+            and occupied(pre) == [] and occupied(post) == [strip] and occupied(after) == []
+            and len(after["strips"]) == spec["mixer_strips"]
+            and all(r["read_failures"] == 0 for r in readings))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -346,10 +384,11 @@ REGISTRY = {
                    "pid": {"type": "int", "required": False, "doc": "Logic pid; else pgrep"}},
         "command": track_flags_command,
         "parse": track_flags_parse,
-        "positive_control": {"fixture": "locale_campaign_19", "state": "reset",
+        "positive_control": {"fixture": "locale_campaign_19", "state": "reset, then changed",
                              "known": track_flags_known,
-                             "reading": "track_count and names as the fixture declares, each "
-                                        "track's arm/mute/solo checkbox found exactly once, all 0"},
+                             "reading": "every track found with each checkbox once; all 0, then "
+                                        "flag_track alone 1/1/1 after the product sets it, then "
+                                        "all 0 after it unsets it (controls.py)"},
         "pilot": "#1020",
     },
     "routing_slots_ax": {
@@ -358,11 +397,12 @@ REGISTRY = {
                    "pid": {"type": "int", "required": False, "doc": "Logic pid; else pgrep"}},
         "command": routing_slots_command,
         "parse": routing_slots_parse,
-        "positive_control": {"fixture": "locale_campaign_mixer", "state": "reset",
+        "positive_control": {"fixture": "locale_campaign_mixer", "state": "reset, then changed",
                              "known": routing_slots_known,
-                             "reading": "the Mixer is found with the fixture's strip count, "
-                                        "exactly track_count strips with one output slot, no "
-                                        "occupied send, no read failure inside the Mixer"},
+                             "reading": "the declared strips; input_strip alone with an input, "
+                                        "reading Apple's Input row + ' 1'; no occupied send, then "
+                                        "input_strip alone occupied after a bus is chosen in its "
+                                        "send slot, then none after the reset (controls.py)"},
         "pilot": "#291",
     },
 }

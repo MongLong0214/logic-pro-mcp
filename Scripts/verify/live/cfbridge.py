@@ -73,6 +73,7 @@ def libs():
         (ax.AXValueGetTypeID, ul, ()), (ax.AXValueGetType, ctypes.c_int, (vp,)),
         (ax.AXValueGetValue, ctypes.c_bool, (vp, ctypes.c_int, vp)),
         (ax.AXIsProcessTrusted, ctypes.c_bool, ()),
+        (ax.AXUIElementPerformAction, ctypes.c_int, (vp, vp)),
     ]
     for fn, restype, argtypes in sig:
         fn.restype = restype
@@ -211,6 +212,28 @@ class AX:
         return {"status": status,
                 "elements": [self.cf.CFArrayGetValueAtIndex(ref, i)
                              for i in range(self.cf.CFArrayGetCount(ref))]}
+
+    def perform(self, element, action):
+        """The AX status of performing `action` (an AXPress on a popup can answer -25204 while
+        its menu is open: the status is a report, the effect has to be read back)."""
+        key = cfstring(action)
+        try:
+            return self.ax.AXUIElementPerformAction(element, key)
+        finally:
+            self.cf.CFRelease(key)
+
+    def element_at(self, path):
+        """{"status", "element"} for a probe path (window index, then child indices)."""
+        listed = self.elements(self.app, "AXWindows")
+        if listed["elements"] is None or not path or path[0] >= len(listed["elements"]):
+            return {"status": listed["status"], "element": None, "failed_at": 0}
+        element = listed["elements"][path[0]]
+        for depth, index in enumerate(path[1:], start=1):
+            kids = self.elements(element, "AXChildren")
+            if kids["elements"] is None or index >= len(kids["elements"]):
+                return {"status": kids["status"], "element": None, "failed_at": depth}
+            element = kids["elements"][index]
+        return {"status": AX_SUCCESS, "element": element}
 
     def close(self):
         for ref in reversed(self._owned):

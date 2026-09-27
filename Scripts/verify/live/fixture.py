@@ -38,10 +38,16 @@ FIXTURES = {
     "locale_campaign_19": {
         "name": "locale_campaign_19", "path": CAMPAIGN, "pilot": "#1020",
         "track_count": 19, "names": CAMPAIGN_NAMES, "types": None, "mixer_strips": None,
+        # The track the positive control mutes, solos and arms: an instrument track the product
+        # set Mute on through its MCU rung on 2026-09-27 (ko), not track 0, the must-FAIL arm's.
+        "flag_track": 2,
     },
     "locale_campaign_mixer": {
         "name": "locale_campaign_mixer", "path": CAMPAIGN, "pilot": "#291",
         "track_count": 19, "names": CAMPAIGN_NAMES, "types": None, "mixer_strips": 21,
+        # Audio 1's strip: the only one with an input slot, and the one #291 sent to Bus 256
+        # (records 291e/<lproj>/target {"strip": 1} and 291e/<lproj>/send-after).
+        "input_strip": 1,
     },
 }
 
