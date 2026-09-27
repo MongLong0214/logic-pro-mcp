@@ -53,8 +53,8 @@ RUN CASES (`"run": {...}`)
     a temporary binary, "switches", drives every step, writes the evidence, attests it in process
     and judges it; the case requires its exit code and a substring of its output. `events` counts
     what the lifecycle was asked to do ({"switch": 0}); `start_env` requires every server start to
-    carry those variables; `recheck` then rechecks the written file from the command line. The
-    script:
+    carry those variables; `recheck` then rechecks the written file from the command line;
+    `"record": true` passes a records directory, as `run --record` does. The script:
         "answers": {"[<lproj>/]<row>/<as>": answer | [answer, ...]}   a list answers successive
                   reads in turn and repeats its last; an answer is {"value": v} (stored as its JSON
                   text), {"text": s}, {"unreadable": why} or {"timeout": true}. Unscripted steps
@@ -113,6 +113,7 @@ import copy
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -424,6 +425,9 @@ MUTANTS = [
              '                out.append(f"track {i} {word}")\n'),
      "new": ('            elif False:\n'
              '                out.append(f"track {i} {word}")\n')},
+    {"id": "record-without-attestation", "file": "runner.py",
+     "old": "        recorded = verify.record_attested(data, att, record_dir)\n",
+     "new": "        recorded = verify.record_attested(data, None, record_dir)\n"},
     {"id": "armed-false-when-unread", "file": "live/spec_probes.py",
      "old": '        raise Unreadable(f"track_armed: {why}")\n',
      "new": '        return {"track": index, "armed": False, "name": None}\n'},
@@ -818,11 +822,12 @@ def _run_fake(case: dict, where: dict):
     life = FakeLifecycle(run.get("script", {}), where, case["name"],
                          fixtures_build.READINGS[os.path.basename(path)])
     out = os.path.join(where["tmp"], f"{case['name']}.evidence.json")
+    records = os.path.join(where["tmp"], f"{case['name']}.records") if run.get("record") else None
     printed = io.StringIO()
     with contextlib.redirect_stdout(printed):
         try:
             code = runner.run_spec(spec, os.path.relpath(path, ROOT), SELFTEST_HEAD, run.get("locales"),
-                                   out, _life=life)
+                                   out, records, _life=life)
         except Exception as exc:  # a crash is a failed case, reported with its type
             code = f"crash {type(exc).__name__}: {exc}"
     text = printed.getvalue()
@@ -1116,6 +1121,40 @@ def check_attestation_check_sees_the_whole_repository(case: dict, where: dict):
     return None
 
 
+#: A head no repository has: a CLI run over it is refused at the build at the latest, so no case
+#: here can start a real build even when a mutant breaks the refusal before it.
+ABSENT_HEAD = "0123456789abcdef0123456789abcdef01234567"
+RUN_OPTIONS = {"-h", "--help", "--head", "--locales", "--out", "--record"}
+SEAM_VARIABLES = {"LPM_VERIFY_REPO", "LPM_VERIFY_ISSUE_BODIES"}
+
+
+def check_run_cli_has_no_life_seam(case: dict, where: dict):
+    """`verify.py run` reaches the live lifecycle and nothing else. Its options are exactly the
+    documented ones, so no flag can select another world; verify.py, runner.py and engine.py name
+    no environment variable but the two SEAMS verify.py documents, neither of which picks a
+    lifecycle; and the command line over the self-test's own spec is refused by
+    runner_live.LiveLifecycle, which alone says a self-test fixture is the self-test's to drive."""
+    import engine
+    import verify
+    run = next(a for a in verify.parser()._subparsers._group_actions[0].choices.items()
+               if a[0] == "run")[1]
+    options = {s for action in run._actions for s in action.option_strings}
+    positionals = [action.dest for action in run._actions if not action.option_strings]
+    if options != RUN_OPTIONS or positionals != ["spec"]:
+        return f"run takes {sorted(options)} and {positionals}, not {sorted(RUN_OPTIONS)} and ['spec']"
+    named = set()
+    for name in ("verify.py", "runner.py", "engine.py"):
+        with open(os.path.join(HERE, name), encoding="utf-8") as handle:
+            named |= set(re.findall(r"[\"']((?:LPM|LOGIC_PRO_MCP)_[A-Z0-9_]+)[\"']", handle.read()))
+    if named - SEAM_VARIABLES:
+        return f"the command line's modules name environment variables {sorted(named - SEAM_VARIABLES)}"
+    code, text = _verify(["run", os.path.join(FIXTURES, "spec-base.json"), "--head", ABSENT_HEAD,
+                          "--out", os.path.join(where["tmp"], "cli-run.json")])
+    if code != engine.EXIT_REFUSED or "only the self-test drives it" not in text:
+        return f"verify.py run over the self-test spec: exit {code}; {text.strip().splitlines()[-2:]}"
+    return None
+
+
 def check_life_seam_named_outside_selftest(case: dict, where: dict):
     """The runner's seams are refused outside their files: a scratch repository tracks a file that
     passes `_life=` to the runner, one that calls `_attest`, one that imports `_drive` to hand it a
@@ -1348,6 +1387,7 @@ def check_live_fixtures(case: dict, where: dict):
 
 
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
+          "run_cli_has_no_life_seam": check_run_cli_has_no_life_seam,
           "nan_not_written": check_nan_not_written,
           "closed_stdout_keeps_the_exit": check_closed_stdout_keeps_the_exit,
           "attestation_built_only_in_process": check_attestation_built_only_in_process,

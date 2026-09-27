@@ -4,7 +4,9 @@
     verify.py check-spec <spec>                  is this acceptance document admissible?
     verify.py recheck <evidence> [--spec <spec>] recompute every verdict from stored observations
     verify.py record <evidence> --out <dir>      refused (exit 2): a file cannot attest; see below
-    verify.py run ... / verify.py batch ...      P0b: the live lifecycle (stubs; exit 2)
+    verify.py run <spec> --head H --out F [--locales L] [--record DIR]
+                                                 build H, drive the spec in Logic, judge it
+    verify.py batch ...                          P0b: a stub (exit 2)
     verify.py self-test                          fixtures and engine mutants, offline
 
 EXIT CODES
@@ -32,9 +34,14 @@ script that calls `engine.judge` with an attestation it built, is not evidence (
 
 `record` of a file is refused with exit 2, not 3. Exit 3 says the evidence could still become
 clean with more observations; no content of a file can make `record` write, so the command itself
-is refused, as `run` and `batch` are in P0a. The recording logic is `record_attested`, which takes
-an attestation in process; `run` will call it, and the self-test exercises it that way. In P0a,
-then, no command writes a record: the producer of records is `run`, in P0b-2.
+is refused. The recording logic is `record_attested`, which takes an attestation in process:
+`run --record DIR` calls it with the attestation of the run that produced the bytes, and that is
+the one command that writes records. The self-test exercises it the same way.
+
+`run` always drives the live world: it calls `runner.run_spec` without a lifecycle, so the runner
+builds `runner_live.LiveLifecycle`. No flag and no environment variable selects another one; the
+self-test's fake is reached only by passing `_life=` in process, which the self-test refuses in
+every tracked file but its own.
 
 This file does I/O and printing only. Every verdict comes from `engine.py`.
 
@@ -48,6 +55,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -329,13 +337,39 @@ def record_attested(data: bytes, attestation, out: str) -> int:
 
 
 # ---------------------------------------------------------------------------------------------
+# run
+# ---------------------------------------------------------------------------------------------
+
+HEAD_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def cmd_run(args) -> int:
+    """Build --head, drive the spec in Logic in its locales, write the evidence to --out, judge it
+    with this process's attestation, and record it under --record. Refusals (exit 2) come before
+    the build and the live lock: the head, the spec, the locales, the fixture (runner._drive)."""
+    import runner
+    if not HEAD_RE.match(args.head):
+        print(f"REFUSED --head {args.head!r}: not a full 40-hex commit")
+        print("run: refused before anything was built or driven (exit 2)")
+        return engine.EXIT_REFUSED
+    try:
+        spec = E.load(args.spec)
+    except (OSError, ValueError) as exc:
+        print(f"REFUSED {args.spec}: {exc}")
+        print("run: refused before anything was built or driven (exit 2)")
+        return engine.EXIT_REFUSED
+    locales = args.locales.split(",") if args.locales else None
+    spec_path = os.path.relpath(os.path.abspath(args.spec), repo())
+    return runner.run_spec(spec, spec_path, args.head, locales, args.out, args.record)
+
+
+# ---------------------------------------------------------------------------------------------
 # P0b stubs
 # ---------------------------------------------------------------------------------------------
 
 def cmd_p0b(args) -> int:
-    print(f"verify.py {args.command}: P0b. The live lifecycle (build from a clean detached checkout, "
-          f"locale switch, fixture reset, probes) is the next ticket; see Scripts/verify/runner.py "
-          f"for the interfaces it implements. Nothing was run. (exit 2)")
+    print(f"verify.py {args.command}: P0b, not wired yet; `verify.py run` drives one spec. "
+          f"Nothing was run. (exit 2)")
     return engine.EXIT_REFUSED
 
 
@@ -359,12 +393,14 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("evidence")
     p.add_argument("--out", required=True, help="the records directory, e.g. docs/observations")
     p.set_defaults(func=cmd_record)
-    p = sub.add_parser("run", help="P0b: run one spec's rows against a head, in its locales")
+    p = sub.add_parser("run", help="build a head, drive one spec's rows in Logic in its locales, judge them")
     p.add_argument("spec")
     p.add_argument("--head", required=True, help="the full 40-hex commit to build and run")
     p.add_argument("--locales", help="comma-separated subset; default: the spec's locales")
     p.add_argument("--out", required=True, help="where to write the evidence document")
-    p.set_defaults(func=cmd_p0b)
+    p.add_argument("--record", help="the records directory, e.g. docs/observations: publish the "
+                                    "evidence under its sha256 and one record per measured locale")
+    p.set_defaults(func=cmd_run)
     p = sub.add_parser("batch", help="P0b: switch each locale once and run every queued head's rows")
     p.add_argument("--queue", default="docs/acceptance/QUEUE.json")
     p.add_argument("--out-dir", required=True)
