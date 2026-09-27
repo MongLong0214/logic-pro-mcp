@@ -274,6 +274,32 @@ private func unresolvedRolePolicy(projectRef: String? = nil) throws -> Audit.Int
     ))))
 }
 
+/// `unresolvedRolePolicy` with a third unaccepted member `z` between them, whose `trk_9` no
+/// capture here issues: a question offers `b` and `c` only, in that order.
+private func unresolvedRolePolicyWithAnUnissuedMember() throws -> Audit.IntentPolicy {
+    try #require(accepted(Audit.parseIntentPolicy(policyObject(
+        targets: [targetEntry("b", "trk_1"), targetEntry("z", "trk_9"), targetEntry("c", "trk_2")],
+        roles: [roleEntry("kick", members: [
+            memberEntry("b", accepted: false),
+            memberEntry("z", accepted: false),
+            memberEntry("c", accepted: false),
+        ])],
+        outputs: [roleOutput("kick", bus: 3)]
+    ))))
+}
+
+/// The question a `kick` role on bus 3 asks when its issued members are `b` and `c`.
+private let kickQuestionOfferingBAndC = Audit.IntentQuestion(
+    id: "role.kick",
+    role: "kick",
+    rule: "main_output_assignment",
+    expected: .expected(.bus(3)),
+    candidates: [
+        Audit.IntentCandidate(handle: "b", trackRef: "trk_1"),
+        Audit.IntentCandidate(handle: "c", trackRef: "trk_2"),
+    ]
+)
+
 /// A case for one assessment gate: its token, the capture and graph that hit it alone, the policy's
 /// `project_ref`, and the status it forces.
 private typealias GateCase = (token: String, capture: Observation.Capture, graph: RoutingGraph, projectRef: String?, status: Audit.IntentStatus)
@@ -1096,28 +1122,55 @@ struct Issue966IntentAssessmentTests {
         ])
     }
 
-    // `partial` is not `unstable`, but a direct target is unverified while either domain is short of
-    // complete, so a role asks nothing there either. `publish` leaves both partial on every real
-    // read, so the last case, a fresh capture through `routingGraph(capture:)`, asks nothing until
-    // #291 publishes them complete. Mutation: let only an `unstable` domain stop the role.
-    @Test func anUnresolvedRoleIsUnverifiedWhileEitherDomainIsIncomplete() throws {
+    // A direct target's verdict is about routing, so it is unverified while either domain is short
+    // of complete. A role's question asks which captured track fills the role, which a `partial`
+    // domain does not put in doubt, so the role asks there, offering only the members the capture
+    // issued. An `unstable` domain means the capture moved under its own read, and there the role
+    // stops as a direct target does. A `main_output` that is `unstable` publishes no edge of its own,
+    // so that graph has none. Mutations: let a `partial` domain stop the role; let an `unstable` one
+    // not stop it.
+    @Test func aRoleAsksWhileADomainIsPartialButNotWhileOneIsUnstable() throws {
         let partialMainOutput = RoutingDomainCoverage(state: .partial, reasons: [RoutingGraphPublication.busIdentityReason])
         let partialAssociation = RoutingDomainCoverage(state: .partial, reasons: [RoutingGraphPublication.positionalAssociationReason])
-        let cases: [(label: String, graph: RoutingGraph, reasons: [Audit.IntentReason], directReasons: [Audit.IntentReason])] = [
+        let unstable = RoutingDomainCoverage(state: .unstable, reasons: [RoutingGraphPublication.projectMovedReason])
+        let asks: [(label: String, graph: RoutingGraph, directReasons: [Audit.IntentReason])] = [
             ("main_output partial",
              graph(coverage: coverage(mainOutput: partialMainOutput), nodes: wrongGraph.nodes, edges: wrongGraph.edges),
-             [.mainOutputCoverageIncomplete], [.mainOutputCoverageIncomplete]),
+             [.mainOutputCoverageIncomplete]),
             ("strip_track_association partial",
              graph(coverage: coverage(association: partialAssociation), nodes: wrongGraph.nodes, edges: wrongGraph.edges),
-             [.stripTrackAssociationIncomplete], [.stripTrackAssociationIncomplete]),
-            ("routingGraph(capture:) of a fresh capture",
-             Observation.routingGraph(capture: threeTrackCapture),
-             [.mainOutputCoverageIncomplete, .stripTrackAssociationIncomplete],
-             [.mainOutputCoverageIncomplete, .stripTrackAssociationIncomplete, .trackNotInGraph]),
+             [.stripTrackAssociationIncomplete]),
+            ("both partial",
+             graph(coverage: coverage(mainOutput: partialMainOutput, association: partialAssociation), nodes: wrongGraph.nodes, edges: wrongGraph.edges),
+             [.mainOutputCoverageIncomplete, .stripTrackAssociationIncomplete]),
         ]
-        for (label, routing, reasons, directReasons) in cases {
+        for (label, routing, directReasons) in asks {
             #expect(routing.isConsistent, "\(label)")
-            let assessment = Audit.assessIntent(policy: try unresolvedRolePolicy(), capture: threeTrackCapture, graph: routing)
+            let assessment = Audit.assessIntent(policy: try unresolvedRolePolicyWithAnUnissuedMember(), capture: threeTrackCapture, graph: routing)
+            let finding = try onlyFinding(assessment)
+            #expect(finding.status == .needsInput, "\(label)")
+            #expect(finding.reasons == [.roleHasNoAcceptedMember], "\(label)")
+            #expect(assessment.questions == [kickQuestionOfferingBAndC], "\(label)")
+
+            let direct = try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: threeTrackCapture, graph: routing))
+            #expect(direct.status == .unverified, "\(label)")
+            #expect(direct.reasons == directReasons, "\(label)")
+        }
+
+        let stops: [(label: String, graph: RoutingGraph, reasons: [Audit.IntentReason], directReasons: [Audit.IntentReason])] = [
+            ("main_output unstable",
+             graph(coverage: coverage(mainOutput: unstable), nodes: wrongGraph.nodes, edges: []),
+             [.mainOutputCoverageIncomplete], [.mainOutputCoverageIncomplete, .outputEdgeAmbiguous]),
+            ("strip_track_association unstable",
+             graph(coverage: coverage(association: unstable), nodes: wrongGraph.nodes, edges: wrongGraph.edges),
+             [.stripTrackAssociationIncomplete], [.stripTrackAssociationIncomplete]),
+            ("strip_track_association unstable, main_output partial",
+             graph(coverage: coverage(mainOutput: partialMainOutput, association: unstable), nodes: wrongGraph.nodes, edges: wrongGraph.edges),
+             [.stripTrackAssociationIncomplete], [.mainOutputCoverageIncomplete, .stripTrackAssociationIncomplete]),
+        ]
+        for (label, routing, reasons, directReasons) in stops {
+            #expect(routing.isConsistent, "\(label)")
+            let assessment = Audit.assessIntent(policy: try unresolvedRolePolicyWithAnUnissuedMember(), capture: threeTrackCapture, graph: routing)
             let finding = try onlyFinding(assessment)
             #expect(finding.status == .unverified, "\(label)")
             #expect(finding.reasons == reasons, "\(label)")
@@ -1127,6 +1180,31 @@ struct Issue966IntentAssessmentTests {
             #expect(direct.status == .unverified, "\(label)")
             #expect(direct.reasons == directReasons, "\(label)")
         }
+    }
+
+    // REMEDIATION-01's witness: a fresh capture published through `routingGraph(capture:)`, which
+    // leaves both domains the rule reads `partial` as every real read does today. The direct target
+    // stops at the coverage; the role asks, and offers only the members the capture issued.
+    // Mutation: let a `partial` domain stop the role.
+    @Test func aRoleAsksOnAFreshCaptureWhosePublishedDomainsArePartial() throws {
+        let routing = Observation.routingGraph(capture: threeTrackCapture)
+        #expect(routing.isConsistent)
+        #expect(routing.projectReference == songReference)
+        #expect(routing.coverage.mainOutput.state == .partial)
+        #expect(routing.coverage.stripTrackAssociation.state == .partial)
+
+        let assessment = Audit.assessIntent(policy: try unresolvedRolePolicyWithAnUnissuedMember(), capture: threeTrackCapture, graph: routing)
+        let finding = try onlyFinding(assessment)
+        #expect(finding.id == "main_output.role.kick")
+        #expect(finding.status == .needsInput)
+        #expect(finding.reasons == [.roleHasNoAcceptedMember])
+        #expect(finding.coverage.mainOutput == routing.coverage.mainOutput)
+        #expect(assessment.questions == [kickQuestionOfferingBAndC])
+        #expect(!assessment.changeRequired)
+
+        let direct = try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: threeTrackCapture, graph: routing))
+        #expect(direct.status == .unverified)
+        #expect(direct.reasons == [.mainOutputCoverageIncomplete, .stripTrackAssociationIncomplete, .trackNotInGraph])
     }
 
     // A graph stamped with another registry epoch cannot be read against this capture, for a direct

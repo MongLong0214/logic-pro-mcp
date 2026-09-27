@@ -886,17 +886,20 @@ extension ProjectSessionAudit {
                 findings.append(roleFinding(statuses.count == 1 ? dropped[0].status : .unverified, reasons: reasons))
                 continue
             }
-            // The rest of what a direct target reads before it looks for its node: the graph's
-            // epoch, then both domains complete. A capture whose project reference went stale is
-            // published with every domain `unstable` and stops here, and so does every real read
-            // while #291 leaves both domains partial.
+            // The graph's epoch, read as a direct target reads it. The domains are read more
+            // narrowly: a direct target's verdict is about routing, so it needs both domains
+            // complete, but the question asks which captured track fills the role, and a `partial`
+            // domain, which every real read publishes while #291 is open, does not put that in
+            // doubt. An `unstable` one does: `publish` marks every domain `unstable` when the
+            // capture moved under its own read, a stale project reference among them, so the role
+            // stops there and asks nothing.
             if let reason = graphEpochMismatch(graph, capture: capture) {
                 findings.append(roleFinding(.unverified, reasons: [reason]))
                 continue
             }
-            let coverageReasons = domainCoverageReasons(of: graph)
-            if !coverageReasons.isEmpty {
-                findings.append(roleFinding(.unverified, reasons: coverageReasons))
+            let unstableReasons = domainCoverageReasons(of: graph, where: { $0 == .unstable })
+            if !unstableReasons.isEmpty {
+                findings.append(roleFinding(.unverified, reasons: unstableReasons))
                 continue
             }
             findings.append(roleFinding(.needsInput, reasons: [.roleHasNoAcceptedMember]))
@@ -994,15 +997,20 @@ extension ProjectSessionAudit {
         graph.projectEpoch == capture.targetSnapshot?.projectEpoch ? nil : .graphEpochMismatch
     }
 
-    /// The token for each of the two domains the rule reads that is not `complete`. The state
-    /// decides, never a reason string. A capture whose project reference went stale is published
-    /// with every domain `unstable`, so this is where it stops.
-    private static func domainCoverageReasons(of graph: RoutingGraph) -> [IntentReason] {
+    /// The token for each of the two domains the rule reads whose state `stops` the finding: by
+    /// default any state but `complete`, which is what a direct target's routing verdict needs, and
+    /// only `unstable` for a role's question. The state decides, never a reason string. A capture
+    /// whose project reference went stale is published with every domain `unstable`, so both stop
+    /// here.
+    private static func domainCoverageReasons(
+        of graph: RoutingGraph,
+        where stops: (RoutingCoverageState) -> Bool = { $0 != .complete }
+    ) -> [IntentReason] {
         var reasons: [IntentReason] = []
-        if graph.coverage.mainOutput.state != .complete {
+        if stops(graph.coverage.mainOutput.state) {
             reasons.append(.mainOutputCoverageIncomplete)
         }
-        if graph.coverage.stripTrackAssociation.state != .complete {
+        if stops(graph.coverage.stripTrackAssociation.state) {
             reasons.append(.stripTrackAssociationIncomplete)
         }
         return reasons
