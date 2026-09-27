@@ -1,0 +1,21 @@
+Limit: nan-in-evidence-refused already exited 2 at f2c04444, because raw_bytes is shape-checked as an integer; its red there is the refusal reason, not the exit. The reading-level red is nan-in-raw-is-unreadable, where the NaN was read as a float.
+Provenance: inherited 5448579ea8a163ca642613f65f591d9aaf6d4d80
+
+Limit: a null inside a constant operand is UNREADABLE too (not_in ["idle", null], ne {"armed": null}), although it is the author's constant and not an absence. The rule reads both sides alike, as f2c04444 already did for a top-level ne null.
+Limit: the W01 cases pin the reading they test (after.armed eq [null], after.mode in [{"state": "idle"}]), so the absence rule is the only check between the row and PASS. They isolate the rule and are not modelled on a Logic reading.
+Provenance: inherited 1200c8436719da2d5996a474ebb285c295f23723
+
+Limit: a restore check still needs no counterexample, so a restoring call that changes nothing passes these rules, as recorded on f2c04444.
+Provenance: inherited 1078610839de1a17f1e5346f83c17afce785bd9f
+
+Limit: a pin is any check against a constant, `ne "idle"` and `count_ge 1` included, so a weak pin still admits a `changed` check. The rule makes the row say what the reading became; it does not judge how precisely.
+Ruled-out: forbidding a second pre-operation reading as the witness of a `changed` check | the plan's D9 weighed it as narrower than a pin and easier to evade, and it would still not say what the reading became
+Provenance: inherited d2806d15e59ea658b07d66be95a9fa9110c1c96a
+
+Limit: is_null passes on one value, null, and count_eq 0 and subset [] each pass only on the empty list. Their passing sets are finite and explicit, but they are not pins here; the pin set is eq, in and matches_canon, and these are reported, not added.
+Limit: `in` pins whatever its list holds, so a long list still admits a reading noise can land in. The rule makes the row name the values the reading may become; it does not judge how many.
+Provenance: inherited 9c1ff078c625d6cd7dd6653fe79f1a300a7cbdda
+
+Limit: overflow-in-evidence-refused and its negative already exit 2 with ad8f5b3b's engine, because raw_bytes is shape-checked as an integer; their red there is the refusal reason, as recorded for nan-in-evidence-refused. The exit-level reds are the raw cases (exit 1) and overflow-in-spec-refused (exit 0).
+Limit: a path selector value (`post.data[id=1e999]`) is parsed by predicates._selector_value with Python's json, not by the shared loader, so it is still read as infinity, and `NaN` as nan. No reading can hold either now, so such a selector matches nothing and is UNREADABLE, never PASS.
+Provenance: inherited 0847440f966c74140adb05880c5b1c1e7f6c3cb0
