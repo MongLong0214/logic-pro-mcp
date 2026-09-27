@@ -958,6 +958,101 @@ struct Issue966IntentAssessmentTests {
         ])
     }
 
+    // A role's candidates carry the policy's references, so each is looked up in the capture the way
+    // a direct target is. The reviewer's trk_9 is not in the three-track capture: alone, the role gets
+    // the direct target's status and token and nothing is asked; beside an issued track, only the
+    // issued one is offered. Mutation: offer every unaccepted member without looking it up.
+    @Test func aRoleOffersOnlyCandidatesTheCaptureIssued() throws {
+        let absentOnly = try #require(accepted(Audit.parseIntentPolicy(policyObject(
+            targets: [targetEntry("ghost", "trk_9")],
+            roles: [roleEntry("kick", members: [memberEntry("ghost", accepted: false)])],
+            outputs: [roleOutput("kick", bus: 3)]
+        ))))
+        let absent = Audit.assessIntent(policy: absentOnly, capture: threeTrackCapture, graph: correctGraph)
+        let absentFinding = try onlyFinding(absent)
+        #expect(absentFinding.id == "main_output.role.kick")
+        #expect(absentFinding.status == .outsideScope)
+        #expect(absentFinding.reasons == [.targetNotInSnapshot])
+        #expect(absentFinding.target == Audit.IntentTargetEvidence(handle: nil, role: "kick", trackRef: nil, trackIndex: nil))
+        #expect(absentFinding.observed == nil)
+        #expect(absent.questions.isEmpty)
+        #expect(!absent.changeRequired)
+
+        // trk_9 named as a direct target, against the same capture and graph.
+        let ghostTarget = try #require(accepted(Audit.parseIntentPolicy(policyObject(
+            targets: [targetEntry("ghost", "trk_9")],
+            outputs: [targetOutput("ghost", bus: 3)]
+        ))))
+        let direct = try onlyFinding(Audit.assessIntent(policy: ghostTarget, capture: threeTrackCapture, graph: correctGraph))
+        #expect(direct.status == .outsideScope)
+        #expect(direct.reasons == [.targetNotInSnapshot])
+
+        let mixedRole = try #require(accepted(Audit.parseIntentPolicy(policyObject(
+            targets: [targetEntry("ghost", "trk_9"), targetEntry("b", "trk_1")],
+            roles: [roleEntry("kick", members: [memberEntry("ghost", accepted: false), memberEntry("b", accepted: false)])],
+            outputs: [roleOutput("kick", bus: 3)]
+        ))))
+        let mixed = Audit.assessIntent(policy: mixedRole, capture: threeTrackCapture, graph: correctGraph)
+        let mixedFinding = try onlyFinding(mixed)
+        #expect(mixedFinding.status == .needsInput)
+        #expect(mixedFinding.reasons == [.roleHasNoAcceptedMember])
+        #expect(mixed.questions == [Audit.IntentQuestion(
+            id: "role.kick",
+            role: "kick",
+            rule: "main_output_assignment",
+            expected: .expected(.bus(3)),
+            candidates: [Audit.IntentCandidate(handle: "b", trackRef: "trk_1")]
+        )])
+    }
+
+    // A reference the capture carries for two rows names no one track, so a direct target with it is
+    // unverified, and as a candidate it is dropped too. When every candidate is dropped, the role is
+    // `outside_scope` only if every dropped one was. Mutation: drop only the candidates the capture
+    // did not issue at all (killed by the first two cases); take the first dropped candidate's status
+    // for the role (killed by the third).
+    @Test func aRoleDropsACandidateTheCaptureCarriesForTwoRows() throws {
+        let doubled = IssuedTrackReferences(
+            byRow: [trackRef(0), trackRef(0), trackRef(2)],
+            byTrackIndex: [0: trackRef(0), 1: trackRef(0), 2: trackRef(2)],
+            ambiguousTrackIndices: []
+        )
+        let capture = makeCapture(tracks: threeTracks, issued: doubled)
+        func rolePolicy(_ members: [(handle: String, ref: String)]) throws -> Audit.IntentPolicy {
+            try #require(accepted(Audit.parseIntentPolicy(policyObject(
+                targets: members.map { targetEntry($0.handle, $0.ref) },
+                roles: [roleEntry("kick", members: members.map { memberEntry($0.handle, accepted: false) })],
+                outputs: [roleOutput("kick", bus: 3)]
+            ))))
+        }
+
+        let beside = Audit.assessIntent(
+            policy: try rolePolicy([("a", "trk_0"), ("c", "trk_2")]),
+            capture: capture,
+            graph: correctGraph
+        )
+        #expect(try onlyFinding(beside).status == .needsInput)
+        #expect(beside.questions.first?.candidates == [Audit.IntentCandidate(handle: "c", trackRef: "trk_2")])
+
+        let alone = Audit.assessIntent(policy: try rolePolicy([("a", "trk_0")]), capture: capture, graph: correctGraph)
+        let aloneFinding = try onlyFinding(alone)
+        #expect(aloneFinding.status == .unverified)
+        #expect(aloneFinding.reasons == [.targetAmbiguousInSnapshot])
+        #expect(alone.questions.isEmpty)
+        let direct = try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: capture, graph: correctGraph))
+        #expect(direct.status == .unverified)
+        #expect(direct.reasons == [.targetAmbiguousInSnapshot])
+
+        let neither = Audit.assessIntent(
+            policy: try rolePolicy([("ghost", "trk_9"), ("a", "trk_0")]),
+            capture: capture,
+            graph: correctGraph
+        )
+        let neitherFinding = try onlyFinding(neither)
+        #expect(neitherFinding.status == .unverified)
+        #expect(neitherFinding.reasons == [.targetNotInSnapshot, .targetAmbiguousInSnapshot])
+        #expect(neither.questions.isEmpty)
+    }
+
     // Mutation: collapse the references-unavailable and target-not-in-snapshot branches into one.
     @Test func targetOutsideTheSnapshotIsOutsideScope() throws {
         let policy = try #require(accepted(Audit.parseIntentPolicy(policyObject(

@@ -310,8 +310,9 @@ extension ProjectSessionAudit {
         }
     }
 
-    /// Candidates are exactly the role's unaccepted members as the client proposed them. No track
-    /// name, type or label is consulted to add or remove one.
+    /// Candidates are the role's unaccepted members as the client proposed them, less any whose
+    /// reference the capture did not issue for exactly one row. No track name, type or label is
+    /// consulted to add or remove one.
     struct IntentQuestion: Encodable, Equatable, Sendable {
         let id: String
         let role: String
@@ -739,6 +740,13 @@ extension ProjectSessionAudit {
         case unreadable(IntentReason)
     }
 
+    /// The one captured row a reference names, or the status and token a target carrying it gets.
+    /// A direct target and each of a role's candidates both read `locate(_:in:)`.
+    private enum ReferenceLocation {
+        case located(trackIndex: Int)
+        case unlocated(IntentStatus, IntentReason)
+    }
+
     /// What the graph shows for one source, before intent is compared with it: where its main
     /// output goes, or why the graph does not say.
     private enum MainOutputObservation {
@@ -846,17 +854,39 @@ extension ProjectSessionAudit {
             // The candidates carry the policy's references. While the capture's own are off or
             // stale a question could name a track this capture does not have, so the role reads the
             // check a direct target reads, and nothing is asked.
-            if case .unreadable(let reason) = trackReferences(of: capture) {
+            let issued: IssuedTrackReferences
+            switch trackReferences(of: capture) {
+            case .unreadable(let reason):
                 findings.append(roleFinding(.unverified, reasons: [reason]))
+                continue
+            case .issued(let references):
+                issued = references
+            }
+            // A candidate is offered only where a direct target with its reference would be found:
+            // on exactly one captured row. The rest are dropped, and the order is the policy's. When
+            // every candidate is dropped, the role carries their tokens, and it is `outside_scope`
+            // only when every one of them is.
+            var candidates: [IntentCandidate] = []
+            var dropped: [(status: IntentStatus, reason: IntentReason)] = []
+            for member in role.members where !member.accepted {
+                guard let target = targetsByHandle[member.handle] else { continue }
+                switch locate(target.trackRef, in: issued) {
+                case .located:
+                    candidates.append(IntentCandidate(handle: member.handle, trackRef: target.trackRef.rawValue))
+                case .unlocated(let status, let reason):
+                    dropped.append((status, reason))
+                }
+            }
+            if candidates.isEmpty, !dropped.isEmpty {
+                let statuses = Set(dropped.map(\.status))
+                var reasons: [IntentReason] = []
+                for (_, reason) in dropped where !reasons.contains(reason) {
+                    reasons.append(reason)
+                }
+                findings.append(roleFinding(statuses.count == 1 ? dropped[0].status : .unverified, reasons: reasons))
                 continue
             }
             findings.append(roleFinding(.needsInput, reasons: [.roleHasNoAcceptedMember]))
-            let candidates = role.members
-                .filter { !$0.accepted }
-                .compactMap { member -> IntentCandidate? in
-                    guard let target = targetsByHandle[member.handle] else { return nil }
-                    return IntentCandidate(handle: member.handle, trackRef: target.trackRef.rawValue)
-                }
             questions.append(IntentQuestion(
                 id: "role.\(name)",
                 role: name,
@@ -932,6 +962,16 @@ extension ProjectSessionAudit {
         return .issued(issued)
     }
 
+    /// Every captured row is searched, so row order never picks one: no row is `outside_scope`
+    /// with `target_not_in_snapshot`, and more than one is `unverified` with
+    /// `target_ambiguous_in_snapshot`.
+    private static func locate(_ trackRef: TargetReference, in issued: IssuedTrackReferences) -> ReferenceLocation {
+        let trackIndices = issued.byTrackIndex.filter { $0.value == trackRef }.keys.sorted()
+        guard let trackIndex = trackIndices.first else { return .unlocated(.outsideScope, .targetNotInSnapshot) }
+        guard trackIndices.count == 1 else { return .unlocated(.unverified, .targetAmbiguousInSnapshot) }
+        return .located(trackIndex: trackIndex)
+    }
+
     /// The one P1 rule, in a fixed order. `compliant` and `violation` need a capture and graph that
     /// pass every gate, a target the capture issued, both the `main_output` and the
     /// `strip_track_association` domains complete, and a source whose output the graph classifies
@@ -986,12 +1026,12 @@ extension ProjectSessionAudit {
         case .issued(let references):
             issued = references
         }
-        let trackIndices = issued.byTrackIndex.filter { $0.value == trackRef }.keys.sorted()
-        guard let trackIndex = trackIndices.first else {
-            return finding(.outsideScope, nil, trackIndex: nil, reasons: [.targetNotInSnapshot])
-        }
-        guard trackIndices.count == 1 else {
-            return finding(.unverified, nil, trackIndex: nil, reasons: [.targetAmbiguousInSnapshot])
+        let trackIndex: Int
+        switch locate(trackRef, in: issued) {
+        case .unlocated(let status, let reason):
+            return finding(status, nil, trackIndex: nil, reasons: [reason])
+        case .located(let index):
+            trackIndex = index
         }
         // The graph carries the epoch of the registry snapshot the capture issued under.
         guard graph.projectEpoch == capture.targetSnapshot?.projectEpoch else {

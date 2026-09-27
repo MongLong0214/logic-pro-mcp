@@ -75,7 +75,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   target outside the snapshot is `outside_scope`. A role with no accepted member is a
   `needs_input` question only when the capture, the graph and the policy's project pass those
   checks and the capture's track references are on and current, the check a direct target reads;
-  otherwise its finding carries the failing check's status and token and nothing is asked. The
+  otherwise its finding carries the failing check's status and token and nothing is asked. Its
+  candidates are the proposed members whose references the capture issued for exactly one row, in
+  the policy's order. When none is, the role carries the tokens a direct target with those
+  references gets (`target_not_in_snapshot`, `target_ambiguous_in_snapshot`), it is
+  `outside_scope` only when every candidate is outside the snapshot, and nothing is asked. The
   source is found by reference, never by name; a node id, destination bus number or captured
   reference that more than one node or row carries is `unverified` rather than decided by order;
   and send and input edges, levels, enabled flags and automation are never read. Limits:
