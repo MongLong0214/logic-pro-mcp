@@ -316,6 +316,76 @@ class TheLiteralIsClassifiedByItsRuntimeBytes(unittest.TestCase):
         self.assertIn("' MIDI '", problems[0])
 
 
+class AConstantIsClassifiedByItsLiteral(unittest.TestCase):
+    """Review of #1034 (after R1-04). The scanner saw only literals written inline, so a Logic label
+    moved into a constant -- `static let` or a local `let` -- and compared with an AX value passed.
+    Measured: `Mixer` planted that way through `==`, `contains` and `hasPrefix` gave 0 literals and
+    exit 0 while the same comparison inline was refused. A comparison operand that names a
+    literal-initialized String constant is now classified by that literal's bytes.
+
+    Mutation killed: constant resolution disabled (`resolve_constant` returning `[]`) turns the
+    three planted cases green, and this class red."""
+
+    _READ = 'let value = AXHelpers.getValue(element) ?? ""\n'
+
+    def _scan(self, source):
+        return TheGuardActuallyRefusesSomething._scan(self, source, None)
+
+    PLANTED = {
+        "static let, ==": 'enum Planted { static let mixerLabel = "Mixer" }\n'
+                          'if value == Planted.mixerLabel { }\n',
+        "local let, contains": 'let localLabel = "Mixer"\nif value.contains(localLabel) { }\n',
+        "static let, hasPrefix": 'enum Planted { static let mixerLabel = "Mixer" }\n'
+                                 'if value.hasPrefix(Planted.mixerLabel) { }\n',
+    }
+
+    def test_a_label_in_a_constant_is_refused(self):
+        for shape, code in self.PLANTED.items():
+            with self.subTest(shape=shape):
+                problems = self._scan(self._READ + code)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn("'Mixer'", problems[0])
+                self.assertIn("TRANSLATES", problems[0])
+
+    def test_the_inline_control_stays_refused(self):
+        problems = self._scan(self._READ + 'if value == "Mixer" { }\n')
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("'Mixer'", problems[0])
+
+    #: The shape of `AccessibilityChannel.PostLeafCleanupSite`: the phrase is one constant, two
+    #: refusals are built from it, and the script interpolates one of them.
+    _EMITTED = ('struct Site {\n'
+                '    static let notObservedMarker = "cleanup was not observed"\n'
+                '    static let dialogRefusal = ": dialog " + notObservedMarker\n'
+                '    var appleScript: String { "return \\"X\\(Self.dialogRefusal)\\"" }\n'
+                '}\n')
+
+    def test_the_products_own_emitted_phrase_passes(self):
+        self.assertEqual(self._scan(self._READ + self._EMITTED
+                                    + 'if value.contains(Site.notObservedMarker) { }\n'), [])
+
+    def test_the_same_phrase_not_emitted_is_refused(self):
+        """The control for the rule above: no concatenation feeding an interpolation."""
+        source = (self._READ + 'struct Site { static let notObservedMarker = "cleanup was not observed" }\n'
+                  + 'if value.contains(Site.notObservedMarker) { }\n')
+        problems = self._scan(source)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("'cleanup was not observed'", problems[0])
+
+    def test_an_emitted_constant_holding_a_logic_label_is_still_apples(self):
+        """The emission rule is consulted after every Apple route."""
+        source = (self._READ + self._EMITTED.replace("cleanup was not observed", "Mixer")
+                  + 'if value.contains(Site.notObservedMarker) { }\n')
+        problems = self._scan(source)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("TRANSLATES", problems[0])
+
+    def test_an_instance_member_is_not_a_constant(self):
+        source = (self._READ + 'enum K { static let title = "Mixer" }\n'
+                  + 'if value == before.title { }\n')
+        self.assertEqual(self._scan(source), [])
+
+
 class TheEntryPointRefuses(unittest.TestCase):
     """The cases above call `check()`. A `main()` that returned 0 without ever calling it would
     pass every one of them, because the repository passes -- `Scripts/mutation-sweep-guard-tests.py`

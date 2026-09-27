@@ -54,13 +54,22 @@ corpus does not hold, or this product's own prose all passed unexamined. Each li
                      prefix, or a literal that itself carries a sentinel code and its delimiter
                      (`... MENU_PICK_FAILED: ...`) -- this product's own words, which Logic never
                      draws. Being a fragment of such a message elsewhere in the file is not
-                     enough (review of #1034 R1-04)
+                     enough (review of #1034 R1-04). Or a constant this product concatenates
+                     into another constant a string literal interpolates -- the phrase it
+                     writes into its own script or refusal -- asked only after every Apple route
   unknown            anything else -- FAILS, unless `docs/canon/AX-COMPARISON-WAIVERS.json` gives
                      it a reason. That file is the ONE exemption list; an entry nothing matches
                      fails too, so it only shrinks.
 
 `--classify` prints every literal with its class. Swift escapes are decoded first: `\\u{FF1A}` is
 the full-width colon, not eight ASCII characters.
+
+A literal is found where it is written inline, and -- since the review of #1034 -- where an operand
+NAMES a String constant whose initializer is one literal (`static let`, `let`, or a computed `var`
+returning one literal): a bare name declared in the same file, or `Type.name` / `Self.name` naming a
+static one. What is NOT followed: a value that reaches the comparison through a function parameter,
+an instance member, an interpolation or any other expression. Measured on this tree: 17 such
+operands, none of them classified by this guard.
 
 Exit: 0 = every AX comparison goes through a LabelSet or is declared · 1 = one does not
 """
@@ -188,6 +197,86 @@ def ax_backed_names(source: str) -> set:
     return {m.group(1) for m in _AX_READ.finditer(source)}
 
 
+#: A String constant whose initializer is ONE literal: `static let N = "…"`, `let N: String = "…"`
+#: at any scope, or a computed `var N: String { "…" }`. An interpolated literal is not one.
+_LITERAL = r'"((?:[^"\\\n]|\\.)*)"'
+_CONSTANT = re.compile(r'(?:\b(static|class)\s+)?\blet\s+(\w+)\s*(?::\s*String\s*)?=\s*' + _LITERAL
+                       + r'[ \t]*(?=\n|;|\}|$)')
+_COMPUTED_CONSTANT = re.compile(r'(?:\b(static|class)\s+)?\bvar\s+(\w+)\s*:\s*String\s*\{\s*'
+                                r'(?:return\s+)?' + _LITERAL + r'\s*\}')
+_NAME = r'((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)'
+_NOT_A_CONSTANT = {"nil", "true", "false", "self", "Self", "super"}
+
+#: The comparison shapes above, with a NAME where they have a literal. Review of #1034: a literal
+#: moved into a constant left every shape above, so `static let label = "Mixer"` compared with an
+#: AX value passed -- and moving a literal into a constant is what a refactor does. `(axvar, name)`.
+_NAME_COMPARISONS = [
+    (1, 2, re.compile(r'\b(' + _AX_VAR + r'\w*)\s*(?:==|!=)\s*' + _NAME + r'(?![\w.(\["])', re.I)),
+    (2, 1, re.compile(_NAME + r'\s*(?:==|!=)\s*(' + _AX_VAR + r'\w*)\b(?!\s*[.(])', re.I)),
+    (1, 2, re.compile(r'\b(' + _AX_VAR + r'\w*)(?:\?)?\.(?:contains|hasPrefix|hasSuffix'
+                      r'|localizedCaseInsensitiveContains|caseInsensitiveCompare'
+                      r'|localizedStandardContains|localizedCaseInsensitiveCompare)\(\s*' + _NAME
+                      + r'\s*\)', re.I)),
+    (1, 2, re.compile(r'\b(' + _AX_VAR + r'\w*)(?:\?)?\.(?:lowercased|uppercased|localizedLowercase'
+                      r'|localizedUppercase|trimmingCharacters)\([^)]*\)\s*(?:==|!=)\s*' + _NAME
+                      + r'(?![\w.(\["])', re.I)),
+]
+_NAME_COLLECTION = re.compile(r'\[\s*(' + _NAME[1:-1] + r'(?:\s*,\s*' + _NAME[1:-1]
+                              + r')*)\s*,?\s*\]\s*\.contains\(\s*(' + _AX_VAR + r'\w*)', re.I)
+
+
+def literal_constants(sources: dict) -> dict:
+    """`{name: [(literal, path, is_static)]}` over `{path: comment-stripped source}`."""
+    out = collections.defaultdict(list)
+    for path, source in sources.items():
+        for pattern in (_CONSTANT, _COMPUTED_CONSTANT):
+            for match in pattern.finditer(source):
+                if "\\(" not in match.group(3):
+                    out[match.group(2)].append((_unescape(match.group(3)), path,
+                                                bool(match.group(1))))
+    return out
+
+
+def resolve_constant(operand: str, path: str, constants: dict) -> list:
+    """The literal constants a comparison operand names: a bare name declared in the same file,
+    or `Type.name` / `Self.name` naming a static one. `value.name` is an instance member and names
+    none. Every declaration that fits is returned, so an ambiguous name is judged by all of them."""
+    if operand in _NOT_A_CONSTANT:
+        return []
+    parts = operand.split(".")
+    declared = constants.get(parts[-1]) or []
+    if len(parts) == 1:
+        return [d for d in declared if d[1] == path]
+    if parts[0] == "Self" or parts[0][:1].isupper():
+        return [d for d in declared if d[2]]
+    return []
+
+
+def emitting_constants(sources: dict, constants: dict) -> set:
+    """`{(name, path)}`: literal constants this product concatenates into another constant that a
+    string literal in the same file interpolates -- the phrase it WRITES into a script or a
+    refusal, like `PostLeafCleanupSite.notObservedMarker` in `": dialog " + notObservedMarker`,
+    interpolated as `\\(Self.dialogRefusal)`. Consulted only after every Apple route, so a Logic
+    label the product also embeds in a script is still classed as Apple's first."""
+    out = set()
+    for name, declarations in constants.items():
+        for _literal, path, _static in declarations:
+            source = sources[path]
+            ref = r'(?:(?:Self|[A-Z]\w*)\.)?' + re.escape(name) + r'\b'
+            built = re.compile(r'\blet\s+(\w+)\s*(?::\s*String\s*)?=\s*(?:' + _LITERAL + r'\s*\+\s*'
+                               + ref + r'|' + ref + r'\s*\+\s*' + _LITERAL + r')')
+            for match in built.finditer(source):
+                derived = match.group(1)
+                if re.search(r'\\\(\s*(?:(?:Self|[A-Z]\w*)\.)?' + re.escape(derived) + r'\s*\)',
+                             source):
+                    out.add((name, path))
+    return out
+
+
+#: Literals that reached an AX comparison ONLY through an emitting constant, from the last scan.
+_EMITTED_ONLY: set = set()
+
+
 def comparisons_outside_labelsets():
     """{literal: {paths}} for every AX comparison whose literal is not a LabelSet's.
 
@@ -206,14 +295,41 @@ def comparisons_outside_labelsets():
     def keep(literal: str) -> bool:
         return bool(canon.normalize(literal)) and literal not in inside
 
+    sources = {}
     for path in swift_sources():
         with open(path, "r", encoding="utf-8") as handle:
             source = handle.read()
         source = _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub(" ", source))
-        source = _LABELSET_BLOCK.sub(" ", source)
+        sources[path] = _LABELSET_BLOCK.sub(" ", source)
+    constants = literal_constants(sources)
+    emitters = emitting_constants(sources, constants)
+    via_emitter, direct = set(), set()
+
+    for path, source in sources.items():
         backed = ax_backed_names(source)
         if not backed:
             continue
+
+        def through_constant(variable: str, operand: str) -> None:
+            if variable.split(".")[0] not in backed:
+                return
+            for literal, declared_in, _static in resolve_constant(operand, path, constants):
+                if keep(literal):
+                    found[literal].add(os.path.relpath(path, REPO))
+                    name = operand.split(".")[-1]
+                    (via_emitter if (name, declared_in) in emitters else direct).add(literal)
+
+        for variable_group, operand_group, pattern in _NAME_COMPARISONS:
+            for match in pattern.finditer(source):
+                through_constant(match.group(variable_group), match.group(operand_group))
+        for match in _NAME_COLLECTION.finditer(source):
+            for operand in re.split(r"\s*,\s*", match.group(1).strip()):
+                through_constant(match.group(match.lastindex), operand)
+        for match in _SWITCH.finditer(source):
+            for case in re.finditer(r"case\s+([^:\n]+):", match.group(2)):
+                for operand in re.split(r"\s*,\s*", case.group(1).strip()):
+                    if re.fullmatch(_NAME, operand):
+                        through_constant(match.group(1), operand)
         for pattern in _COMPARISONS:
             for match in pattern.finditer(source):
                 variable = re.match(r"[\w.]+", match.group(0).lstrip('"')).group(0).split(".")[0]
@@ -222,6 +338,7 @@ def comparisons_outside_labelsets():
                 literal = _unescape(match.group(1))
                 if keep(literal):
                     found[literal].add(os.path.relpath(path, REPO))
+                    direct.add(literal)
         for match in _CASE_FOLDED.finditer(source):
             variable = re.match(r"[\w.]+", match.group(0)).group(0).split(".")[0]
             if variable not in backed:
@@ -234,6 +351,7 @@ def comparisons_outside_labelsets():
             # translate was dropped here, before anything could classify it.
             shipped = next((c for c in _folded_candidates(raw) if canon.is_translated(c)), None)
             found[shipped or raw].add(os.path.relpath(path, REPO))
+            direct.add(shipped or raw)
         for match in _COLLECTION_CONTAINS.finditer(source):
             if match.group(2).split(".")[0] not in backed:
                 continue
@@ -241,6 +359,7 @@ def comparisons_outside_labelsets():
                 literal = _unescape(raw)
                 if keep(literal):
                     found[literal].add(os.path.relpath(path, REPO))
+                    direct.add(literal)
         for match in _SWITCH.finditer(source):
             if match.group(1).split(".")[0] not in backed:
                 continue
@@ -249,6 +368,9 @@ def comparisons_outside_labelsets():
                     literal = _unescape(raw)
                     if keep(literal):
                         found[literal].add(os.path.relpath(path, REPO))
+                        direct.add(literal)
+    _EMITTED_ONLY.clear()
+    _EMITTED_ONLY.update(via_emitter - direct)
     return found
 
 
@@ -325,6 +447,10 @@ def classify(literal: str, paths=()) -> str:
     if _apple_ships(literal):
         return APPLE_VALUE
     if _OWN_CODE.search(literal):
+        return IDENTIFIER
+    if literal in _EMITTED_ONLY:
+        # It reached the comparison only through a constant this product writes into its own
+        # script or refusal (`emitting_constants`), and no Apple route above claimed it.
         return IDENTIFIER
     return UNKNOWN
 
