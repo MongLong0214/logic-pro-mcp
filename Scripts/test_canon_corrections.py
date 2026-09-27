@@ -435,6 +435,65 @@ class StringsDict(unittest.TestCase):
             self.assertIn("Bad.stringsdict", str(caught.exception))
 
 
+class AStringsDictEntryIsCompleteOrItFails(unittest.TestCase):
+    """Review of #1034 R1-02. Rows were yielded as each field was met and nothing was required, so
+    an entry holding only a `one` form extracted as that one row, with no error. Each test removes
+    one required field from a complete entry.
+
+    Mutation killed, per test: deleting the one requirement it names from `_stringsdict_entry`."""
+
+    def _refused(self, entry, *, needle):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = FakeLogic(tmp, {"Contents/Resources/en.lproj/Short.stringsdict":
+                                   plistlib.dumps({"tracks": entry})})
+            with self.assertRaises(canon.CanonDecodeError) as caught:
+                list(canon.extract_stringsdict(fake.app))
+        message = str(caught.exception)
+        self.assertIn("Short.stringsdict", message)
+        self.assertIn("'tracks'", message)
+        self.assertIn(needle, message)
+
+    @staticmethod
+    def _complete():
+        return {"NSStringLocalizedFormatKey": "%#@n@",
+                "n": {"NSStringFormatSpecTypeKey": "NSStringPluralRuleType",
+                      "NSStringFormatValueTypeKey": "d", "one": "%d track", "other": "%d tracks"}}
+
+    def test_the_reviewers_entry_with_only_a_one_form_fails(self):
+        self._refused({"NSStringLocalizedFormatKey": "%#@n@",
+                       "n": {"NSStringFormatSpecTypeKey": "NSStringPluralRuleType",
+                             "NSStringFormatValueTypeKey": "d", "one": "%d track"}},
+                      needle="no `other` form")
+
+    def test_no_format_key_fails(self):
+        entry = self._complete()
+        del entry["NSStringLocalizedFormatKey"]
+        self._refused(entry, needle="no NSStringLocalizedFormatKey")
+
+    def test_no_spec_type_key_fails(self):
+        entry = self._complete()
+        del entry["n"]["NSStringFormatSpecTypeKey"]
+        self._refused(entry, needle="no NSStringFormatSpecTypeKey")
+
+    def test_no_value_type_key_fails(self):
+        entry = self._complete()
+        del entry["n"]["NSStringFormatValueTypeKey"]
+        self._refused(entry, needle="no NSStringFormatValueTypeKey")
+
+    def test_no_other_form_fails(self):
+        entry = self._complete()
+        del entry["n"]["other"]
+        self._refused(entry, needle="no `other` form")
+
+    def test_the_complete_entry_extracts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = FakeLogic(tmp, {"Contents/Resources/en.lproj/Short.stringsdict":
+                                   plistlib.dumps({"tracks": self._complete()})})
+            rows = sorted(r[2:] for r in canon.extract_stringsdict(fake.app))
+        self.assertEqual(rows, [("tracks", "format", "%#@n@"), ("tracks/n", "one", "%d track"),
+                                ("tracks/n", "other", "%d tracks")])
+
+
 # ---------------------------------------------------------------------------------------------
 # plugin_names -- DefaultPluginMapping.plist, the one file that names Channel EQ
 # ---------------------------------------------------------------------------------------------

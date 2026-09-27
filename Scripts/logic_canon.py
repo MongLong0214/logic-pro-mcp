@@ -921,32 +921,56 @@ def extract_stringsdict(app: str):
             locale = _locale_of(path) or "-"
             unit = os.path.join(_rel(app, os.path.dirname(os.path.dirname(path))), name)
             for key, entry in load_stringsdict(path).items():
-                if not isinstance(entry, dict):
-                    raise CanonDecodeError(f"{path}: entry {key!r} is not a dict")
-                for variable, spec in entry.items():
-                    if variable == "NSStringLocalizedFormatKey":
-                        if not isinstance(spec, str):
-                            raise CanonDecodeError(f"{path}: {key!r} format is not a string")
-                        yield (unit, locale, key, "format", spec)
-                        continue
-                    if variable == "Comment" and isinstance(spec, str):
-                        continue
-                    if not isinstance(spec, dict) or not _STRINGSDICT_VARIABLE.fullmatch(variable):
-                        raise CanonDecodeError(
-                            f"{path}: {key!r} carries {variable!r} = {type(spec).__name__}, a "
-                            f"shape this extractor does not read. Stopping rather than skipping.")
-                    if spec.get("NSStringFormatSpecTypeKey") != "NSStringPluralRuleType":
-                        raise CanonDecodeError(
-                            f"{path}: {key!r}/{variable} is a "
-                            f"{spec.get('NSStringFormatSpecTypeKey')!r} rule, not a plural rule.")
-                    for category, text in spec.items():
-                        if category in ("NSStringFormatSpecTypeKey", "NSStringFormatValueTypeKey"):
-                            continue
-                        if category not in PLURAL_CATEGORIES or not isinstance(text, str):
-                            raise CanonDecodeError(
-                                f"{path}: {key!r}/{variable} has {category!r}, which is not a "
-                                f"plural category holding a string.")
-                        yield (unit, locale, f"{key}/{variable}", category, text)
+                yield from _stringsdict_entry(path, unit, locale, key, entry)
+
+
+def _stringsdict_entry(path: str, unit: str, locale: str, key: str, entry) -> list:
+    """One `.stringsdict` entry's rows, or a CanonDecodeError naming the file and key.
+
+    Complete or nothing (review of #1034 R1-02): the entry carries its
+    `NSStringLocalizedFormatKey`, and every plural rule in it carries
+    `NSStringFormatSpecTypeKey`, `NSStringFormatValueTypeKey` and an `other` form -- the one form
+    CLDR gives every language. Rows used to be yielded as each field was met and nothing was
+    required, so an entry holding only a `one` form extracted as that row, and the index pinned a
+    partial account of the file as the whole one. All 1,060 entries in Logic 12.3 (6674) are
+    complete; this is about the next bundle.
+    """
+    def refuse(what: str) -> CanonDecodeError:
+        return CanonDecodeError(f"{path}: entry {key!r} {what}")
+
+    if not isinstance(entry, dict):
+        raise refuse("is not a dict")
+    if "NSStringLocalizedFormatKey" not in entry:
+        raise refuse("has no NSStringLocalizedFormatKey, so its plural forms format nothing")
+    rows = []
+    for variable, spec in entry.items():
+        if variable == "NSStringLocalizedFormatKey":
+            if not isinstance(spec, str):
+                raise refuse("has a format that is not a string")
+            rows.append((unit, locale, key, "format", spec))
+            continue
+        if variable == "Comment" and isinstance(spec, str):
+            continue
+        if not isinstance(spec, dict) or not _STRINGSDICT_VARIABLE.fullmatch(variable):
+            raise refuse(f"carries {variable!r} = {type(spec).__name__}, a shape this extractor "
+                         f"does not read. Stopping rather than skipping.")
+        if "NSStringFormatSpecTypeKey" not in spec:
+            raise refuse(f"has a rule {variable!r} with no NSStringFormatSpecTypeKey")
+        if spec["NSStringFormatSpecTypeKey"] != "NSStringPluralRuleType":
+            raise refuse(f"has {variable!r} as a {spec['NSStringFormatSpecTypeKey']!r} rule, not "
+                         f"a plural rule")
+        if not isinstance(spec.get("NSStringFormatValueTypeKey"), str):
+            raise refuse(f"has a plural rule {variable!r} with no NSStringFormatValueTypeKey")
+        if "other" not in spec:
+            raise refuse(f"has a plural rule {variable!r} with no `other` form")
+        for category, text in spec.items():
+            if category in ("NSStringFormatSpecTypeKey", "NSStringFormatValueTypeKey"):
+                continue
+            if category not in PLURAL_CATEGORIES or not isinstance(text, str):
+                raise refuse(f"has {variable}/{category!r}, which is not a plural category "
+                             f"holding a string")
+            rows.append((unit, locale, f"{key}/{variable}", category, text))
+    return rows
 
 
 def extract_madsp(app: str):
