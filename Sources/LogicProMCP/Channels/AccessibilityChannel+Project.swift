@@ -258,19 +258,44 @@ extension AccessibilityChannel {
             || AXLocalePolicy.projectChooserEmptyProjectLabel.matches(value, mode: .exactStrict)
     }
 
-    static func isCreatedProjectWindowTitle(_ title: String?) -> Bool {
-        guard let title else { return false }
+    /// The one reading of Logic's arrange-window title: `<project> - <view>`, split at the view
+    /// suffix Logic appends in its own UI language. Nil when the title carries no suffix the
+    /// policy knows, or when nothing non-empty stands in front of it.
+    ///
+    /// The suffix is localized. Measured live: `Untitled 55 - Tracks` in English,
+    /// `Untitled 55 - 트랙` in Korean. Hard-coding the English form made project.new report
+    /// failure for a project it had just created on every non-English Logic (#516). Exactly ONE
+    /// trailing suffix is taken, and only the last one: a project a user named `Take 2 - Tracks`
+    /// is titled `Take 2 - Tracks - Tracks`, and its name is `Take 2 - Tracks`.
+    ///
+    /// `project.new` witnesses a created project by the presence of this split, and
+    /// `logic://project/info` names the project by its first half (#1022); both read the title
+    /// through here so they cannot disagree about what an arrange window is.
+    static func arrangeWindowTitleComponents(_ title: String) -> (projectName: String, viewSuffix: String)? {
         let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        // The suffix is localized. Measured live: `Untitled 55 - Tracks` in English,
-        // `Untitled 55 - 트랙` in Korean. Hard-coding the English form made project.new report
-        // failure for a project it had just created on every non-English Logic.
         for label in AXLocalePolicy.arrangeWindowTitleSuffix.labels {
             let suffix = " - " + label
             if normalized.hasSuffix(suffix), normalized.count > suffix.count {
-                return true
+                return (projectName: String(normalized.dropLast(suffix.count)), viewSuffix: label)
             }
         }
-        return false
+        return nil
+    }
+
+    /// The project's own name as the arrange window's title reads it (#1022).
+    ///
+    /// `logic://project/info` used to report the whole title, so `name` changed with Logic's UI
+    /// language — `lpm-locale-campaign - Tracks` in English, `… - Spuren` in German, `… - トラック`
+    /// in Japanese — and the `prj_` descriptor `ProjectReferenceIssuance` builds from it changed
+    /// with it. A title without a known suffix is returned as it reads, not guessed at: this
+    /// removes a suffix the policy knows, it does not invent a project name.
+    static func projectName(fromWindowTitle title: String) -> String {
+        arrangeWindowTitleComponents(title)?.projectName ?? title
+    }
+
+    static func isCreatedProjectWindowTitle(_ title: String?) -> Bool {
+        guard let title else { return false }
+        return arrangeWindowTitleComponents(title) != nil
     }
 
     static func createdProjectWindowSelectionIsUnambiguous(
@@ -1565,7 +1590,10 @@ extension AccessibilityChannel {
         }
         let title = AXHelpers.getTitle(window, runtime: runtime.ax) ?? "Unknown"
         var info = ProjectInfo()
-        info.name = title
+        // #1022: the title is `<project> - <view>` with the view in Logic's UI language, and this
+        // record is the name every consumer sees — the audit, the health snapshot, and the `prj_`
+        // descriptor. The project's own name is what they are asking for.
+        info.name = projectName(fromWindowTitle: title)
         info.lastUpdated = Date()
         return encodeResult(info)
     }

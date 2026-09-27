@@ -42,7 +42,7 @@ Every tool in `tools/list` advertises an `outputSchema`. Mixed command tools adv
 | `logic://tracks` | track list with source/freshness metadata |
 | `logic://mixer` | mixer strips, plugin slots, data-source labels |
 | `logic://markers` | marker list when Logic exposes it |
-| `logic://project/info` | project name/path, tempo, sample rate, track count |
+| `logic://project/info` | project name (the document's own name, without Logic's localized ` - Tracks` window suffix)/path, tempo, sample rate, track count |
 | `logic://project/audit` | read-only project/session audit |
 | `logic://project/cleanup-plan` | read-only cleanup plan |
 | `logic://midi/ports` | CoreMIDI ports visible to the process |

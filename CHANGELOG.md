@@ -17,6 +17,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - The track header's record-enable checkbox is found in all ten languages (#1020). `trackRecordEnableCheckbox` held the Korean and English strings only, so in the other eight an Accessibility arm refused and the MCU rung could not read the track before pressing. The set is now derived from Logic's plain `Record Enable` row.
 - `logic://tracks` no longer reports an armed track as disarmed on every dark frame of its blinking Rec LED (#1020). Logic blinks the Rec LED of an armed track on a Mackie Control surface, and the feedback parser wrote every frame into `isArmed`; with one track armed, `logic://tracks` read it armed and disarmed in turn at 100 ms. The parser no longer writes the arm; Mute and Solo LEDs still write their state.
 - `logic://tracks` reads `isArmed` from the record-enable checkbox the arm write verifies (#1020). The poller found the arm by a keyword whose Spanish member `Grabar` is not inside Logic's `Activar grabación`, so a Spanish track read disarmed while `set_arm` verified its arm. Both now find the control through `AXLogicProElements.trackArmControl`.
+- **`logic://project/info` reports the project's own name, not Logic's window title (#1022).**
+  `name` was the whole title of the arrange window, and Logic appends the view to that title in
+  its own UI language: the same project read `lpm-locale-campaign - Tracks` in English,
+  `… - Spuren` in German, `… - トラック` in Japanese, and the `prj_` descriptor built from the name
+  changed with the language. Exactly one trailing ` - <view>` is now removed, for the spellings
+  `AXLocalePolicy.arrangeWindowTitleSuffix` already carried, and only when a non-empty name stands
+  in front of it; a title with no known suffix is reported as it reads. `project.new`'s
+  created-window witness and this name now read the title through one rule
+  (`AccessibilityChannel.arrangeWindowTitleComponents`). Limits: a project whose own name ends in
+  ` - Tracks` is titled `… - Tracks - Tracks` and only the last suffix is taken; the live
+  harness (`Scripts/livekit/live_1022_project_name_has_no_view_suffix.py`) measures one language
+  per run and was run in all ten on one project whose own name has no ` - ` in it.
 - **`logic://mixer`'s `routing_graph` no longer depends on whether `logic://tracks` was read
   first (#291).** In a fresh server a mixer read published no track nodes at all until
   `logic://tracks` had been read, because only that resource issued `trk_` references; the same
