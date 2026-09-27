@@ -1,10 +1,10 @@
 {
   "name": "live_1020_mcu_set_arm_is_a_set",
-  "head": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+  "head": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
   "artifact": {
-    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
-    "sha256": "dba2811df1f3de4215b1cb94354b242d0d75458f8966c91f07f689a0f3d023fc",
-    "built_from": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+    "sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
+    "built_from": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
     "worktree_clean": true,
     "built_from_is_measured": false,
     "artifact_older_than_sources": false
@@ -217,7 +217,7 @@
         "observed": true,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_62DB1534-D33F-4CE2-900B-FC235B01C7DB",
+        "trace_id": "lpmcp_DA3022E6-274B-422A-9E04-10FA4BB9B185",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -737,7 +737,7 @@
         "observed": false,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_24929AE9-F978-45D7-81CD-2D9EA6487FEE",
+        "trace_id": "lpmcp_01677F15-E631-4003-A900-AD58B633A326",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -1028,7 +1028,7 @@
           "AbsZer Audio1 DelCls DelCls       Enregistrement active "
         ],
         "success": true,
-        "trace_id": "lpmcp_D70E7C7C-E938-4424-96A8-0637FF9572E5",
+        "trace_id": "lpmcp_0960E8A0-8208-49A1-98E8-867ADA881FA1",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,
@@ -1584,7 +1584,7 @@
           "AbsZer Audio1 DelCls DelCls       Enregistrement active "
         ],
         "success": true,
-        "trace_id": "lpmcp_B0269CFC-70DD-4E70-B338-D68D5A66146A",
+        "trace_id": "lpmcp_E8DF7229-C1F1-48E8-8BF6-44C53FCAD30E",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,

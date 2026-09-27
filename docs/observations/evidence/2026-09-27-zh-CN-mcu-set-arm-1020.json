@@ -1,10 +1,10 @@
 {
   "name": "live_1020_mcu_set_arm_is_a_set",
-  "head": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+  "head": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
   "artifact": {
-    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
-    "sha256": "dba2811df1f3de4215b1cb94354b242d0d75458f8966c91f07f689a0f3d023fc",
-    "built_from": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+    "sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
+    "built_from": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
     "worktree_clean": true,
     "built_from_is_measured": false,
     "artifact_older_than_sources": false
@@ -217,7 +217,7 @@
         "observed": true,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_6A1CDA24-4304-454A-87D9-1C8B4ECC787D",
+        "trace_id": "lpmcp_64A9C0FB-BB60-41C0-81D2-0438C18FEF78",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -737,7 +737,7 @@
         "observed": false,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_75B5E308-3390-41B5-9004-A8ACEC2FCE77",
+        "trace_id": "lpmcp_7AD02218-9EE2-4C50-B527-CE99B10713D2",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -1028,7 +1028,7 @@
           "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
         ],
         "success": true,
-        "trace_id": "lpmcp_92C038AC-DA77-4BFB-921D-5BE190F83E9E",
+        "trace_id": "lpmcp_82D9AB36-8707-4B5F-BC3B-58D318ED3823",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,
@@ -1584,7 +1584,7 @@
           "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
         ],
         "success": true,
-        "trace_id": "lpmcp_B793CDBE-150B-41AB-9C88-CE251F8DABF7",
+        "trace_id": "lpmcp_BE8427F1-3348-4EE4-B902-F7A0AEF2B99C",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,

@@ -38,10 +38,10 @@
     "evidence/2026-09-27-ko-KR-mcu-set-arm-1020.json",
     "evidence/2026-09-27-ko-KR-mcu-set-arm-1020-control.json"
   ],
-  "method": "The release binary at c7c0b7a791c1f010b67d4fa229e37b992bfce65e was started against the open project with LOGIC_PRO_MCP_ARM_KEYCODE set to a value that does not parse and nothing else talking to Logic. The harness armed the first disarmed track through logic_tracks arm, checked that the reply came from the MCU rung, refreshed the cache and read the track's isArmed from logic://tracks, read it 30 more times 100 ms apart without a refresh while Logic's Rec LED blinked, then disarmed it the same way. A second server started without the variable put the track back. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to. Then the harness armed and disarmed track 15, strip 7 of bank 1, reading the census armed set and track 7 after each, and tried to arm track 16, which sits in the last bank, reading the census, tracks 16 and 13 and the MCU upper row from logic://mcu/state before and after.",
+  "method": "The release binary at 4b036d9340b424759b5dc0caa7c85e87cdb7f7eb was started against the open project with LOGIC_PRO_MCP_ARM_KEYCODE set to a value that does not parse and nothing else talking to Logic. The harness armed the first disarmed track through logic_tracks arm, checked that the reply came from the MCU rung, refreshed the cache and read the track's isArmed from logic://tracks, read it 30 more times 100 ms apart without a refresh while Logic's Rec LED blinked, then disarmed it the same way. A second server started without the variable put the track back. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to. Then the harness armed and disarmed track 15, strip 7 of bank 1, reading the census armed set and track 7 after each, and tried to arm track 16, which sits in the last bank, reading the census, tracks 16 and 13 and the MCU upper row from logic://mcu/state before and after.",
   "observations": [
     {
-      "binary": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+      "binary": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
       "mcu_connected": true,
       "track": 0,
       "arm_reply": {

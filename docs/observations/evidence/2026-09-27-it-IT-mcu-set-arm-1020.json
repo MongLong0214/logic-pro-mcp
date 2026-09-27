@@ -1,10 +1,10 @@
 {
   "name": "live_1020_mcu_set_arm_is_a_set",
-  "head": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+  "head": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
   "artifact": {
-    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
-    "sha256": "dba2811df1f3de4215b1cb94354b242d0d75458f8966c91f07f689a0f3d023fc",
-    "built_from": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+    "sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
+    "built_from": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
     "worktree_clean": true,
     "built_from_is_measured": false,
     "artifact_older_than_sources": false
@@ -217,7 +217,7 @@
         "observed": true,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_97767204-D261-4859-8926-F5CBB95B115B",
+        "trace_id": "lpmcp_016EA287-9810-4578-A721-0D809B71CD06",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -737,7 +737,7 @@
         "observed": false,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_7FD0D288-4AA9-49E6-BC56-7BEB5B4344E1",
+        "trace_id": "lpmcp_D615BEBF-4DD0-4AA6-BBD7-76F7BD650E01",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -1028,7 +1028,7 @@
           "AbsZer Audio1 DelCls DelCls       Abilita registrazione "
         ],
         "success": true,
-        "trace_id": "lpmcp_828F1723-7056-4DC2-B56A-4ED44B6D336B",
+        "trace_id": "lpmcp_442C2DE9-94E0-4534-8ABF-E73077D0BA28",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,
@@ -1584,7 +1584,7 @@
           "AbsZer Audio1 DelCls DelCls       Abilita registrazione "
         ],
         "success": true,
-        "trace_id": "lpmcp_EC71F34D-120D-4753-8431-E23C64AD19EB",
+        "trace_id": "lpmcp_CDDF9C2A-ECA1-461A-913F-F12BDFDF83F3",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,

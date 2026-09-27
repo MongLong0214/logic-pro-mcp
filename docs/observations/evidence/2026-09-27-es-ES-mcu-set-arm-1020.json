@@ -1,10 +1,10 @@
 {
   "name": "live_1020_mcu_set_arm_is_a_set",
-  "head": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+  "head": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
   "artifact": {
-    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
-    "sha256": "dba2811df1f3de4215b1cb94354b242d0d75458f8966c91f07f689a0f3d023fc",
-    "built_from": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+    "sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
+    "built_from": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
     "worktree_clean": true,
     "built_from_is_measured": false,
     "artifact_older_than_sources": false
@@ -217,7 +217,7 @@
         "observed": true,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_7147DF45-E276-4D1E-9D9B-BAE0523B7FF8",
+        "trace_id": "lpmcp_379C1AE2-1A39-494D-ADF0-6E5E22EBD439",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -737,7 +737,7 @@
         "observed": false,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_4126ADE0-D65B-4A3F-88E5-1F2F2ED2A9E1",
+        "trace_id": "lpmcp_FA0E6684-9F10-4885-8FE8-B9A0C746C788",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -1028,7 +1028,7 @@
           "AbsZer Audio1 DelCls DelCls DelCls    Activar grabacion "
         ],
         "success": true,
-        "trace_id": "lpmcp_230ECCBB-976D-4CA3-855F-1344BB5910F5",
+        "trace_id": "lpmcp_7D87B08D-0113-417C-B2DF-6F3A9ECA8DFC",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,
@@ -1584,7 +1584,7 @@
           "AbsZer Audio1 DelCls DelCls DelCls    Activar grabacion "
         ],
         "success": true,
-        "trace_id": "lpmcp_1F41C55D-68AE-4561-AEBC-0B3EBC7220BD",
+        "trace_id": "lpmcp_4E9DB05D-6B4D-414A-B24B-AD2510CA7027",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,

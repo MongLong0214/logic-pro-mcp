@@ -1,10 +1,10 @@
 {
   "name": "live_1020_mcu_set_arm_is_a_set",
-  "head": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+  "head": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
   "artifact": {
-    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
-    "sha256": "dba2811df1f3de4215b1cb94354b242d0d75458f8966c91f07f689a0f3d023fc",
-    "built_from": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+    "sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
+    "built_from": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
     "worktree_clean": true,
     "built_from_is_measured": false,
     "artifact_older_than_sources": false
@@ -217,7 +217,7 @@
         "observed": true,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_2AA7E214-77E8-4383-A5F3-8277C093F1D3",
+        "trace_id": "lpmcp_6F6F2BDB-EE89-49F0-9D22-02F62179B7C3",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -737,7 +737,7 @@
         "observed": false,
         "state": "A",
         "success": true,
-        "trace_id": "lpmcp_28658624-9B21-42AB-B5D2-1622AF7B7E46",
+        "trace_id": "lpmcp_712840CD-7AAF-4563-8691-C6CC382899D9",
         "track": 0,
         "verification_source": "ax_value",
         "verified": true,
@@ -1028,7 +1028,7 @@
           "AbsZer Audio1 DelCls DelCls DelCls      Ativar Gravacao "
         ],
         "success": true,
-        "trace_id": "lpmcp_83C1D79E-3C4C-44D7-8698-ADB9A404045A",
+        "trace_id": "lpmcp_CDF7C1B1-9BFE-4277-A497-515E32F8A9C5",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,
@@ -1584,7 +1584,7 @@
           "AbsZer Audio1 DelCls DelCls DelCls      Ativar Gravacao "
         ],
         "success": true,
-        "trace_id": "lpmcp_D5DA3F39-0588-469D-BA7D-84DD4F825C7F",
+        "trace_id": "lpmcp_DC517EA8-EB73-4C96-B459-74347D03EBA1",
         "track": 15,
         "verification_source": "ax_value",
         "verified": true,
