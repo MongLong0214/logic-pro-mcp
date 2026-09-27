@@ -64,7 +64,11 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # branch. Its disarm counterexample is the reply and track list before #1020 — State B from the LED
 # echo with the track still armed — so a predicate that accepted a lone velocity-0 release would
 # fail in the same run.
-FLOOR = 26
+# 26 -> 27 on 2026-09-27, the union again: live_965_inspect_session_reports_the_cached_population,
+# whose five counterexamples are each the state its check exists to refuse -- a second issuer's
+# references, a report that counted no strips, an association claimed complete, a refusal that
+# wrote, a new window.
+FLOOR = 27
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

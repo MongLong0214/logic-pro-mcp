@@ -115,20 +115,24 @@ struct QualificationRunnerTests {
         // semantic validator, so the other 20 read-only ops were honestly
         // recorded protocolSmoke ("transport worked, nobody checked meaning").
         // Now every read-only spec has an oracle, so a read that returns its
-        // real payload qualifies: passed == 23 (22 oracles + health's bespoke
-        // validator), protocolSmoke == 0. The 90 mutating ops are all
+        // real payload qualifies: passed == the read-only count (the oracles + health's
+        // bespoke validator), protocolSmoke == 0. The mutating ops are all notQualified:
         // they still defer to ADR-001-c for live mutation.
         // DERIVED: one case per registry spec. It was `113` and read 114 the day main added
         // `system.setup_control_surface`.
         #expect(operationCases.count == OperationRegistry.specs.count)
-        #expect(operationCases.filter { $0.status == .passed }.count == 23)
+        // DERIVED: every read-only spec qualifies semantically (its oracle, or health's bespoke
+        // validator). It was the literal `23`, and read 24 the day #965 added the read-only
+        // project.inspect_session with its oracle.
+        let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
+        #expect(operationCases.filter { $0.status == .passed }.count == readOnlyCount)
         #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
-        // DERIVED: everything the registry has, minus the 23 this fixture qualifies. It was
-        // `90`, and the day main added `system.setup_control_surface` it read 91 -- a number
+        // DERIVED: everything the registry has, minus the read-only specs this fixture qualifies.
+        // It was `90`, and the day main added `system.setup_control_surface` it read 91 -- a number
         // that tracks the registry turns every new operation into a failing test that says
         // nothing about the product.
         #expect(operationCases.filter { $0.status == .notQualified }.count
-                    == OperationRegistry.specs.count - 23)
+                    == OperationRegistry.specs.count - readOnlyCount)
         #expect(operationCases.filter { $0.status == .failed }.isEmpty)
         #expect(operationCases.filter { $0.status == .passed }.allSatisfy {
             $0.verificationKind == .semanticReadback
@@ -1919,7 +1923,7 @@ struct QualificationRunnerTests {
         ))
 
         #expect(result.handshakeOK)
-        #expect(result.catalog?.operationCount == 115)   // #884 system.setup_control_surface, #862 mixer.bank
+        #expect(result.catalog?.operationCount == 116)   // #884 system.setup_control_surface, #862 mixer.bank, #965 project.inspect_session
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
 
@@ -1930,7 +1934,7 @@ struct QualificationRunnerTests {
 
         #expect(operationResults.count == OperationRegistry.specs.count)
         #expect(mutating.count == 92)
-        #expect(readOnly.count == 23)
+        #expect(readOnly.count == 24)   // #965 project.inspect_session is read-only
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
         // The exactness is right and stays. What was wrong is that it reported a
@@ -2028,7 +2032,9 @@ struct QualificationRunnerTests {
             """
             no value-restore cycle produced evidence in this run. Expected one of \
             \(valueCycleOperations.sorted()); saw records for \
-            \(withEvidence.map(\.operationID).sorted())
+            \(withEvidence.map(\.operationID).sorted()); the value recipes answered \
+            \(mutating.filter { valueCycleOperations.contains($0.operationID) }
+                .map { "\($0.operationID): \($0.mutationRestoreRefusal ?? "no refusal recorded")" })
             """
         )
         #expect(withEvidence.allSatisfy {
@@ -2700,17 +2706,20 @@ struct QualificationRunnerTests {
         #expect(aggregateCases.filter { $0.status == .failed }.count == 1)
         #expect(aggregateCases.filter { $0.status == .notQualified }.count == 1)
         // #373 Phase A: the read-only surface now qualifies semantically.
-        #expect(operationCases.filter { $0.status == .passed }.count == 23)
+        // DERIVED, as in operationQualificationSeparatesSemanticReadSmokeAndTypedDeferrals: every
+        // read-only spec qualifies semantically. It was the literal `23` until #965.
+        let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
+        #expect(operationCases.filter { $0.status == .passed }.count == readOnlyCount)
         #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
-        // DERIVED: everything the registry has, minus the 23 this fixture qualifies. It was
-        // `90`, and the day main added `system.setup_control_surface` it read 91 -- a number
+        // DERIVED: everything the registry has, minus the read-only specs this fixture qualifies.
+        // It was `90`, and the day main added `system.setup_control_surface` it read 91 -- a number
         // that tracks the registry turns every new operation into a failing test that says
         // nothing about the product.
         #expect(operationCases.filter { $0.status == .notQualified }.count
-                    == OperationRegistry.specs.count - 23)
-        // #373 Phase A: 22 oracled read-only ops + system.health's bespoke
+                    == OperationRegistry.specs.count - readOnlyCount)
+        // #373 Phase A: the oracled read-only ops + system.health's bespoke
         // validator. The aggregate axes contribute no passes here.
-        #expect(attestation.passed == 23)
+        #expect(attestation.passed == readOnlyCount)
         #expect(attestation.failed == 1)
 
         for qualificationCase in operationCases {

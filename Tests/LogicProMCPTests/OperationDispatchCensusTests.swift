@@ -62,7 +62,11 @@ struct OperationDispatchCensusTests {
                     terminationStatus: 0,
                     stderrOutput: ""
                 )
-            }
+            },
+            // #965/#866: `project.inspect_session` reads the project file for an
+            // expected track count; the inert reader keeps this census off
+            // AppleScript.
+            projectFileReader: .unavailable
         )
 
         for spec in OperationRegistry.specs {

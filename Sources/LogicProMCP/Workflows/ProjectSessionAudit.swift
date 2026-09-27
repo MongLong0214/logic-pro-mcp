@@ -4,7 +4,9 @@ enum ProjectSessionAudit {
     static let auditSchema = "logic_pro_mcp_project_audit.v1"
     static let cleanupPlanSchema = "logic_pro_mcp_project_cleanup_plan.v1"
 
-    private static let staleThresholdSeconds = 30.0
+    /// Also the age at which `logic_project.inspect_session` calls cached track rows stale (#965),
+    /// so the two reports agree about the same rows.
+    static let staleThresholdSeconds = 30.0
 
     enum Status: String, Codable, Sendable {
         case ok

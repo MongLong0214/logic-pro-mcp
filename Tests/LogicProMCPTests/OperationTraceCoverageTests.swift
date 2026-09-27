@@ -211,7 +211,7 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 115)
+        #expect(OperationRegistry.specs.count == 116)   // #965 registered project.inspect_session
         #expect(mutatingSpecs.count == 92)   // #884 system.setup_control_surface, #862 mixer.bank
 
         // A mutating op that refuses BEFORE dispatch starts its trace starts no trace with the
@@ -321,15 +321,19 @@ extension OperationTraceTests {
                     terminationStatus: 0,
                     stderrOutput: ""
                 )
-            }
+            },
+            // #965/#866: `project.inspect_session` reads the project file for an
+            // expected track count; the inert reader keeps this census off
+            // AppleScript.
+            projectFileReader: .unavailable
         )
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 115)
-        #expect(readOnlySpecs.count == 23)
-        // Mutability is total: the mutating census (87) and this inverse gate
-        // (23) together account for every registered spec, so a new operation
+        #expect(OperationRegistry.specs.count == 116)   // #965 registered project.inspect_session
+        #expect(readOnlySpecs.count == 24)
+        // Mutability is total: the mutating census (92) and this inverse gate
+        // (24) together account for every registered spec, so a new operation
         // cannot land outside both gates.
         #expect(readOnlySpecs.count + mutatingSpecs.count == OperationRegistry.specs.count)
 
