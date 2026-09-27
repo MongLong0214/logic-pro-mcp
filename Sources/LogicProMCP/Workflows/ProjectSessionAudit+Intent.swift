@@ -6,7 +6,7 @@ import MCP
 // Everything here lives inside `ProjectSessionAudit` so the namespace is extended, not
 // paralleled, and nothing here touches the legacy `Finding`, `buildAudit` or the cleanup plan: a
 // #28 client keeps the wire contract ProjectSessionAuditTests pins. The assessor consumes a #965
-// `Capture` and the #291 R1 `RoutingGraph` published from that same capture as immutable data. It
+// `Capture` and the #291 `RoutingGraph` published from that same capture as immutable data. It
 // never sees a cache, a router, a registry or the host, and the same inputs always encode to the
 // same bytes.
 //
@@ -15,7 +15,7 @@ import MCP
 // node found by `targetRef`, its `outputClassification`, its `.mainOutput` edges and the
 // destination's `busNumber`. What it never reads: a track name, type or output label, a coverage
 // reason string, any `SendEdge` field, a `.send` or `.inputAssignment` edge, a level, an enabled
-// flag, or a track's automation or mute state. ADR-021 §2: none of those proves a route right, and
+// flag, or a track's automation or mute state. ADR-021 section 2: none of those proves a route right, and
 // none proves a connection absent. `displayName` and the coverage reasons are copied into the
 // finding as evidence for the reader; no decision is taken on them.
 
@@ -39,7 +39,7 @@ extension ProjectSessionAudit {
     }
 
     /// A proposed role. Members the client has not accepted are candidates, and a role with no
-    /// accepted member stays a question (ADR-021 §2): the rule never picks one from a name.
+    /// accepted member stays a question (ADR-021 section 2): the rule never picks one from a name.
     struct IntentRole: Equatable, Sendable {
         let role: String
         let members: [IntentRoleMember]
@@ -211,7 +211,7 @@ extension ProjectSessionAudit {
         case sidechain
         case monitoring
 
-        /// The main-output rule reads none of these: #291 R1 publishes no send edge (send slots
+        /// The main-output rule reads none of these: #291 publishes no send edge (send slots
         /// answer occupancy, not destination), and sidechain and monitoring have no reader at all.
         /// Every finding names all three as not verified, so a consumer cannot mistake silence for
         /// coverage.

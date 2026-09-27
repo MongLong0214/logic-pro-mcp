@@ -4,7 +4,7 @@ import Testing
 @testable import LogicProMCP
 
 // #966 P1 (ADR-021). Every case drives the pure `parseIntentPolicy` / `assessIntent` on a #965
-// Capture and a #291 R1 RoutingGraph. One case reads a real StateCache and TargetRegistry through
+// Capture and a #291 RoutingGraph. One case reads a real StateCache and TargetRegistry through
 // `SessionPopulationObservation.capture` and `routingGraph(capture:)`; every other graph is built
 // by hand. Each test's leading comment names the mutation of the source that must make it fail.
 //
@@ -89,7 +89,7 @@ private func makeCapture(
 private let threeTracks = [liveTrack(0, name: "Kick"), liveTrack(1, name: "Snare"), liveTrack(2, name: "Tom")]
 private let threeTrackCapture = makeCapture(tracks: threeTracks, issued: issuedReferences(for: threeTracks))
 
-// MARK: - Graph fixtures (the #291 R1 shape)
+// MARK: - Graph fixtures (the #291 shape)
 
 private func trackNode(
     _ index: Int,
@@ -445,7 +445,7 @@ struct Issue966IntentAssessmentTests {
         #expect(minimal.outputs.isEmpty)
     }
 
-    // ADR-021 §1 / #30 boundary: a creative session plan is not a repair policy and cannot be handed in
+    // ADR-021 section 1 / #30 boundary: a creative session plan is not a repair policy and cannot be handed in
     // as one. Mutation: accept any schema string.
     @Test func aCreativeSessionPlanShapedObjectIsNotAPolicy() throws {
         let plan: [String: Value] = [
@@ -805,7 +805,7 @@ struct Issue966IntentAssessmentTests {
         #expect(!onMinimal.changeRequired)
     }
 
-    // ADR-021 §4 P1: a send edge, an enabled flag, a send level, minus infinity or an automation state
+    // ADR-021 section 4 P1: a send edge, an enabled flag, a send level, minus infinity or an automation state
     // is neither a route nor proof a connection is absent. Mutation: read `.send` edges as main
     // outputs, or read `SendEdge.enabled` / `level` / `automationMode`.
     @Test func aSendEdgeNeverChangesAVerdict() throws {
@@ -977,7 +977,7 @@ struct Issue966IntentAssessmentTests {
         #expect(assessment.changeRequired)
     }
 
-    // ADR-021 §4 P1: a soloed, armed, duplicate-named or unnamed track with a correct route is no repair.
+    // ADR-021 section 4 P1: a soloed, armed, duplicate-named or unnamed track with a correct route is no repair.
     // Mutation: read `isSoloed`, `isArmed` or the name when setting a status.
     @Test func legacyWarningsAreNotConvertedIntoRepairs() throws {
         var soloedKick = liveTrack(0, name: "Kick")

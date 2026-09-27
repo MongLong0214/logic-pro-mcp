@@ -652,7 +652,7 @@ private func legacyCleanupPlanReport(from report: ProjectSessionAudit.AuditRepor
 }
 
 @Test func testProjectAuditLegacyWireKeysAreUnchangedByIntentExtension() throws {
-    // ADR-021 §1: the intent extension adds a new type beside #28's audit; it never widens the
+    // ADR-021 section 1: the intent extension adds a new type beside #28's audit; it never widens the
     // legacy Finding (no basis/status/coverage key here) nor the audit or cleanup-plan reports.
     // Exact Set equality on every level a #28 client reads, so a leaked field fails this test.
     let report = ProjectSessionAudit.buildAudit(snapshot: messySnapshot())
@@ -687,7 +687,7 @@ private func legacyCleanupPlanReport(from report: ProjectSessionAudit.AuditRepor
 @Test func testProjectAuditMessySessionExampleIsPinnedExactly() throws {
     // #28's supported example, pinned as exact ORDERED id arrays (the determinism test above only
     // uses `contains`). A later rule that adds, drops or reorders a legacy finding or step fails
-    // here, which is the compatibility ADR-021 §1 requires of the extension.
+    // here, which is the compatibility ADR-021 section 1 requires of the extension.
     let report = ProjectSessionAudit.buildAudit(snapshot: messySnapshot())
 
     #expect(report.findings.map(\.id) == [
