@@ -293,11 +293,25 @@ actor CGEventChannel: Channel {
             return .error("No keyboard shortcut mapped for: \(operation)")
         }
 
+        // #440 D: same gate as the sequence path. A mapped chord posted while
+        // Logic is in the background is swallowed, and the State B envelope
+        // below would then report a keystroke Logic never received.
+        let preparation = prepareFrontmost()
+        guard preparation.isReady else {
+            return Self.frontmostRefusal(operation: operation, preparation: preparation)
+        }
+
         // #1029 review R-03 and #1039: under an input source that is not ASCII-capable, a plain
         // letter reaches Logic as that source's character and runs nothing, and the State B below
-        // would report a keystroke that did nothing. Checked before Logic is brought forward, so a
-        // refusal changes nothing. A source that does not read is refused the same way: unread is
-        // not ASCII-capable, and the source it failed to read may be 2-Set Korean (round 2, R-03).
+        // would report a keystroke that did nothing. A source that does not read is refused the
+        // same way: unread is not ASCII-capable, and the source it failed to read may be 2-Set
+        // Korean (round 2, R-03).
+        // Read after Logic is brought forward, immediately before the post (round 3, R-03): with
+        // macOS's "Automatically switch to a document's input source", activation can restore
+        // Logic's own source, so a reading taken before it can say ABC for a key that then reaches
+        // Logic under 2-Set Korean. The same setting can turn 2-Set Korean into ABC on activation,
+        // so no earlier reading refuses either. The cost: a refused key may have brought Logic
+        // forward, and nothing is posted.
         if shortcut.isPlainLetter {
             guard let source = runtime.currentInputSource() else {
                 return Self.inputSourceRefusal(operation: operation, source: nil)
@@ -305,14 +319,6 @@ actor CGEventChannel: Channel {
             if !source.isASCIICapable {
                 return Self.inputSourceRefusal(operation: operation, source: source)
             }
-        }
-
-        // #440 D: same gate as the sequence path. A mapped chord posted while
-        // Logic is in the background is swallowed, and the State B envelope
-        // below would then report a keystroke Logic never received.
-        let preparation = prepareFrontmost()
-        guard preparation.isReady else {
-            return Self.frontmostRefusal(operation: operation, preparation: preparation)
         }
 
         let sent = runtime.postKeyEvent(shortcut.keyCode, shortcut.flags, pid)

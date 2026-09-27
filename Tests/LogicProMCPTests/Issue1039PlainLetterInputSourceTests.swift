@@ -6,50 +6,64 @@ import Testing
 // #1029 review R-03 and #1039: under an input source that is not ASCII-capable (2-Set Korean), a
 // plain letter key reaches Logic as that source's character and runs nothing; measured live for Q,
 // N and X, with and without the event's Unicode string set to the Latin letter. `CGEventChannel`
-// now refuses such a key before it prepares or posts anything. These tests drive the channel
-// through its input-source probe. Each names the mutation it kills. Nothing here reads a clock.
+// now refuses such a key and posts nothing. It reads the source after Logic is brought forward,
+// immediately before the post (round 3). These tests drive the channel through its input-source
+// probe. Each names the mutation it kills. Nothing here reads a clock.
 
 private let korean = CGEventChannel.InputSourceReading(
     id: "com.apple.inputmethod.Korean.2SetKorean", isASCIICapable: false
 )
 private let abc = CGEventChannel.InputSourceReading(id: "com.apple.keylayout.ABC", isASCIICapable: true)
 
-/// Counts the frontmost probe and the activation, so a refusal can show it prepared nothing.
-private final class PreparationCalls: @unchecked Sendable {
-    private let lock = NSLock()
-    private var count = 0
-    func record() {
-        lock.lock()
-        defer { lock.unlock() }
-        count += 1
-    }
-    var total: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return count
-    }
-}
-
 private func runtime(
     _ recorder: CGEventRecorder,
-    source: CGEventChannel.InputSourceReading?,
-    preparation: PreparationCalls = PreparationCalls()
+    source: CGEventChannel.InputSourceReading?
 ) -> CGEventChannel.Runtime {
     CGEventChannel.Runtime(
         isLogicProRunning: { true },
         logicProPID: { 42 },
         postKeyEvent: { keyCode, flags, pid in recorder.post(keyCode: keyCode, flags: flags, pid: pid) },
         sleepMicros: { _ in },
-        isLogicFrontmost: {
-            preparation.record()
-            return true
-        },
-        activateLogic: {
-            preparation.record()
-            return true
-        },
         currentInputSource: { source }
     )
+}
+
+/// Logic in the background whose activation changes the input source, as macOS's "Automatically
+/// switch to a document's input source" does: the source reads `before` until `activateLogic`
+/// runs and `after` from then on, and Logic reads frontmost only once it has been activated.
+private final class ActivationSwitchesSource: @unchecked Sendable {
+    private let lock = NSLock()
+    private let before: CGEventChannel.InputSourceReading
+    private let after: CGEventChannel.InputSourceReading
+    private var activationCount = 0
+
+    init(before: CGEventChannel.InputSourceReading, after: CGEventChannel.InputSourceReading) {
+        self.before = before
+        self.after = after
+    }
+
+    var activations: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return activationCount
+    }
+
+    func runtime(_ recorder: CGEventRecorder) -> CGEventChannel.Runtime {
+        CGEventChannel.Runtime(
+            isLogicProRunning: { true },
+            logicProPID: { 42 },
+            postKeyEvent: { keyCode, flags, pid in recorder.post(keyCode: keyCode, flags: flags, pid: pid) },
+            sleepMicros: { _ in },
+            isLogicFrontmost: { self.activations > 0 },
+            activateLogic: {
+                self.lock.lock()
+                defer { self.lock.unlock() }
+                self.activationCount += 1
+                return true
+            },
+            currentInputSource: { self.activations > 0 ? self.after : self.before }
+        )
+    }
 }
 
 private func envelope(_ raw: String) -> [String: Any]? {
@@ -94,19 +108,16 @@ private let plainNonLetterOps = ["transport.play", "transport.pause", "transport
     }
 
     /// Kills: removing the input-source check from `execute` (the key is posted and a send-only
-    /// State B comes back), and moving it after `prepareFrontmost()` (Logic is brought forward for
-    /// a key that cannot act).
+    /// State B comes back).
     @Test("a plain letter under a non-ASCII source is refused and nothing is posted", arguments: plainLetterOps)
     func plainLetterRefusedUnderKorean(_ operation: String) async throws {
         let recorder = CGEventRecorder()
-        let preparation = PreparationCalls()
-        let channel = CGEventChannel(runtime: runtime(recorder, source: korean, preparation: preparation))
+        let channel = CGEventChannel(runtime: runtime(recorder, source: korean))
 
         let result = await channel.execute(operation: operation, params: [:])
 
         #expect(!result.isSuccess, "\(operation): \(result.message)")
         #expect(recorder.snapshot().isEmpty, "\(operation) posted \(recorder.snapshot().map(\.keyCode))")
-        #expect(preparation.total == 0, "\(operation) prepared Logic \(preparation.total) times")
         let object = try #require(envelope(result.message))
         #expect(object["state"] as? String == "C")
         let success = try #require(object["success"] as? Bool)
@@ -170,14 +181,12 @@ private let plainNonLetterOps = ["transport.play", "transport.pause", "transport
     @Test("a plain letter under a source that does not read is refused and nothing is posted", arguments: plainLetterOps)
     func plainLetterRefusedWhenTheSourceDoesNotRead(_ operation: String) async throws {
         let recorder = CGEventRecorder()
-        let preparation = PreparationCalls()
-        let channel = CGEventChannel(runtime: runtime(recorder, source: nil, preparation: preparation))
+        let channel = CGEventChannel(runtime: runtime(recorder, source: nil))
 
         let result = await channel.execute(operation: operation, params: [:])
 
         #expect(!result.isSuccess, "\(operation): \(result.message)")
         #expect(recorder.snapshot().isEmpty, "\(operation) posted \(recorder.snapshot().map(\.keyCode))")
-        #expect(preparation.total == 0, "\(operation) prepared Logic \(preparation.total) times")
         let object = try #require(envelope(result.message))
         #expect(object["state"] as? String == "C")
         let success = try #require(object["success"] as? Bool)
@@ -188,6 +197,52 @@ private let plainNonLetterOps = ["transport.play", "transport.pause", "transport
         #expect(object["events_posted"] as? Int == 0)
         let writeAttempted = try #require(object["write_attempted"] as? Bool)
         #expect(!writeAttempted)
+    }
+
+    /// Round 3, R-03: Logic in the background, ABC before activation and 2-Set Korean after it.
+    /// The key would reach Logic under 2-Set Korean, so it is refused and nothing is posted.
+    /// Kills: the source read before `prepareFrontmost()` again (the round-2 order, which reads
+    /// ABC and posts), and dropping the read after it (mutant `no-post-activation-read`).
+    @Test("a plain letter is refused when activation switches ABC to 2-Set Korean", arguments: plainLetterOps)
+    func plainLetterRefusedWhenActivationSwitchesToKorean(_ operation: String) async throws {
+        let recorder = CGEventRecorder()
+        let focus = ActivationSwitchesSource(before: abc, after: korean)
+        let channel = CGEventChannel(runtime: focus.runtime(recorder))
+
+        let result = await channel.execute(operation: operation, params: [:])
+
+        #expect(focus.activations == 1, "\(operation): activated \(focus.activations) times")
+        #expect(!result.isSuccess, "\(operation): \(result.message)")
+        #expect(recorder.snapshot().isEmpty, "\(operation) posted \(recorder.snapshot().map(\.keyCode))")
+        let object = try #require(envelope(result.message))
+        #expect(object["state"] as? String == "C")
+        let success = try #require(object["success"] as? Bool)
+        #expect(!success)
+        #expect(object["error"] as? String == "not_supported")
+        #expect(object["reason"] as? String == "input_source_blocks_plain_letters")
+        #expect(object["input_source_id"] as? String == korean.id)
+        #expect(object["events_posted"] as? Int == 0)
+        let writeAttempted = try #require(object["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+    }
+
+    /// The same setting the other way: 2-Set Korean before activation, ABC after it. The key
+    /// reaches Logic as a letter, so it is posted; a reading taken before activation does not
+    /// decide.
+    /// Kills: the source read before `prepareFrontmost()` again, or a pre-activation read kept
+    /// beside the new one and allowed to refuse.
+    @Test("a plain letter is posted when activation switches 2-Set Korean to ABC", arguments: plainLetterOps)
+    func plainLetterPostedWhenActivationSwitchesToABC(_ operation: String) async throws {
+        let recorder = CGEventRecorder()
+        let focus = ActivationSwitchesSource(before: korean, after: abc)
+        let channel = CGEventChannel(runtime: focus.runtime(recorder))
+        let shortcut = try #require(CGEventChannel.keyMap[operation])
+
+        let result = await channel.execute(operation: operation, params: [:])
+
+        #expect(focus.activations == 1, "\(operation): activated \(focus.activations) times")
+        #expect(result.isSuccess, "\(operation): \(result.message)")
+        #expect(recorder.snapshot().map(\.keyCode) == [shortcut.keyCode])
     }
 
     /// The unread source refuses plain letters only: a keypad key still posts.
