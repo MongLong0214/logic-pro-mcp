@@ -1248,16 +1248,26 @@ enum AXLocalePolicy {
     )
 
     static let keyCommandsWindowTitle = LabelSet(
-        canonical: "Key Command",
-        variants: ["키 명령", "キーコマンド", "Befehlstaste", "Comando de teclado", "Raccourci clavier",
-                   "Comando da tastiera", "键盘命令", "按鍵指令"],
+        canonical: "Key Command Assignments",
+        variants: [
+            "키 명령 할당",
+            "キーコマンドの割り当て", "Tastaturkurzbefehlzuweisungen",
+            "Asignaciones de comandos de teclado", "Assignations de raccourcis clavier",
+            "Assegnazioni comandi da tastiera", "Atribuições de Comandos de Teclado",
+            "键盘命令分配", "按鍵指令指定"
+        ],
         rationale: "Identifies the Key Commands window by title substring. The window Logic opened for"
-            + " Option+K was titled `키 명령 할당 – U.S. – 편집됨` when it was read live 2026-09-14; only"
-            + " the head is matched because the preset name and the edited marker vary. Apple's row"
-            + " is ControllerAssignments `2163.title`, ANCHORED AT ko because the row has no `en` on"
-            + " the `strings` side -- English lives in `nibstrings`, the split #895 established --"
-            + " so `Key Command` itself is the one member this derivation does not verify. Apple's pt value `Comando de Teclado` is NOT stored: it differs from the es value only by case, and `check-probe-product-drift.py` refuses two members a case-folded match would merge. Every comparison here is case-insensitive, so the es spelling matches a Portuguese reading and nothing is lost -- but the set is one member short of Apple's row for that reason and not by oversight.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FControllerAssignments.strings/ko/2163.title#value"
+            + " Option+K was titled `키 명령 할당 – U.S. – 편집됨` when it was read live 2026-09-14 and"
+            + " `Assegnazioni comandi da tastiera – U.S. – Modificato` on an Italian Logic 2026-09-28;"
+            + " only the head is matched because the preset name and the edited marker vary. Apple's"
+            + " row is Localizable `Key Command Assignments`, and KeyCommands `5.title` (the nib's own"
+            + " title) carries the same values, differing only by case in pt. Until #1028 P1b the"
+            + " set held ControllerAssignments `2163.title` (`Key Command`, `Comando da tastiera`):"
+            + " a row the ten-locale derivation check passed and the window does not show. Its"
+            + " German, Spanish, French, Italian and Portuguese values are not substrings of this"
+            + " title, so the setup reported that the window had not opened when it had.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Key%20Command%20Assignments#value",
+        alsoDerivedFrom: ["logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/5.title#value"]
     )
 
     static let recordArmKeyCommandName = LabelSet(
@@ -1294,7 +1304,7 @@ enum AXLocalePolicy {
         rationale: "The Key Commands checkbox `system.setup_arm_key` toggles before posting its chord,"
             + " distinguished from `키 위치로 학습` and `새로운 할당 학습` when it was read live 2026-09-14."
             + " Apple's row is KeyCommands `300557.title`, ANCHORED AT ko for the same reason as the"
-            + " window title: the row has no `en` on the `strings` side.",
+            + " window title's KeyCommands `5.title`: the row has no `en` on the `strings` side.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/300557.title#value"
     )
 

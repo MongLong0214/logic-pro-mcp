@@ -2874,16 +2874,17 @@
    }
   },
   "keyCommandsWindowTitle": {
-   "canonical": "Key Command",
+   "canonical": "Key Command Assignments",
    "variants": [
-    "키 명령",
-    "キーコマンド",
-    "Befehlstaste",
-    "Comando de teclado",
-    "Raccourci clavier",
-    "Comando da tastiera",
-    "键盘命令",
-    "按鍵指令"
+    "키 명령 할당",
+    "キーコマンドの割り当て",
+    "Tastaturkurzbefehlzuweisungen",
+    "Asignaciones de comandos de teclado",
+    "Assignations de raccourcis clavier",
+    "Assegnazioni comandi da tastiera",
+    "Atribuições de Comandos de Teclado",
+    "键盘命令分配",
+    "按鍵指令指定"
    ],
    "rationale": "Identifies the Key Commands window by title substring. The window Logic opened for",
    "match": "contains",

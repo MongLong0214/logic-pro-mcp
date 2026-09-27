@@ -71,7 +71,7 @@ import Testing
         windowInitiallyOpen: Bool = true,
         // The Key Commands window's TITLE. Logic localizes it, and the matcher used to hold an
         // English literal, so a test that only ever builds an English title cannot see that bug.
-        windowTitle: String = "Key Commands",
+        windowTitle: String = "Key Command Assignments",
         // Arrange windows carry AXDocument; the Key Commands utility window does not.
         documentURL: String? = nil,
         // A read of AXDocument that FAILS rather than answering. Distinct from `documentURL: nil`,
@@ -1208,7 +1208,33 @@ import Testing
     /// on every non-English Logic — and with it `tracks.arm`'s only coordinate-free setup path.
     @Test("the Key Commands window is found by its localized title")
     func keyCommandsWindowIsFoundWhenLogicLocalizesItsTitle() {
-        for title in ["키 명령 할당 – U.S. – 편집됨", "키 명령 할당", "Key Commands"] {
+        for title in ["키 명령 할당 – U.S. – 편집됨", "키 명령 할당", "Key Command Assignments"] {
+            let fixture = Self.fixture(windowTitle: title)
+            #expect(
+                ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) != nil,
+                "a window titled \(title) is the Key Commands window"
+            )
+        }
+    }
+
+    /// Measured 2026-09-28 on an Italian Logic 12.3: Option+K opened
+    /// `Assegnazioni comandi da tastiera – U.S. – Modificato`, and setup answered State C at stage
+    /// `open_key_commands` saying the window did not open. The set held ControllerAssignments
+    /// `2163.title` (`Comando da tastiera`), a row whose de, es, fr, it and pt values are not
+    /// substrings of the title Logic draws, though its ko, ja and zh values happen to be. The titles
+    /// here are Apple's `Key Command Assignments` row in each language, plus the Italian reading.
+    ///
+    /// Kills: the set derived from `2163.title` again (the five European titles are not found).
+    @Test("the Key Commands window is found by its title in every language Logic ships")
+    func keyCommandsWindowIsFoundInEveryShippedLanguage() {
+        let titles = [
+            "Key Command Assignments", "Tastaturkurzbefehlzuweisungen",
+            "Asignaciones de comandos de teclado", "Assignations de raccourcis clavier",
+            "Assegnazioni comandi da tastiera", "Assegnazioni comandi da tastiera – U.S. – Modificato",
+            "キーコマンドの割り当て", "키 명령 할당", "Atribuições de comandos de teclado",
+            "键盘命令分配", "按鍵指令指定",
+        ]
+        for title in titles {
             let fixture = Self.fixture(windowTitle: title)
             #expect(
                 ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) != nil,
@@ -1222,7 +1248,8 @@ import Testing
     /// assignment GUI against something else entirely.
     @Test("an unrelated window title is not mistaken for the Key Commands window")
     func unrelatedWindowTitleIsNotTheKeyCommandsWindow() {
-        for title in ["lpm-locale-campaign - 트랙", "Absolute Zero", "마커 목록", ""] {
+        for title in ["lpm-locale-campaign - 트랙", "Absolute Zero", "마커 목록",
+                      "lpm-locale-campaign - Elenco marcatori", ""] {
             let fixture = Self.fixture(windowTitle: title)
             #expect(
                 ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil,
@@ -1272,7 +1299,7 @@ import Testing
         // case below already covers. With no URL stored, the old path answers nil (no document,
         // title matches, so it IS the Key Commands window) and the new path answers undetermined.
         let fixture = Self.fixture(
-            windowTitle: "내 키 명령 프로젝트 - 트랙",
+            windowTitle: "내 키 명령 할당 프로젝트 - 트랙",
             documentURL: nil,
             documentReadFails: true
         )
@@ -1287,8 +1314,8 @@ import Testing
     @Test("a Korean project name containing the Key Commands token is not selected")
     func koreanDocumentWindowIsNotTheKeyCommandsWindow() {
         let fixture = Self.fixture(
-            windowTitle: "내 키 명령 프로젝트 - 트랙",
-            documentURL: "file:///Users/test/Music/내%20키%20명령%20프로젝트.logicx/"
+            windowTitle: "내 키 명령 할당 프로젝트 - 트랙",
+            documentURL: "file:///Users/test/Music/내%20키%20명령%20할당%20프로젝트.logicx/"
         )
 
         #expect(ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil)
