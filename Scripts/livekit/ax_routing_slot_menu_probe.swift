@@ -127,26 +127,54 @@ print("slot destination: \(originalDestination)")
 // The spelling comes from the caller, parsed out of `AXLocalePolicy.trackMuteButton`, which carries
 // `음소거` and `ミュート` as well. An English literal here would lose the control on a Japanese Logic
 // and the run would then report a wall it had no instrument to see.
+//
+// The control must leave the Mute as it found it whether or not it saw it move. Measured 2026-09-27
+// on a Korean Logic 12.3 while a LogicProMCP server was polling: a press on this checkbox was applied
+// only when AXFocused had been set on it just before, and not reliably even then, so the old pair —
+// focus once, press, wait 0.7 s, press, wait 0.7 s — applied one press of the two, printed `moved: 0`
+// and left the Mute flipped. Four runs in #291's first Korean live run left track 0 muted that way.
+// So every press is preceded by focus, every change is waited for rather than slept past, and the
+// value read before the first press is what the control puts back, with a bounded number of presses.
 let muteLabels: [String] = {
     guard let index = CommandLine.arguments.firstIndex(of: "--mute-labels") else { return ["Mute"] }
     let rest = CommandLine.arguments.dropFirst(index + 1).prefix { !$0.hasPrefix("--") }
     return rest.isEmpty ? ["Mute"] : Array(rest)
 }()
+func muteValue(_ mute: AXUIElement) -> Int? { attribute(mute, kAXValueAttribute as String) as? Int }
+/// Focus, press, then poll up to three seconds for the value to differ from `from`.
+func pressMute(_ mute: AXUIElement, from: Int?) -> Int? {
+    _ = AXUIElementSetAttributeValue(mute, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    usleep(400_000)
+    _ = AXUIElementPerformAction(mute, kAXPressAction as CFString)
+    for _ in 0..<30 {
+        usleep(100_000)
+        if muteValue(mute) != from { break }
+    }
+    return muteValue(mute)
+}
 if let mute = sweep().first(where: {
     text($0, kAXRoleAttribute as String) == "AXCheckBox" && muteLabels.contains(text($0, kAXDescriptionAttribute as String))
 }) {
-    _ = AXUIElementSetAttributeValue(mute, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-    usleep(400_000)
-    let before = attribute(mute, kAXValueAttribute as String) as? Int
-    _ = AXUIElementPerformAction(mute, kAXPressAction as CFString)
-    usleep(700_000)
-    let during = attribute(mute, kAXValueAttribute as String) as? Int
-    _ = AXUIElementPerformAction(mute, kAXPressAction as CFString)
-    usleep(700_000)
-    let after = attribute(mute, kAXValueAttribute as String) as? Int
-    print("control mute moved: \((before != during && before == after) ? 1 : 0)")
+    let before = muteValue(mute)
+    let during = pressMute(mute, from: before)
+    let moved = before != nil && during != nil && during != before
+    // Only a press that was seen to move is answered by a press back; one that was not seen is left
+    // to the restore loop below, which acts on the value it reads and not on what it assumes.
+    let after = moved ? pressMute(mute, from: during) : during
+    print("control mute moved: \((moved && after == before) ? 1 : 0)")
+    var restorePresses = 0
+    while let wanted = before, let now = muteValue(mute), now != wanted, restorePresses < 4 {
+        _ = pressMute(mute, from: now)
+        restorePresses += 1
+    }
+    let final = muteValue(mute)
+    print("control mute before: \(before.map(String.init) ?? "unread")")
+    print("control mute after: \(final.map(String.init) ?? "unread")")
+    print("control mute restore presses: \(restorePresses)")
+    print("control mute restored: \((before != nil && final == before) ? 1 : 0)")
 } else {
     print("control mute moved: 0")
+    print("control mute restored: 1")
 }
 
 let pressRC = AXUIElementPerformAction(slot, kAXPressAction as CFString)
