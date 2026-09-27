@@ -879,10 +879,10 @@ class ARecordMayDeclareTheAxisInapplicable(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_a_single_cjk_character_is_not_tested(self):
-        """Killed by `cjk-floor-one`. `끔` is a whole Korean label Logic ships, and the floor for a
+        """Killed by `cjk-floor-one`. `값` is a whole Korean label Logic ships, and the floor for a
         CJK string is two characters, not one."""
-        self.assertTrue(self._corpora_holding("끔"))
-        result = self._declines_over("끔")
+        self.assertTrue(self._corpora_holding("값"))
+        result = self._declines_over("값")
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
