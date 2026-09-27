@@ -30,6 +30,8 @@
     "absence/nibstrings.en.u32": "a417fdb909f57d7a44b43ed23ccdcd8521822c31ca55116f7e300797247b791e",
     "absence/plugin_names.-.folded.u32": "b51e7090057a67f850c50a5363bccd258cab225c5c56dbf02cd82adca57ebfcd",
     "absence/plugin_names.-.u32": "a5e0ee46d843c3d71175c4fb17e4ab2d4f21869eab5ac41283e48d6d6e705c5a",
+    "absence/pluginsettings.-.folded.u32": "40b8fa85b5fc7402f1085182000d8aae2fbe576d5b60c634aa8ecb741f792498",
+    "absence/pluginsettings.-.u32": "344429aeaaddef36054e1b07936e2a04bf69007c65d27902e883585bad522f6b",
     "absence/quickhelp.de.folded.u32": "b31c23794ee49f1e61b9474bcbff555985890e7958e946022d612f35d28fb00d",
     "absence/quickhelp.de.u32": "a40ae686d5d934bd5de10c5c0dd80b5571a10972e9e47fbcb1162ade3c99dec9",
     "absence/quickhelp.en.folded.u32": "6fecc00c423c199ab2f082efac4642775171339c73d919efe20cd7cd4647570c",
@@ -103,6 +105,8 @@
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
     "index/plugin_names.tsv": "f6d22385cbe42b4e2736a1dbb2637ad10ee67b8bce79578969a473ccc3b6ec93",
     "index/plugin_names.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
+    "index/pluginsettings.tsv": "827154b12becb1b89cf36a9cd5bc43c1d8ca952a370fea6b9dcafde2ac1a6eb9",
+    "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/quickhelp.tsv": "2d68dc5b1b7c1d81526c0f6822b73c724de01e723590eaeed225b7db6c2cdee5",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "fa7228b975a73eb080a8de18a5de7d57a818a78e9e2867aa572cb55c33feb2c0",
@@ -560,6 +564,28 @@
       "files": 1,
       "folded_entries": {
         "-": 237
+      },
+      "locales": [
+        "-"
+      ],
+      "no_english_twin": {},
+      "not_localized": {}
+    },
+    "pluginsettings": {
+      "absence_entries": {
+        "-": 143
+      },
+      "absence_false_positive": {
+        "-": 3.3295e-08
+      },
+      "cited_rows": 3,
+      "cited_values": 0,
+      "corpus_digest": "6b6ebfcae539207377084d004b70c01c785494370314525702f271575b9830eb",
+      "english_equal_rows_in_translated_units": {},
+      "entries": 147,
+      "files": 3713,
+      "folded_entries": {
+        "-": 143
       },
       "locales": [
         "-"

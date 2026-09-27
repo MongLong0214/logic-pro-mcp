@@ -101,7 +101,7 @@ EXPECTED_LOCALES = LOCALE_NAMES
 
 #: Which `.lproj` locales each source must carry, and whether it may also carry `-` (data in no
 #: `.lproj`). "ten" means `EXPECTED_LOCALES`. `nibstrings` is English by construction -- it reads
-#: `Base.lproj` -- and `madsp`, `nib` and `plugin_names` are not localised at all.
+#: `Base.lproj` -- and `madsp`, `nib`, `plugin_names` and `pluginsettings` are not localised at all.
 SOURCE_LOCALES = {
     "quickhelp": ("ten", False),
     "strings": ("ten", True),
@@ -111,6 +111,7 @@ SOURCE_LOCALES = {
     "madsp": ((), True),
     "nib": ((), True),
     "plugin_names": ((), True),
+    "pluginsettings": ((), True),
 }
 
 #: Sources small enough that `build` pins EVERY row, not only the cited ones. `plugin_names` is 242
@@ -1533,6 +1534,34 @@ def extract_niblabels(app: str, stats=None):
     if failures:
         raise CanonDecodeError(f"{len(failures)} nib(s) did not parse; first: {failures[0]}")
 
+#: The bundle's factory plug-in settings roots, relative to `Contents/Resources`. Issue #1030:
+#: the second one ships folders the first does not (Studio Piano's among them), and the catalog
+#: read only the first.
+PLUGIN_SETTINGS_ROOTS = ("Plug-In Settings", "Plug-In Settings Internal")
+
+
+def extract_pluginsettings(app: str):
+    """The name of every folder under the bundle's two factory plug-in settings roots. Issue #1030.
+
+    One row per folder: unit = the root, key = the folder, value = the folder's name. The stock
+    plug-in catalog keys its seeds by these names, and `check-factory-settings-folders.py` holds
+    every one of them to a seed or an exclusion. Files beside the folders (`CSParameterOrder.plist`)
+    are not rows, and the `.pst` files inside them are not either: a preset listing belongs to the
+    catalog's own probe, which reads every depth of every root on the machine it runs on.
+
+    Not localised -- Apple names each folder once. `/Library/Application Support/Logic/Plug-In
+    Settings` is outside the bundle, so it is outside this corpus and outside every proof over it.
+    """
+    for root_name in PLUGIN_SETTINGS_ROOTS:
+        root = os.path.join(app, "Contents", "Resources", root_name)
+        if not os.path.isdir(root):
+            continue
+        unit = _rel(app, root)
+        for name in sorted(os.listdir(root)):
+            if os.path.isdir(os.path.join(root, name)):
+                yield (unit, "-", name, "folder", name)
+
+
 EXTRACTORS = {
     "quickhelp": extract_quickhelp,
     "strings": extract_strings,
@@ -1540,6 +1569,7 @@ EXTRACTORS = {
     "nib": extract_nib_runtime_attributes,
     "nibstrings": extract_nibstrings,
     "niblabels": extract_niblabels,
+    "pluginsettings": extract_pluginsettings,
     "stringsdict": extract_stringsdict,
     "plugin_names": extract_plugin_names,
 }
@@ -2666,6 +2696,13 @@ def corpus_files(app: str, source: str) -> list[str]:
             for name in files:
                 if name.endswith(".nib"):
                     out.append(_rel(app, os.path.join(root, name)))
+    elif source == "pluginsettings":
+        # Every file under both roots. The rows are folder names, and a folder with no file in it
+        # has no path here: `corpus_folders` puts every folder into the digest by name.
+        for root_name in PLUGIN_SETTINGS_ROOTS:
+            for root, _dirs, files in os.walk(os.path.join(app, "Contents", "Resources", root_name)):
+                for name in files:
+                    out.append(_rel(app, os.path.join(root, name)))
     elif source == "stringsdict":
         for root, _dirs, files in os.walk(app):
             for name in files:
@@ -2685,18 +2722,44 @@ def corpus_files(app: str, source: str) -> list[str]:
     return sorted(out)
 
 
-def corpus_digest(app: str, paths: list[str]) -> str:
+def corpus_folders(app: str, source: str) -> list[str]:
+    """The directories whose NAMES a source's rows are, bundle-relative. Sorted.
+
+    Only `pluginsettings` has any. Its rows are the folders under the two settings roots, and a
+    folder holding no file has no path in `corpus_files`, so without this an empty folder added by
+    Apple is a new row under an unchanged certificate (#1036 F-04). Taken from the extractor
+    itself, so the digest covers exactly the folders the rows are read from. Every other source's
+    rows come from the bytes of files `corpus_files` lists, and it has none.
+    """
+    if source != "pluginsettings":
+        return []
+    return sorted(f"{unit}/{key}" for unit, _locale, key, _field, _value in extract_pluginsettings(app))
+
+
+def corpus_digest(app: str, paths: list[str], folders: list[str] = ()) -> str:
     """One digest over every byte the corpus is made of, taken path by path.
 
     Not a digest of the concatenation: a digest of the sorted `path\\tfiledigest` stream. That way
     a file MOVING changes the result, which a concatenation would hide, and a file being added or
     dropped changes it too. An index whose manifest digest no longer matches the installed Logic
     was taken over different bytes and nothing built on it may be trusted.
+
+    `folders` follow as one `path/` line each. A source with none digests exactly as before.
     """
     hasher = hashlib.sha256()
     for rel in paths:
         hasher.update(f"{rel}\t{_file_digest(os.path.join(app, rel))}\n".encode("utf-8"))
+    for rel in folders:
+        hasher.update(f"{rel}/\n".encode("utf-8"))
     return hasher.hexdigest()
+
+
+def source_digest(app: str, source: str, paths: list[str] | None = None) -> str:
+    """The certificate `build` pins for `source` and every drift check recomputes: its files, and
+    for `pluginsettings` its folders. `paths` is `corpus_files(app, source)` when the caller has it."""
+    if paths is None:
+        paths = corpus_files(app, source)
+    return corpus_digest(app, paths, corpus_folders(app, source))
 
 
 def app_build(app: str) -> dict:
@@ -3125,7 +3188,7 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
         manifest["sources"][source] = {
             "files": len(paths),
             "entries": len(extracted[source]),
-            "corpus_digest": corpus_digest(app, paths),
+            "corpus_digest": source_digest(app, source, paths),
             "locales": sorted(values_by_locale),
             "absence_entries": absence_counts,
             "folded_entries": folded_counts,
@@ -3415,7 +3478,7 @@ def confirm(app: str, texts) -> dict:
         extractor = EXTRACTORS.get(source)
         if extractor is None:
             raise CanonError(f"the manifest pins source {source!r} and this code cannot extract it")
-        if corpus_digest(app, corpus_files(app, source)) != block.get("corpus_digest"):
+        if source_digest(app, source) != block.get("corpus_digest"):
             raise CanonError(f"{source}: the installed corpus is not the pinned one. Run `build` "
                              f"first.")
         by_locale: dict = {}
@@ -4046,7 +4109,7 @@ def drift_host(manifest: dict, app: str) -> list:
     return [f"{source}: the installed corpus digest differs from the pinned one"
             for source, block in sorted((manifest.get("sources") or {}).items())
             if source in EXTRACTORS
-            and corpus_digest(app, corpus_files(app, source)) != block["corpus_digest"]]
+            and source_digest(app, source) != block["corpus_digest"]]
 
 
 def _cmd_status(args) -> int:
@@ -4071,7 +4134,7 @@ def _cmd_status(args) -> int:
             print(f"DRIFT: installed Logic is {here['version']} ({here['build']})", file=sys.stderr)
             return 1
         for source, block in sorted(manifest["sources"].items()):
-            now = corpus_digest(args.app, corpus_files(args.app, source))
+            now = source_digest(args.app, source)
             state = "ok" if now == block["corpus_digest"] else "DRIFT"
             print(f"  {source:10s} {state}")
             if state == "DRIFT":
