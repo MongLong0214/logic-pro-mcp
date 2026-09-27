@@ -58,7 +58,7 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
         with the reading just before the operation, so its witness may be any differing earlier
         reading.
       - A RESTORE CHECK (`restore_expect`) reads only what a restore produced: every step it reads
-        is bound AFTER the first call in `restore` (the restoring action; a call is a step with
+        is bound AFTER the last call in `restore` (the restoring action; a call is a step with
         `call`, `is_call`, the test every rule here uses). A probe in `restore` before that call,
         the call's own reply, and every step of `steps` from the operation on are refused: a
         reading taken after the operation and before a restore is a claim about the operation, so
@@ -164,6 +164,12 @@ OBS_OPERAND = ("changed", "unchanged")
 CANON_OPERAND = ("matches_canon",)
 LIST_OPERAND = ("in", "not_in", "subset", "superset")
 COUNT_OPERAND = ("count_eq", "count_ge")
+#: The operators that can pin the path of a `changed` check: each states what the reading became,
+#: `eq` one constant, `in` one of a listed set of constants, `matches_canon` one canon row. Every
+#: other operator passes on an open set of readings -- `ne` and `not_in` on all but the values they
+#: list, the counts, set comparisons and `not_null` on any reading of the right shape, `changed`
+#: and `unchanged` on a relation to another reading -- so noise can satisfy it as well (VFY-01).
+PIN_OPS = ("eq", "in", "matches_canon")
 
 ISSUE_DOC = re.compile(r"^issue:([1-9][0-9]*)$")
 #: The only repository documents a criterion may be quoted from (ADR-027 D1).
@@ -329,6 +335,7 @@ def row_problems(row: dict, n_sources: int) -> list:
         out += [f"expect[{i}]: {p}" for p in expectation_problems(e, set(steps))]
     for j, e in enumerate(row["restore_expect"]):
         out += [f"restore_expect[{j}]: {p}" for p in expectation_problems(e, set(steps) | set(after))]
+    out += unpinned_changed(expect, "expect") + unpinned_changed(row["restore_expect"], "restore_expect")
     for name in row["independence"]:
         if name not in steps:
             out.append(f"independence names {name!r}, which is not a step of this row")
@@ -468,20 +475,21 @@ BEFORE_RESTORE = ("A reading taken after the operation and before a restore is a
 
 
 def restore_problems(row: dict, order: dict, at: int) -> list:
-    """A restore check reads only what a restore produced: steps bound AFTER the first call in
+    """A restore check reads only what a restore produced: steps bound AFTER the last call in
     `restore` (the restoring action, `is_call`). A probe before that call, the call's own reply,
     and every step of `steps` from the operation on are claims about the operation, not about the
-    restore; no restore check reads any call's reply. With no call in `restore` nothing was
+    restore; no restore check reads any call's reply. A reading between two calls in `restore` is
+    refused too: a later call can undo what it read (a redo after the undo). With no call in `restore` nothing was
     restored, so `restore_expect` is empty; with one, it is not (#984). A check's `ref.obs` may
     also name a reading bound before the operation: the as-found state it compares with. `order`
     and `at` are the positions in `steps`."""
     restore = [s["as"] for s in row["restore"]]
-    first = next((k for k, s in enumerate(row["restore"]) if is_call(s)), None)
-    if first is None:
+    last = max((k for k, s in enumerate(row["restore"]) if is_call(s)), default=None)
+    if last is None:
         n = len(row["restore_expect"])
         return [f"restore_expect has {n} check(s), but `restore` has no call, so nothing restored "
                 f"the state and there is nothing for a restore check to read. {BEFORE_RESTORE}"] if n else []
-    call, left = restore[first], set(restore[first + 1:])
+    call, left = restore[last], set(restore[last + 1:])
     if not row["restore_expect"]:
         return [f"`restore` has the call {call!r} and restore_expect is empty, so nothing shows the "
                 f"fixture was put back. A write is credited only when its restore is verified (#984): "
@@ -503,8 +511,11 @@ def restore_problems(row: dict, order: dict, at: int) -> list:
                            f"itself. A restore check reads the state the call left behind: a step "
                            f"after it")
             elif name in restore and name not in left:
+                between = any(is_call(s) for s in row["restore"][:restore.index(name)])
                 out.append(f"restore_expect[{j}] {what} {name!r}, a restore step before the restoring "
-                           f"call {call!r}. {BEFORE_RESTORE}")
+                           f"call {call!r}. " + (f"{call!r} is a later call in `restore` and can undo "
+                                                 f"what it read: a restore check reads a step after "
+                                                 f"the last call" if between else BEFORE_RESTORE))
             elif name in calls:
                 out.append(f"restore_expect[{j}] {what} {name!r}, the reply of a call. A reply is what "
                            f"a call says it did, not the state it left; a restore check reads a state")
@@ -570,6 +581,24 @@ def step_problems(step: dict) -> list:
     elif op not in NO_OPERAND and "value" not in until:
         out.append(f"wait.until: {op} needs a value")
     return out
+
+
+def unpinned_changed(checks: list, key: str) -> list:
+    """`changed` PASSES on any difference, noise included: an indicator that blinks, a second
+    reading a character apart. On its own it cannot say the operation did what the row claims. It
+    is admissible only when another check in the same list pins the same path, which states what
+    the reading became: `eq` a constant, `in` a listed set of constants (`value`), or
+    `matches_canon` a canon row (`ref.canon`). Nothing weaker pins (PIN_OPS): `ne "before"` passes
+    on the same noise `changed` does, and so do `not_in`, `not_null` and the rest. An `eq` or `in`
+    against another observation (`ref.obs`) states a relation, not a value, and pins nothing."""
+    pinned = {e["path"] for e in checks
+              if e["op"] in PIN_OPS and ("value" in e or "canon" in (e.get("ref") or {}))}
+    return [f"{key}[{i}] is changed over {e['path']!r}, and no check in {key} pins that path: eq "
+            f"a constant, in a listed set of constants, or matches_canon a canon row. changed "
+            f"passes on any difference, noise included, and ne, not_in and the other operators pass "
+            f"on an open set of readings that noise can land in; add a check that says what "
+            f"{e['path']!r} becomes"
+            for i, e in enumerate(checks) if e["op"] == "changed" and e["path"] not in pinned]
 
 
 def expectation_problems(e: dict, bound: set) -> list:

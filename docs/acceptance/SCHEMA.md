@@ -40,6 +40,14 @@ the last of two equal keys silently, so a document could say `"locales": "all"` 
 text and something else to the engine. Such a document is refused (exit 2), naming the key. A raw
 reading with a key given twice is UNREADABLE, for the same reason.
 
+The same parse refuses `NaN`, `Infinity` and `-Infinity`. They are not JSON, but Python's `json`
+reads them as numbers, and a NaN equals nothing, itself included: a reading of NaN would pass
+`changed`, `ne` and `not_in` without being a reading at all. It refuses a number that overflows a
+float, such as `1e999` or `-1e999`, the same way: those are JSON, but Python's `json` reads them as
+infinity. A document that holds any of these is refused (exit 2), and a raw reading that holds one
+is UNREADABLE. A large finite number such as `1e308` is read. The writer refuses NaN and infinity
+too.
+
 ### Only `run` certifies clean
 
 Every field of an evidence document on disk is written by whoever wrote the file: `binary_path`,
@@ -154,7 +162,7 @@ one of the ten.
 | `expect` | expectations over the bound readings; the row PASSES only if every one PASSES. Each is an effect, or an invariant with `"invariant": true` (below) |
 | `counterexample` | substitutions that must make named expectations FAIL (below) |
 | `restore` | steps that return the fixture to its as-found state (may be empty) |
-| `restore_expect` | expectations that prove it was returned; they read only steps after the first call in `restore`, and are empty when `restore` has no call (below) |
+| `restore_expect` | expectations that prove it was returned; they read only steps after the last call in `restore`, and are empty when `restore` has no call (below) |
 | `independence` | the names whose readings do not come from the operation's own reply |
 
 ### Steps
@@ -210,12 +218,30 @@ A missing path is never FAIL and never PASS. A reading of the wrong type for its
 | `is_null`, `not_null` | none | the path exists and holds / does not hold `null` |
 | `matches_canon` | `ref.canon` + `ref.locale` + `ref.quote` only | the reading's canon digest equals the pinned digest of that canon row |
 
-`changed`/`unchanged` compute what `ne`/`eq` compute. They are separate names so that a row meaning
-"this moved relative to the pre-state" cannot be written against a constant by mistake.
+`changed`/`unchanged` compute what `ne`/`eq` compute, apart from the absence rules below. They are
+separate names so that a row meaning "this moved relative to the pre-state" cannot be written
+against a constant by mistake.
+
+`changed` PASSES on any difference, noise included: an indicator that blinks, a second reading a
+character apart. On its own it cannot say that the operation did what the row claims. A `changed`
+check is refused unless another check in the same list (`expect` or `restore_expect`) pins the same
+path. The pin states what the reading became, and three checks do: `eq` a constant, `in` a listed
+set of constants (a `value` list), and `matches_canon` a canon row. Nothing weaker pins. `ne`,
+`not_in`, `subset`, `superset`, `count_eq`, `count_ge`, `is_null`, `not_null`, `changed` and
+`unchanged` do not, and neither does an `eq` or `in` against another observation (`ref.obs`).
+`ne "before"` passes on the same noise `changed` does.
 
 `changed`, `ne` and `not_in` PASS on a difference, and null differs from every reading, so a null
-would satisfy them by absence. Under these three a null on either side is UNREADABLE, never PASS.
-The positive operators are unchanged: a null fails them except against a null operand and under
+would satisfy them by absence. Under these three a null anywhere in either value, at any depth
+(`[null]`, `{"armed": null}`), is UNREADABLE, never PASS. So is a key that one value has and the
+other lacks at the same place (for `not_in`, the reading against each element of the list): a
+missing key is absence too. Objects are compared key by key and lists index by index; a list element
+on one side only is a difference, since a list's length is part of what was read.
+
+`unchanged` PASSES when the two readings are equal, and two nulls are equal. When they are equal and
+hold a null, at any depth, it is UNREADABLE: two absences agree without showing that nothing
+changed. With a null on one side only it FAILS. The other positive operators fail a null except
+against a null operand (`eq` with a null on the other side, `in` a list that holds null) and under
 `is_null`.
 
 `matches_canon` references are `logic-canon://strings/<source>/<locale>/<key>#value` with
@@ -295,11 +321,13 @@ what it credits to the operation was read after the operation ran.
 
 A restore check (`restore_expect`) reads only what a restore produced.
 
-- Every step it reads is bound AFTER the first call in `restore`: the restoring action. A call is a
+- Every step it reads is bound AFTER the last call in `restore`: the restoring action. A call is a
   step with `call`, the same test the order rules use for the operation and the calls before it.
 - A probe in `restore` before that call, the call's own reply, and every step of `steps` from the
   operation on are refused. A reading taken after the operation and before a restore is a claim
-  about the operation, so it belongs in `expect`, with a counterexample.
+  about the operation, so it belongs in `expect`, with a counterexample. A reading between two
+  calls in `restore` is refused as well: the later call can undo what it read (an undo, the
+  reading, then a redo).
 - Its path may not name a step bound before the operation either. Its `ref.obs` may: that is the
   as-found state the restore is compared with, the point of a restore check.
 - No restore check reads a call's reply, in `steps` or in `restore`, in its path or its `ref.obs`.

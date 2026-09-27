@@ -47,13 +47,21 @@ pre-state" cannot be written against a typed constant by mistake.
 A reading of the wrong type for its operator (count_eq on a string) is FAIL, not UNREADABLE: the
 value was read, and it is not what the row says it should be.
 
-NULL UNDER A NEGATIVE OPERATOR
-------------------------------
+NULL AND ABSENCE
+----------------
 `changed`, `ne` and `not_in` PASS when two values differ, and null differs from every reading, so
-a null on either side would satisfy them by absence, whatever the element was: absence counted as
-success. Under these three a null is UNREADABLE instead, never PASS. The positive
-operators are unchanged: a null fails them except against a null operand (`eq` or `unchanged`
-with a null on the other side, `in` a list that holds null) and under `is_null`.
+a null would satisfy them by absence, whatever the element was: absence counted as success. Under
+these three a null anywhere in either value, at any depth (`[null]`, `{"armed": null}`), is
+UNREADABLE instead, never PASS. So is a key that one value has and the other lacks at the same
+place (for `not_in`, the reading against each element of the list): a missing key is absence too.
+Objects are compared key by key and lists index by index; a list element on one side only
+is a difference, since a list's length is part of what was read.
+
+`unchanged` PASSES when two values are equal, and two nulls are equal. When the values are equal
+and hold a null, at any depth, it is UNREADABLE: two absences agree without showing that nothing
+changed. With a null on one side only it FAILS. The other positive operators are as they
+were: a null fails them except against a null operand (`eq` with a null on the other side, `in` a
+list that holds null) and under `is_null`.
 """
 from __future__ import annotations
 
@@ -219,8 +227,60 @@ OPS = {
 }
 
 
-#: Operators that PASS on a difference. A null on either side is UNREADABLE under them (above).
+#: Operators that PASS on a difference. Under them a null anywhere in either value, or a key only
+#: one side has, is UNREADABLE (above).
 NULL_IS_UNREADABLE = ("changed", "ne", "not_in")
+
+
+def nulls(value, here: str = ""):
+    """Each place a null sits in `value`, at any depth, as a path suffix ("" is the value itself)."""
+    if value is None:
+        yield here
+    elif isinstance(value, dict):
+        for key in sorted(value):
+            yield from nulls(value[key], f"{here}.{key}")
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            yield from nulls(item, f"{here}[{i}]")
+
+
+def one_sided_keys(a, b, here: str = ""):
+    """Each key that one of two values has and the other lacks at the same place, walking objects
+    by key and lists by index."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        for key in sorted(set(a) ^ set(b)):
+            yield f"{here}.{key}"
+        for key in sorted(set(a) & set(b)):
+            yield from one_sided_keys(a[key], b[key], f"{here}.{key}")
+    elif isinstance(a, list) and isinstance(b, list):
+        for i, (x, y) in enumerate(zip(a, b)):
+            yield from one_sided_keys(x, y, f"{here}[{i}]")
+
+
+def _at(where: str) -> str:
+    return f" at {where}" if where else ""
+
+
+def absence(op: str, a, b):
+    """Why `op` over the reading `a` and the operand `b` would be decided by what is not there, or
+    None (above). Under changed, ne and not_in: a null anywhere in either value, or a key only one
+    side has. Under unchanged: the values are equal and hold a null."""
+    if op in NULL_IS_UNREADABLE:
+        for side, value in (("reading", a), ("operand", b)):
+            where = next(nulls(value), None)
+            if where is not None:
+                return f"a null in the {side}{_at(where)} cannot show a difference; {op} does not pass on absence"
+        for other in (b if op == "not_in" and isinstance(b, list) else [b]):
+            where = next(one_sided_keys(a, other), None)
+            if where is not None:
+                return (f"the key {where} is on one side only, and a missing key cannot show a "
+                        f"difference; {op} does not pass on absence")
+    elif op == "unchanged" and same(a, b):
+        where = next(nulls(a), None)
+        if where is not None:
+            return (f"both sides hold null{_at(where)}, and two absences agree without showing that "
+                    f"nothing changed; unchanged does not pass on absence")
+    return None
 
 
 def check(op: str, actual, operand=None):
@@ -240,8 +300,9 @@ def check(op: str, actual, operand=None):
         if isinstance(operand, Unreadable):
             return UNREADABLE, f"operand: {operand.reason}"
         shown = f"{_show(actual.value)} {op} {_show(operand.value)}"
-        if op in NULL_IS_UNREADABLE and (actual.value is None or operand.value is None):
-            return UNREADABLE, f"{shown}: a null cannot show a difference; {op} does not pass on absence"
+        why = absence(op, actual.value, operand.value)
+        if why:
+            return UNREADABLE, f"{shown}: {why}"
         ok = test(actual.value, operand.value)
     else:
         ok = test(actual.value, None)
