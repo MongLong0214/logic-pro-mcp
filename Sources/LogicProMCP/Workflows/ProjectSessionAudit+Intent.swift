@@ -816,18 +816,27 @@ extension ProjectSessionAudit {
         }
         for (name, destination) in unresolvedRoles.sorted(by: { $0.key < $1.key }) {
             guard let role = rolesByName[name] else { continue }
-            findings.append(IntentFinding(
-                id: "main_output.role.\(name)",
-                rule: mainOutputAssignmentRule,
-                basis: .approvedPolicy,
-                severity: .info,
-                status: .needsInput,
-                target: IntentTargetEvidence(handle: nil, role: name, trackRef: nil, trackIndex: nil),
-                observed: nil,
-                expected: .expected(destination),
-                coverage: coverage(edgeObserved: false, destinationBusObserved: false, expected: destination, graph: graph),
-                reasons: [.roleHasNoAcceptedMember]
-            ))
+            func roleFinding(_ status: IntentStatus, reasons: [IntentReason]) -> IntentFinding {
+                IntentFinding(
+                    id: "main_output.role.\(name)",
+                    rule: mainOutputAssignmentRule,
+                    basis: .approvedPolicy,
+                    severity: .info,
+                    status: status,
+                    target: IntentTargetEvidence(handle: nil, role: name, trackRef: nil, trackIndex: nil),
+                    observed: nil,
+                    expected: .expected(destination),
+                    coverage: coverage(edgeObserved: false, destinationBusObserved: false, expected: destination, graph: graph),
+                    reasons: reasons
+                )
+            }
+            // A question about another project, or over a graph this capture cannot vouch for,
+            // would be answered for the wrong project: the gate speaks instead and nothing is asked.
+            if let gate {
+                findings.append(roleFinding(gate.status, reasons: [gate.reason]))
+                continue
+            }
+            findings.append(roleFinding(.needsInput, reasons: [.roleHasNoAcceptedMember]))
             let candidates = role.members
                 .filter { !$0.accepted }
                 .compactMap { member -> IntentCandidate? in

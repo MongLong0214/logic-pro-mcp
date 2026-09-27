@@ -262,6 +262,17 @@ private func onlyFinding(_ assessment: Audit.IntentAssessment) throws -> Audit.I
     return try #require(assessment.findings.first)
 }
 
+/// One role `kick` whose members `b` (trk_1) and `c` (trk_2) are both unaccepted, and no output
+/// naming a target directly.
+private func unresolvedRolePolicy(projectRef: String? = nil) throws -> Audit.IntentPolicy {
+    try #require(accepted(Audit.parseIntentPolicy(policyObject(
+        projectRef: projectRef,
+        targets: [targetEntry("b", "trk_1"), targetEntry("c", "trk_2")],
+        roles: [roleEntry("kick", members: [memberEntry("b", accepted: false), memberEntry("c", accepted: false)])],
+        outputs: [roleOutput("kick", bus: 3)]
+    ))))
+}
+
 /// A case for one assessment gate: its token, the capture and graph that hit it alone, the policy's
 /// `project_ref`, and the status it forces.
 private typealias GateCase = (token: String, capture: Observation.Capture, graph: RoutingGraph, projectRef: String?, status: Audit.IntentStatus)
@@ -868,6 +879,41 @@ struct Issue966IntentAssessmentTests {
         )])
         #expect(!assessment.questions[0].candidates.contains { $0.trackRef == "trk_0" })
         #expect(!assessment.changeRequired)
+    }
+
+    // A role with no accepted member is a question only while the gate is open. Asked about another
+    // project, or over a graph that cannot be read against this capture, it would be answered for the
+    // wrong project; the role's finding carries the gate's status and token instead. Mutation: emit
+    // the role's `needs_input` finding and question before the gate is consulted.
+    @Test func anUnresolvedRoleIsGatedLikeADirectTarget() throws {
+        for (token, capture, routing, projectRef, status) in assessmentGateCases() {
+            let assessment = Audit.assessIntent(
+                policy: try unresolvedRolePolicy(projectRef: projectRef),
+                capture: capture,
+                graph: routing
+            )
+            let finding = try onlyFinding(assessment)
+
+            #expect(finding.id == "main_output.role.kick", "\(token)")
+            #expect(finding.status == status, "\(token)")
+            #expect(finding.reasons.map(\.rawValue) == [token])
+            #expect(finding.target == Audit.IntentTargetEvidence(handle: nil, role: "kick", trackRef: nil, trackIndex: nil), "\(token)")
+            #expect(finding.observed == nil, "\(token)")
+            #expect(assessment.questions.isEmpty, "\(token)")
+            #expect(!assessment.changeRequired, "\(token)")
+        }
+
+        // Positive control: with the gate open the same policy asks, and the candidates are exactly
+        // the proposed members.
+        let open = Audit.assessIntent(policy: try unresolvedRolePolicy(projectRef: "prj_song"), capture: threeTrackCapture, graph: correctGraph)
+        let finding = try onlyFinding(open)
+        #expect(finding.status == .needsInput)
+        #expect(finding.reasons == [.roleHasNoAcceptedMember])
+        #expect(open.questions.map(\.id) == ["role.kick"])
+        #expect(open.questions.first?.candidates == [
+            Audit.IntentCandidate(handle: "b", trackRef: "trk_1"),
+            Audit.IntentCandidate(handle: "c", trackRef: "trk_2"),
+        ])
     }
 
     // Mutation: collapse the references-unavailable and target-not-in-snapshot branches into one.
