@@ -25,7 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   not reported (`project_file_not_bound`), and rows older than the audit's 30-second threshold say
   `track_cache_stale`. `scope: selection` is always `partial` (`selection_state_unverified`),
   because an unreadable AXSelected reads as unselected. A section version, `ax_occluded` or the
-  document flag that moves during the capture makes every requested domain `unstable`, and a
+  document flag that moves during the capture makes every requested domain `unstable`, including
+  a flag that flips and flips back before the capture ends, and a
   `project_ref` that no longer names the cached project is refused with State C
   `stale_target_reference` without binding the other project. `allow_ui_navigation=true` is
   refused with State C `not_implemented` until the navigating increment lands. Registry censuses grow to 116 operations / 24 read-only.

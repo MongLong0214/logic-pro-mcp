@@ -62,8 +62,18 @@ private func makeCapture(
     projectIssuance: ProjectIssuance? = nil
 ) -> Observation.Capture {
     Observation.Capture(
-        before: StateCache.CaptureBoundary(versions: versionsBefore, hasDocument: hasDocument, axOccluded: axOccluded),
-        after: StateCache.CaptureBoundary(versions: versionsAfter, hasDocument: hasDocument, axOccluded: axOccluded),
+        before: StateCache.CaptureBoundary(
+            versions: versionsBefore,
+            occlusionRevision: 0,
+            hasDocument: hasDocument,
+            axOccluded: axOccluded
+        ),
+        after: StateCache.CaptureBoundary(
+            versions: versionsAfter,
+            occlusionRevision: 0,
+            hasDocument: hasDocument,
+            axOccluded: axOccluded
+        ),
         projectEpoch: 3,
         project: ProjectInfo(name: "Song", filePath: "/Users/x/Song.logicx"),
         tracks: tracks,
@@ -597,6 +607,40 @@ struct Issue965CaptureTests {
         )
         let occludedAfterCapture = await cache.getAXOccluded()
         #expect(occludedAfterCapture)
+        try expectEveryDomainUnstable(report)
+    }
+
+    // SP-02: occlusion ends where it began, so comparing the flag value sees nothing; only the
+    // occlusion revision can tell this capture from a quiet one.
+    @Test func anOcclusionThatFlipsAndFlipsBackDuringTheFileReadMakesEveryRequestedDomainUnstable() async throws {
+        let cache = await populatedCache()
+        let report = try await captureReport(
+            cache,
+            reader: reader(duringRead: {
+                await cache.updateAXOccluded(true)
+                await cache.updateAXOccluded(false)
+            }),
+            domains: Observation.Domain.allCases
+        )
+        let occludedAfterCapture = await cache.getAXOccluded()
+        #expect(!occludedAfterCapture)
+        try expectEveryDomainUnstable(report)
+    }
+
+    // The document flag ends where it began too; the project epoch that updateDocumentState(false)
+    // advances through clearProjectState is what moves the watched versions.
+    @Test func aDocumentThatGoesAndComesBackDuringTheFileReadMakesEveryRequestedDomainUnstable() async throws {
+        let cache = await populatedCache()
+        let report = try await captureReport(
+            cache,
+            reader: reader(duringRead: {
+                await cache.updateDocumentState(false)
+                await cache.updateDocumentState(true)
+            }),
+            domains: Observation.Domain.allCases
+        )
+        let documentAfterCapture = await cache.getHasDocument()
+        #expect(documentAfterCapture)
         try expectEveryDomainUnstable(report)
     }
 

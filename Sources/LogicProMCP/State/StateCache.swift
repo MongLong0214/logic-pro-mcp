@@ -49,6 +49,10 @@ actor StateCache {
     private var regionsProjectIdentity: ProjectIdentity?
     private var sectionRevisions: [CacheSectionID: UInt64] = [:]
     private var droppedStaleWriteCounts: [CacheSectionID: UInt64] = [:]
+    /// #965: advances every time `axOccluded` takes a different value. The flag belongs to no
+    /// section, so no section revision moves with it; this is what lets a `CaptureBoundary` see
+    /// occlusion that flipped and flipped back between its two readings.
+    private var occlusionRevision: UInt64 = 0
 
     /// Whether Logic Pro has an open document with a visible window.
     /// Defaults to true (optimistic) — StatePoller sets to false when no document detected.
@@ -160,12 +164,17 @@ actor StateCache {
 
     /// #965: everything a whole-session capture must see unchanged, read in one actor hop.
     ///
-    /// `hasDocument` and `axOccluded` are written without advancing any section version
-    /// (`updateDocumentState(true)`, `updateAXOccluded`), so comparing versions alone cannot see
-    /// them move. Reading the versions one `await` at a time also leaves a gap between reads that
-    /// a write can land in unseen. One synchronous call leaves neither.
+    /// `axOccluded` belongs to no section, so no section version moves with it. `occlusionRevision`
+    /// advances on every change of it, so occlusion that flips and flips back between two
+    /// boundaries still makes them differ, where comparing the flag value alone would see them
+    /// equal. `hasDocument` needs no counter: `updateDocumentState(false)` runs `clearProjectState`,
+    /// which advances the project epoch every watched `SectionVersion` carries, and any flip-back
+    /// of `hasDocument` must pass through false, so it moves the versions.
+    /// Reading the versions one `await` at a time would also leave a gap between reads that a
+    /// write can land in unseen. One synchronous call leaves neither.
     struct CaptureBoundary: Sendable, Equatable {
         let versions: [CacheSectionID: SectionVersion]
+        let occlusionRevision: UInt64
         let hasDocument: Bool
         let axOccluded: Bool
     }
@@ -175,7 +184,12 @@ actor StateCache {
         for section in sections {
             versions[section] = currentVersion(for: section)
         }
-        return CaptureBoundary(versions: versions, hasDocument: hasDocument, axOccluded: axOccluded)
+        return CaptureBoundary(
+            versions: versions,
+            occlusionRevision: occlusionRevision,
+            hasDocument: hasDocument,
+            axOccluded: axOccluded
+        )
     }
 
     /// Number of conditional writes rejected because their observed version
@@ -254,6 +268,9 @@ actor StateCache {
     /// v3.1.4 (#4) — set the AX occlusion flag. Idempotent; called every
     /// poll cycle by `StatePoller.pollOnce`.
     func updateAXOccluded(_ occluded: Bool) {
+        if axOccluded != occluded {
+            occlusionRevision += 1
+        }
         axOccluded = occluded
     }
 
