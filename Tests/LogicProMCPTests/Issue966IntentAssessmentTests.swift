@@ -151,7 +151,8 @@ private let completeCoverage = RoutingCoverage.uniform(completeDomain)
 
 private func coverage(
     mainOutput: RoutingDomainCoverage = completeDomain,
-    association: RoutingDomainCoverage = completeDomain
+    association: RoutingDomainCoverage = completeDomain,
+    sends: RoutingDomainCoverage = completeDomain
 ) -> RoutingCoverage {
     RoutingCoverage(
         population: completeDomain,
@@ -159,13 +160,20 @@ private func coverage(
         mainOutput: mainOutput,
         physicalOutput: completeDomain,
         busToAuxInput: completeDomain,
-        sends: completeDomain
+        sends: sends
     )
 }
 
+/// Both domains the rule reads complete, `sends` partial: the graph as a whole is partial, so
+/// `isConsistent` returns before its duplicate-id check and an id two nodes carry passes the gate.
+private let sendsPartialCoverage = coverage(sends: RoutingDomainCoverage(state: .partial, reasons: ["send slots unread"]))
+
 /// A consistent graph for `baselineSnapshotId`. `complete` and `partialReason` follow the coverage
 /// the way `publish` derives them, so `isConsistent` holds unless a test breaks it on purpose.
+/// `projectReference` is the capture's project unless a test says otherwise; `publish` leaves it
+/// nil whenever the capture issued none.
 private func graph(
+    projectReference: TargetReference? = songReference,
     projectEpoch: UInt64 = 3,
     snapshotId: String = baselineSnapshotId,
     coverage: RoutingCoverage = completeCoverage,
@@ -174,7 +182,7 @@ private func graph(
 ) -> RoutingGraph {
     let reasons = coverage.domains.filter { $0.state != .complete }.flatMap(\.reasons)
     return RoutingGraph(
-        projectReference: songReference,
+        projectReference: projectReference,
         projectEpoch: projectEpoch,
         complete: coverage.isComplete,
         partialReason: coverage.isComplete ? nil : reasons.joined(separator: "; "),
@@ -252,6 +260,47 @@ private func kickPolicy(bus: Int = 3, projectRef: String? = nil) throws -> Audit
 private func onlyFinding(_ assessment: Audit.IntentAssessment) throws -> Audit.IntentFinding {
     #expect(assessment.findings.count == 1)
     return try #require(assessment.findings.first)
+}
+
+/// A case for one assessment gate: its token, the capture and graph that hit it alone, the policy's
+/// `project_ref`, and the status it forces.
+private typealias GateCase = (token: String, capture: Observation.Capture, graph: RoutingGraph, projectRef: String?, status: Audit.IntentStatus)
+
+/// Every assessment gate, each hit alone. The graph for an unissued project reference carries none,
+/// the way `publish` leaves it.
+private func assessmentGateCases() -> [GateCase] {
+    let moved = baselineVersions.merging([.mixer: StateCache.SectionVersion(projectEpoch: 3, sectionRevision: 3)]) { $1 }
+    let inconsistent = RoutingGraph(
+        projectReference: songReference,
+        projectEpoch: 3,
+        complete: true,
+        partialReason: nil,
+        nodes: correctGraph.nodes,
+        edges: correctGraph.edges + [mainOutput(from: 0, to: "nowhere")],
+        provenance: [.axMixerStrip],
+        snapshotId: baselineSnapshotId,
+        coverage: completeCoverage
+    )
+    let issued = issuedReferences(for: threeTracks)
+    return [
+        ("cache_moved_during_capture",
+         makeCapture(tracks: threeTracks, issued: issued, after: boundary(moved)), correctGraph, nil, .unverified),
+        ("graph_not_from_capture",
+         threeTrackCapture, graph(snapshotId: "snap_3_t7_m1_p1", nodes: correctGraph.nodes, edges: correctGraph.edges), nil, .unverified),
+        ("graph_project_mismatch",
+         threeTrackCapture,
+         graph(projectReference: TargetReference(rawValue: "prj_other"), nodes: correctGraph.nodes, edges: correctGraph.edges),
+         nil, .unverified),
+        ("routing_graph_inconsistent", threeTrackCapture, inconsistent, nil, .unverified),
+        ("no_document",
+         makeCapture(tracks: threeTracks, issued: issued, before: boundary(hasDocument: false)), correctGraph, nil, .unverified),
+        ("ax_occluded",
+         makeCapture(tracks: threeTracks, issued: issued, before: boundary(axOccluded: true)), correctGraph, nil, .unverified),
+        ("project_reference_unavailable",
+         makeCapture(tracks: threeTracks, issued: issued, projectIssuance: .unobserved(reason: "no path")),
+         graph(projectReference: nil, nodes: correctGraph.nodes, edges: correctGraph.edges), "prj_song", .unverified),
+        ("policy_project_mismatch", threeTrackCapture, correctGraph, "prj_other", .outsideScope),
+    ]
 }
 
 @Suite("Issue966IntentAssessmentTests")
@@ -706,6 +755,86 @@ struct Issue966IntentAssessmentTests {
         #expect(finding.reasons == [.sourceNodeAmbiguous])
     }
 
+    // `sends` partial is enough for `isConsistent` to skip its duplicate-id check, so two destination
+    // nodes sharing one id, on buses 3 and 4, reach the rule. Node order must not pick the verdict,
+    // and the same graph with unique ids still decides. Mutation: resolve the destination with
+    // `first(where:)` in `observeMainOutput`.
+    @Test func aDestinationIdTwoNodesCarryIsUnverifiedInEitherOrder() throws {
+        let onThree = busNode(3, id: "aux_shared")
+        let onFour = busNode(4, id: "aux_shared")
+        for destinations in [[onThree, onFour], [onFour, onThree]] {
+            let order = destinations.compactMap(\.busNumber).map(String.init).joined(separator: ",")
+            let routing = graph(
+                coverage: sendsPartialCoverage,
+                nodes: [trackNode(0)] + destinations,
+                edges: [mainOutput(from: 0, to: "aux_shared")]
+            )
+            #expect(routing.isConsistent, "\(order)")
+            let finding = try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: threeTrackCapture, graph: routing))
+
+            #expect(finding.status == .unverified, "\(order)")
+            #expect(finding.reasons.map(\.rawValue) == ["output_destination_ambiguous"], "\(order)")
+            #expect(finding.observed == nil, "\(order)")
+            #expect(finding.coverage.outputEdgeObserved, "\(order)")
+            #expect(!finding.coverage.destinationBusObserved, "\(order)")
+        }
+
+        // Positive control: unique ids, the capture's project, the same partial `sends`.
+        let toThree = graph(coverage: sendsPartialCoverage, nodes: [trackNode(0), drumBus, reverbBus], edges: [mainOutput(from: 0, to: drumBus.id)])
+        let toFour = graph(coverage: sendsPartialCoverage, nodes: [trackNode(0), drumBus, reverbBus], edges: [mainOutput(from: 0, to: reverbBus.id)])
+        #expect(try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: threeTrackCapture, graph: toThree)).status == .compliant)
+        #expect(try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: threeTrackCapture, graph: toFour)).status == .violation)
+    }
+
+    // The source's edges are found by its id, so an id another node also carries cannot say whose
+    // edge it is. Mutation: drop the source-id check in `observeMainOutput`.
+    @Test func aSourceIdAnotherNodeCarriesIsAmbiguous() throws {
+        let routing = graph(
+            coverage: sendsPartialCoverage,
+            nodes: [trackNode(0), auxNode("trk_0"), drumBus],
+            edges: [mainOutput(from: 0, to: drumBus.id)]
+        )
+        #expect(routing.isConsistent)
+        let finding = try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: threeTrackCapture, graph: routing))
+
+        #expect(finding.status == .unverified)
+        #expect(finding.reasons == [.sourceNodeAmbiguous])
+        #expect(finding.observed == nil)
+    }
+
+    // Two nodes on one bus number: the number the verdict compares names no single destination.
+    // Mutation: drop the bus-number check in `observeMainOutput`.
+    @Test func aBusNumberTwoNodesCarryIsUnverified() throws {
+        let routing = graph(
+            nodes: [trackNode(0), drumBus, busNode(3, id: "aux_other")],
+            edges: [mainOutput(from: 0, to: drumBus.id)]
+        )
+        #expect(routing.isConsistent)
+        let finding = try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: threeTrackCapture, graph: routing))
+
+        #expect(finding.status == .unverified)
+        #expect(finding.reasons.map(\.rawValue) == ["output_destination_ambiguous"])
+        #expect(finding.observed == nil)
+        #expect(finding.coverage.outputEdgeObserved)
+    }
+
+    // A reference the capture carries for two rows cannot say which row is the target. Mutation: take
+    // the lowest track index that carries it.
+    @Test func aReferenceTwoCapturedRowsCarryIsUnverified() throws {
+        let doubled = IssuedTrackReferences(
+            byRow: [trackRef(0), trackRef(0), trackRef(2)],
+            byTrackIndex: [0: trackRef(0), 1: trackRef(0), 2: trackRef(2)],
+            ambiguousTrackIndices: []
+        )
+        let capture = makeCapture(tracks: threeTracks, issued: doubled)
+        let finding = try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: capture, graph: correctGraph))
+
+        #expect(finding.status == .unverified)
+        #expect(finding.reasons.map(\.rawValue) == ["target_ambiguous_in_snapshot"])
+        #expect(finding.target.trackIndex == nil)
+        #expect(finding.observed == nil)
+    }
+
     // A role with no accepted member is a question whose candidates are the proposed ones only. The
     // capture's track named "Kick" is not among them and must not appear. Mutation: derive candidates
     // from track names.
@@ -760,7 +889,9 @@ struct Issue966IntentAssessmentTests {
     // Mutation: collapse the references-unavailable and target-not-in-snapshot branches into one.
     @Test func referencesUnavailableIsUnverifiedNotOutsideScope() throws {
         let noReferences = makeCapture(tracks: threeTracks, issued: nil)
-        let assessment = Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: noReferences, graph: correctGraph)
+        // With references off `publish` binds no project, so the graph carries none either.
+        let unbound = graph(projectReference: nil, nodes: correctGraph.nodes, edges: correctGraph.edges)
+        let assessment = Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: noReferences, graph: unbound)
         let finding = try onlyFinding(assessment)
 
         #expect(finding.status == .unverified)
@@ -889,37 +1020,11 @@ struct Issue966IntentAssessmentTests {
     // Each gate that says the graph cannot be read against this capture, one literal token each.
     // Mutation: drop the snapshot-id gate (or any other gate named here).
     @Test func eachValidityGateHasItsToken() throws {
-        let moved = baselineVersions.merging([.mixer: StateCache.SectionVersion(projectEpoch: 3, sectionRevision: 3)]) { $1 }
-        let inconsistent = RoutingGraph(
-            projectReference: songReference,
-            projectEpoch: 3,
-            complete: true,
-            partialReason: nil,
-            nodes: correctGraph.nodes,
-            edges: correctGraph.edges + [mainOutput(from: 0, to: "nowhere")],
-            provenance: [.axMixerStrip],
-            snapshotId: baselineSnapshotId,
-            coverage: completeCoverage
-        )
-        let issued = issuedReferences(for: threeTracks)
-        let cases: [(String, Observation.Capture, RoutingGraph, String?, Audit.IntentStatus)] = [
-            ("cache_moved_during_capture",
-             makeCapture(tracks: threeTracks, issued: issued, after: boundary(moved)), correctGraph, nil, .unverified),
-            ("graph_not_from_capture",
-             threeTrackCapture, graph(snapshotId: "snap_3_t7_m1_p1", nodes: correctGraph.nodes, edges: correctGraph.edges), nil, .unverified),
-            ("routing_graph_inconsistent", threeTrackCapture, inconsistent, nil, .unverified),
-            ("no_document",
-             makeCapture(tracks: threeTracks, issued: issued, before: boundary(hasDocument: false)), correctGraph, nil, .unverified),
-            ("ax_occluded",
-             makeCapture(tracks: threeTracks, issued: issued, before: boundary(axOccluded: true)), correctGraph, nil, .unverified),
-            ("project_reference_unavailable",
-             makeCapture(tracks: threeTracks, issued: issued, projectIssuance: .unobserved(reason: "no path")),
-             correctGraph, "prj_song", .unverified),
-            ("policy_project_mismatch", threeTrackCapture, correctGraph, "prj_other", .outsideScope),
+        let cases = assessmentGateCases() + [
             ("target_snapshot_stale",
              makeCapture(tracks: threeTracks, issued: nil, referencesEnabled: true), correctGraph, nil, .unverified),
         ]
-        #expect(!inconsistent.isConsistent)
+        #expect(cases.filter { !$0.graph.isConsistent }.map(\.token) == ["routing_graph_inconsistent"])
         for (token, capture, routing, projectRef, status) in cases {
             let finding = try onlyFinding(Audit.assessIntent(
                 policy: try kickPolicy(bus: 3, projectRef: projectRef),
@@ -937,6 +1042,36 @@ struct Issue966IntentAssessmentTests {
             graph: correctGraph
         ))
         #expect(control.status == .compliant)
+    }
+
+    // The snapshot id names cache revisions, not graph contents, so only the project reference ties a
+    // graph to the capture's project, and a reference on one side alone is no tie. Mutation: drop the
+    // project comparison from the gate.
+    @Test func aGraphOfAnotherProjectIsUnverified() throws {
+        let unobserved = makeCapture(
+            tracks: threeTracks,
+            issued: issuedReferences(for: threeTracks),
+            projectIssuance: .unobserved(reason: "no path")
+        )
+        let cases: [(String, Observation.Capture, TargetReference?)] = [
+            ("another project", threeTrackCapture, TargetReference(rawValue: "prj_other")),
+            ("the graph names none", threeTrackCapture, nil),
+            ("the capture issued none", unobserved, songReference),
+        ]
+        for (label, capture, graphProject) in cases {
+            let routing = graph(projectReference: graphProject, nodes: correctGraph.nodes, edges: correctGraph.edges)
+            #expect(routing.isConsistent, "\(label)")
+            let finding = try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: capture, graph: routing))
+
+            #expect(finding.status == .unverified, "\(label)")
+            #expect(finding.reasons.map(\.rawValue) == ["graph_project_mismatch"], "\(label)")
+            #expect(finding.observed == nil, "\(label)")
+        }
+
+        // Positive controls: one project on both sides, and none on either.
+        let unbound = graph(projectReference: nil, nodes: correctGraph.nodes, edges: correctGraph.edges)
+        #expect(try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: threeTrackCapture, graph: correctGraph)).status == .compliant)
+        #expect(try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: unobserved, graph: unbound)).status == .compliant)
     }
 
     // Every finding, whatever its status, says which aspects nothing observed. Mutation: emit an empty

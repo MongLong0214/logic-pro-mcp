@@ -11,13 +11,16 @@ import MCP
 // same bytes.
 //
 // What the rule reads: the capture's boundaries and issued references, the graph's snapshot id,
-// consistency, epoch and the `main_output` / `strip_track_association` coverage states, the source
-// node found by `targetRef`, its `outputClassification`, its `.mainOutput` edges and the
-// destination's `busNumber`. What it never reads: a track name, type or output label, a coverage
-// reason string, any `SendEdge` field, a `.send` or `.inputAssignment` edge, a level, an enabled
-// flag, or a track's automation or mute state. ADR-021 section 2: none of those proves a route right, and
-// none proves a connection absent. `displayName` and the coverage reasons are copied into the
-// finding as evidence for the reader; no decision is taken on them.
+// project reference, consistency, epoch and the `main_output` / `strip_track_association` coverage
+// states, the source node found by `targetRef`, its `outputClassification`, its `.mainOutput` edges
+// and the destination's `busNumber`. Each node and captured row it looks up must match exactly
+// once: `isConsistent` skips its duplicate-id check on a partial graph, and a partial `sends`
+// domain makes a graph partial while the two domains read here stay complete. What it never
+// reads: a track name, type or output label, a coverage reason string, any `SendEdge` field, a
+// `.send` or `.inputAssignment` edge, a level, an enabled flag, or a track's automation or mute
+// state. ADR-021 section 2: none of those proves a route right, and none proves a connection
+// absent. `displayName` and the coverage reasons are copied into the finding as evidence for the
+// reader; no decision is taken on them.
 
 extension ProjectSessionAudit {
     static let intentPolicySchema = "logic_pro_mcp_repair_policy.v1"
@@ -184,6 +187,7 @@ extension ProjectSessionAudit {
         // Capture and graph validity: the graph cannot be read against this capture at all.
         case cacheMovedDuringCapture = "cache_moved_during_capture"
         case graphNotFromCapture = "graph_not_from_capture"
+        case graphProjectMismatch = "graph_project_mismatch"
         case routingGraphInconsistent = "routing_graph_inconsistent"
         case noDocument = "no_document"
         case axOccluded = "ax_occluded"
@@ -193,6 +197,7 @@ extension ProjectSessionAudit {
         case referencesUnavailable = "references_unavailable"
         case targetSnapshotStale = "target_snapshot_stale"
         case targetNotInSnapshot = "target_not_in_snapshot"
+        case targetAmbiguousInSnapshot = "target_ambiguous_in_snapshot"
         case graphEpochMismatch = "graph_epoch_mismatch"
         // Domain coverage: compliant and violation need both domains complete.
         case mainOutputCoverageIncomplete = "main_output_coverage_incomplete"
@@ -202,6 +207,7 @@ extension ProjectSessionAudit {
         case sourceNodeAmbiguous = "source_node_ambiguous"
         case outputUnclassified = "output_unclassified"
         case outputEdgeAmbiguous = "output_edge_ambiguous"
+        case outputDestinationAmbiguous = "output_destination_ambiguous"
         case expectedBusNotObserved = "expected_bus_not_observed"
         case roleHasNoAcceptedMember = "role_has_no_accepted_member"
     }
@@ -865,6 +871,16 @@ extension ProjectSessionAudit {
         if graph.snapshotId != SessionPopulationObservation.snapshotID(for: capture) {
             return AssessmentGate(status: .unverified, reason: .graphNotFromCapture)
         }
+        // The snapshot id names cache revisions, not graph contents, so it cannot say whose project
+        // the graph describes; the project reference the capture issued can. `publish` copies it and
+        // leaves the graph's nil when the capture issued none, so one side alone is a mismatch too.
+        var capturedProject: TargetReference?
+        if case .issued(let reference)? = capture.projectIssuance {
+            capturedProject = reference
+        }
+        if graph.projectReference != capturedProject {
+            return AssessmentGate(status: .unverified, reason: .graphProjectMismatch)
+        }
         if !graph.isConsistent {
             return AssessmentGate(status: .unverified, reason: .routingGraphInconsistent)
         }
@@ -938,8 +954,12 @@ extension ProjectSessionAudit {
         guard let issued = capture.issued else {
             return finding(.unverified, nil, trackIndex: nil, reasons: [.targetSnapshotStale])
         }
-        guard let trackIndex = issued.byTrackIndex.filter({ $0.value == trackRef }).keys.min() else {
+        let trackIndices = issued.byTrackIndex.filter { $0.value == trackRef }.keys.sorted()
+        guard let trackIndex = trackIndices.first else {
             return finding(.outsideScope, nil, trackIndex: nil, reasons: [.targetNotInSnapshot])
+        }
+        guard trackIndices.count == 1 else {
+            return finding(.unverified, nil, trackIndex: nil, reasons: [.targetAmbiguousInSnapshot])
         }
         // The graph carries the epoch of the registry snapshot the capture issued under.
         guard graph.projectEpoch == capture.targetSnapshot?.projectEpoch else {
@@ -989,7 +1009,8 @@ extension ProjectSessionAudit {
     }
 
     /// The source is the one node carrying the target's reference, never a node found by name.
-    /// Only its `outputClassification` and its `.mainOutput` edges are read.
+    /// Only its `outputClassification` and its `.mainOutput` edges are read. Every lookup runs over
+    /// all nodes and needs exactly one match, so node order never picks the observation.
     private static func observeMainOutput(of trackRef: TargetReference, in graph: RoutingGraph) -> MainOutputObservation {
         func classified(_ output: RoutingOutputClassification) -> MainOutputObservation {
             .observed(IntentEndpoint(nodeId: nil, displayName: nil, busNumber: nil, output: output))
@@ -1007,13 +1028,24 @@ extension ProjectSessionAudit {
         case .physicalOutput?:
             return classified(.physicalOutput)
         case .bus?:
+            // Edges name their source by id: another node carrying that id could own the edge.
+            guard graph.nodes.filter({ $0.id == source.id }).count == 1 else {
+                return .unobserved(.sourceNodeAmbiguous, edgeObserved: false)
+            }
             let edges = graph.edges.filter { $0.kind == .mainOutput && $0.source == source.id }
-            guard edges.count == 1,
-                  let edge = edges.first,
-                  let busNode = graph.nodes.first(where: { $0.id == edge.destination }),
-                  let busNumber = busNode.busNumber
-            else {
+            guard edges.count == 1, let edge = edges.first else {
                 return .unobserved(.outputEdgeAmbiguous, edgeObserved: !edges.isEmpty)
+            }
+            let destinations = graph.nodes.filter { $0.id == edge.destination }
+            guard destinations.count <= 1 else {
+                return .unobserved(.outputDestinationAmbiguous, edgeObserved: true)
+            }
+            guard let busNode = destinations.first, let busNumber = busNode.busNumber else {
+                return .unobserved(.outputEdgeAmbiguous, edgeObserved: true)
+            }
+            // The verdict compares this number, so it has to name one node.
+            guard graph.nodes.filter({ $0.busNumber == busNumber }).count == 1 else {
+                return .unobserved(.outputDestinationAmbiguous, edgeObserved: true)
             }
             return .observed(IntentEndpoint(
                 nodeId: busNode.id,

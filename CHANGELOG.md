@@ -69,11 +69,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   and `violation` need the `main_output` and `strip_track_association` domains both `complete`;
   otherwise the finding is `unverified` with `main_output_coverage_incomplete` /
   `strip_track_association_incomplete` and the domains' own reasons copied as evidence. A capture
-  that moved, a graph from another capture, an inconsistent graph, no document, occlusion, a stale
-  reference snapshot or an unissued project reference is `unverified` with its own token; a policy
-  for another project or a target outside the snapshot is `outside_scope`. The source is found by
-  reference, never by name, and send and input edges, levels, enabled flags and automation are
-  never read. Limits: `publish` leaves both domains `partial` on every read today, so every real
+  that moved, a graph from another capture, a graph whose project reference is not the one the
+  capture issued, an inconsistent graph, no document, occlusion, a stale reference snapshot or an
+  unissued project reference is `unverified` with its own token; a policy for another project or a
+  target outside the snapshot is `outside_scope`. The source is found by reference, never by name;
+  a node id, destination bus number or captured reference that more than one node or row carries
+  is `unverified` rather than decided by order; and send and input edges, levels, enabled flags
+  and automation are never read. Limits: `publish` leaves both domains `partial` on every read today, so every real
   assessment is `unverified`; no command, resource or documented surface exposes this yet.
 
 ### Fixed
