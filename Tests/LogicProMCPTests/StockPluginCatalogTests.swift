@@ -66,6 +66,24 @@ private func censusFixture(
     )
 }
 
+/// A throwaway factory-settings tree: each path is a file under a fresh temporary directory, and a
+/// path ending in `/` is a directory.
+private func makeFactoryTree(_ paths: [String]) throws -> URL {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("stock-plugin-presets-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    for path in paths {
+        let url = root.appendingPathComponent(path)
+        if path.hasSuffix("/") {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            continue
+        }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("preset".utf8).write(to: url)
+    }
+    return root
+}
+
 @Suite("Stock plugin intelligence — validator")
 struct StockPluginValidatorTests {
     @Test("validator rejects duplicate stable IDs")
@@ -393,31 +411,18 @@ struct StockPluginCatalogTests {
                 "verified entries carrying factory presets must validate: \(snapshot.validation.issues)")
     }
 
-    @Test("factory preset probing keeps bounded sorted names without full-directory storage")
-    func boundedFactoryPresetNames() throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("stock-plugin-presets-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        for filename in ["Zed.pst", "Alpha.pst", "Beta.pst", "Gamma.pst", "ignore.txt"] {
-            FileManager.default.createFile(
-                atPath: directory.appendingPathComponent(filename).path,
-                contents: Data("preset".utf8)
-            )
-        }
+    @Test("a factory preset walk returns sorted names and says when the entry cap stopped it")
+    func factoryPresetWalkIsBounded() throws {
+        // Kills the mutant that reports a walk the entry cap stopped as complete.
+        let directory = try makeFactoryTree(["Zed.pst", "Alpha.pst", "Beta.pst", "Gamma.pst", "ignore.txt"])
 
-        let names = StockPluginCatalog.boundedFactoryPresetNames(
-            in: directory.path,
-            maxDirectoryEntries: 100,
-            maxNames: 3
-        )
-        #expect(names == ["Alpha", "Beta", "Gamma"])
+        let walk = StockPluginCatalog.factoryPresets(in: directory.path, maxDirectoryEntries: 100)
+        #expect(walk.presets.map(\.name) == ["Alpha", "Beta", "Gamma", "Zed"])
+        #expect(walk.complete)
 
-        let entryCapped = StockPluginCatalog.boundedFactoryPresetNames(
-            in: directory.path,
-            maxDirectoryEntries: 1,
-            maxNames: 12
-        )
-        #expect(entryCapped.count <= 1)
+        let capped = StockPluginCatalog.factoryPresets(in: directory.path, maxDirectoryEntries: 1)
+        #expect(capped.presets.count <= 1)
+        #expect(!capped.complete, "a walk the entry cap stopped must not read as the whole folder")
     }
 
     @Test("contradictory census evidence fails loudly and never yields verified")
@@ -505,6 +510,8 @@ struct StockPluginResourceTests {
         let detail = try await stockPluginResourceObject("logic://stock-plugins/logic.stock.effect.gain")
         #expect((detail["entry"] as? [String: Any])?["id"] as? String == "logic.stock.effect.gain")
         #expect((detail["entry"] as? [String: Any])?["known_presets"] as? [String] != nil)
+        #expect((detail["entry"] as? [String: Any])?["known_presets_truncated"] as? Bool != nil)
+        #expect(detail["factory_presets"] as? [Any] != nil)
 
         let search = try await stockPluginResourceObject("logic://stock-plugins/search?query=gain")
         #expect(((search["entries"] as? [[String: Any]])?.contains { $0["id"] as? String == "logic.stock.effect.gain" })!)
@@ -517,6 +524,8 @@ struct StockPluginResourceTests {
         let capabilities = try await stockPluginResourceObject("logic://stock-plugins/capabilities")
         #expect(((capabilities["truth_labels"] as? [String])?.contains("verified"))!)
         #expect(((capabilities["catalog_entry_fields"] as? [String])?.contains("known_presets"))!)
+        #expect(((capabilities["catalog_entry_fields"] as? [String])?.contains("known_presets_truncated"))!)
+        #expect(((capabilities["catalog_entry_fields"] as? [String])?.contains("known_presets_total"))!)
         #expect(((capabilities["resources"] as? [String])?.contains("logic://stock-plugins"))!)
         #expect((capabilities["production_reachable_states"] as? [String]) == ["inferred", "manifested"])
         #expect(((capabilities["census_injectable_states"] as? [String])?.contains("readback_mismatch"))!)
@@ -568,5 +577,128 @@ struct StockPluginResourceTests {
         #expect(total != nil)
         #expect((missing["entries"] as? [[String: Any]])?.count == total)
         #expect((empty["entries"] as? [[String: Any]])?.count == total)
+    }
+}
+
+/// #1030: the catalog sees every factory preset Apple ships. Each test names the mutant it kills,
+/// and none reads the installed Logic -- every root is a temporary directory.
+@Suite("Stock plugin intelligence — factory presets")
+struct StockPluginFactoryPresetTests {
+    @Test("a preset filed in a category subfolder is found, with the subfolder as its category")
+    func nestedPresetIsFound() throws {
+        // Kills the mutant that restores `.skipsSubdirectoryDescendants` in `factoryPresets(in:)`.
+        let root = try makeFactoryTree([
+            "ES2/#default.pst",
+            "ES2/01 Synth Leads/Lead One.pst",
+            "ES2/01 Synth Leads/Deeper/Lead Two.pst",
+            "ES2/01 Synth Leads/order.plist",
+        ])
+
+        let walk = StockPluginCatalog.factoryPresets(in: root.appendingPathComponent("ES2").path)
+
+        #expect(walk.complete)
+        #expect(walk.presets.map(\.name) == ["#default", "Lead One", "Lead Two"])
+        #expect(walk.presets.map(\.category) == [nil, "01 Synth Leads", "01 Synth Leads/Deeper"])
+    }
+
+    @Test("the Plug-In Settings Internal root is searched, and every root's presets are kept")
+    func internalRootIsSearched() throws {
+        // Kills the mutant that removes `Plug-In Settings Internal` from `factorySettingsRoots`.
+        let tree = try makeFactoryTree([
+            "Fake.app/Contents/Resources/Plug-In Settings/Sculpture/#default.pst",
+            "Fake.app/Contents/Resources/Plug-In Settings Internal/Sculpture/01 Pads/Glass Pad.pst",
+        ])
+        let appPath = tree.appendingPathComponent("Fake.app").path
+
+        let manifests = StockPluginCatalog.probeLocalManifests(
+            appPath: appPath,
+            sharedRoot: tree.appendingPathComponent("no-shared-root").path
+        )
+
+        let sculpture = try #require(manifests["logic.stock.instrument.sculpture"])
+        #expect(sculpture.sourcePath == appPath + "/Contents/Resources/Plug-In Settings/Sculpture")
+        #expect(sculpture.presetNames == ["#default", "Glass Pad"])
+        let internalPreset = try #require(sculpture.presets.first { $0.name == "Glass Pad" })
+        #expect(internalPreset.folder == appPath + "/Contents/Resources/Plug-In Settings Internal/Sculpture")
+        #expect(internalPreset.category == "01 Pads")
+    }
+
+    @Test("a list the name cap cuts says it is cut and gives the total")
+    func truncationIsReportedWithItsTotal() throws {
+        // Kills the mutant that drops the truncation flag in `buildEntry`.
+        let thirteen = (1...13).map { "Preset \($0 < 10 ? "0" : "")\($0)" }
+        let twelve = Array(thirteen.prefix(12))
+        let census = censusFixture(manifests: [
+            "logic.stock.effect.limiter": StockPluginLocalManifest(sourcePath: "/fixture/Limiter", presetNames: thirteen),
+            "logic.stock.effect.gain": StockPluginLocalManifest(sourcePath: "/fixture/Gain", presetNames: twelve),
+        ])
+        let snapshot = StockPluginCatalog.defaultSnapshot(census: census)
+        #expect(snapshot.validation.isValid, "\(snapshot.validation.issues)")
+
+        let cut = try #require(snapshot.entries.first { $0.id == "logic.stock.effect.limiter" })
+        #expect(cut.knownPresets == twelve)
+        #expect(cut.knownPresetsTruncated, "13 presets under a cap of 12 must say the list is cut")
+        #expect(cut.knownPresetsTotal == 13)
+        #expect(StockPluginCatalog.factoryPresets(id: cut.id, census: census).map(\.name) == thirteen)
+
+        let encoded = try #require(ResourceHandlers.jsonObject(cut) as? [String: Any])
+        let encodedTruncated = try #require(encoded["known_presets_truncated"] as? Bool)
+        #expect(encodedTruncated)
+        #expect(encoded["known_presets_total"] as? Int == 13)
+
+        let whole = try #require(snapshot.entries.first { $0.id == "logic.stock.effect.gain" })
+        #expect(whole.knownPresets == twelve)
+        #expect(!whole.knownPresetsTruncated)
+        #expect(whole.knownPresetsTotal == 12)
+    }
+
+    @Test("a walk that stopped marks the entry truncated with an unknown total, never a short one")
+    func stoppedWalkIsTruncatedWithUnknownTotal() throws {
+        // Kills the same mutant as above through the other half of the condition: a walk the
+        // entry cap stopped, where the names alone are under the name cap.
+        let tree = try makeFactoryTree([
+            "Fake.app/Contents/Resources/Plug-In Settings/Limiter/A.pst",
+            "Fake.app/Contents/Resources/Plug-In Settings/Limiter/B.pst",
+            "Fake.app/Contents/Resources/Plug-In Settings/Limiter/C.pst",
+        ])
+        let manifests = StockPluginCatalog.probeLocalManifests(
+            appPath: tree.appendingPathComponent("Fake.app").path,
+            sharedRoot: tree.appendingPathComponent("no-shared-root").path,
+            maxDirectoryEntries: 1
+        )
+        let limiter = try #require(manifests["logic.stock.effect.limiter"])
+        #expect(!limiter.scanComplete)
+
+        let snapshot = StockPluginCatalog.defaultSnapshot(census: censusFixture(manifests: manifests))
+        let entry = try #require(snapshot.entries.first { $0.id == "logic.stock.effect.limiter" })
+        #expect(entry.knownPresetsTruncated)
+        #expect(entry.knownPresetsTotal == nil)
+    }
+
+    @Test("a factory-settings folder with no seed and no exclusion fails")
+    func unaccountedFolderFails() throws {
+        // Kills the mutant that removes the Studio Piano seed.
+        let root = try makeFactoryTree([
+            "Studio Piano/Grand.pst",
+            "ES2/#default.pst",
+            "Auto-Funk/Fat Funk.pst",
+            "Not A Plug-In/Anything.pst",
+            "CSParameterOrder.plist",
+        ])
+
+        let unaccounted = try StockPluginCatalog.unaccountedFactorySettingsFolders(
+            roots: [root.path, root.appendingPathComponent("absent-root").path]
+        )
+        #expect(unaccounted == ["Not A Plug-In"])
+
+        // A root that exists and cannot be listed is not a root with nothing unaccounted in it.
+        let notADirectory = root.appendingPathComponent("CSParameterOrder.plist").path
+        #expect(throws: (any Error).self) {
+            try StockPluginCatalog.unaccountedFactorySettingsFolders(roots: [notADirectory])
+        }
+
+        // A name is a seed or an exclusion, never both.
+        let seedNames = Set(StockPluginCatalog.defaultSnapshot(census: .deterministic()).entries.map(\.displayName))
+        #expect(seedNames.isDisjoint(with: StockPluginCatalog.factorySettingsFolderExclusions.keys))
     }
 }
