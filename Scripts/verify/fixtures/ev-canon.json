@@ -1,0 +1,180 @@
+{
+ "format": "lpm-evidence/1",
+ "spec_path": "Scripts/verify/fixtures/spec-canon.json",
+ "spec": {
+  "format": "lpm-acceptance/1",
+  "issue": 1020,
+  "surface": "arrange.menus",
+  "sources": [
+   {
+    "doc": "docs/adr/ADR-019-observation-ledger.md",
+    "sha": "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea",
+    "quote": "The observation system exists so that when Logic moves"
+   }
+  ],
+  "fixture": {
+   "id": "selftest-canon",
+   "note": "A self-test fixture for matches_canon. The canon row is pinned in docs/canon/index/strings.tsv for en."
+  },
+  "locales": {
+   "subset": [
+    "en"
+   ],
+   "reason": "self-test: the fixture's reading is the English value of the pinned row"
+  },
+  "rows": [
+   {
+    "id": "label-is-apples",
+    "criterion": 0,
+    "steps": [
+     {
+      "as": "before",
+      "read": {
+       "uri": "logic://system/ui"
+      }
+     },
+     {
+      "as": "open",
+      "call": {
+       "tool": "logic_navigate",
+       "command": "show_smart_controls",
+       "params": {}
+      }
+     },
+     {
+      "as": "after",
+      "read": {
+       "uri": "logic://system/ui"
+      }
+     }
+    ],
+    "operation": "open",
+    "expect": [
+     {
+      "path": "open.state",
+      "op": "eq",
+      "value": "A"
+     },
+     {
+      "path": "after.title",
+      "op": "matches_canon",
+      "ref": {
+       "canon": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Smart%20Controls#value",
+       "locale": "$locale",
+       "quote": "Smart Controls"
+      }
+     }
+    ],
+    "counterexample": [
+     {
+      "observation": "before",
+      "replaces": "after",
+      "must_fail": [
+       1
+      ]
+     }
+    ],
+    "restore": [],
+    "restore_expect": [],
+    "independence": [
+     "before",
+     "after"
+    ]
+   }
+  ]
+ },
+ "spec_sha256": "94c32c68e44d8cde76d8814824893fc65d11bc05f03b18699b8e843a62158738",
+ "binary": {
+  "binary_path": null,
+  "binary_sha256": null,
+  "head": "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea",
+  "binding": "unbound",
+  "note": "self-test fixture: no binary exists, so none is claimed; cases that need one bind a temporary file (selftest.py, the `bind` patch op)"
+ },
+ "runs": {
+  "en": {
+   "date": "2026-09-27",
+   "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)"
+   },
+   "locale_reading": {
+    "lproj": "en",
+    "code": "en",
+    "expected_title": {
+     "readable": true,
+     "value": "lpm-locale-campaign - Tracks"
+    },
+    "language_setting": {
+     "readable": true,
+     "value": [
+      "en"
+     ]
+    },
+    "window_names": {
+     "readable": true,
+     "value": [
+      "lpm-locale-campaign - Tracks"
+     ]
+    }
+   },
+   "rows": {
+    "label-is-apples": {
+     "observations": {
+      "before": {
+       "step": {
+        "as": "before",
+        "read": {
+         "uri": "logic://system/ui"
+        }
+       },
+       "raw": "{\"title\": \"Tracks\"}",
+       "raw_bytes": 19
+      },
+      "open": {
+       "step": {
+        "as": "open",
+        "call": {
+         "tool": "logic_navigate",
+         "command": "show_smart_controls",
+         "params": {}
+        }
+       },
+       "raw": "{\"state\": \"A\", \"success\": true}",
+       "raw_bytes": 31
+      },
+      "after": {
+       "step": {
+        "as": "after",
+        "read": {
+         "uri": "logic://system/ui"
+        }
+       },
+       "raw": "{\"title\": \"Smart Controls\"}",
+       "raw_bytes": 27
+      }
+     }
+    }
+   }
+  }
+ },
+ "verdicts": {
+  "en": {
+   "label-is-apples": {
+    "verdict": "PASS",
+    "expect": [
+     "PASS",
+     "PASS"
+    ],
+    "counterexample": [
+     "FAIL"
+    ],
+    "restore": [],
+    "reasons": []
+   }
+  }
+ }
+}
