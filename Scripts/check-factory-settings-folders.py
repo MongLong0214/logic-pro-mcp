@@ -28,8 +28,9 @@ WHAT IT DOES NOT CLAIM
 - An unaccounted folder whose 32-bit prefix equals an accounted name's passes. The set holds 143
   prefixes, so the chance for one new folder is about 143 / 2**32.
 - The shared `/Library/Application Support/Logic/Plug-In Settings` root is outside the bundle and
-  outside the canon, so its folders are not checked here. `unaccountedFactorySettingsFolders(roots:)`
-  checks all three roots on a machine that has them.
+  outside the canon, so its folders are not checked here. They are checked by
+  `StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()` on a host that has
+  the shared root; CI has none, so there it is skipped.
 - It does not check that an exclusion still names a folder Apple ships.
 
 Exit: 0 = every pinned folder is accounted for - 1 = one is not, or the inputs could not be read
@@ -152,7 +153,7 @@ def problems(root: str = None) -> list:
             f"{len(unaccounted)} of the {len(table)} factory plug-in settings folders Logic "
             f"{logic.get('version')} ({logic.get('build')}) ships in its bundle have neither a seed "
             f"nor an entry in `factorySettingsFolderExclusions`. The canon pins digests, not names: "
-            f"on a machine with Logic, `StockPluginCatalog.unaccountedFactorySettingsFolders(roots:)` "
+            f"on a host with Logic, `swift test --filter hostFactorySettingsFoldersAreAccountedFor` "
             f"names them, or list `Contents/Resources/Plug-In Settings` and "
             f"`Contents/Resources/Plug-In Settings Internal`. Give each a seed, or an exclusion that "
             f"says why it has none.")

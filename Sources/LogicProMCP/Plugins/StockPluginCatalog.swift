@@ -1089,6 +1089,10 @@ enum StockPluginCatalog {
     /// The same question asked of the directories under `roots`. A root that does not exist
     /// contributes nothing; one that exists and cannot be listed throws, because a root nobody
     /// could read is not a root with nothing unaccounted in it.
+    ///
+    /// Over the three real roots, `factorySettingsRoots(appPath:)` of the installed Logic, this is
+    /// checked by `StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()` on a
+    /// host that has the shared root; CI has none, so there it is skipped.
     static func unaccountedFactorySettingsFolders(
         roots: [String],
         fileManager: FileManager = .default
@@ -1613,10 +1617,14 @@ enum StockPluginCatalog {
     // MARK: - Factory-settings folders no seed owns
 
     /// Every folder under a factory-settings root is a seed's display name or a key here, and the
-    /// value says why it has no seed. This is the one place that question is answered:
-    /// `unaccountedFactorySettingsFolders` and `Scripts/check-factory-settings-folders.py` hold the
-    /// catalog to it. Measured against every folder of the three roots on Logic 12.3 (6674); each
-    /// unit or variant key is read from `DefaultPluginMapping.plist` in MAContentTagging.framework.
+    /// value says why it has no seed. This is the one place that question is answered.
+    /// `Scripts/check-factory-settings-folders.py` holds the catalog to it for the two bundle roots
+    /// in CI, and refuses a value that is not one of the three reason constructors below. All
+    /// three roots, the shared one included, are checked by
+    /// `StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()` on a host that
+    /// has the shared root; CI has none, so there it is skipped. Measured against every folder of
+    /// the three roots on Logic 12.3 (6674); each unit or variant key is read from
+    /// `DefaultPluginMapping.plist` in MAContentTagging.framework.
     static let factorySettingsFolderExclusions: [String: String] = [
         "Auto-Funk": stompbox("0007"),
         "Blue Echo": stompbox("0008"),

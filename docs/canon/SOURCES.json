@@ -135,7 +135,7 @@
       "limits": [
         "Folder names only. The presets inside a folder are not pinned; the digest says that they changed, not which.",
         "Four names ship under both roots, so the rows outnumber the distinct names the absence set holds.",
-        "The shared `/Library/Application Support/Logic/Plug-In Settings` root is outside the bundle and outside this corpus, so folders that ship only there are checked on a machine that has it, by `StockPluginCatalog.unaccountedFactorySettingsFolders(roots:)`, not in CI.",
+        "The shared `/Library/Application Support/Logic/Plug-In Settings` root is outside the bundle and outside this corpus. Folders that ship only there are checked by `StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()` on a host that has the shared root; CI has none, so there it is skipped.",
         "Not localised: the bundle holds one directory per folder, not one per `.lproj`, and nothing here says what name a localised Logic shows for the plug-in."
       ]
     },

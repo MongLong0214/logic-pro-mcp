@@ -84,6 +84,12 @@ private func makeFactoryTree(_ paths: [String]) throws -> URL {
     return root
 }
 
+/// The three factory-settings roots production reads on this host: both bundle roots of the Logic
+/// `StockPluginCensus.production()` probes, and the shared Application Support root.
+private let hostFactorySettingsRoots = StockPluginCatalog.factorySettingsRoots(
+    appPath: LogicProTarget.preferredInstalledApplicationPath()
+)
+
 @Suite("Stock plugin intelligence — validator")
 struct StockPluginValidatorTests {
     @Test("validator rejects duplicate stable IDs")
@@ -583,8 +589,9 @@ struct StockPluginResourceTests {
     }
 }
 
-/// #1030: the catalog sees every factory preset Apple ships. Each test names the mutant it kills,
-/// and none reads the installed Logic -- every root is a temporary directory.
+/// #1030: the catalog sees every factory preset Apple ships. Each test names the mutant it kills.
+/// Every root is a temporary directory except in `hostFactorySettingsFoldersAreAccountedFor`, which
+/// reads the installed Logic and the shared root, and is skipped where either is absent.
 @Suite("Stock plugin intelligence — factory presets")
 struct StockPluginFactoryPresetTests {
     @Test("a preset filed in a category subfolder is found, with the subfolder as its category")
@@ -710,6 +717,39 @@ struct StockPluginFactoryPresetTests {
                 #expect(Set(encoded.keys) == Set(promised))
             }
         }
+    }
+
+    @Test("a folder only in the shared root, with no seed and no exclusion, is reported")
+    func sharedRootOnlyFolderIsReported() throws {
+        // Kills the mutant that drops the shared root from `factorySettingsRoots`, the list the
+        // host check below reads.
+        let tree = try makeFactoryTree([
+            "Fake.app/Contents/Resources/Plug-In Settings/ES2/#default.pst",
+            "Fake.app/Contents/Resources/Plug-In Settings Internal/Studio Piano/Grand.pst",
+            "Shared/Pedalboard/Clean.pst",
+            "Shared/Only In The Shared Root/Anything.pst",
+        ])
+        let roots = StockPluginCatalog.factorySettingsRoots(
+            appPath: tree.appendingPathComponent("Fake.app").path,
+            sharedRoot: tree.appendingPathComponent("Shared").path
+        )
+
+        let unaccounted = try StockPluginCatalog.unaccountedFactorySettingsFolders(roots: roots)
+        #expect(unaccounted == ["Only In The Shared Root"])
+    }
+
+    @Test(
+        "on a host with Logic and the shared root, every folder in the three factory-settings roots is a seed or a reasoned exclusion",
+        .enabled(
+            if: hostFactorySettingsRoots.allSatisfy { FileManager.default.fileExists(atPath: $0) },
+            "skipped, not passed: a factory-settings root is absent on this host. CI has no Logic and no shared root, so the shared root is checked only on a host that has it."
+        )
+    )
+    func hostFactorySettingsFoldersAreAccountedFor() throws {
+        // Kills the mutant that deletes an exclusion whose folder ships only in the shared root
+        // (`AVerb` on Logic 12.3 (6674)); the canon pins the bundle roots only, so nothing else sees it.
+        let unaccounted = try StockPluginCatalog.unaccountedFactorySettingsFolders(roots: hostFactorySettingsRoots)
+        #expect(unaccounted.isEmpty, "folders with neither a seed nor an exclusion: \(unaccounted) in \(hostFactorySettingsRoots)")
     }
 
     @Test("a factory-settings folder with no seed and no exclusion fails")
