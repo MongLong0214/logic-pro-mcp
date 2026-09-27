@@ -28,6 +28,8 @@
     "absence/niblabels.zh_TW.u32": "93e583c59300c520cbab52bc249d51dc3884c203169adc3c3a287daf74754bc5",
     "absence/nibstrings.en.folded.u32": "4126a61e469582b90578e149098ba1f1b9f98353530c3456295e7c720641420f",
     "absence/nibstrings.en.u32": "a417fdb909f57d7a44b43ed23ccdcd8521822c31ca55116f7e300797247b791e",
+    "absence/plugin_names.-.folded.u32": "b51e7090057a67f850c50a5363bccd258cab225c5c56dbf02cd82adca57ebfcd",
+    "absence/plugin_names.-.u32": "a5e0ee46d843c3d71175c4fb17e4ab2d4f21869eab5ac41283e48d6d6e705c5a",
     "absence/quickhelp.de.folded.u32": "b31c23794ee49f1e61b9474bcbff555985890e7958e946022d612f35d28fb00d",
     "absence/quickhelp.de.u32": "a40ae686d5d934bd5de10c5c0dd80b5571a10972e9e47fbcb1162ade3c99dec9",
     "absence/quickhelp.en.folded.u32": "6fecc00c423c199ab2f082efac4642775171339c73d919efe20cd7cd4647570c",
@@ -70,39 +72,63 @@
     "absence/strings.zh_CN.u32": "00411c6c92eb549954f8a9f025f0bbbff1318392cc6ec0a906f53c105eb607eb",
     "absence/strings.zh_TW.folded.u32": "3ac8f9d9bf1ad618500c13f453a4d977b056f3cd5702038a6784e3d8f3664519",
     "absence/strings.zh_TW.u32": "ef81ff10d762c8422eabdfa6a06770c5dc4db62922b7318742d778cee7e58bcb",
-    "absence/translated.en.u32": "68a2626a813876c46cc415d757a9ea3c8096eec280155f6e81ecb1341354e444",
-    "index/madsp.tsv": "664b694f0bacce322cf8b15a4539594f2106d2d5b7c38b10b0e3e508b30d2320",
+    "absence/stringsdict.de.folded.u32": "6b9900d0b140cc134df9ee54dc405a7625cdf39b679e49a6419baabc91f3ce4e",
+    "absence/stringsdict.de.u32": "72a910716848514bf76985cbd72b5bb1018b599e76c070b7c061b9beefeb061c",
+    "absence/stringsdict.en.folded.u32": "f5d3b3dadf9b1fb665b8b149261e41e843b9b2730cef270cce5a9c0b787d159c",
+    "absence/stringsdict.en.u32": "7ee3b1bbc3935ee274a50704553e19e9f604b32ee9efc02b37ad1c5368a1b317",
+    "absence/stringsdict.es.folded.u32": "9cd842a5e266d5149c7683016b948c65c9451f245a3cea824dca7dfb1a2cbbd7",
+    "absence/stringsdict.es.u32": "d1ba92f73ce829648d5049ce709907a48e860c93c206e076475bc3472941d324",
+    "absence/stringsdict.fr.folded.u32": "4be02b71121840e0e624d37cac2ae39417ae4a4a73b4b8e311b7d7bc6c30c7b9",
+    "absence/stringsdict.fr.u32": "de5d3a3a2a245b862332ecd2b6ca1b97d377a85ac3e583bbdd604559242f2cee",
+    "absence/stringsdict.it.folded.u32": "c7f22f56a5692d7d8825f3f798257393f3d7089e7139a72f2f3e41c0735c0356",
+    "absence/stringsdict.it.u32": "ea4ea9e1a844d55c85e51642d7f97bd325f273ddbf4fdbfac3854a8257d2b956",
+    "absence/stringsdict.ja.folded.u32": "147b43621d2730b8ef49e886a2baf6b2f8cd6ca609f5219c6a8ea2534fe86c8c",
+    "absence/stringsdict.ja.u32": "7e94de3ee7f9d28231c75c41513ff4f33cf5a0a8c6dd4db679188dae18ca92d2",
+    "absence/stringsdict.ko.folded.u32": "a3899e54b3dfd42870d9f1e8b20af9a307da436de7899acc5bd6805b46ce72ef",
+    "absence/stringsdict.ko.u32": "3298d6b433de7e8220382189892a35b42ceb191ac5731c747fd16c9adaa3308a",
+    "absence/stringsdict.pt.folded.u32": "469ab1b2589990a6dc6cf9ac97e652ffc1de4fa847be19acafbd083561012826",
+    "absence/stringsdict.pt.u32": "76919d1f152ed9fb26062b56b77a1b2c5e6d2f857d9e5544daa34116b3a34b26",
+    "absence/stringsdict.zh_CN.folded.u32": "015de8c877ce9f6ae16597e1205eab2aa6f94fb257db94254edecb51cd9a617c",
+    "absence/stringsdict.zh_CN.u32": "cb6ad1dde5f91e7555b15b5513b29958a363e69115937ac3d2725542926f08d8",
+    "absence/stringsdict.zh_TW.folded.u32": "d1dc38a107e01ed7edd04ca5c5c5b0e122a7040e54c5305eb18ea17d8efaa2f8",
+    "absence/stringsdict.zh_TW.u32": "4c4aae4613e29973635c5d725abb88aea4994a043c2eec1cb22572dfbb44df26",
+    "absence/translated.en.u32": "77b0230c9f97342f6bab1750d2f0cb164455ec4b873bf26fb8ee67fe6a91ac32",
+    "index/madsp.tsv": "8f0c41c994ce439e1e91f5290c7d663e0d0961b7ee41468fa7032028ea321c9e",
     "index/madsp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/nib.tsv": "b93ad8637d21efa0dd4a376f66209b3a68e514707191d42c1fd27c4fd372d3d5",
+    "index/nib.tsv": "cfa538478c6a0197d838e2629612e14ec1706fd42e09252351619754c7b2d59c",
     "index/nib.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/niblabels.tsv": "b78d3501fd42cdff6a47c857a48cddd2912e78961ed111cdb6acf16dacb23928",
+    "index/niblabels.tsv": "251168083f649fd298772378849247cf221a639aec6401e20978049c1cef2748",
     "index/niblabels.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/nibstrings.tsv": "ac732bc853eb32faf7d61ad3665bcd1805dbb1e325fb12bfe9cceb3fa3ec2ef4",
+    "index/nibstrings.tsv": "d9c920078bfb70d1d6843714f0525dfd90bb5dc0149188634b698ba7e95617f8",
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
-    "index/quickhelp.tsv": "0568c660242037aca4b2205e9049e08d4049f18b434517badf7e94b88d435630",
+    "index/plugin_names.tsv": "f6d22385cbe42b4e2736a1dbb2637ad10ee67b8bce79578969a473ccc3b6ec93",
+    "index/plugin_names.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
+    "index/quickhelp.tsv": "1fe83236f575e507a1ed10d317cd61eeb7cab85f5083a4dfd8d0b50e36d2d392",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/strings.tsv": "6186e4025190c16d68d9db850e4189dd76b1273a497790ea41d1f99b4e3b9175",
+    "index/strings.tsv": "a1d64f5eb6d4a43930e3e24cd534e684e76499eb28adfb4a063fa6b5f6fcd5ce",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
-    "ledger/casefold.tsv": "aee4559a28f6d596942c8a1ff3c8b0b0b6514fd54d0366c5c939ad2642b36669",
+    "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
+    "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
+    "ledger/casefold.tsv": "bc502e9593cca9e581de6e21e60b2e542af4ebb69ac06c86e7d81cd8a51538a9",
     "ledger/presence.tsv": "fb94cdeeea840f0aa7f2a820ffb91691b793065ae7842207e66bf804022f4057"
   },
-  "extractor_version": 2,
+  "extractor_version": 3,
   "ledger_casefold_entries": {
     "madsp": {
       "-": 16
     },
     "niblabels": {
       "-": 37,
-      "de": 30,
+      "de": 26,
       "en": 35,
-      "es": 29,
-      "fr": 32,
-      "it": 31,
-      "ja": 37,
-      "ko": 43,
-      "pt": 32,
-      "zh_CN": 35,
-      "zh_TW": 36
+      "es": 26,
+      "fr": 29,
+      "it": 29,
+      "ja": 34,
+      "ko": 40,
+      "pt": 29,
+      "zh_CN": 32,
+      "zh_TW": 33
     },
     "nibstrings": {
       "en": 96
@@ -112,12 +138,9 @@
       "en": 61,
       "es": 41,
       "fr": 4,
-      "it": 61,
       "ja": 56,
       "ko": 63,
-      "pt": 61,
-      "zh_CN": 30,
-      "zh_TW": 61
+      "zh_CN": 30
     },
     "strings": {
       "-": 2,
@@ -126,7 +149,7 @@
       "es": 159,
       "fr": 150,
       "it": 155,
-      "ja": 167,
+      "ja": 166,
       "ko": 172,
       "pt": 161,
       "zh_CN": 142,
@@ -184,6 +207,14 @@
     "build": "6674",
     "version": "12.3"
   },
+  "migration": {
+    "ci_rows_compared": 1639,
+    "ci_rows_rekeyed": 20,
+    "from_extractor": 2,
+    "rows_not_carried_forward": 0,
+    "rows_now_not_localized": 30,
+    "to_extractor": 3
+  },
   "schema": 1,
   "sources": {
     "madsp": {
@@ -193,9 +224,10 @@
       "absence_false_positive": {
         "-": 9.11299e-07
       },
-      "cited_rows": 1,
+      "cited_rows": 3,
       "cited_values": 0,
       "corpus_digest": "3e015ce94a8c7ff1889b360fc443fb96667cce1302649a9d4d467b9a298bb64e",
+      "english_equal_rows_in_translated_units": {},
       "entries": 14940,
       "files": 128,
       "folded_entries": {
@@ -203,7 +235,9 @@
       },
       "locales": [
         "-"
-      ]
+      ],
+      "no_english_twin": {},
+      "not_localized": {}
     },
     "nib": {
       "absence_entries": {
@@ -212,9 +246,10 @@
       "absence_false_positive": {
         "-": 1.81142e-07
       },
-      "cited_rows": 3,
+      "cited_rows": 6,
       "cited_values": 0,
       "corpus_digest": "50cc58b947e7a3bba4e11c438d8555e7e5737a823ba5b3b10cb51ff0bfbd7a07",
+      "english_equal_rows_in_translated_units": {},
       "entries": 3313,
       "files": 1169,
       "folded_entries": {
@@ -222,7 +257,9 @@
       },
       "locales": [
         "-"
-      ]
+      ],
+      "no_english_twin": {},
+      "not_localized": {}
     },
     "niblabels": {
       "absence_entries": {
@@ -251,9 +288,20 @@
         "zh_CN": 1.0035e-07,
         "zh_TW": 1.00117e-07
       },
-      "cited_rows": 26,
+      "cited_rows": 39,
       "cited_values": 0,
       "corpus_digest": "4b33113b014a85e773a4add45b605325f93dd38b56b9e13c3abfe5acb4fcaa1d",
+      "english_equal_rows_in_translated_units": {
+        "de": 175,
+        "es": 63,
+        "fr": 67,
+        "it": 58,
+        "ja": 74,
+        "ko": 73,
+        "pt": 107,
+        "zh_CN": 55,
+        "zh_TW": 63
+      },
       "entries": 9259,
       "files": 1007,
       "folded_entries": {
@@ -281,7 +329,199 @@
         "pt",
         "zh_CN",
         "zh_TW"
-      ]
+      ],
+      "no_english_twin": {},
+      "not_localized": {
+        "de": [
+          "Contents/Frameworks/Logic.framework/Versions/A/Resources/EDrummerMPW.nib",
+          "Contents/Frameworks/Logic.framework/Versions/A/Resources/RegionInspector.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/STORMMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAdditionalTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAutoTaggingViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTDependenciesViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTGenreTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTIndexingWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTLoopInfoViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTNodesOutlineViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTOtherTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagListViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagTreeViewController.nib",
+          "Contents/Frameworks/MAPlugInGUI.framework/Versions/A/Resources/GChannelEQGarageBandViewControllerVectorUI.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/MAKeyboardWindow.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/TrackHeaderDraggingOverlayWindow.nib",
+          "Contents/Helpers/Impulse Response Utility.app/Contents/Resources/AboutPanel.nib"
+        ],
+        "es": [
+          "Contents/Frameworks/Logic.framework/Versions/A/Resources/EDrummerMPW.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/STORMMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAdditionalTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAutoTaggingViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTDependenciesViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTGenreTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTIndexingWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTLoopInfoViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTNodesOutlineViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTOtherTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagListViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagTreeViewController.nib",
+          "Contents/Frameworks/MAPlugInGUI.framework/Versions/A/Resources/GChannelEQGarageBandViewControllerVectorUI.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/MAKeyboardWindow.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/TrackHeaderDraggingOverlayWindow.nib",
+          "Contents/Helpers/Impulse Response Utility.app/Contents/Resources/AboutPanel.nib"
+        ],
+        "fr": [
+          "Contents/Frameworks/Logic.framework/Versions/A/Resources/EDrummerMPW.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/STORMMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAdditionalTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAutoTaggingViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTDependenciesViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTGenreTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTIndexingWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTLoopInfoViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTNodesOutlineViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTOtherTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagListViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagTreeViewController.nib",
+          "Contents/Frameworks/MAPlugInGUI.framework/Versions/A/Resources/GChannelEQGarageBandViewControllerVectorUI.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/MAKeyboardWindow.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/TrackHeaderDraggingOverlayWindow.nib",
+          "Contents/Helpers/Impulse Response Utility.app/Contents/Resources/AboutPanel.nib"
+        ],
+        "it": [
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/STORMMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAdditionalTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAutoTaggingViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTDependenciesViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTGenreTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTIndexingWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTLoopInfoViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTNodesOutlineViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTOtherTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagListViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagTreeViewController.nib",
+          "Contents/Frameworks/MAPlugInGUI.framework/Versions/A/Resources/GChannelEQGarageBandViewControllerVectorUI.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/MAKeyboardWindow.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/TrackHeaderDraggingOverlayWindow.nib",
+          "Contents/Helpers/Impulse Response Utility.app/Contents/Resources/AboutPanel.nib"
+        ],
+        "ja": [
+          "Contents/Frameworks/Logic.framework/Versions/A/Resources/EDrummerMPW.nib",
+          "Contents/Frameworks/Logic.framework/Versions/A/Resources/EDrummerMPWView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/STORMMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAdditionalTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAutoTaggingViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTDependenciesViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTGenreTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTIndexingWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTLoopInfoViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTNodesOutlineViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTOtherTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagListViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagTreeViewController.nib",
+          "Contents/Frameworks/MAPlugInGUI.framework/Versions/A/Resources/GChannelEQGarageBandViewControllerVectorUI.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/MAKeyboardWindow.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/TrackHeaderDraggingOverlayWindow.nib",
+          "Contents/Helpers/Impulse Response Utility.app/Contents/Resources/AboutPanel.nib"
+        ],
+        "ko": [
+          "Contents/Frameworks/Logic.framework/Versions/A/Resources/EDrummerMPW.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/STORMMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAdditionalTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAutoTaggingViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTDependenciesViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTGenreTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTIndexingWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTLoopInfoViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTNodesOutlineViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTOtherTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagListViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagTreeViewController.nib",
+          "Contents/Frameworks/MAPlugInGUI.framework/Versions/A/Resources/GChannelEQGarageBandViewControllerVectorUI.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/MAKeyboardWindow.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/TrackHeaderDraggingOverlayWindow.nib",
+          "Contents/Helpers/Impulse Response Utility.app/Contents/Resources/AboutPanel.nib"
+        ],
+        "pt": [
+          "Contents/Frameworks/Logic.framework/Versions/A/Resources/EDrummerMPW.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/STORMMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAdditionalTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAutoTaggingViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTDependenciesViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTGenreTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTIndexingWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTLoopInfoViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTNodesOutlineViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTOtherTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagListViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagTreeViewController.nib",
+          "Contents/Frameworks/MAPlugInGUI.framework/Versions/A/Resources/GChannelEQGarageBandViewControllerVectorUI.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/MAKeyboardWindow.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/TrackHeaderDraggingOverlayWindow.nib",
+          "Contents/Helpers/Impulse Response Utility.app/Contents/Resources/AboutPanel.nib"
+        ],
+        "zh_CN": [
+          "Contents/Frameworks/Logic.framework/Versions/A/Resources/EDrummerMPW.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/STORMMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAdditionalTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAutoTaggingViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTDependenciesViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTGenreTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTIndexingWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTLoopInfoViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTNodesOutlineViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTOtherTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagListViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagTreeViewController.nib",
+          "Contents/Frameworks/MAPlugInGUI.framework/Versions/A/Resources/GChannelEQGarageBandViewControllerVectorUI.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/MAKeyboardWindow.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/TrackHeaderDraggingOverlayWindow.nib",
+          "Contents/Helpers/Impulse Response Utility.app/Contents/Resources/AboutPanel.nib"
+        ],
+        "zh_TW": [
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/STORMMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAdditionalTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTAutoTaggingViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTDependenciesViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTGenreTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTIndexingWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTLoopInfoViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTMainWindow.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTNodesOutlineViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTOtherTaggingContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserContainerView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagBrowserView.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagListViewController.nib",
+          "Contents/Frameworks/MAContentTaggingUI.framework/Versions/A/Resources/TGRTTagTreeViewController.nib",
+          "Contents/Frameworks/MAPlugInGUI.framework/Versions/A/Resources/GChannelEQGarageBandViewControllerVectorUI.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/MAKeyboardWindow.nib",
+          "Contents/Frameworks/MAToolKitHighLevel.framework/Versions/A/Resources/TrackHeaderDraggingOverlayWindow.nib",
+          "Contents/Helpers/Impulse Response Utility.app/Contents/Resources/AboutPanel.nib"
+        ]
+      }
     },
     "nibstrings": {
       "absence_entries": {
@@ -290,9 +530,10 @@
       "absence_false_positive": {
         "en": 6.60541e-07
       },
-      "cited_rows": 34,
+      "cited_rows": 51,
       "cited_values": 3,
       "corpus_digest": "63b6fe3a97a427b7e3ef93b0c0b049c2d647e8919781a03187df4e36bc10aee5",
+      "english_equal_rows_in_translated_units": {},
       "entries": 6270,
       "files": 162,
       "folded_entries": {
@@ -300,7 +541,31 @@
       },
       "locales": [
         "en"
-      ]
+      ],
+      "no_english_twin": {},
+      "not_localized": {}
+    },
+    "plugin_names": {
+      "absence_entries": {
+        "-": 237
+      },
+      "absence_false_positive": {
+        "-": 5.5181e-08
+      },
+      "cited_rows": 726,
+      "cited_values": 0,
+      "corpus_digest": "05f7b82a244d334f0312e6bc4481d91571f05e87ac2477c3cbbdfcd9a9789cae",
+      "english_equal_rows_in_translated_units": {},
+      "entries": 242,
+      "files": 1,
+      "folded_entries": {
+        "-": 237
+      },
+      "locales": [
+        "-"
+      ],
+      "no_english_twin": {},
+      "not_localized": {}
     },
     "quickhelp": {
       "absence_entries": {
@@ -327,9 +592,17 @@
         "zh_CN": 4.791887e-06,
         "zh_TW": 4.812842e-06
       },
-      "cited_rows": 102,
+      "cited_rows": 156,
       "cited_values": 0,
       "corpus_digest": "21cc7dce8e354afa1ab3de915762a9b01054735823bd32c99114cd8fa5b2cadb",
+      "english_equal_rows_in_translated_units": {
+        "de": 10804,
+        "es": 10664,
+        "fr": 10238,
+        "ja": 10809,
+        "ko": 10700,
+        "zh_CN": 10266
+      },
       "entries": 390820,
       "files": 20,
       "folded_entries": {
@@ -382,6 +655,18 @@
         "zh_CN",
         "zh_TW"
       ],
+      "no_english_twin": {},
+      "not_localized": {
+        "it": [
+          "QuickHelp"
+        ],
+        "pt": [
+          "QuickHelp"
+        ],
+        "zh_TW": [
+          "QuickHelp"
+        ]
+      },
       "round_trip": {
         "de": {
           "compositions": 7026,
@@ -544,9 +829,20 @@
         "zh_CN": 1.1548866e-05,
         "zh_TW": 1.087226e-05
       },
-      "cited_rows": 3166,
+      "cited_rows": 4749,
       "cited_values": 2,
       "corpus_digest": "830a5131378ede72bb0a20211985166f367b7a35a30a85d875c9c25ff0b89e1a",
+      "english_equal_rows_in_translated_units": {
+        "de": 4844,
+        "es": 4100,
+        "fr": 3696,
+        "it": 3224,
+        "ja": 3555,
+        "ko": 3530,
+        "pt": 3821,
+        "zh_CN": 2483,
+        "zh_TW": 2267
+      },
       "entries": 605190,
       "files": 2538,
       "folded_entries": {
@@ -574,8 +870,133 @@
         "pt",
         "zh_CN",
         "zh_TW"
-      ]
+      ],
+      "no_english_twin": {},
+      "not_localized": {
+        "de": [
+          "Contents/Frameworks/MAMixer.framework/Versions/A/Resources/Localizable-MasteringAssistant.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/Item.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/LocalizableSubtrackNames.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Boys Noize.logicx/Contents/Resources/InfoPlist.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Cory Wong.logicx/Contents/Resources/InfoPlist.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Crate Digging.logicx/Contents/Resources/InfoPlist.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Mark Lettieri.logicx/Contents/Resources/InfoPlist.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Oak Felder.logicx/Contents/Resources/InfoPlist.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/PomPom.logicx/Contents/Resources/InfoPlist.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Soulection.logicx/Contents/Resources/InfoPlist.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/TRAKGIRL.logicx/Contents/Resources/InfoPlist.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Take A Daytrip.logicx/Contents/Resources/InfoPlist.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Tom Misch.logicx/Contents/Resources/InfoPlist.strings"
+        ],
+        "es": [
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/Item.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/LocalizableSubtrackNames.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Cory Wong.logicx/Contents/Resources/InfoPlist.strings"
+        ],
+        "fr": [
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/Item.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/LocalizableSubtrackNames.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Cory Wong.logicx/Contents/Resources/InfoPlist.strings"
+        ],
+        "it": [
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/Item.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/LocalizableSubtrackNames.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Cory Wong.logicx/Contents/Resources/InfoPlist.strings"
+        ],
+        "ja": [
+          "Contents/Frameworks/MAMixer.framework/Versions/A/Resources/Localizable-MasteringAssistant.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/Item.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/LocalizableSubtrackNames.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Cory Wong.logicx/Contents/Resources/InfoPlist.strings"
+        ],
+        "ko": [
+          "Contents/Frameworks/MAMixer.framework/Versions/A/Resources/Localizable-MasteringAssistant.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/Item.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/LocalizableSubtrackNames.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Cory Wong.logicx/Contents/Resources/InfoPlist.strings"
+        ],
+        "pt": [
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/Item.strings",
+          "Contents/Resources/Library.bundle/ContentDatabaseV01.db/LocalizableSubtrackNames.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Cory Wong.logicx/Contents/Resources/InfoPlist.strings"
+        ],
+        "zh_CN": [
+          "Contents/Frameworks/MAMixer.framework/Versions/A/Resources/Localizable-MasteringAssistant.strings",
+          "Contents/Resources/Project Templates/Live Loop Grids/Cory Wong.logicx/Contents/Resources/InfoPlist.strings"
+        ],
+        "zh_TW": [
+          "Contents/Resources/Project Templates/Live Loop Grids/Cory Wong.logicx/Contents/Resources/InfoPlist.strings"
+        ]
+      }
+    },
+    "stringsdict": {
+      "absence_entries": {
+        "de": 298,
+        "en": 307,
+        "es": 299,
+        "fr": 297,
+        "it": 287,
+        "ja": 203,
+        "ko": 202,
+        "pt": 304,
+        "zh_CN": 201,
+        "zh_TW": 201
+      },
+      "absence_false_positive": {
+        "de": 6.9384e-08,
+        "en": 7.1479e-08,
+        "es": 6.9616e-08,
+        "fr": 6.9151e-08,
+        "it": 6.6822e-08,
+        "ja": 4.7265e-08,
+        "ko": 4.7032e-08,
+        "pt": 7.0781e-08,
+        "zh_CN": 4.6799e-08,
+        "zh_TW": 4.6799e-08
+      },
+      "cited_rows": 0,
+      "cited_values": 0,
+      "corpus_digest": "5a20aa1867fff9e92cd8be63112a2fb06dad72b261e82148092b296b66028aa9",
+      "english_equal_rows_in_translated_units": {
+        "de": 61,
+        "es": 51,
+        "fr": 53,
+        "it": 54,
+        "ja": 42,
+        "ko": 49,
+        "pt": 53,
+        "zh_CN": 41,
+        "zh_TW": 38
+      },
+      "entries": 2984,
+      "files": 100,
+      "folded_entries": {
+        "de": 298,
+        "en": 307,
+        "es": 299,
+        "fr": 297,
+        "it": 287,
+        "ja": 202,
+        "ko": 202,
+        "pt": 304,
+        "zh_CN": 201,
+        "zh_TW": 201
+      },
+      "locales": [
+        "de",
+        "en",
+        "es",
+        "fr",
+        "it",
+        "ja",
+        "ko",
+        "pt",
+        "zh_CN",
+        "zh_TW"
+      ],
+      "no_english_twin": {},
+      "not_localized": {}
     }
   },
-  "translated_en_values": 68548
+  "translated_en_values": 68815
 }

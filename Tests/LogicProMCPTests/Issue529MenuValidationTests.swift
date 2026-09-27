@@ -96,9 +96,9 @@ private func issue529ClassifierMatchedDialogResultSentinels() throws -> Set<Stri
     return try issue529SentinelPrefixes(
         capturedBy: [
             #"(?m)^\s*case\s+\"([A-Z][A-Z_]+)"#,
-            #"(?m)^\s*case\s+let\s+value\s+where\s+value\.hasPrefix\(\"([A-Z][A-Z_]+)"#,
-            #"(?m)^\s*case\s+let\s+value\s+where\s+value\s*==\s*\"([A-Z][A-Z_]+)"#,
-            #"(?m)^\s*\|\|\s*value\.hasPrefix\(\"([A-Z][A-Z_]+)"#,
+            #"(?m)^\s*case\s+let\s+scriptResult\s+where\s+scriptResult\.hasPrefix\(\"([A-Z][A-Z_]+)"#,
+            #"(?m)^\s*case\s+let\s+scriptResult\s+where\s+scriptResult\s*==\s*\"([A-Z][A-Z_]+)"#,
+            #"(?m)^\s*\|\|\s*scriptResult\.hasPrefix\(\"([A-Z][A-Z_]+)"#,
         ],
         from: classifier
     )

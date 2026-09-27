@@ -92,7 +92,32 @@ def _swift_literals():
 # ui-labels.json. This file used to undo only `\"` and `\\`, so a member written
 # `Audio Units\u{00A0}:` reached the digest as the eight characters `\u{00A0}` and the one
 # language whose row it is (fr) was reported as a language the product cannot work in.
-_unescape = _swift_literals()._unescape
+_LABELS = _swift_literals()
+_unescape = _LABELS._unescape
+#: LabelSets the product reads with `.exactStrict`, which trims nothing (#1028).
+_EXACT_STRICT = _LABELS._EXACT_STRICT
+
+#: Cells whose cited row no member matches once `#ci` stopped folding a no-break space (extractor
+#: v3, #1028). v2 credited all six only through that fold. Each is the same shape: Apple's row
+#: holds U+00A0 where the member holds U+0020, and `.exact` compares the two as different.
+#: They are listed, not "fixed", because the German live reading disagrees with the row: the menu
+#: census (docs/observations/2026-09-12-de-DE-arrange-menus-census.json) recorded U+0020 for all
+#: five, so either AppKit draws the row with a plain space or the menu is not built from the
+#: cited row (audit B D2: derivation must be positional). Spanish `Audio Units` has no es-ES raw
+#: reading in ui-labels.json provenance at all. Which it is, is a live question for #1028 P1b, and
+#: a member added here without it would be a guess. Self-shrinking: an entry whose cell is covered
+#: again fails the guard.
+_NBSP_DE = ("cited row has U+00A0, member U+0020; the de-DE menu census read U+0020. Row or "
+            "rendering: #1028 P1b")
+KNOWN_UNCOVERED: dict = {
+    ("controlSurfaceSetupMenuItem", "de"): _NBSP_DE,
+    ("controlSurfaceSettingsMenuItem", "de"): _NBSP_DE,
+    ("allTracksAsAudioFilesMenuItem", "de"): _NBSP_DE,
+    ("midiFileMenuItem", "de"): _NBSP_DE,
+    ("goToPositionMenuItem", "de"): _NBSP_DE,
+    ("pluginMenuAudioUnits", "es"): "cited row `Audio\u00a0Units`, member U+0020; no es-ES raw "
+                                    "reading exists to say which the menu draws: #1028 P1b",
+}
 
 
 def declarations(source: str):
@@ -121,6 +146,8 @@ def declarations(source: str):
 
 def check(source: str, canon) -> tuple:
     failures, checked = [], 0
+    not_localized: list = []
+    known_hit: set = set()
     manifest = canon.load_manifest()
     # One row can span two SOURCES: Apple compiles the English of 162 tables into `Base.lproj` nibs
     # and ships the nine translations as `.strings`, so `GotoPosition.strings 5.title` is
@@ -156,18 +183,33 @@ def check(source: str, canon) -> tuple:
         # Case-FOLDED, because that is the question the product asks. Every `LabelSet.matches`
         # mode is case-insensitive, so the lowercase `mixer` this product carries for containment
         # DOES match Apple's `Mixer`; comparing exact digests called that a language the product
-        # cannot work in. `build` pins a `#ci` digest beside each cited row for exactly this.
-        digests = {canon.short_digest(canon.normalize(member).casefold())
-                   for member in members}
+        # cannot work in. `build` pins `#ci` (and `#cit`, the trimmed row) beside each cited row
+        # for exactly this, and `label_row_credit` is the one comparison (#1028): until v3 the
+        # digest also folded a no-break space, so five German cells passed here that `.exact`
+        # cannot match at runtime.
+        strict = name in _EXACT_STRICT
         uncovered, unpinned = [], []
         for locale in sorted(locales):
-            row = (ref.unit, locale, ref.key, ref.field + canon.CASE_INSENSITIVE)
-            pinned = next((indexes[name].get(row) for name in peers
-                           if indexes[name].get(row)), None)
-            if pinned is None:
+            row = (ref.unit, locale, ref.key, ref.field)
+
+            def pinned(suffix, row=row):
+                key = row[:3] + (row[3] + suffix,)
+                return next((indexes[peer].get(key) for peer in peers
+                             if indexes[peer].get(key)), None)
+
+            state, _member = canon.label_row_credit(pinned, members, strict=strict)
+            if state == canon.UNPINNED:
                 unpinned.append(locale)
-            elif pinned not in digests:
+            elif state == canon.UNCOVERED:
                 uncovered.append(locale)
+            elif state == canon.NOT_LOCALIZED:
+                # Neither a failure nor coverage: Apple ships the English file there, so there
+                # is no row to derive from and nothing to hold the LabelSet to. Counted, and the
+                # coverage table says `not_localized` rather than `derived`.
+                not_localized.append(f"{name}/{locale}")
+            if state == canon.UNCOVERED and (name, locale) in KNOWN_UNCOVERED:
+                uncovered.remove(locale)
+                known_hit.add((name, locale))
         if unpinned:
             failures.append(
                 f"{name}: {ref.unit.split('/')[-1]} {ref.key} is not pinned for {unpinned}. "
@@ -178,6 +220,11 @@ def check(source: str, canon) -> tuple:
                 f"{name}: no member of this LabelSet is what Apple ships in {uncovered}. The row "
                 f"says one thing there and this label cannot match it, which is a language the "
                 f"product does not work in at this site.")
+    for name, locale in sorted(set(KNOWN_UNCOVERED) - known_hit):
+        failures.append(
+            f"KNOWN_UNCOVERED lists {name}/{locale}, and that cell is no longer uncovered. Delete "
+            f"the entry: this list only shrinks.")
+    check.not_localized = not_localized
     return failures, checked
 
 
@@ -192,7 +239,9 @@ def main() -> int:
             print(f"  {failure}", file=sys.stderr)
         return 1
     print(f"{checked} of {total} LabelSets name a row, and every one of them is that row's own "
-          f"values in every locale the corpus carries")
+          f"values in every locale the corpus carries, except {len(check.not_localized)} cell(s) "
+          f"Apple ships as the English file (not_localized) and {len(KNOWN_UNCOVERED)} listed in "
+          f"KNOWN_UNCOVERED")
     return 0
 
 

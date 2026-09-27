@@ -1987,6 +1987,7 @@ def main() -> int:
     failures.extend(canon.verify_derived_counts(manifest))
     failures.extend(canon.verify_presence_ledger(manifest))
     failures.extend(canon.verify_index_against_absence())
+    failures.extend(canon.verify_citations_confirmed(manifest))
     check_build_agrees_with_the_ledger(manifest, failures)
     check_waivers_only_shrink(failures)
     check_no_measured_count_shrinks(failures)
