@@ -984,13 +984,15 @@ struct Issue1020MCUStripButtonSetTests {
         #expect(first["state"] as? String == "A")
         let firstAttempted = try #require(first["write_attempted"] as? Bool)
         #expect(firstAttempted)
-        #expect(bit(first["observed"] as? Bool) == "on")
+        let firstObserved = try #require(first["observed"] as? Bool)
+        #expect(bit(firstObserved) == "on")
 
         let second = try setEnvelope(run.replies.1)
         #expect(second["state"] as? String == "A")
         let secondAttempted = try #require(second["write_attempted"] as? Bool)
         #expect(!secondAttempted)
-        #expect(bit(second["observed"] as? Bool) == "on")
+        let secondObserved = try #require(second["observed"] as? Bool)
+        #expect(bit(secondObserved) == "on")
 
         #expect(await run.channel.bankExclusionWaiterCount == 0)
         #expect(await run.sleeper.requested.isEmpty)
@@ -1013,7 +1015,8 @@ struct Issue1020MCUStripButtonSetTests {
         #expect(obj["state"] as? String == "A")
         let attempted = try #require(obj["write_attempted"] as? Bool)
         #expect(!attempted)
-        #expect(bit(obj["observed"] as? Bool) == bit(enabled))
+        let observed = try #require(obj["observed"] as? Bool)
+        #expect(bit(observed) == bit(enabled))
         #expect(obj["bank_presses_sent"] == nil)
     }
 
@@ -1032,13 +1035,15 @@ struct Issue1020MCUStripButtonSetTests {
         #expect(first["state"] as? String == "A")
         let firstAttempted = try #require(first["write_attempted"] as? Bool)
         #expect(firstAttempted)
-        #expect(bit(first["observed"] as? Bool) == "on")
+        let firstObserved = try #require(first["observed"] as? Bool)
+        #expect(bit(firstObserved) == "on")
 
         let second = try setEnvelope(run.replies.1)
         #expect(second["state"] as? String == "A")
         let secondAttempted = try #require(second["write_attempted"] as? Bool)
         #expect(secondAttempted)
-        #expect(bit(second["observed"] as? Bool) == "off")
+        let secondObserved = try #require(second["observed"] as? Bool)
+        #expect(bit(secondObserved) == "off")
 
         #expect(await run.channel.bankExclusionWaiterCount == 0)
         #expect(await run.sleeper.requested.isEmpty)
