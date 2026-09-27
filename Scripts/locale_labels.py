@@ -126,12 +126,18 @@ def _derived_declarations(source: str):
     return list(module.declarations(source))
 
 
-def _locale_values(members, ref_text: str) -> dict:
+def _locale_values(members, ref_text: str, *, strict: bool = False, not_localized=None) -> dict:
     """`{"ko-KR": "키 레이블로 학습", ...}` for one derived LabelSet, resolved offline by digest.
 
     Empty for a locale the row is not pinned at, or one where no member matches -- both of which
     `check-labelsets-are-derived.py` already refuses, so an empty answer here means that guard is
     failing too and this generator is not the place to report it.
+
+    Also empty for a locale where Apple ships the English file (#1028): `it.lproj/QuickHelp.plist`
+    IS the English file, and the value taken from it was generated into this table as Italian.
+    Those locales are added to `not_localized` when the caller passes a set, so the generated file
+    can say so instead of leaving the gap unexplained. The comparison is `label_row_credit`, the
+    same one the guard makes.
     """
     canon = _load_canon()
     if canon is None or not ref_text:
@@ -146,26 +152,31 @@ def _locale_values(members, ref_text: str) -> dict:
     peers = [name for name, space in namespace_of.items()
              if space == namespace_of.get(ref.source, ref.source)]
     indexes = {name: canon.load_index(name) for name in peers}
-    by_digest = {}
-    for member in members:
-        by_digest.setdefault(canon.short_digest(canon.normalize(member).casefold()), member)
     out = {}
     for locale in SUPPORTED_LOCALES:
         code = _locale_code(locale)
-        row = (ref.unit, code, ref.key, ref.field + canon.CASE_INSENSITIVE)
-        pinned = next((indexes[name].get(row) for name in peers if indexes[name].get(row)), None)
-        if pinned and pinned in by_digest:
-            out[locale] = by_digest[pinned]
+
+        def pinned(suffix, code=code):
+            row = (ref.unit, code, ref.key, ref.field + suffix)
+            return next((indexes[name].get(row) for name in peers if indexes[name].get(row)), None)
+
+        state, member = canon.label_row_credit(pinned, members, strict=strict)
+        if state == canon.COVERED:
+            out[locale] = member
+        elif state == canon.NOT_LOCALIZED and not_localized is not None:
+            not_localized.add(locale)
     # A bare language subtag too, but ONLY where it names one locale. `logicUILocaleIdentifier`
     # answers `ko-KR`, and callers that carry a language alone -- a test, a config, a host that
     # reports `de` -- would otherwise fall back to English for a language Apple translates. `zh`
     # is the reason this is derived rather than assumed: it names `zh-CN` AND `zh-TW`, and a table
     # that picked one would answer Simplified on a Traditional host and never say it guessed.
+    # Counted over EVERY supported locale, not the ones that got a value: with zh-TW not localized,
+    # counting only `out` made `zh` name zh-CN alone.
     subtags = {}
-    for locale in out:
+    for locale in SUPPORTED_LOCALES:
         subtags.setdefault(locale.split("-")[0], []).append(locale)
     for subtag, locales in subtags.items():
-        if len(locales) == 1 and subtag not in out:
+        if len(locales) == 1 and subtag not in out and locales[0] in out:
             out[subtag] = out[locales[0]]
     return out
 
@@ -195,7 +206,9 @@ def render_swift(doc: dict) -> str:
         if name not in members_of:
             missing.append(name)
             continue
-        values = _locale_values(members_of[name], derived.get(name))
+        not_localized = set()
+        values = _locale_values(members_of[name], derived.get(name),
+                                strict=name in _EXACT_STRICT, not_localized=not_localized)
         lines.append("")
         for chunk in textwrap.wrap(why, 94):
             lines.append(f"    /// {chunk}")
@@ -208,6 +221,10 @@ def render_swift(doc: dict) -> str:
         for key in ordered:
             escaped = values[key].replace("\\", "\\\\").replace('"', '\\"')
             lines.append(f'        "{key}": "{escaped}",')
+        # No value, and no guess: Apple ships the English file for these (#1028). A caller that
+        # falls back to English here types English into a translated UI.
+        for locale in [locale for locale in SUPPORTED_LOCALES if locale in not_localized]:
+            lines.append(f'        // "{locale}": not localized -- Apple ships the English file')
         lines.append("    ]")
     lines += ["}", ""]
     if missing:

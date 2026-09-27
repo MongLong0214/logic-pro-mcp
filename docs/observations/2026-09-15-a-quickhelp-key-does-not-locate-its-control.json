@@ -185,6 +185,50 @@
         {
           "source": "strings",
           "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
         }
       ],
       "why_runtime": "Contents/Info.plist declares CFBundleHelpBookFolder=logic.help and that folder is on no disk here: Apple serves Logic's help over the network, at support.apple.com/guide/logicpro/<anchor>/mac. The only local trace is a Spotlight index under ~/Library/Caches/com.apple.helpd which carries page text and no anchor identifiers. So an Anchor-to-screen mapping exists and is not a local canonical fact."

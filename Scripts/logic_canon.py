@@ -81,12 +81,50 @@ DEFAULT_APP = "/Applications/Logic Pro.app"
 #: Bumped when extraction or normalization changes in a way that moves a digest. The manifest
 #: records it, and a checker refuses an index built by a different one rather than comparing
 #: digests that were never comparable.
-EXTRACTOR_VERSION = 2
+#:
+#: v3 (ADR-027, #1028): the `#ci` digest is taken over `fold_case` alone, where v2 took it over
+#: `normalize(...).casefold()` -- which also folded a no-break space and stripped the ends, so seven
+#: pinned rows were credited by a fold no LabelSet performs. An index built by v2 is not re-keyed
+#: in place: `build` refuses to carry a v2 row forward and records what moved in the manifest.
+EXTRACTOR_VERSION = 3
 
-#: The ten locale names Logic ships QuickHelp under. `build` verifies this list against the bundle
-#: and fails when it disagrees, because a locale appearing or vanishing is exactly the kind of
-#: drift that should stop a build rather than shrink a corpus quietly.
-EXPECTED_LOCALES = ("de", "en", "es", "fr", "it", "ja", "ko", "pt", "zh_CN", "zh_TW")
+#: The ten `.lproj` names Logic ships. Spelled once, and NOT the test seam below: a citation that
+#: names a locale outside this list (`logic-canon://strings/klingon#value`) is refused by name.
+LOCALE_NAMES = ("de", "en", "es", "fr", "it", "ja", "ko", "pt", "zh_CN", "zh_TW")
+
+#: The ten locale names `build` requires. `build` verifies this list against EVERY source and the
+#: whole bundle and fails when it disagrees, because a locale appearing or vanishing is exactly the
+#: kind of drift that should stop a build rather than shrink a corpus quietly. Until #1028 only
+#: QuickHelp was checked, so a new `pt_PT.lproj` of `.strings` would have become a silent new
+#: locale. Empty disables the check, and exists only so a test can build a two-file bundle.
+EXPECTED_LOCALES = LOCALE_NAMES
+
+#: Which `.lproj` locales each source must carry, and whether it may also carry `-` (data in no
+#: `.lproj`). "ten" means `EXPECTED_LOCALES`. `nibstrings` is English by construction -- it reads
+#: `Base.lproj` -- and `madsp`, `nib`, `plugin_names` and `pluginsettings` are not localised at all.
+SOURCE_LOCALES = {
+    "quickhelp": ("ten", False),
+    "strings": ("ten", True),
+    "niblabels": ("ten", True),
+    "stringsdict": ("ten", False),
+    "nibstrings": (("en",), False),
+    "madsp": ((), True),
+    "nib": ((), True),
+    "plugin_names": ((), True),
+    "pluginsettings": ((), True),
+}
+
+#: Sources small enough that `build` pins EVERY row, not only the cited ones. `plugin_names` is 242
+#: rows, and pinning all of it is what lets an offline guard answer "does Apple ship this plug-in
+#: name, and where" with a row citation and a 48-bit digest instead of a 32-bit absence probe
+#: (ADR-027 (#1028), audit B D5: `Channel EQ` was "in no corpus" only because this file was not
+#: pinned).
+PIN_EVERY_ROW = frozenset({"plugin_names"})
+
+#: What an index row holds in place of a digest, and what resolving it answers, when the file the
+#: row lives in is the ENGLISH file for that locale -- byte for byte, or row for row. It is a state,
+#: not a value: resolution never returns the English as that locale's text (ADR-027 D6, #1028).
+NOT_LOCALIZED = "not_localized"
 
 #: Ten NAMES, seven FILES. `en.lproj`, `it.lproj`, `pt.lproj` and `zh_TW.lproj` ship the same
 #: QuickHelp.plist byte for byte (sha256 3ed7aa22...), so it, pt and zh_TW are untranslated English.
@@ -180,6 +218,13 @@ def digest(text: str) -> str:
 #: form puts after a field name, the ellipsis a menu puts on an item that opens a dialog, spaces.
 #: Folding them answers a DIFFERENT question from `normalize`, and only one question: "is this
 #: absent, or is it a shipped label I typed slightly wrong?"
+#:
+#: It is read ONE CHARACTER AT A TIME (audit B, D8). `"..."` here is three full stops, not an
+#: ellipsis token, so every `.`, `-`, `_` and `:` ANYWHERE in a string is removed, not only the
+#: decoration around a label: `v1.5`/`v15`, `Pre-Fader`/`PreFader`, `A_B`/`AB` and
+#: `Re: Take`/`Re Take` all fold equal. Left as it is on purpose (#1028): the error is on the safe
+#: side -- it over-reports near misses and so refuses absence claims, it never proves a shipped
+#: label absent -- and narrowing it would move every folded digest for no measured gain.
 _DECORATION = "\u2026...:：·•\t\n\r \u00a0\u3000-–—_"
 
 
@@ -232,6 +277,38 @@ def fold_case(text: str) -> str:
     compares canonically equivalent strings as equal and the corpus reaches us in both forms.
     """
     return unicodedata.normalize("NFC", text).casefold()
+
+
+def ci_digest(text: str) -> str:
+    """The `#ci` digest: 12 hex of the SHA-256 of `fold_case(text)`, and of nothing else.
+
+    ONE fold definition (ADR-027 D6, #1028). v2 pinned `short_digest(normalize(v).casefold())`,
+    which also turned a no-break space into a space and stripped the ends -- so `#ci` credited a
+    German `Setup …` to a member `Setup …` that `.exact` cannot match, while `fold_case`, the
+    ledger's fold, did not. Deliberately not `short_digest`: that one normalizes its input.
+    """
+    return hashlib.sha256(fold_case(text).encode("utf-8")).hexdigest()[:12]
+
+
+def _swift_trims(ch: str) -> bool:
+    """`CharacterSet.whitespacesAndNewlines`: category Z*, TAB, U+000A-U+000D and U+0085."""
+    return unicodedata.category(ch).startswith("Z") or ch in "\t\n\x0b\x0c\r\x85"
+
+
+def swift_trim(text: str) -> str:
+    """What every non-strict `LabelSet.matches` mode does to a READING before it compares.
+
+    `text.trimmingCharacters(in: .whitespacesAndNewlines)` -- both ends, a no-break space
+    included (it is category Zs), nothing inside. Not a fold: `fold_case` is the only fold, and
+    this is the matcher's treatment of the string it reads, applied to Apple's row because Apple's
+    row is what it reads. `.exactStrict` does not trim, so its question never uses this.
+    """
+    start, end = 0, len(text)
+    while start < end and _swift_trims(text[start]):
+        start += 1
+    while end > start and _swift_trims(text[end - 1]):
+        end -= 1
+    return text[start:end]
 
 
 def short_digest(text: str) -> str:
@@ -307,13 +384,34 @@ def decode_bytes(raw: bytes) -> str | None:
 # ---------------------------------------------------------------------------
 
 #: `\0` is deliberately NOT here: it is handled by the octal branch, which reads `\0`, `\00` and
-#: `\000` the way CFPropertyList does. A lowercase `\u` is also absent -- CFPropertyList treats it
-#: as a literal `u`, and an earlier version decoded it as a code point, which is the opposite of
-#: what Apple's parser does.
+#: `\000` the way CFPropertyList does. `\U` and `\u` are not here either: both are the hex branch.
+#: An earlier comment said CFPropertyList reads a lowercase `\u` as a literal `u`; measured against
+#: `plutil -convert json` on macOS 26 (ADR-027, #1028), `"A"` is `A`, so that was wrong too.
 _ESCAPES = {
     '"': '"', "\\": "\\", "n": "\n", "t": "\t", "r": "\r",
     "a": "\a", "b": "\b", "f": "\f", "v": "\v", "'": "'",
 }
+
+_HEX = "0123456789abcdefABCDEF"
+
+#: The characters CFPropertyList accepts in an UNQUOTED string, a key or a value. Measured with
+#: `plutil`: `a$b`, `a/b`, `a.b`, `a-b`, `a_b` and `key:x` parse; `a+b`, `#a` and a non-ASCII
+#: letter (`é`) are refused. ASCII letters and digits only -- `str.isalnum` would admit `é`.
+_UNQUOTED = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$:./-")
+
+
+def _hex_escape(text: str, i: int) -> tuple[int, int]:
+    """Read the hex digits after `\\U` or `\\u` the way CFPropertyList does: up to FOUR of them.
+
+    Measured with `plutil`: `\\U41` is `A`, `\\U00411` is `A` followed by `1`, and `\\U` followed by
+    no hex digit at all is U+0000 (`\\Uzz` gives NUL then `zz`). The first version required exactly
+    four and refused the rest, which failed loudly on files CoreFoundation reads.
+    """
+    digits = ""
+    while len(digits) < 4 and i < len(text) and text[i] in _HEX:
+        digits += text[i]
+        i += 1
+    return (int(digits, 16) if digits else 0), i
 
 
 def _scan_quoted(text: str, i: int) -> tuple[str, int]:
@@ -340,38 +438,48 @@ def _scan_quoted(text: str, i: int) -> tuple[str, int]:
         if i >= len(text):
             raise CanonDecodeError("string ends inside an escape sequence")
         esc = text[i]
-        if esc == "U":
-            hex4 = text[i + 1:i + 5]
-            if len(hex4) < 4 or any(c not in "0123456789abcdefABCDEF" for c in hex4):
-                raise CanonDecodeError(f"malformed \\U escape at offset {i}")
-            code = int(hex4, 16)
-            i += 5
+        if esc in "Uu":
+            code, i = _hex_escape(text, i + 1)
             # A SURROGATE PAIR. CFPropertyList joins them; the first version emitted two lone
             # surrogates instead, so `\U D83D \U DE00` became garbage rather than an emoji -- and
             # `digest()` hashes the garbage without raising, so a wrong digest would be committed
             # with no signal at all. No string in this Logic uses one, which is why the corpus
             # comparison against `plutil` was clean over all 2,538 files and this stayed latent.
             # Found by review 2026-09-15. It goes live on the first Logic that ships an emoji.
-            if 0xD800 <= code <= 0xDBFF and text[i:i + 2] == "\\U":
-                low = text[i + 2:i + 6]
-                if len(low) == 4 and all(c in "0123456789abcdefABCDEF" for c in low):
-                    trail = int(low, 16)
-                    if 0xDC00 <= trail <= 0xDFFF:
-                        out.append(chr(0x10000 + ((code - 0xD800) << 10) + (trail - 0xDC00)))
-                        i += 6
-                        continue
+            if 0xD800 <= code <= 0xDBFF and text[i:i + 2] in ("\\U", "\\u"):
+                trail, after = _hex_escape(text, i + 2)
+                if 0xDC00 <= trail <= 0xDFFF and after == i + 6:
+                    out.append(chr(0x10000 + ((code - 0xD800) << 10) + (trail - 0xDC00)))
+                    i = after
+                    continue
+            if 0xD800 <= code <= 0xDFFF:
+                # A lone surrogate is not a character, and `str.encode("utf-8")` in `digest` would
+                # raise far from here. What CoreFoundation makes of one was not measured.
+                raise CanonDecodeError(f"lone surrogate \\U{code:04X} at offset {i}")
             out.append(chr(code))
             continue
-        if esc.isdigit():
+        if esc in "01234567":
             # An OCTAL escape, which CFPropertyList reads and the first version passed through as
             # its own digits: `\101` became `101` rather than `A`. Also latent in this build.
             digits = ""
             while len(digits) < 3 and i < len(text) and text[i] in "01234567":
                 digits += text[i]
                 i += 1
-            if digits:
-                out.append(chr(int(digits, 8)))
-                continue
+            code = int(digits, 8)
+            if code >= 0x80:
+                # CFPropertyList maps an octal escape through the NeXTSTEP encoding, not through
+                # Unicode: measured with `plutil`, `"\351"` is `Ø` (NeXTSTEP 0xE9), `"\200"` is a
+                # no-break space and `"\400"` wraps to U+0000. The previous version returned
+                # `chr(0o351)`, `é`, and hashed it without a word -- a wrong digest committed with
+                # no signal. Python has no NeXTSTEP codec and a hand-typed table is a guess, so a
+                # byte above ASCII is REFUSED rather than decoded differently from Apple (#1028).
+                # 0 files in Logic 12.3 use an octal escape at all.
+                raise CanonDecodeError(
+                    f"octal escape \\{digits} at offset {i - len(digits)} is above ASCII. "
+                    f"CoreFoundation decodes it through NeXTSTEP, which this parser does not "
+                    f"reproduce, so it refuses rather than produce a different character.")
+            out.append(chr(code))
+            continue
         if esc in _ESCAPES:
             out.append(_ESCAPES[esc])
             i += 1
@@ -415,54 +523,78 @@ def parse_strings(raw: bytes, *, path: str = "<bytes>") -> dict[str, str]:
             loaded = plistlib.loads(raw)
         except Exception as exc:  # plistlib raises several unrelated types
             raise CanonDecodeError(f"{path}: binary plist did not load: {exc}") from exc
-        if not isinstance(loaded, dict):
-            raise CanonDecodeError(f"{path}: binary plist is {type(loaded).__name__}, not a dict")
-        return {str(k): str(v) for k, v in loaded.items()}
+        return _string_table(loaded, path, "binary plist")
 
     if raw.lstrip()[:5] == b"<?xml" or raw.lstrip()[:9] == b"<!DOCTYPE":
         try:
             loaded = plistlib.loads(raw)
         except Exception as exc:
             raise CanonDecodeError(f"{path}: xml plist did not load: {exc}") from exc
-        if not isinstance(loaded, dict):
-            raise CanonDecodeError(f"{path}: xml plist is {type(loaded).__name__}, not a dict")
-        return {str(k): str(v) for k, v in loaded.items()}
+        return _string_table(loaded, path, "xml plist")
 
     text = decode_bytes(raw)
     if text is None:
         raise CanonDecodeError(f"{path}: no encoding decoded these bytes cleanly")
 
+    # The grammar is CFPropertyList's strings-file grammar, measured against `plutil -convert json`
+    # rather than remembered (#1028). Where this parser cannot do what CoreFoundation does it
+    # raises: a `.strings` file this module decodes differently from Apple is a digest committed
+    # for a string Logic never shows, and nothing downstream can see that.
     out: dict[str, str] = {}
     i = _skip_trivia(text, 0)
     while i < len(text):
-        if text[i] == '"':
-            key, i = _scan_quoted(text, i)
-        else:
-            start = i
-            while i < len(text) and (text[i].isalnum() or text[i] in "_.-"):
-                i += 1
-            if i == start:
-                raise CanonDecodeError(f"{path}: unexpected {text[i]!r} at offset {i}")
-            key = text[start:i]
+        key, i = _scan_token(text, i, path)
         i = _skip_trivia(text, i)
+        if i < len(text) and text[i] == ";":
+            # `"Cancel";` -- a key with no value is its own value. `plutil` reads it as
+            # `{"Cancel": "Cancel"}`; the first version refused the file.
+            out[key] = key
+            i = _skip_trivia(text, i + 1)
+            continue
         if i >= len(text) or text[i] != "=":
-            raise CanonDecodeError(f"{path}: expected '=' after key {key!r}")
+            raise CanonDecodeError(f"{path}: expected '=' or ';' after key {key!r}")
         i = _skip_trivia(text, i + 1)
         if i >= len(text):
             raise CanonDecodeError(f"{path}: file ends after '=' for key {key!r}")
-        if text[i] == '"':
-            value, i = _scan_quoted(text, i)
-        else:
-            start = i
-            while i < len(text) and text[i] not in ";\n":
-                i += 1
-            value = text[start:i].strip()
+        value, i = _scan_token(text, i, path)
         i = _skip_trivia(text, i)
-        if i < len(text) and text[i] == ";":
-            i += 1
+        if i >= len(text) or text[i] != ";":
+            # CoreFoundation refuses an entry without its `;` -- the whole file, measured. This
+            # parser used to accept one, so a file Logic cannot read was a file this pinned.
+            raise CanonDecodeError(f"{path}: expected ';' after the value of {key!r}")
         out[key] = value
-        i = _skip_trivia(text, i)
+        i = _skip_trivia(text, i + 1)
     return out
+
+
+def _scan_token(text: str, i: int, path: str) -> tuple[str, int]:
+    """One key or value: a quoted string, or a run of the characters CoreFoundation leaves bare."""
+    if text[i] == '"':
+        return _scan_quoted(text, i)
+    start = i
+    while i < len(text) and text[i] in _UNQUOTED:
+        i += 1
+    if i == start:
+        raise CanonDecodeError(f"{path}: unexpected {text[i]!r} at offset {i}")
+    return text[start:i], i
+
+
+def _string_table(loaded, path: str, form: str) -> dict[str, str]:
+    """A plist-form `.strings` table, refused unless every key and value is a string.
+
+    It used to be `{str(k): str(v)}`, so a dictionary value -- the shape of a `.stringsdict`
+    entry -- became the Python repr `"{'NSStringLocalizedFormatKey': …}"` and was digested as if
+    Logic showed it. 0 such files in Logic 12.3; the first one should stop the build (#1028).
+    """
+    if not isinstance(loaded, dict):
+        raise CanonDecodeError(f"{path}: {form} is {type(loaded).__name__}, not a dict")
+    for key, value in loaded.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise CanonDecodeError(
+                f"{path}: {form} entry {key!r} holds a {type(value).__name__}, not a string. A "
+                f".strings table maps strings to strings; stringifying anything else digests text "
+                f"Logic never shows.")
+    return dict(loaded)
 
 
 def load_plist(path: str):
@@ -731,6 +863,151 @@ def extract_strings(app: str):
                 yield (unit, locale, key, "value", value)
 
 
+def load_stringsdict(path: str) -> dict:
+    """One `.stringsdict`, read the way CoreFoundation reads it.
+
+    Five of Logic 12.3's hundred -- the `en.lproj` copies of `Localizable-PluginSearch`,
+    `-SpatialMPFourExport`, `-StemSeparation`, `-UniversalContentManager` and MAPlaySurface's
+    `Localizable` -- begin with a UTF-16LE byte-order mark and then DECLARE `encoding="UTF-8"`.
+    Expat believes the declaration and refuses the file; CoreFoundation believes the mark, and
+    `plutil` reads all five. So the mark wins here too: the bytes are decoded by their BOM and
+    handed to the XML parser re-encoded as the UTF-8 they say they are. Anything else that does
+    not load is raised with its path -- never skipped, because a skipped file is a corpus that is
+    short without saying so.
+    """
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    if raw[:2] in _BOM_UTF16:
+        try:
+            raw = raw.decode("utf-16").encode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise CanonDecodeError(f"{path}: UTF-16 byte-order mark, and the bytes are not "
+                                   f"UTF-16: {exc}") from exc
+    try:
+        loaded = plistlib.loads(raw)
+    except Exception as exc:  # plistlib raises several unrelated types
+        raise CanonDecodeError(f"{path}: stringsdict did not load: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise CanonDecodeError(f"{path}: stringsdict is {type(loaded).__name__}, not a dict")
+    return loaded
+
+
+#: The plural categories a `NSStringPluralRuleType` variable may carry (Unicode CLDR).
+PLURAL_CATEGORIES = ("zero", "one", "two", "few", "many", "other")
+_STRINGSDICT_VARIABLE = re.compile(r"[A-Za-z0-9_]+")
+#: A `%#@name@` reference to a rule, in the format or in a plural form's own string -- Apple
+#: allows a plural form to name a second variable (review of #1034 R1-02, round 3). A reference
+#: with more than one format argument carries a positional specifier before the `#@`, as in
+#: `%1$#@sound_packs@` (measured live in Logic 12.3's own `Localizable-UniversalContentManager`
+#: and `Localizable.stringsdict`) -- the bare `%#@n@` this module's own tests use is the
+#: one-argument case of the same syntax, not a different one.
+_STRINGSDICT_REFERENCE = re.compile(r"%(?:\d+\$)?#@([A-Za-z0-9_]+)@")
+
+
+def extract_stringsdict(app: str):
+    """Every `.stringsdict` in the bundle: each entry's format and each plural form, per locale.
+
+    Rows, addressed like `.strings` (unit = the `.lproj`'s parent joined with the basename):
+
+        key = the entry's key                 field = `format`    the NSStringLocalizedFormatKey
+        key = `<entry key>/<variable>`        field = a CLDR plural category (`one`, `other`, ...)
+
+    A variable name is `[A-Za-z0-9_]+` -- measured, all 96 in Logic 12.3 -- so the LAST `/` of a
+    plural row's key separates it from the entry key, which may itself contain a slash. A name
+    outside that alphabet, a rule type other than `NSStringPluralRuleType`, or any value that is
+    not a string stops the build rather than being skipped. `Comment` is the localiser's note
+    (`Piano Roll info display`), which no screen shows, and is the one sibling not read.
+
+    Before #1028 none of this was in the canon, so every plural UI string -- `Do you want to
+    download %i sound pack(s)…` -- read `nowhere`, or worse, `absent`.
+    """
+    for root, _dirs, files in os.walk(app):
+        for name in sorted(files):
+            if not name.endswith(".stringsdict"):
+                continue
+            path = os.path.join(root, name)
+            locale = _locale_of(path) or "-"
+            unit = os.path.join(_rel(app, os.path.dirname(os.path.dirname(path))), name)
+            for key, entry in load_stringsdict(path).items():
+                yield from _stringsdict_entry(path, unit, locale, key, entry)
+
+
+def _stringsdict_entry(path: str, unit: str, locale: str, key: str, entry) -> list:
+    """One `.stringsdict` entry's rows, or a CanonDecodeError naming the file and key.
+
+    Complete or nothing (review of #1034 R1-02): the entry carries its
+    `NSStringLocalizedFormatKey`, and every plural rule in it carries
+    `NSStringFormatSpecTypeKey`, `NSStringFormatValueTypeKey` and an `other` form -- the one form
+    CLDR gives every language. Rows used to be yielded as each field was met and nothing was
+    required, so an entry holding only a `one` form extracted as that row, and the index pinned a
+    partial account of the file as the whole one.
+
+    Round 3: every `%#@name@` reference -- in the format, or nested inside a plural form's own
+    string, since Apple allows a plural form to name a second variable -- must resolve to a rule
+    dict in this same entry, or this refuses naming the variable and where it was referenced. A
+    reference with more than one format argument carries a positional specifier before the `#@`
+    (`%1$#@name@`); the bare `%#@n@` is the one-argument case of the same syntax, not a different
+    one, and both are checked. A rule that nothing references is NOT refused here -- measured 0 of
+    1,190 rules in Logic 12.3 (Limit).
+
+    All 1,060 entries in Logic 12.3 (6674) are complete and reference only rules they carry; this
+    is about the next bundle.
+    """
+    def refuse(what: str) -> CanonDecodeError:
+        return CanonDecodeError(f"{path}: entry {key!r} {what}")
+
+    if not isinstance(entry, dict):
+        raise refuse("is not a dict")
+    if "NSStringLocalizedFormatKey" not in entry:
+        raise refuse("has no NSStringLocalizedFormatKey, so its plural forms format nothing")
+    rows = []
+    rule_names = set()
+    # (text, where) for every string that may itself carry a `%#@name@` reference -- the format,
+    # and every plural form, since Apple allows a plural form's string to reference a second
+    # variable. Checked once the loop below has seen every rule, so order within the entry never
+    # matters (MUTATION: checking this per-item instead would reject an entry naming a later rule).
+    referencing = []
+    for variable, spec in entry.items():
+        if variable == "NSStringLocalizedFormatKey":
+            if not isinstance(spec, str):
+                raise refuse("has a format that is not a string")
+            rows.append((unit, locale, key, "format", spec))
+            referencing.append((spec, "its format"))
+            continue
+        if variable == "Comment" and isinstance(spec, str):
+            continue
+        if not isinstance(spec, dict) or not _STRINGSDICT_VARIABLE.fullmatch(variable):
+            raise refuse(f"carries {variable!r} = {type(spec).__name__}, a shape this extractor "
+                         f"does not read. Stopping rather than skipping.")
+        if "NSStringFormatSpecTypeKey" not in spec:
+            raise refuse(f"has a rule {variable!r} with no NSStringFormatSpecTypeKey")
+        if spec["NSStringFormatSpecTypeKey"] != "NSStringPluralRuleType":
+            raise refuse(f"has {variable!r} as a {spec['NSStringFormatSpecTypeKey']!r} rule, not "
+                         f"a plural rule")
+        if not isinstance(spec.get("NSStringFormatValueTypeKey"), str):
+            raise refuse(f"has a plural rule {variable!r} with no NSStringFormatValueTypeKey")
+        if "other" not in spec:
+            raise refuse(f"has a plural rule {variable!r} with no `other` form")
+        rule_names.add(variable)
+        for category, text in spec.items():
+            if category in ("NSStringFormatSpecTypeKey", "NSStringFormatValueTypeKey"):
+                continue
+            if category not in PLURAL_CATEGORIES or not isinstance(text, str):
+                raise refuse(f"has {variable}/{category!r}, which is not a plural category "
+                             f"holding a string")
+            rows.append((unit, locale, f"{key}/{variable}", category, text))
+            referencing.append((text, f"{variable}/{category}"))
+    # MUTATION: removing this loop lets `{"NSStringLocalizedFormatKey": "%#@n@"}`, with no `n`
+    # rule, extract as one format row and silent nothing -- the incomplete extraction reported
+    # complete that review of #1034 R1-02 found.
+    for text, where in referencing:
+        for name in _STRINGSDICT_REFERENCE.findall(text):
+            if name not in rule_names:
+                raise refuse(f"references {name!r} in {where}, which has no rule dict in this "
+                             f"entry")
+    return rows
+
+
 def extract_madsp(app: str):
     """MADSP's per-plug-in parameter tables. Not localised -- the names are fixed in the plist.
 
@@ -784,6 +1061,43 @@ def _walk_madsp(node):
             yield node[meta]
     if not nested and ("parameterID" in node or "syncValueID" in node):
         yield node
+
+
+PLUGIN_NAMES_PATH = ("Contents", "Frameworks", "MAContentTagging.framework", "Versions", "A",
+                     "Resources", "DefaultPluginMapping.plist")
+
+
+def extract_plugin_names(app: str):
+    """Logic's own map from an Audio Unit identity to the plug-in's display name.
+
+    `DefaultPluginMapping.plist` (MAContentTagging) is one flat dict of 242 entries on Logic 12.3
+    (6674), e.g. `EMAG|0236|0000` -> `Channel EQ`. The unit is the AU identity exactly as the file
+    writes it, the key is `name`, the field is `value`. It sits in no `.lproj`, so the locale is
+    `-`: a fact about the file. That the plug-in menu SHOWS these names untranslated is read on a
+    Korean Logic only (f4b8d5a0); this source says Apple ships the string, not where it is drawn.
+
+    Anything but a dict of strings stops the build naming the file: a shape this does not read
+    would otherwise pin a partial list as the whole one.
+    """
+    path = os.path.join(app, *PLUGIN_NAMES_PATH)
+    if not os.path.exists(path):
+        # Review of #1034 R1-01: a missing map returned no rows, and the locale check accepts an
+        # empty locale-independent source, so a Logic without this file rebuilt `plugin_names` as
+        # an empty corpus -- every plug-in name then read "in no corpus" with a green build.
+        raise CanonDecodeError(f"{_rel(app, path)} is missing. `plugin_names` is that one file; "
+                               f"without it the source is not empty, it is unread.")
+    try:
+        loaded = load_plist(path)
+    except Exception as exc:
+        raise CanonDecodeError(f"{_rel(app, path)}: plist did not load: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise CanonDecodeError(f"{_rel(app, path)}: expected a dict, found {type(loaded).__name__}")
+    for identity in sorted(loaded):
+        name = loaded[identity]
+        if not isinstance(identity, str) or not isinstance(name, str):
+            raise CanonDecodeError(f"{_rel(app, path)}: entry {identity!r} -> {name!r} is not a "
+                                   f"string to a string")
+        yield (identity, "-", "name", "value", name)
 
 
 def extract_nib_runtime_attributes(app: str):
@@ -1256,6 +1570,8 @@ EXTRACTORS = {
     "nibstrings": extract_nibstrings,
     "niblabels": extract_niblabels,
     "pluginsettings": extract_pluginsettings,
+    "stringsdict": extract_stringsdict,
+    "plugin_names": extract_plugin_names,
 }
 
 #: The field suffix under which a cited row's CASE-FOLDED digest is pinned beside its exact one.
@@ -1266,7 +1582,54 @@ EXTRACTORS = {
 #: corpus's data, and with only exact digests it cannot: `mixerNamedElement` carries the lowercase
 #: `mixer` this product matches by containment, Apple's row says `Mixer`, and the two are the same
 #: label to everything that runs. One extra digest per cited row, and only for cited rows.
+#:
+#: Taken by `ci_digest` -- `fold_case` and nothing else -- since extractor v3 (#1028).
 CASE_INSENSITIVE = "#ci"
+
+#: The same digest over `swift_trim(value)`: the row as a non-strict matcher sees it after trimming
+#: the READING's ends. Apple's French `Toggle Track Record Enable` ends in a no-break space; `.exact`
+#: trims it off the reading and matches a member without one, `.exactStrict` does not. A guard that
+#: asks the product's question picks `#ci` or `#cit` by the label's match mode rather than folding
+#: the ends away for every mode, which is the v2 defect this replaces.
+CASE_INSENSITIVE_TRIMMED = "#cit"
+
+#: Every field suffix a derived digest is pinned under. Such a row accompanies an exact row and is
+#: not itself a value the absence sets can find.
+DERIVED_SUFFIXES = (CASE_INSENSITIVE_TRIMMED, CASE_INSENSITIVE)
+
+
+def derived_suffix(field: str) -> str | None:
+    """The derived-digest suffix `field` carries, or None for an exact row."""
+    return next((suffix for suffix in DERIVED_SUFFIXES if field.endswith(suffix)), None)
+
+
+#: What `label_row_credit` answers for one pinned row and one LabelSet.
+COVERED, UNCOVERED, UNPINNED = "covered", "uncovered", "unpinned"
+
+
+def label_row_credit(pinned, members, *, strict: bool):
+    """`(state, member)`: does any member of a LabelSet match the row Apple pins, as Swift would?
+
+    `pinned(suffix)` returns the index digest for the cited row's field + `suffix`, or None. The
+    ONE place a derived LabelSet is compared with a row, so `check-labelsets-are-derived.py` and
+    the generator of `AXLocaleValues.swift` cannot disagree about it (#1028 audit B D4):
+
+      NOT_LOCALIZED  the unit is the English file in this locale; no member is credited
+      UNPINNED       no digest -- the reference was never resolved in this locale
+      COVERED        a member folds to the row (`#ci`), or -- for a non-strict mode, which trims
+                     the reading's ends -- to the trimmed row (`#cit`)
+      UNCOVERED      the row says something no member can match
+    """
+    exact = pinned(CASE_INSENSITIVE)
+    if exact == NOT_LOCALIZED:
+        return NOT_LOCALIZED, None
+    if exact is None:
+        return UNPINNED, None
+    trimmed = None if strict else pinned(CASE_INSENSITIVE_TRIMMED)
+    for member in members:
+        if ci_digest(member) in (exact, trimmed):
+            return COVERED, member
+    return UNCOVERED, None
 
 
 #: Sources that address the SAME (unit, key) and must be joined before asking whether Apple
@@ -1274,6 +1637,167 @@ CASE_INSENSITIVE = "#ci"
 #: it into `Base.lproj/<table>.nib` instead of shipping `en.lproj/<table>.strings`, and measured on
 #: this build not one of the 162 tables has both. Anything not listed here stands alone.
 TRANSLATION_NAMESPACE = {"nibstrings": "strings"}
+
+
+# ---------------------------------------------------------------------------
+# proof of translation (ADR-027 D6, audit B D1, #1028)
+# ---------------------------------------------------------------------------
+#
+# A row counts as locale L's text only if the file it lives in is PROVEN translated for L. Before
+# #1028 nothing asked: `it.lproj/QuickHelp.plist`, `pt.lproj/...` and `zh_TW.lproj/...` are the
+# English file byte for byte, and `recordArmKeyCommandName` was certified -- and generated into
+# `AXLocaleValues.swift` -- as `Toggle Track Record Enable` in Italian, Portuguese and Traditional
+# Chinese, while Apple's own Italian for that command is `Attiva/disattiva abilitazione
+# registrazione traccia` in `Logic.framework/.../it.lproj/Localizable.strings`.
+#
+# THE RULE, per (source, unit, locale), comparing the unit's rows with its English twin's by
+# (key, field) -- across `TRANSLATION_NAMESPACE`, so a `.strings` overlay meets its `Base.lproj` nib:
+#
+#   translated        at least one shared row differs from English
+#   not_localized     every shared row equals English -- the byte-identical file is the obvious
+#                     case, and a file re-serialised with the same text is the same fact
+#   no_english_twin   the unit shares no row with an English file, so nothing can be proven
+#
+# A ROW whose value equals English is credited only inside a `translated` unit. Real translations
+# keep English words -- `Solo`, `Mute`, `MIDI` -- so row-level equality is not refused. The COST of
+# that rule is a false negative, recorded per locale in the manifest as
+# `english_equal_rows_in_translated_units`: in a file Apple translated, a row somebody forgot is
+# indistinguishable from a row that is English on purpose, and both are credited.
+
+TRANSLATED, NO_ENGLISH_TWIN = "translated", "no_english_twin"
+
+
+def localization_states(rows_by_source: dict) -> dict:
+    """`{(source, unit, locale): state}` for every localised unit, from extracted rows.
+
+    `rows_by_source` is `{source: iterable of (unit, locale, key, field, value)}`. English and `-`
+    get no state: English is the reference and `-` is not localised at all.
+    """
+    tables: dict = {}
+    #: Which sources carry a (namespace, unit, locale): the state is theirs. `nibstrings` holds
+    #: only English, so a German state recorded against it would describe rows it does not have.
+    owners: dict = {}
+    for source, rows in rows_by_source.items():
+        namespace = TRANSLATION_NAMESPACE.get(source, source)
+        for unit, locale, key, field, value in rows:
+            if locale == "-":
+                continue
+            tables.setdefault((namespace, unit), {}).setdefault(locale, {})[(key, field)] = value
+            owners.setdefault((namespace, unit, locale), set()).add(source)
+    states = {}
+    for (namespace, unit), by_locale in tables.items():
+        english = by_locale.get("en") or {}
+        for locale, table in by_locale.items():
+            if locale == "en":
+                continue
+            shared = [row for row in table if row in english]
+            if not shared:
+                state = NO_ENGLISH_TWIN
+            elif all(table[row] == english[row] for row in shared):
+                state = NOT_LOCALIZED
+            else:
+                state = TRANSLATED
+            for source in owners[(namespace, unit, locale)]:
+                states[(source, unit, locale)] = state
+    return states
+
+
+def english_equal_rows(rows_by_source: dict, states: dict) -> dict:
+    """`{source: {locale: n}}`: rows equal to their English twin inside a TRANSLATED unit.
+
+    The false-negative cost of the row-level rule, counted rather than asserted.
+    """
+    english: dict = {}
+    for source, rows in rows_by_source.items():
+        namespace = TRANSLATION_NAMESPACE.get(source, source)
+        for unit, locale, key, field, value in rows:
+            if locale == "en":
+                english[(namespace, unit, key, field)] = value
+    out: dict = {}
+    for source, rows in rows_by_source.items():
+        namespace = TRANSLATION_NAMESPACE.get(source, source)
+        for unit, locale, key, field, value in rows:
+            if locale in ("en", "-") or states.get((source, unit, locale)) != TRANSLATED:
+                continue
+            if english.get((namespace, unit, key, field)) == value:
+                by_locale = out.setdefault(source, {})
+                by_locale[locale] = by_locale.get(locale, 0) + 1
+    return {source: dict(sorted(by_locale.items())) for source, by_locale in sorted(out.items())}
+
+
+def localization_state(manifest: dict, source: str, unit: str, locale: str) -> str:
+    """The pinned state of one unit in one locale, offline, from `MANIFEST.json`.
+
+    `en` is the reference and `-` is not localised; both answer `translated`, meaning "this row IS
+    the locale's text" -- which for them is true by construction.
+    """
+    if locale in ("en", "-"):
+        return TRANSLATED
+    block = (manifest.get("sources") or {}).get(source) or {}
+    if unit in ((block.get("not_localized") or {}).get(locale) or ()):
+        return NOT_LOCALIZED
+    if unit in ((block.get("no_english_twin") or {}).get(locale) or ()):
+        return NO_ENGLISH_TWIN
+    return TRANSLATED
+
+
+def _state_lists(states: dict, source: str, state: str) -> dict:
+    out: dict = {}
+    for (name, unit, locale), found in states.items():
+        if name == source and found == state:
+            out.setdefault(locale, []).append(unit)
+    return {locale: sorted(units) for locale, units in sorted(out.items())}
+
+
+def check_source_locales(source: str, locales) -> None:
+    """Raise unless `source` carries exactly the locales `SOURCE_LOCALES` declares for it.
+
+    Both directions, for every source (#1028): a locale that APPEARS makes the corpus narrower than
+    the application while every absence claim reads as though it covered all of it; one that
+    VANISHES makes every absence claim over it false. Nothing is written before this has run.
+    """
+    if not EXPECTED_LOCALES:
+        return
+    wanted, dash_allowed = SOURCE_LOCALES.get(source, (None, None))
+    if wanted is None:
+        raise CanonError(f"SOURCE_LOCALES declares nothing for source {source!r}. A source whose "
+                         f"locales nobody declared is a source whose drift nobody checks.")
+    wanted = set(EXPECTED_LOCALES) if wanted == "ten" else set(wanted)
+    seen = set(locales)
+    named = seen - {"-"}
+    extra, missing = sorted(named - wanted), sorted(wanted - named)
+    if "-" in seen and not dash_allowed:
+        extra.append("-")
+    if extra:
+        raise CanonError(
+            f"{source} ships locales this build does not know about: {extra}. Add them to "
+            f"EXPECTED_LOCALES / SOURCE_LOCALES -- an absence claim over a corpus narrower than "
+            f"the application is not a proof about the application. Nothing has been written.")
+    if missing:
+        raise CanonError(
+            f"{source} is missing locales {missing}. A corpus that lost a locale makes every "
+            f"absence claim over it false, so this stops the build rather than shrinking. "
+            f"Nothing has been written.")
+
+
+def check_bundle_locales(app: str) -> None:
+    """Every `.lproj` directory anywhere in the bundle is one of the ten, or `Base`.
+
+    The per-source check sees only the files a source reads; a language folder holding only images
+    or a file type no source reads yet would pass it. A new language is a fact about the whole
+    application, so this looks at the whole application.
+    """
+    if not EXPECTED_LOCALES:
+        return
+    unknown = set()
+    for _root, dirs, _files in os.walk(app):
+        for name in dirs:
+            if name.endswith(".lproj") and name[: -len(".lproj")] not in (
+                    set(EXPECTED_LOCALES) | {"Base"}):
+                unknown.add(name)
+    if unknown:
+        raise CanonError(f"the bundle holds language folders this build does not know about: "
+                         f"{sorted(unknown)}. Nothing has been written.")
 
 
 def locate_in(rows, text: str, *, source: str = "?"):
@@ -2098,6 +2622,26 @@ def is_absent(source: str, locale: str, text: str) -> bool:
     return not (position < len(table) and table[position] == needle)
 
 
+def locale_independent_citations(text: str) -> list[str]:
+    """Every pinned row, in a source no locale translates, whose value is exactly `text`.
+
+    Over the committed key index, by the 12-hex digest of the exact value -- not the 32-bit absence
+    set, so a hit is a row, cited by address, and nothing collides into one. Only sources whose
+    `SOURCE_LOCALES` entry names no `.lproj` count, and only locale `-`: a string there is the same
+    string in every language because the file it comes from has no language. Only EXACT rows;
+    a case-folded match is a different claim. Sorted, so the first is stable.
+    """
+    digest = short_digest(text)
+    found = []
+    for source, (wanted, _dash) in sorted(SOURCE_LOCALES.items()):
+        if wanted or not os.path.exists(index_path(source)):
+            continue
+        for (unit, locale, key, field), pinned in load_index(source).items():
+            if locale == "-" and not derived_suffix(field) and pinned == digest:
+                found.append(str(CanonRef(source, unit, locale, key, field)))
+    return sorted(found)
+
+
 # ---------------------------------------------------------------------------
 # the manifest -- which bytes the index was taken over
 # ---------------------------------------------------------------------------
@@ -2160,6 +2704,14 @@ def corpus_files(app: str, source: str) -> list[str]:
             for root, _dirs, files in os.walk(os.path.join(app, "Contents", "Resources", root_name)):
                 for name in files:
                     out.append(_rel(app, os.path.join(root, name)))
+    elif source == "stringsdict":
+        for root, _dirs, files in os.walk(app):
+            for name in files:
+                if name.endswith(".stringsdict"):
+                    out.append(_rel(app, os.path.join(root, name)))
+    elif source == "plugin_names":
+        if os.path.exists(os.path.join(app, *PLUGIN_NAMES_PATH)):
+            out.append(os.path.join(*PLUGIN_NAMES_PATH))
     else:
         # A source with no branch here returned an EMPTY list, so its manifest entry recorded
         # `files: 0` and a corpus digest taken over nothing -- and `status` would then call the
@@ -2205,8 +2757,25 @@ def load_manifest() -> dict:
 # resolving a citation
 # ---------------------------------------------------------------------------
 
+def _refuse_unknown_locale(ref: CanonRef) -> None:
+    """A citation into a real source must name one of Logic's ten `.lproj` locales, or `-`.
+
+    Before #1028 `logic-canon://strings/klingon#value` resolved offline to an empty line and exit 0
+    (audit B D7): the value branch never looked at the locale, so a typo in a locale read as a
+    pinned citation. Sources outside `SOURCE_LOCALES` are test fixtures and name their own locales.
+    """
+    if ref.source in SOURCE_LOCALES and ref.locale not in LOCALE_NAMES + ("-",):
+        raise CanonResolveError(
+            f"{ref}: {ref.locale!r} is not a locale Logic ships. The ten are "
+            f"{', '.join(LOCALE_NAMES)}, and `-` for data in no .lproj.")
+
+
 def resolve_offline(ref: CanonRef) -> str:
     """The committed digest for a reference. Raises when it is not in the index.
+
+    For a row whose unit is NOT localised for that locale it returns `NOT_LOCALIZED`, never the
+    English digest (#1028): the English in `it.lproj/QuickHelp.plist` is a fact about the file,
+    not Italian.
 
     A VALUE citation has no key, so there is no row to return a digest FROM: the claim is that
     Apple ships some string here, and which string is carried by the citation's own `value`. It is
@@ -2214,6 +2783,7 @@ def resolve_offline(ref: CanonRef) -> str:
     and resolve each one -- proving the reference is pinned at all -- ask this instead, so it
     answers for the source rather than for a row.
     """
+    _refuse_unknown_locale(ref)
     if ref.is_value_citation:
         if not load_value_index(ref.source):
             raise CanonResolveError(
@@ -2240,6 +2810,7 @@ def check_citation(ref_text: str, quoted_value: str) -> None:
     digest of the quoted value equals the digest the index recorded from Apple's own bytes.
     """
     ref = CanonRef.parse(ref_text)
+    _refuse_unknown_locale(ref)
     if ref.is_value_citation:
         # No key, so nothing to look up by row: the claim is that Apple ships this string in this
         # corpus and locale, and `build` confirmed it against Logic and pinned its full digest.
@@ -2257,6 +2828,11 @@ def check_citation(ref_text: str, quoted_value: str) -> None:
                 f"yet -- run Scripts/logic_canon.py build.")
         return
     committed = resolve_offline(ref)
+    if committed == NOT_LOCALIZED:
+        raise CanonResolveError(
+            f"{ref}\n"
+            f"  is NOT LOCALIZED: Apple ships this unit in {ref.locale} as the English file, so it "
+            f"has no {ref.locale} value to quote. Cite a translated row, or a measured reading.")
     quoted = short_digest(quoted_value)
     if quoted != committed:
         raise CanonResolveError(
@@ -2487,6 +3063,10 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
     """Extract the corpus, write the absence sets, pin the manifest, resolve every citation.
 
     Needs Logic. Everything else in this module needs only what this writes.
+
+    Two phases since #1028. Every source is extracted and its locales checked FIRST, and nothing is
+    written until all of them have passed: the locale check used to sit inside the per-source loop,
+    after earlier sources had already overwritten their absence sets.
     """
     # Start from what is already pinned. `build --source strings` used to write a manifest holding
     # ONLY that source, and `required_corpora` reads the manifest -- so a documented flag silently
@@ -2506,46 +3086,75 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
                 f"A partial rebuild across builds would leave sources describing different "
                 f"applications. Rebuild every source.")
         manifest["sources"] = {}
+    # A different EXTRACTOR is the same hazard in another axis: v3 moved every `#ci` digest, and a
+    # row carried forward from a v2 index would sit beside v3 rows with nothing to tell them apart.
+    # So a version change rebuilds every source and starts every index from nothing, and the
+    # manifest says what moved. Re-keying in place is what "silently" would have meant.
+    migrating_from = previous.get("extractor_version") if previous else None
+    migrating = bool(previous) and migrating_from != EXTRACTOR_VERSION
+    if migrating and not refresh_citations:
+        raise CanonError(
+            f"the pinned index was built by extractor v{migrating_from}; migrating it to "
+            f"v{EXTRACTOR_VERSION} rewrites every index, which needs the citations. Run without "
+            f"--no-citations.")
+    if migrating:
+        if set(sources) != set(EXTRACTORS):
+            raise CanonError(
+                f"the pinned index was built by extractor v{migrating_from} and this is "
+                f"v{EXTRACTOR_VERSION}. A partial rebuild would leave sources keyed by two "
+                f"different folds. Rebuild every source.")
+        manifest["sources"] = {}
+        before_index = {source: load_index(source) for source in EXTRACTORS}
+
+    # Phase 1 -- extract and check. Nothing below this block writes until every source passed.
+    check_bundle_locales(app)
+    extracted: dict[str, list] = {}
+    for source in sources:
+        extracted[source] = list(EXTRACTORS[source](app))
+        check_source_locales(source, {row[1] for row in extracted[source]})
+    # Proof of translation needs a unit's ENGLISH, which may live in another source of the same
+    # namespace (`nibstrings` is the English of `strings`), so a partial rebuild reads those too --
+    # for the comparison only; nothing is written for a source that was not asked for.
+    state_rows = dict(extracted)
+    for source in sources:
+        namespace = TRANSLATION_NAMESPACE.get(source, source)
+        for other in sorted(EXTRACTORS):
+            if other not in state_rows and TRANSLATION_NAMESPACE.get(other, other) == namespace:
+                state_rows[other] = list(EXTRACTORS[other](app))
+    states = localization_states(state_rows)
+    equal_rows = english_equal_rows(state_rows, states)
+
     cited = scan_repo_citations(repo) if refresh_citations else {}
     by_source: dict[str, dict[tuple[str, str, str, str], str]] = {}
-    folded_by_source: dict[str, dict[tuple[str, str, str, str], str]] = {}
+    ci_by_source: dict[str, dict[tuple[str, str, str, str], str]] = {}
+    cit_by_source: dict[str, dict[tuple[str, str, str, str], str]] = {}
     values_by_locale_by_source: dict[str, dict[str, set]] = {}
-    raw_by_locale_by_source: dict[str, dict[str, set]] = {}
+    credited_by_locale_by_source: dict[str, dict[str, set]] = {}
+    credited_raw_by_locale_by_source: dict[str, dict[str, set]] = {}
 
     for source in sources:
-        extractor = EXTRACTORS[source]
         values_by_locale: dict[str, set[str]] = {}
-        raw_by_locale: dict[str, set[str]] = {}
+        credited: dict[str, set[str]] = {}
+        credited_raw: dict[str, set[str]] = {}
         rows: dict[tuple[str, str, str, str], str] = {}
-        folded_rows: dict[tuple[str, str, str, str], str] = {}
-        entries = 0
-        for unit, locale, key, field, value in extractor(app):
-            entries += 1
+        ci_rows: dict[tuple[str, str, str, str], str] = {}
+        cit_rows: dict[tuple[str, str, str, str], str] = {}
+        for unit, locale, key, field, value in extracted[source]:
             folded = normalize(value)
+            # The absence sets hold every value the bundle ships, translated or not: "is this
+            # string in Logic" is a question about bytes, and the English in it.lproj IS there.
             values_by_locale.setdefault(locale, set()).add(folded)
-            raw_by_locale.setdefault(locale, set()).add(value)
-            rows[(unit, locale, key, field)] = short_digest(value)
-            folded_rows[(unit, locale, key, field)] = short_digest(normalize(value).casefold())
-        if source == "quickhelp" and EXPECTED_LOCALES:
-            # BOTH directions. The first version compared only one way, so a Logic that ADDED a
-            # locale left the corpus quietly narrower than the application -- and every absence
-            # claim would then be taken over nine tenths of what Apple ships while reading as
-            # though it covered all of it.
-            extra = sorted(set(values_by_locale) - set(EXPECTED_LOCALES))
-            if extra:
-                raise CanonError(
-                    f"QuickHelp ships locales this build does not know about: {extra}. Add them to "
-                    f"EXPECTED_LOCALES -- an absence claim over a corpus narrower than the "
-                    f"application is not a proof about the application. Nothing has been written.")
-            missing = sorted(set(EXPECTED_LOCALES) - set(values_by_locale))
-            if missing:
-                # BEFORE any write. The check used to run after the loop below, which had already
-                # overwritten the absence files -- so the promise to "stop the build rather than
-                # shrink" protected the manifest and not the artefacts.
-                raise CanonError(
-                    f"QuickHelp is missing locales {missing}. A corpus that lost a locale makes "
-                    f"every absence claim over it false, so this stops the build rather than "
-                    f"shrinking. Nothing has been written.")
+            row = (unit, locale, key, field)
+            if states.get((source, unit, locale)) == NOT_LOCALIZED:
+                # ...but it is not the Italian. Every digest a consumer could take as "this
+                # locale's value" becomes the state instead, so nothing can resolve it to English.
+                rows[row] = ci_rows[row] = cit_rows[row] = NOT_LOCALIZED
+                continue
+            credited.setdefault(locale, set()).add(folded)
+            credited_raw.setdefault(locale, set()).add(value)
+            rows[row] = short_digest(value)
+            ci_rows[row] = ci_digest(value)
+            cit_rows[row] = ci_digest(swift_trim(value))
         paths = corpus_files(app, source)
         absence_counts, folded_counts = {}, {}
         for locale, values in sorted(values_by_locale.items()):
@@ -2553,7 +3162,7 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
             folded_counts[locale] = write_absence(source, locale, values, folded=True)
         manifest["sources"][source] = {
             "files": len(paths),
-            "entries": entries,
+            "entries": len(extracted[source]),
             "corpus_digest": corpus_digest(app, paths),
             "locales": sorted(values_by_locale),
             "absence_entries": absence_counts,
@@ -2561,11 +3170,45 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
             "absence_false_positive": {
                 locale: round(absence_false_positive(count), 12)
                 for locale, count in absence_counts.items()},
+            "not_localized": _state_lists(states, source, NOT_LOCALIZED),
+            "no_english_twin": _state_lists(states, source, NO_ENGLISH_TWIN),
+            "english_equal_rows_in_translated_units": equal_rows.get(source, {}),
         }
         by_source[source] = rows
-        folded_by_source[source] = folded_rows
+        ci_by_source[source] = ci_rows
+        cit_by_source[source] = cit_rows
         values_by_locale_by_source[source] = values_by_locale
-        raw_by_locale_by_source[source] = raw_by_locale
+        credited_by_locale_by_source[source] = credited
+        credited_raw_by_locale_by_source[source] = credited_raw
+
+    def retaken(source: str, committed: dict) -> dict:
+        """The committed rows of one source, each taken again from the corpus just extracted.
+
+        Review of #1034 R1-01. The rebuild used to merge the committed index back in as it stood,
+        so a row survived whether or not the corpus still carried its key. The only offline check
+        on a row is that its VALUE is in the absence set, and many values are shipped under more
+        than one key -- `plugin_names` has five pairs of identities sharing a name, and 1,009 of the
+        1,583 `strings` rows share their value with another row (measured 2026-09-27, Logic 12.3
+        6674) -- so a row Apple had dropped went on resolving behind a green verify. Now the row
+        comes across only with the digest this corpus gives it, and a row whose key is gone does
+        not come across: a citation to it fails as unresolved, which is what a rebuild is for.
+        """
+        out: dict = {}
+        for row in committed:
+            if not derived_suffix(row[3]):
+                pin(out, source, row)
+        return out
+
+    def pin(target: dict, source: str, sibling: tuple) -> None:
+        """The exact row and both derived digests for one (unit, locale, key, field)."""
+        digest = by_source[source].get(sibling)
+        if digest is None:
+            return
+        unit, locale, key, field = sibling
+        target[sibling] = digest
+        target[(unit, locale, key, field + CASE_INSENSITIVE)] = ci_by_source[source][sibling]
+        target[(unit, locale, key, field + CASE_INSENSITIVE_TRIMMED)] = \
+            cit_by_source[source][sibling]
 
     if refresh_citations:
         # Rows a citation in ANOTHER source pins here, because one row can span two sources.
@@ -2590,26 +3233,17 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
                     # for every build that has one -- a standing false alarm about a reference the
                     # same run had just confirmed, next to the real unresolved ones.
                     continue
-                row = by_source[source].get(ref.index_row())
-                if row is None:
+                if by_source[source].get(ref.index_row()) is None:
                     unresolved.append(ref_text)
                     continue
-                wanted[ref.index_row()] = row
-                # And the SAME row in every other locale the source carries. A citation names one
-                # locale, but the thing worth checking offline is almost never one locale: it is
-                # that this control says the same thing in every language Logic ships. Without the
-                # siblings, a derivation over ten locales can only be verified on a machine that
-                # has Logic -- which is the one place the answer is not needed. Ten digests per
-                # citation is the whole cost.
+                # The cited row, and the SAME row in every other locale the source carries. A
+                # citation names one locale, but the thing worth checking offline is almost never
+                # one locale: it is that this control says the same thing in every language Logic
+                # ships. Without the siblings, a derivation over ten locales can only be verified
+                # on a machine that has Logic -- which is the one place the answer is not needed.
                 unit, _locale, key, field = ref.index_row()
                 for sibling_locale in sorted(values_by_locale_by_source.get(source) or {}):
-                    sibling = (unit, sibling_locale, key, field)
-                    digest = by_source[source].get(sibling)
-                    if digest is not None:
-                        wanted[sibling] = digest
-                        folded = folded_by_source.get(source, {}).get(sibling)
-                        if folded is not None:
-                            wanted[(unit, sibling_locale, key, field + CASE_INSENSITIVE)] = folded
+                    pin(wanted, source, (unit, sibling_locale, key, field))
                 # And across the namespace, because a single row can span two SOURCES. Apple
                 # compiles the English of 162 tables into `Base.lproj` nibs and ships the nine
                 # translations as `.strings`, so `GotoPosition.strings 5.title` is `nibstrings` in
@@ -2619,48 +3253,62 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
                 # reference nobody ever resolved.
                 namespace = TRANSLATION_NAMESPACE.get(source, source)
                 for other in sources:
-                    if other == source:
-                        continue
-                    if TRANSLATION_NAMESPACE.get(other, other) != namespace:
+                    if other == source or TRANSLATION_NAMESPACE.get(other, other) != namespace:
                         continue
                     for sibling_locale in sorted(values_by_locale_by_source.get(other) or {}):
-                        sibling = (unit, sibling_locale, key, field)
-                        digest = by_source[other].get(sibling)
-                        if digest is not None:
-                            cross_namespace.setdefault(other, {})[sibling] = digest
-                            folded = folded_by_source.get(other, {}).get(sibling)
-                            if folded is not None:
-                                cross_namespace[other][
-                                    (unit, sibling_locale, key, field + CASE_INSENSITIVE)] = folded
+                        pin(cross_namespace.setdefault(other, {}), other,
+                            (unit, sibling_locale, key, field))
+            if source in PIN_EVERY_ROW:
+                for row in by_source[source]:
+                    pin(wanted, source, row)
+            if migrating:
+                # Migrate, do not drop: every row the old index held is taken again from this
+                # corpus, under this extractor. A row whose key Apple no longer ships is the only
+                # one that does not come across, and the manifest counts those.
+                for row in before_index.get(source) or {}:
+                    if not derived_suffix(row[3]):
+                        pin(wanted, source, row)
+            # VALUE citations: confirmed against the corpus just extracted, then pinned by full
+            # digest. PRUNED on every rebuild (audit B D3): the file used to be the seed of this
+            # set and was only ever added to, so a value Apple stopped shipping went on checking.
+            # A row already committed survives only if this corpus still credits its value --
+            # the same keep-while-true the key index gives a citation another branch rests on.
+            credited = credited_by_locale_by_source.get(source) or {}
+            value_rows = set()
+            unconfirmed = []
+            for cited_source, locale, value in scan_value_citations(repo):
+                if cited_source != source:
+                    continue
+                if normalize(value) in credited.get(locale, ()):
+                    value_rows.add((locale, short_digest(value)))
+                else:
+                    unconfirmed.append(f"{locale}: {value!r}")
+            kept = set() if migrating else load_value_index(source)
+            shipped: dict[str, set] = {}
+            for locale, digest in kept:
+                if locale not in shipped:
+                    shipped[locale] = {short_digest(value) for value in credited.get(locale, ())}
+                if digest in shipped[locale]:
+                    value_rows.add((locale, digest))
+            write_value_index(source, value_rows)
+            manifest["sources"][source]["cited_values"] = len(value_rows)
+            if unconfirmed:
+                manifest["sources"][source]["unconfirmed_values"] = sorted(unconfirmed)
+
             # Keep rows already committed even when nothing cites them this run, so that removing
             # one citation does not silently un-pin a digest another branch is still resting on --
             # but the FRESH digest wins where both have the row. Written the other way round first,
             # and `dict.update` overwrites: a rebuild after a Logic update kept every stale digest,
             # so a citation whose string Apple had changed went on resolving. That is the exact
             # failure `docs/canon/README.md` says a rebuild exists to surface, and the code did the
-            # opposite. Found by review 2026-09-15 with a synthetic two-build corpus.
-            # VALUE citations: confirmed against the corpus just extracted, then pinned by full
-            # digest. `by_source` is keyed by row; the values themselves are what a value citation
-            # claims, so they are checked against the locale's value set.
-            value_rows = set(load_value_index(source))
-            unconfirmed = []
-            for cited_source, locale, value in scan_value_citations(repo):
-                if cited_source != source:
-                    continue
-                if normalize(value) in (values_by_locale_by_source.get(source) or {}).get(locale, ()):
-                    value_rows.add((locale, short_digest(value)))
-                else:
-                    unconfirmed.append(f"{locale}: {value!r}")
-            write_value_index(source, value_rows)
-            manifest["sources"][source]["cited_values"] = len(value_rows)
-            if unconfirmed:
-                manifest["sources"][source]["unconfirmed_values"] = sorted(unconfirmed)
-
-            merged = load_index(source)
+            # opposite. Found by review 2026-09-15 with a synthetic two-build corpus. Nothing is
+            # kept across an extractor change: a kept row would be keyed by the old fold.
+            # What is kept is the ADDRESS, re-taken from this corpus (`retaken`), never the old
+            # digest -- see there for the review of #1034 R1-01.
+            merged = {} if migrating else retaken(source, load_index(source))
             merged.update(wanted)
             write_index(source, merged)
-            wanted = merged
-            manifest["sources"][source]["cited_rows"] = len(wanted)
+            manifest["sources"][source]["cited_rows"] = len(merged)
             if unresolved:
                 manifest["sources"][source]["unresolved_citations"] = sorted(set(unresolved))
 
@@ -2675,6 +3323,25 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
             if len(merged) != before or any(merged[row] != rows_to_pin[row] for row in rows_to_pin):
                 write_index(other, merged)
             manifest["sources"][other]["cited_rows"] = len(merged)
+    else:
+        # `--no-citations` scans no new references, but it still rewrites this source's absence
+        # sets from the corpus in hand, so the index beside them is re-taken from the same corpus.
+        # Leaving it untouched kept every row of the previous build -- the retention R1-01 names.
+        for source in sources:
+            rows = retaken(source, load_index(source))
+            if source in PIN_EVERY_ROW:
+                for row in by_source[source]:
+                    pin(rows, source, row)
+            write_index(source, rows)
+            manifest["sources"][source]["cited_rows"] = len(rows)
+
+    if migrating:
+        manifest["migration"] = migration_report(migrating_from, before_index,
+                                                 {source: load_index(source) for source in EXTRACTORS})
+    elif (previous.get("migration") or {}).get("to_extractor") == EXTRACTOR_VERSION:
+        # The record of how the index CAME to this extractor stays until the next migration. A
+        # plain rebuild dropped it, so the only account of which rows moved went with it.
+        manifest["migration"] = previous["migration"]
 
     # Which English values Apple TRANSLATES, as digests, so a guard can ask offline. CI has no
     # Logic, and "does Apple translate this label" is what decides whether matching it by literal
@@ -2713,11 +3380,14 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
 
     # The label ledger's strings, asked up to case (#981). Rows for a source this run did not
     # extract are kept; the ones it did extract are replaced, so a string Apple stopped shipping
-    # leaves with the rebuild that saw it go.
+    # leaves with the rebuild that saw it go. Only CREDITED values answer (#1028): the English in
+    # a not-localized file is not the locale's, and it credited 29 cells in it, pt and zh_TW.
     kept = set()
     if os.path.exists(ledger_casefold_path()):
-        kept = {row for row in load_ledger_casefold() if row[0] not in values_by_locale_by_source}
-    ledger_rows = kept | ledger_casefold_rows(raw_by_locale_by_source, ledger_strings(repo))
+        kept = {row for row in load_ledger_casefold()
+                if row[0] not in credited_raw_by_locale_by_source}
+    ledger_rows = kept | ledger_casefold_rows(credited_raw_by_locale_by_source,
+                                              ledger_strings(repo))
     write_ledger_casefold(ledger_rows)
     manifest["ledger_casefold_entries"] = ledger_counts(ledger_rows)
 
@@ -2736,6 +3406,31 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
         json.dump(manifest, handle, ensure_ascii=False, indent=2, sort_keys=True)
         handle.write("\n")
     return manifest
+
+
+def migration_report(from_version, before: dict, after: dict) -> dict:
+    """What an extractor change moved, row by row, so a re-key is a stated fact and not a silent one.
+
+    Compares the index each source held before the rebuild with the one it holds after, over the
+    rows both carry: how many `#ci` digests changed, how many rows now read `not_localized`, and how
+    many rows were dropped because nothing in this tree cites them any more.
+    """
+    report = {"from_extractor": from_version, "to_extractor": EXTRACTOR_VERSION,
+              "ci_rows_compared": 0, "ci_rows_rekeyed": 0, "rows_now_not_localized": 0,
+              "rows_not_carried_forward": 0}
+    for source in sorted(set(before) | set(after)):
+        old, new = before.get(source) or {}, after.get(source) or {}
+        report["rows_not_carried_forward"] += sum(1 for row in old if row not in new)
+        for row, digest in old.items():
+            if row not in new:
+                continue
+            if new[row] == NOT_LOCALIZED and digest != NOT_LOCALIZED:
+                report["rows_now_not_localized"] += 1
+            elif row[3].endswith(CASE_INSENSITIVE):
+                report["ci_rows_compared"] += 1
+                if new[row] != digest:
+                    report["ci_rows_rekeyed"] += 1
+    return report
 
 
 def confirm(app: str, texts) -> dict:
@@ -2944,40 +3639,95 @@ def verify_index_against_absence() -> list:
     act nobody performs by accident.
     """
     problems = []
+    manifest = load_manifest() if os.path.exists(MANIFEST_PATH) else {}
+
+    # A source that pins every row holds exactly the rows its corpus has: one more is a row the
+    # corpus no longer carries, and its value can still be in the absence set under another
+    # identity (review of #1034 R1-01), so the digest walk below cannot see it. A missing index
+    # file is `verify_artifacts`' to report; this counts the one that is there.
+    for source in sorted(PIN_EVERY_ROW & set(manifest.get("sources") or {})):
+        if not os.path.exists(index_path(source)):
+            continue
+        exact = sum(1 for row in load_index(source) if not derived_suffix(row[3]))
+        entries = manifest["sources"][source].get("entries")
+        if exact != entries:
+            problems.append(f"index/{source}.tsv holds {exact} rows and its corpus has {entries} "
+                            f"entries. `{source}` pins every row, so the two are equal or the "
+                            f"index carries a row the corpus does not.")
+
+    def in_absence(source: str, locale: str, short: str, what: str) -> None:
+        try:
+            table = load_absence(source, locale)
+        except CanonError as exc:
+            problems.append(f"{what}: {exc}")
+            return
+        needle = int(short[:8], 16)
+        position = bisect.bisect_left(table, needle)
+        if not (position < len(table) and table[position] == needle):
+            problems.append(
+                f"{what} is pinned at digest {short}, and no value in "
+                f"absence/{source}.{locale}.u32 hashes to it. A row whose value is not in the "
+                f"corpus was not taken from the corpus.")
+
     # `*.tsv` also matches `<source>.values.tsv`, which is a VALUE index -- two columns, not five.
     # This walked it as a key index and died on the field count. A glob that predates a file type
     # does not know about it, and the one it does not know about is the one that breaks it.
     for path in sorted(glob.glob(os.path.join(INDEX_DIR, "*.tsv"))):
         if path.endswith(".values.tsv"):
+            # Checked since #1028 (audit B D3): a value row is a claim that Apple ships a string,
+            # and nothing compared it with the corpus, so a stale one went on answering.
+            source = os.path.basename(path)[: -len(".values.tsv")]
+            for locale, short in sorted(load_value_index(source)):
+                in_absence(source, locale, short, f"index/{source}.values.tsv ({locale})")
             continue
         source = os.path.basename(path)[: -len(".tsv")]
-        for (unit, locale, key, field), short in load_index(source).items():
-            if field.endswith(CASE_INSENSITIVE):
-                # A `#ci` row is the CASE-FOLDED digest of the row beside it, and the absence sets
+        index = load_index(source)
+        for (unit, locale, key, field), short in index.items():
+            state = localization_state(manifest, source, unit, locale)
+            if (short == NOT_LOCALIZED) != (state == NOT_LOCALIZED):
+                # Both directions. A `not_localized` row the manifest does not list is a state
+                # nobody proved; a listed unit whose row holds a digest is the English credited as
+                # the locale's text again -- the exact thing #1028 exists to stop.
+                problems.append(
+                    f"index/{source}.tsv row {key!r} ({unit}, {locale}, {field}) holds {short!r} "
+                    f"and MANIFEST.json says the unit is {state} there.")
+                continue
+            if short == NOT_LOCALIZED:
+                continue
+            suffix = derived_suffix(field)
+            if suffix:
+                # A `#ci`/`#cit` row is a FOLDED digest of the row beside it, and the absence sets
                 # preserve case on purpose -- so it cannot be found there and its absence proves
                 # nothing. The exact row it accompanies IS checked here, and tampering with either
                 # breaks the manifest digest over the whole index file. What this loop protects
-                # against is a row that was never taken from the corpus at all, and a `#ci` row is
-                # written only where its exact twin was.
-                exact = (unit, locale, key, field[: -len(CASE_INSENSITIVE)])
-                if exact not in load_index(source):
+                # against is a row that was never taken from the corpus at all, and a derived row
+                # is written only where its exact twin was.
+                exact = (unit, locale, key, field[: -len(suffix)])
+                if exact not in index:
                     problems.append(
                         f"index/{source}.tsv pins a case-folded digest for {key!r} ({unit}, "
                         f"{locale}) with no exact row beside it. A folded digest alone is checked "
                         f"by nothing.")
                 continue
-            try:
-                table = load_absence(source, locale)
-            except CanonError as exc:
-                problems.append(f"index/{source}.tsv row {key!r}: {exc}")
-                continue
-            needle = int(short[:8], 16)
-            position = bisect.bisect_left(table, needle)
-            if not (position < len(table) and table[position] == needle):
-                problems.append(
-                    f"index/{source}.tsv pins {key!r} ({unit}, {locale}, {field}) at digest "
-                    f"{short}, and no value in absence/{source}.{locale}.u32 hashes to it. A row "
-                    f"whose value is not in the corpus was not taken from the corpus.")
+            in_absence(source, locale, short, f"index/{source}.tsv row {key!r} ({unit}, {locale}, "
+                                              f"{field})")
+    return problems
+
+
+def verify_citations_confirmed(manifest: dict) -> list:
+    """Every citation the last build could not confirm is a problem, not a manifest footnote.
+
+    Audit B D3: `build` wrote `unconfirmed_values` and `unresolved_citations` into the manifest and
+    nothing ever read either, so a value Apple stopped shipping sat in the tree, cited, next to a
+    green check. Read here, and `check-canon-citations.py` fails on them.
+    """
+    problems = []
+    for source, block in sorted((manifest.get("sources") or {}).items()):
+        for item in block.get("unconfirmed_values") or []:
+            problems.append(f"{source}: value citation {item} is not shipped by the pinned Logic "
+                            f"(or only as a not-localized English file)")
+        for ref in block.get("unresolved_citations") or []:
+            problems.append(f"{source}: citation {ref} did not resolve against the pinned Logic")
     return problems
 
 
@@ -3025,19 +3775,69 @@ def _cmd_build(args) -> int:
             print(f"             UNRESOLVED: {len(block['unresolved_citations'])}")
             for ref in block["unresolved_citations"][:5]:
                 print(f"               {ref}")
+        if block.get("unconfirmed_values"):
+            print(f"             UNCONFIRMED VALUES: {len(block['unconfirmed_values'])}")
+        if block.get("not_localized"):
+            print(f"             not localized: " + ", ".join(
+                f"{locale} {len(units)}" for locale, units in sorted(block["not_localized"].items())))
+    if manifest.get("migration"):
+        print(f"migration: {json.dumps(manifest['migration'], sort_keys=True)}")
     return 0
 
 
 def _cmd_resolve(args) -> int:
-    ref = CanonRef.parse(args.ref)
+    """Exit 0 with the value (online) or digest (offline); 3 for NOT LOCALIZED; 1/2 refused.
+
+    Audit B D7: an unknown source died in a KeyError traceback online, and a value citation or a
+    `klingon` locale printed an empty line and exit 0 offline -- a caller testing the exit code
+    read all three as resolved.
+    """
+    try:
+        ref = CanonRef.parse(args.ref)
+    except CanonRefError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if ref.source not in EXTRACTORS:
+        print(f"{ref}: unknown source {ref.source!r}. Sources: {', '.join(sorted(EXTRACTORS))}.",
+              file=sys.stderr)
+        return 2
+    try:
+        _refuse_unknown_locale(ref)
+    except CanonResolveError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if ref.is_value_citation:
+        print(f"{ref}: a value citation names no row, so there is nothing to resolve. Check it "
+              f"with its value: Scripts/logic_canon.py check '{ref}=<value>'", file=sys.stderr)
+        return 2
     if args.app and os.path.isdir(args.app):
-        for unit, locale, key, field, value in EXTRACTORS[ref.source](args.app):
+        namespace = TRANSLATION_NAMESPACE.get(ref.source, ref.source)
+        rows_by_source = {name: [row for row in EXTRACTORS[name](args.app) if row[0] == ref.unit]
+                          for name in sorted(EXTRACTORS)
+                          if TRANSLATION_NAMESPACE.get(name, name) == namespace}
+        if localization_states(rows_by_source).get(
+                (ref.source, ref.unit, ref.locale)) == NOT_LOCALIZED:
+            print(f"{ref}: NOT LOCALIZED -- Apple ships this unit in {ref.locale} as the English "
+                  f"file", file=sys.stderr)
+            print(NOT_LOCALIZED)
+            return 3
+        for unit, locale, key, field, value in rows_by_source[ref.source]:
             if (unit, locale, key, field) == ref.index_row():
                 print(value)
                 return 0
         print(f"{ref}: not found in the installed Logic", file=sys.stderr)
         return 1
-    print(resolve_offline(ref))
+    try:
+        digest = resolve_offline(ref)
+    except CanonResolveError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if digest == NOT_LOCALIZED:
+        print(f"{ref}: NOT LOCALIZED -- pinned as the English file in {ref.locale}",
+              file=sys.stderr)
+        print(NOT_LOCALIZED)
+        return 3
+    print(digest)
     return 0
 
 
@@ -3186,11 +3986,24 @@ def _cmd_census(args) -> int:
     """
     app = args.app
     out = {"logic": app_build(app)}
+    all_rows = {}
     for source in sorted(EXTRACTORS):
-        rows = list(EXTRACTORS[source](app))
+        rows = all_rows[source] = list(EXTRACTORS[source](app))
         by_locale = collections.Counter(locale for _u, locale, _k, _f, _v in rows)
         out[source] = {"files": len(corpus_files(app, source)), "entries": len(rows),
                        "locales": dict(sorted(by_locale.items()))}
+    # Proof of translation (#1028), with its cost beside it: units Apple ships as the English file
+    # per locale, units with no English twin, and the rows equal to English that the row-level
+    # rule still credits because their unit is translated.
+    states = localization_states(all_rows)
+    for source in sorted(EXTRACTORS):
+        out[source]["not_localized_units"] = {
+            locale: len(units) for locale, units in _state_lists(states, source, NOT_LOCALIZED).items()}
+        out[source]["no_english_twin_units"] = {
+            locale: len(units)
+            for locale, units in _state_lists(states, source, NO_ENGLISH_TWIN).items()}
+    out["english_equal_rows_in_translated_units"] = english_equal_rows(all_rows, states)
+    del all_rows
     encodings = collections.Counter()
     for root, _dirs, files in os.walk(app):
         for name in files:
@@ -3244,10 +4057,52 @@ def _cmd_census(args) -> int:
     return 0
 
 
+def drift_offline(manifest: dict) -> list:
+    """What disagrees between the pinned corpus and THIS CODE, with no Logic needed.
+
+    The extractor version, and the set of sources: a source this code can extract that the
+    manifest does not pin (as `stringsdict` was before #1028) is a corpus nobody checked.
+    """
+    problems = []
+    if manifest.get("extractor_version") != EXTRACTOR_VERSION:
+        problems.append(f"the index was built by extractor v{manifest.get('extractor_version')} "
+                        f"and this code is v{EXTRACTOR_VERSION}; rebuild on a machine with Logic")
+    pinned = set(manifest.get("sources") or {})
+    for source in sorted(set(EXTRACTORS) - pinned):
+        problems.append(f"source {source!r} is extracted by this code and not pinned")
+    for source in sorted(pinned - set(EXTRACTORS)):
+        problems.append(f"source {source!r} is pinned and this code cannot extract it")
+    return problems
+
+
+def drift_host(manifest: dict, app: str) -> list:
+    """What disagrees between the pinned corpus and the Logic installed at `app`."""
+    here = app_build(app)
+    if here != manifest.get("logic"):
+        return [f"installed Logic is {here.get('version')} ({here.get('build')}) and the corpus "
+                f"is pinned to {manifest['logic']['version']} ({manifest['logic']['build']})"]
+    return [f"{source}: the installed corpus digest differs from the pinned one"
+            for source, block in sorted((manifest.get("sources") or {}).items())
+            if source in EXTRACTORS
+            and corpus_digest(app, corpus_files(app, source)) != block["corpus_digest"]]
+
+
 def _cmd_status(args) -> int:
     manifest = load_manifest()
     print(f"index pinned to Logic {manifest['logic']['version']} ({manifest['logic']['build']}), "
-          f"extractor v{manifest['extractor_version']}")
+          f"extractor v{manifest['extractor_version']} (this code: v{EXTRACTOR_VERSION})")
+    for source, block in sorted((manifest.get("sources") or {}).items()):
+        states = block.get("not_localized") or {}
+        if states:
+            print(f"  {source:11s} NOT LOCALIZED: " + ", ".join(
+                f"{locale} {len(units)} unit(s)" for locale, units in sorted(states.items())))
+    offline = drift_offline(manifest)
+    for problem in offline:
+        print(f"DRIFT: {problem}", file=sys.stderr)
+    if offline:
+        return 1
+    if not (args.app and os.path.isdir(args.app)):
+        print(f"  host: no Logic at {args.app}; the installed build was NOT compared")
     if args.app and os.path.isdir(args.app):
         here = app_build(args.app)
         if here != manifest["logic"]:
