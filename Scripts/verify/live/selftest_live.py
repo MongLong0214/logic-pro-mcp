@@ -4,9 +4,13 @@
 Usage:  /usr/bin/python3 Scripts/verify/live/selftest_live.py [--head <sha>] [--locales ko de]
                                                              [--evidence-root <dir>]
 
+`--locales` must name ko and at least one distinct other locale (space or comma separated); any
+other set is refused with exit 2 before anything is built or driven.
+
 Steps, each recorded raw with the predicate that judged it (its source text is stored beside it):
 
-  build             binary.build(head): built by construction, re-hashed here
+  build             binary.Builds(REPO).get(head): swift build run by THIS process, re-hashed here;
+                    no record on disk is ever read back as a build
   exclusivity       exclusive.claim: the lock taken, no other server or test bundle running
   per locale:
     switch          locale.switch_to(lproj): Logic's AppleLanguages and the arrange title from
@@ -14,19 +18,25 @@ Steps, each recorded raw with the predicate that judged it (its source text is s
     fixture_reset   fixture.reset("locale_campaign_mixer"): Don't Save, reopen, show the Mixer; then
                     both fixtures' fingerprints read and compared with their declarations
     screen_clean    screen.settle_to_clean, then no dirt
-    positive_control/<probe>  every registered probe on the reset fixture reports its known reading
     server          the built binary started and initialized
+    positive_control/track_flags_ax  controls.py: flag_track muted, soloed and armed through the
+                    server and read by the probe as that track alone, then unset and read at 0
     must_fail       the #1020 arm probe after arming track 0 through the server must DISAGREE with
-                    its pre-state reading (the control FAILS, as it must), then the disarm restores
-                    every track's flags
+                    its pre-state reading on track 0 alone (the control FAILS, as it must), then the
+                    disarm restores every track's flags
     server_stop     the server stopped, pid verified gone
+    positive_control/routing_slots_ax  controls.py: the known input label on input_strip, a bus
+                    chosen in its send slot read as that strip's occupied send, then a reset read
+                    with none
     screen_clean_after  no dirt after the drive
   restore           locale.restore_locale("ko"), confirmed the same way
   final             the resting state read once more (Korean, fixture, clean screen)
 
-The evidence is written to <evidence-root>/<head>/selftest.json whatever happens. The lock is
-released in a `finally`. Nothing here decides anything by a flag an author wrote: every verdict is a
-predicate over a recorded observation.
+The verdict (`verdict`) requires every step above for every requested locale, each passed, and no
+failed step anywhere: a missing step is a failure. The evidence is written to
+<evidence-root>/<head>/selftest.json whatever happens. The lock is released in a `finally`.
+Nothing here decides anything by a flag an author wrote: every verdict is a predicate over a
+recorded observation.
 
 This file must not be run with its own directory first on sys.path (`locale.py` would shadow the
 standard library); the lines below put the parent directory there instead.
@@ -48,7 +58,7 @@ import socket  # noqa: E402
 import time  # noqa: E402
 import traceback  # noqa: E402
 
-from live import binary, exclusive, fixture, mcp, obs, probes, screen  # noqa: E402
+from live import binary, controls, exclusive, fixture, mcp, obs, probes, screen  # noqa: E402
 from live import locale as live_locale  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
@@ -62,7 +72,12 @@ MUST_FAIL_TRACK = 0
 # ---------------------------------------------------------------------------------------------
 
 def pred_build(o):
-    return (o.get("binding") == "built-by-verifier" and bool(o.get("binary_path"))
+    """Built by THIS run: a swift-build stage that returned 0 in its own stages, never a record read
+    back from disk (PR #1033 review R2), and the file re-hashed here equal to the build's hash."""
+    built_here = any(stage.get("stage") == "swift-build" and stage.get("returncode") == 0
+                     for stage in o.get("stages") or [])
+    return (built_here and o.get("reused") is not True
+            and o.get("binding") == "built-by-verifier" and bool(o.get("binary_path"))
             and o.get("rehash") == o.get("binary_sha256") and o.get("head") == o.get("asked_head"))
 
 
@@ -144,11 +159,32 @@ class Run:
             verdict, observation = False, {**observation, "predicate_raised": repr(exc)}
         self.doc["steps"].append({"step": name, "lproj": lproj, "t": obs.now(),
                                   "passed": verdict is True, "predicate": predicate.__name__,
-                                  "predicate_source": inspect.getsource(predicate),
+                                  "predicate_source": inspect.getsource(predicate)
+                                  + getattr(predicate, "source", ""),
                                   "observation": observation})
         print(f"{'PASS' if verdict is True else 'FAIL'} {name}{' [' + lproj + ']' if lproj else ''}",
               flush=True)
         return verdict is True
+
+
+def pred_positive_control(name):
+    known = probes.REGISTRY[name]["positive_control"]["known"]
+    spec = fixture.spec(probes.REGISTRY[name]["positive_control"]["fixture"])
+
+    def predicate(o):
+        return known(spec, o.get("control") or {})
+
+    predicate.__name__ = f"positive_control_{name}"
+    predicate.source = inspect.getsource(known)
+    return predicate
+
+
+#: The steps every requested locale must have, each passed (PR #1033 review R4).
+PER_LOCALE_STEPS = ("switch", "fixture_reset", "screen_clean", "server",
+                    "positive_control/track_flags_ax", "must_fail", "server_stop",
+                    "positive_control/routing_slots_ax", "screen_clean_after")
+#: The steps a run must have once.
+RUN_STEPS = ("build", "exclusivity", "restore", "final")
 
 
 def drive_locale(run, lproj, built):
@@ -161,26 +197,13 @@ def drive_locale(run, lproj, built):
 
     step("screen_clean", screen.settle_to_clean(timeout_s=10.0), pred_screen_clean)
 
-    for name, probe in probes.REGISTRY.items():
-        control = probe["positive_control"]
-        args = {"lproj": lproj}
-        if "fixture" in probe["schema"]:
-            args["fixture"] = fixture.spec(control["fixture"])["path"]
-        observed = {"screen": screen.sample(), "run": probes.run(name, args),
-                    "fixture": control["fixture"], "reading": control["reading"]}
-        known = control["known"]
-        spec = fixture.spec(control["fixture"])
-
-        def pred_positive_control(o, known=known, spec=spec):
-            return known(spec, (o.get("run") or {}).get("observation") or {})
-
-        pred_positive_control.__name__ = f"positive_control_{name}"
-        step(f"positive_control/{name}", observed, pred_positive_control)
-
     server = mcp.Server(built["binary_path"])
     try:
         start = server.start(init_timeout_s=60)
         step("server", {"start": start}, pred_server)
+        step("positive_control/track_flags_ax",
+             {"screen": screen.sample(), **controls.drive("track_flags_ax", lproj, server)},
+             pred_positive_control("track_flags_ax"))
         fp = fixture.read("locale_campaign_19", lproj, server) if start.get("spawned") else None
         pre = probes.run("track_flags_ax", {"lproj": lproj})
         arm = server.tool("logic_tracks", "arm", {"index": MUST_FAIL_TRACK, "enabled": True},
@@ -196,24 +219,73 @@ def drive_locale(run, lproj, built):
     finally:
         stop = server.stop()
         step("server_stop", {"stop": stop, "server": server.record()}, pred_server_stop)
+    # The routing control ends in a reset (Don't Save + reopen), so it runs with no server up.
+    step("positive_control/routing_slots_ax",
+         {"screen": screen.sample(), **controls.drive("routing_slots_ax", lproj, None)},
+         pred_positive_control("routing_slots_ax"))
     step("screen_clean_after", screen.settle_to_clean(timeout_s=10.0), pred_screen_clean)
+
+
+def parse_locales(values):
+    """`--locales` as given (space or comma separated) -> (locales, problem or None).
+
+    The self-test's claim is Korean plus at least one other locale; a run that cannot make that
+    claim is refused before anything is built or driven (PR #1033 review R4)."""
+    locales = [part for value in values for part in value.split(",") if part]
+    unknown = [lp for lp in locales if lp not in live_locale.LOCALES]
+    if unknown:
+        return locales, f"unknown lproj(s): {unknown}"
+    if len(set(locales)) != len(locales):
+        return locales, f"a locale is repeated: {locales}"
+    if live_locale.RESTING not in locales:
+        return locales, f"{live_locale.RESTING!r} is required"
+    if len(locales) < 2:
+        return locales, f"{live_locale.RESTING!r} plus at least one distinct other locale is required"
+    return locales, None
+
+
+def verdict(doc):
+    """Every required step present and passed, for every requested locale; nothing else failed."""
+    steps = doc.get("steps") or []
+    locales = doc.get("locales")
+    problems = []
+    if not isinstance(locales, list):
+        problems.append("the run names no locales")
+        locales = []
+    else:
+        _, problem = parse_locales(locales)
+        if problem:
+            problems.append(problem)
+    required = [(name, None) for name in RUN_STEPS]
+    required += [(name, lproj) for lproj in locales for name in PER_LOCALE_STEPS]
+    for name, lproj in required:
+        # restore and final are recorded against the resting locale by the run itself
+        found = [s for s in steps if s["step"] == name and (lproj is None or s["lproj"] == lproj)]
+        if not found:
+            problems.append(f"missing {name}[{lproj}]")
+    failed = [f"{s['step']}[{s['lproj']}]" for s in steps if not s.get("passed")]
+    return {"steps": len(steps), "passed": sum(1 for s in steps if s.get("passed")),
+            "failed": failed, "problems": problems, "crashed": "crash" in doc,
+            "exit": 0 if steps and not failed and not problems and "crash" not in doc else 1}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--head")
-    parser.add_argument("--locales", nargs="+", default=["ko", "de"])
+    parser.add_argument("--locales", nargs="+", default=["ko", "de"],
+                        help="ko plus at least one distinct other; space or comma separated")
     parser.add_argument("--evidence-root", default=EVIDENCE_ROOT)
     args = parser.parse_args()
-    unknown = [lp for lp in args.locales if lp not in live_locale.LOCALES]
-    if unknown:
-        parser.error(f"unknown lproj(s): {unknown}")
+    locales, problem = parse_locales(args.locales)
+    if problem:
+        parser.error(problem)
     head = args.head or obs.run(["git", "-C", REPO, "rev-parse", "HEAD"], 10)["stdout"].strip()
     run = Run(head)
+    run.doc["locales"] = locales
     out_dir = os.path.join(args.evidence_root, head)
     os.makedirs(out_dir, exist_ok=True)
     try:
-        built = binary.build(head, REPO)
+        built = binary.Builds(REPO).get(head)
         if built.get("binary_path"):
             built["rehash"] = binary.sha256_of(built["binary_path"])
         built["asked_head"] = head
@@ -227,7 +299,7 @@ def main():
             run.doc["as_found"] = {"reading": live_locale.reading(live_locale.RESTING),
                                    "screen": screen.clean_state()}
             try:
-                for lproj in args.locales:
+                for lproj in locales:
                     drive_locale(run, lproj, built)
             finally:
                 run.step("restore", live_locale.restore_locale(live_locale.RESTING), pred_switch,
@@ -244,18 +316,13 @@ def main():
 
 
 def finish(run, out_dir):
-    steps = run.doc["steps"]
     run.doc["finished_unix"] = time.time()
-    run.doc["verdict"] = {"steps": len(steps), "passed": sum(1 for s in steps if s["passed"]),
-                          "failed": [f"{s['step']}[{s['lproj']}]" for s in steps if not s["passed"]],
-                          "crashed": "crash" in run.doc}
-    ok = bool(steps) and not run.doc["verdict"]["failed"] and "crash" not in run.doc
-    run.doc["verdict"]["exit"] = 0 if ok else 1
+    run.doc["verdict"] = verdict(run.doc)
     path = os.path.join(out_dir, "selftest.json")
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(run.doc, handle, ensure_ascii=False, indent=1, default=repr)
     print(json.dumps({"evidence": path, **run.doc["verdict"]}, ensure_ascii=False))
-    return 0 if ok else 1
+    return run.doc["verdict"]["exit"]
 
 
 if __name__ == "__main__":
