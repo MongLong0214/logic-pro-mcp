@@ -1,3 +1,4 @@
+import Carbon
 import CoreGraphics
 import Foundation
 
@@ -6,6 +7,12 @@ import Foundation
 /// This is the primary channel for transport control and editing operations.
 actor CGEventChannel: Channel {
     let id: ChannelID = .cgEvent
+
+    /// The keyboard input source a posted key is read through, as TIS reports it.
+    struct InputSourceReading: Sendable, Equatable {
+        let id: String?
+        let isASCIICapable: Bool
+    }
 
     struct Runtime: Sendable {
         let isLogicProRunning: @Sendable () -> Bool
@@ -18,6 +25,10 @@ actor CGEventChannel: Channel {
         /// in-process activation poisons this process's own `postToPid`, so the
         /// production path goes through AppleScript.
         let activateLogic: @Sendable () -> Bool
+        /// #1029 review R-03 / #1039: the current keyboard input source, or nil when it did not
+        /// read. Defaults to nil (unread), which posts as before, for the same reason as the two
+        /// #440 defaults below.
+        let currentInputSource: @Sendable () -> InputSourceReading?
 
         /// The two #440 fields default to an already-frontmost Logic so existing
         /// callers that construct a Runtime for an unrelated reason keep
@@ -32,7 +43,8 @@ actor CGEventChannel: Channel {
             postKeyEvent: @escaping @Sendable (CGKeyCode, CGEventFlags, pid_t) -> Bool,
             sleepMicros: @escaping @Sendable (useconds_t) -> Void,
             isLogicFrontmost: @escaping @Sendable () -> Bool = { true },
-            activateLogic: @escaping @Sendable () -> Bool = { true }
+            activateLogic: @escaping @Sendable () -> Bool = { true },
+            currentInputSource: @escaping @Sendable () -> InputSourceReading? = { nil }
         ) {
             self.isLogicProRunning = isLogicProRunning
             self.logicProPID = logicProPID
@@ -40,6 +52,7 @@ actor CGEventChannel: Channel {
             self.sleepMicros = sleepMicros
             self.isLogicFrontmost = isLogicFrontmost
             self.activateLogic = activateLogic
+            self.currentInputSource = currentInputSource
         }
 
         static let production = Runtime(
@@ -50,8 +63,24 @@ actor CGEventChannel: Channel {
             },
             sleepMicros: { usleep($0) },
             isLogicFrontmost: ProcessUtils.Runtime.production.logicIsFrontmost,
-            activateLogic: ProcessUtils.Runtime.production.activateLogicPro
+            activateLogic: ProcessUtils.Runtime.production.activateLogicPro,
+            currentInputSource: { CGEventChannel.readCurrentInputSource() }
         )
+    }
+
+    /// TIS's current keyboard input source: its id and `kTISPropertyInputSourceIsASCIICapable`.
+    /// nil when the source or that property does not read. Measured 2026-09-28 on macOS 26.3: the
+    /// same values read on the main thread, a detached thread and a detached task (2-Set Korean,
+    /// false), so the channel's actor can call it.
+    static func readCurrentInputSource() -> InputSourceReading? {
+        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+              let rawCapable = TISGetInputSourceProperty(source, kTISPropertyInputSourceIsASCIICapable) else {
+            return nil
+        }
+        let capable = CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque(rawCapable).takeUnretainedValue())
+        let id = TISGetInputSourceProperty(source, kTISPropertyInputSourceID)
+            .map { Unmanaged<CFString>.fromOpaque($0).takeUnretainedValue() as String }
+        return InputSourceReading(id: id, isASCIICapable: capable)
     }
 
     /// #440 D: why no event was posted. A CGEvent keystroke delivered while
@@ -117,6 +146,21 @@ actor CGEventChannel: Channel {
         static func keypad(_ code: CGKeyCode) -> Shortcut {
             Shortcut(keyCode: code, flags: .maskNumericPad)
         }
+
+        /// The 26 letter keys (HIToolbox `kVK_ANSI_A` ... `kVK_ANSI_Z`).
+        static let letterKeyCodes: Set<CGKeyCode> = Set([
+            kVK_ANSI_A, kVK_ANSI_B, kVK_ANSI_C, kVK_ANSI_D, kVK_ANSI_E, kVK_ANSI_F, kVK_ANSI_G,
+            kVK_ANSI_H, kVK_ANSI_I, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L, kVK_ANSI_M, kVK_ANSI_N,
+            kVK_ANSI_O, kVK_ANSI_P, kVK_ANSI_Q, kVK_ANSI_R, kVK_ANSI_S, kVK_ANSI_T, kVK_ANSI_U,
+            kVK_ANSI_V, kVK_ANSI_W, kVK_ANSI_X, kVK_ANSI_Y, kVK_ANSI_Z,
+        ].map { CGKeyCode($0) })
+
+        /// A letter key with no Command, Control or Option: the key an input method turns into its
+        /// own character. Shift does not stop it (Shift-Q is ㅃ under 2-Set Korean).
+        var isPlainLetter: Bool {
+            Self.letterKeyCodes.contains(keyCode)
+                && flags.intersection([.maskCommand, .maskControl, .maskAlternate]).isEmpty
+        }
     }
 
     /// Mapping from operation strings to keyboard shortcuts.
@@ -130,8 +174,11 @@ actor CGEventChannel: Channel {
     /// A posted key still carries the character the active input source gives it. Measured
     /// 2026-09-27 on a Korean Logic with the 2-Set Korean input method active: Q, N and X ran
     /// nothing, while Control-B, Option-Command-W, Command-Z, Space, comma, period and the keypad
-    /// keys ran their commands. Under the ABC layout Q, N and X ran theirs too.
-    /// The other bare letters here (R, C, K, P, Y, A, Z) were not tried but are bare letters too; a separate defect.
+    /// keys ran their commands. Under the ABC layout Q, N and X ran theirs too. #1039 reports the
+    /// other plain letters here (R, C, K, P, Y, A, Z) dead the same way. Setting the event's Unicode
+    /// string to the Latin letter did not help (measured 2026-09-28, Q, N and X, two focus
+    /// placements), so `execute` refuses every plain letter under a source that is not
+    /// ASCII-capable (`Shortcut.isPlainLetter`, `inputSourceRefusal`) and posts nothing.
     ///
     /// An op whose function has no default binding carries NO entry: a keystroke bound to some
     /// other command changes the wrong state and reports that it was sent, which is worse than the
@@ -241,6 +288,17 @@ actor CGEventChannel: Channel {
 
         guard let shortcut = Self.keyMap[operation] else {
             return .error("No keyboard shortcut mapped for: \(operation)")
+        }
+
+        // #1029 review R-03 and #1039: under an input source that is not ASCII-capable, a plain
+        // letter reaches Logic as that source's character and runs nothing, and the State B below
+        // would report a keystroke that did nothing. Checked before Logic is brought forward, so a
+        // refusal changes nothing. An unread source is not called blocking: the key is posted as
+        // before.
+        if shortcut.isPlainLetter,
+           let source = runtime.currentInputSource(),
+           !source.isASCIICapable {
+            return Self.inputSourceRefusal(operation: operation, source: source)
         }
 
         // #440 D: same gate as the sequence path. A mapped chord posted while
@@ -360,6 +418,31 @@ actor CGEventChannel: Channel {
             }
         }
         return seen
+    }
+
+    /// State C for a plain letter under an input source that is not ASCII-capable. Not terminal, so
+    /// the router tries the next rung, and when there is none the caller gets this refusal rather
+    /// than a send-only success for a key that could not act.
+    static func inputSourceRefusal(operation: String, source: InputSourceReading) -> ChannelResult {
+        var extras: [String: Any] = [
+            "operation": operation,
+            "method": "cgevent",
+            "reason": "input_source_blocks_plain_letters",
+            "events_posted": 0,
+            "write_attempted": false,
+            "safe_to_retry": true,
+        ]
+        if let id = source.id {
+            extras["input_source_id"] = id
+        }
+        return .error(HonestContract.encodeStateC(
+            error: .notSupported,
+            hint: "The active input source (\(source.id ?? "unnamed")) is not ASCII-capable, so a plain "
+                + "letter key reaches Logic as that source's character and runs no key command "
+                + "(measured under 2-Set Korean: Q, N and X ran nothing). No event was posted. Switch "
+                + "to an ASCII-capable input source such as ABC and retry.",
+            extras: extras
+        ))
     }
 
     /// State C for a refused preparation. `write_attempted` is false and

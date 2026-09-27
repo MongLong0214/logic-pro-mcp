@@ -221,6 +221,8 @@ func testCGEventProductionRuntimeSmokeExecutesWithoutCrash() {
     // event tap); this smoke test asserts the production runtime drives the full
     // path without crashing.
     _ = runtime.postKeyEvent(0, [], getpid())
+    // #1039: the real TIS read runs to completion; its value depends on the host.
+    _ = runtime.currentInputSource()
 }
 
 // MARK: - T1: project.new has no CGEvent keystroke (#1029)
