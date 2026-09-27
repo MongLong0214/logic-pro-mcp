@@ -1351,8 +1351,11 @@ extension AccessibilityChannel {
         /// The result the site reports, up to the refusal text. The parser classifies on it.
         let resultPrefix: String
 
-        static let dialogRefusal = ": dialog cleanup was not observed"
-        static let menuRefusal = ": menu cleanup was not observed"
+        /// The phrase every post-leaf cleanup refusal carries, and the one `postLeafCleanup` looks
+        /// for. Declared once so the emitter and the parser cannot drift apart (#1028).
+        static let notObservedMarker = "cleanup was not observed"
+        static let dialogRefusal = ": dialog " + notObservedMarker
+        static let menuRefusal = ": menu " + notObservedMarker
 
         static let leafClickError = Self(
             identifier: "leaf_click_error", resultPrefix: "DIALOG_ACTUATION_ISSUED"
@@ -2668,17 +2671,17 @@ extension AccessibilityChannel {
         switch payload.result {
         case "OK":
             return .driven
-        case let value where value.hasPrefix("MENU_NOT_FOUND"):
+        case let scriptResult where scriptResult.hasPrefix("MENU_NOT_FOUND"):
             return .failure(.menuNotFound)
         case "MENU_STATE_UNREADABLE":
             return .failure(.menuStateUnreadable)
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
-        case let value where value == "MENU_VALIDATION_UNREADABLE"
-            || value.hasPrefix("MENU_VALIDATION_UNREADABLE:"):
+        case let scriptResult where scriptResult == "MENU_VALIDATION_UNREADABLE"
+            || scriptResult.hasPrefix("MENU_VALIDATION_UNREADABLE:"):
             let prefix = "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted="
-            guard value.hasPrefix(prefix),
-                  let menuActuationAttempted = Bool(String(value.dropFirst(prefix.count)))
+            guard scriptResult.hasPrefix(prefix),
+                  let menuActuationAttempted = Bool(String(scriptResult.dropFirst(prefix.count)))
             else {
                 // This sentinel is a safety refusal. A legacy bare value or malformed suffix has
                 // lost the observation, not established that no click occurred, so retain `true`
@@ -2689,15 +2692,15 @@ extension AccessibilityChannel {
             return .failure(.menuValidationUnreadable(
                 menuActuationAttempted: menuActuationAttempted
             ))
-        case let value where value.hasPrefix("DIALOG_PREEXISTING"):
-            return .failure(.dialogPreexisting(menuActuationAttempted: preLeafMenuActuationEvidence(value)))
-        case let value where value.hasPrefix("DIALOG_PREEXISTENCE_UNREADABLE"):
-            return .failure(.dialogPreexistenceUnreadable(menuActuationAttempted: preLeafMenuActuationEvidence(value)))
-        case let value where value.hasPrefix("MENU_PICK_FAILED"):
-            if value.hasPrefix("MENU_PICK_FAILED: menu state was not observed closed at entry")
-                || value.hasPrefix("MENU_PICK_FAILED: menu cleanup was not observed") {
+        case let scriptResult where scriptResult.hasPrefix("DIALOG_PREEXISTING"):
+            return .failure(.dialogPreexisting(menuActuationAttempted: preLeafMenuActuationEvidence(scriptResult)))
+        case let scriptResult where scriptResult.hasPrefix("DIALOG_PREEXISTENCE_UNREADABLE"):
+            return .failure(.dialogPreexistenceUnreadable(menuActuationAttempted: preLeafMenuActuationEvidence(scriptResult)))
+        case let scriptResult where scriptResult.hasPrefix("MENU_PICK_FAILED"):
+            if scriptResult.hasPrefix("MENU_PICK_FAILED: menu state was not observed closed at entry")
+                || scriptResult.hasPrefix("MENU_PICK_FAILED: menu cleanup was not observed") {
                 return .failure(.menuCouldNotBeClosed(
-                    menuActuationAttempted: value.hasPrefix(
+                    menuActuationAttempted: scriptResult.hasPrefix(
                         "MENU_PICK_FAILED: menu cleanup was not observed after menu actuation"
                     ),
                     // The parser only ever reports what the script observed. Reconciliation has
@@ -2705,35 +2708,35 @@ extension AccessibilityChannel {
                     reconciledMenuClosed: false
                 ))
             }
-            return .failure(.menuPickFailed(menuActuationAttempted: preLeafMenuActuationEvidence(value)))
-        case let value where value.hasPrefix("DIALOG_UNIDENTIFIED_NEW_WINDOW"):
+            return .failure(.menuPickFailed(menuActuationAttempted: preLeafMenuActuationEvidence(scriptResult)))
+        case let scriptResult where scriptResult.hasPrefix("DIALOG_UNIDENTIFIED_NEW_WINDOW"):
             return .failure(.dialogUnidentifiedNewWindow)
-        case let value where value.hasPrefix("DIALOG_APPEARANCE_UNREADABLE"):
+        case let scriptResult where scriptResult.hasPrefix("DIALOG_APPEARANCE_UNREADABLE"):
             return .failure(.dialogAppearanceUnreadable)
-        case let value where value.hasPrefix("DIALOG_ACTUATION_ISSUED"):
+        case let scriptResult where scriptResult.hasPrefix("DIALOG_ACTUATION_ISSUED"):
             // A closed dialog is insufficient if a menu cleanup remained unreadable. Both surfaces
             // must be observed closed before this known pre-Return path can fall through to a
             // later position route.
             return .failure(.dialogActuationIssued(
-                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_ACTUATION_ISSUED")
+                cleanup: postLeafCleanup(scriptResult, resultPrefix: "DIALOG_ACTUATION_ISSUED")
             ))
-        case let value where value.hasPrefix("DIALOG_SUBMISSION_NOT_ISSUED"):
+        case let scriptResult where scriptResult.hasPrefix("DIALOG_SUBMISSION_NOT_ISSUED"):
             return .failure(.dialogSubmissionNotIssued(
-                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_SUBMISSION_NOT_ISSUED")
+                cleanup: postLeafCleanup(scriptResult, resultPrefix: "DIALOG_SUBMISSION_NOT_ISSUED")
             ))
-        case let value where value.hasPrefix("DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED"):
+        case let scriptResult where scriptResult.hasPrefix("DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED"):
             return .failure(.dialogInputIssued(
                 issuance: .selectAllArmed,
-                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED")
+                cleanup: postLeafCleanup(scriptResult, resultPrefix: "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED")
             ))
-        case let value where value.hasPrefix("DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED"):
+        case let scriptResult where scriptResult.hasPrefix("DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED"):
             return .failure(.dialogInputIssued(
                 issuance: .positionInputArmed,
-                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED")
+                cleanup: postLeafCleanup(scriptResult, resultPrefix: "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED")
             ))
-        case let value where value.hasPrefix("DIALOG_SUBMISSION_ISSUED"):
+        case let scriptResult where scriptResult.hasPrefix("DIALOG_SUBMISSION_ISSUED"):
             return .failure(.dialogSubmissionIssued(
-                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_SUBMISSION_ISSUED")
+                cleanup: postLeafCleanup(scriptResult, resultPrefix: "DIALOG_SUBMISSION_ISSUED")
             ))
         default:
             return .failure(.unexpectedResult)
@@ -2744,13 +2747,14 @@ extension AccessibilityChannel {
     /// "cleanup was not observed" stays the dialog case, which is what every such result meant
     /// before #942 told the two apart.
     private static func postLeafCleanup(
-        _ value: String, resultPrefix: String
+        _ scriptResult: String, resultPrefix: String
     ) -> GotoPositionDialogResultClassification.PostLeafCleanup {
-        if value.hasPrefix(resultPrefix + PostLeafCleanupSite.menuRefusal) {
+        if scriptResult.hasPrefix(resultPrefix + PostLeafCleanupSite.menuRefusal) {
             // The parser reports only what the script observed; reconciliation has not run.
             return .menuNotObservedClosed(reconciledMenuClosed: false)
         }
-        return value.contains("cleanup was not observed") ? .dialogNotObservedClosed : .observedClosed
+        return scriptResult.contains(PostLeafCleanupSite.notObservedMarker)
+            ? .dialogNotObservedClosed : .observedClosed
     }
 
     private enum GotoPositionDialogRouteResult {

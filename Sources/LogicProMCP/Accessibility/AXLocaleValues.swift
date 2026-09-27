@@ -22,17 +22,15 @@ enum AXLocaleValues {
         "de-DE": "Spur für die Aufnahme aktivieren ein-/ausschalten",
         "es-ES": "Activar/desactivar grabación de pista",
         "fr-FR": "Activer/Désactiver l’enregistrement sur piste",
-        "it-IT": "Toggle Track Record Enable",
-        "pt-BR": "Toggle Track Record Enable",
         "zh-CN": "开关轨道录音启用",
-        "zh-TW": "Toggle Track Record Enable",
         "de": "Spur für die Aufnahme aktivieren ein-/ausschalten",
         "en": "Toggle Track Record Enable",
         "es": "Activar/desactivar grabación de pista",
         "fr": "Activer/Désactiver l’enregistrement sur piste",
-        "it": "Toggle Track Record Enable",
         "ja": "トラックの録音可能を切り替える",
         "ko": "트랙 녹음 활성화 토글",
-        "pt": "Toggle Track Record Enable",
+        // "it-IT": not localized -- Apple ships the English file
+        // "pt-BR": not localized -- Apple ships the English file
+        // "zh-TW": not localized -- Apple ships the English file
     ]
 }
