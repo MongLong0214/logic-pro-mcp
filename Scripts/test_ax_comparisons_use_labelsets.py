@@ -215,6 +215,40 @@ class EveryLiteralIsClassified(unittest.TestCase):
         self.assertIn("\uff1a", found)
 
 
+class APlugInNameIsCitedFromApplesMap(unittest.TestCase):
+    """#1028 (ADR-027 D5). `Channel EQ` was "in no corpus" only because the canon had not pinned
+    `DefaultPluginMapping.plist`. Pinned as `plugin_names`, a name Logic maps is an Apple value with
+    the row it came from, and a name it does not map is still nobody's."""
+
+    _READ = TheGuardActuallyRefusesSomething._READ
+
+    def _scan(self, source):
+        return TheGuardActuallyRefusesSomething._scan(self, source, None)
+
+    CHANNEL_EQ = {
+        "ref": "logic-canon://plugin_names/EMAG%7C0236%7C0000/-/name#value",
+        "value": "Channel EQ",
+    }
+
+    def test_a_plugin_name_logic_maps_is_an_apple_value_with_its_row(self):
+        self.assertEqual(guard.classify(self.CHANNEL_EQ["value"]), guard.APPLE_VALUE)
+        self.assertEqual(guard.citation(self.CHANNEL_EQ["value"]), self.CHANNEL_EQ["ref"])
+        self.assertEqual(self._scan(self._READ + 'if title == "Channel EQ" { }\n'), [])
+
+    def test_a_made_up_plugin_name_stays_unknown_and_fails(self):
+        """The control: without it the case above passes on a classifier that calls anything a
+        plug-in name. One character off a real name is not that name."""
+        self.assertEqual(guard.citation("Channel EQX"), None)
+        self.assertEqual(guard.classify("Channel EQX"), guard.UNKNOWN)
+        problems = self._scan(self._READ + 'if title == "Channel EQX" { }\n')
+        self.assertTrue(problems, "a plug-in name Apple's map does not hold passed")
+        self.assertIn("Channel EQX", problems[0])
+
+    def test_only_the_exact_value_is_cited(self):
+        """A case-folded match is a different claim, and the row is pinned by its exact digest."""
+        self.assertEqual(guard.citation("channel eq"), None)
+
+
 class TheEntryPointRefuses(unittest.TestCase):
     """The cases above call `check()`. A `main()` that returned 0 without ever calling it would
     pass every one of them, because the repository passes -- `Scripts/mutation-sweep-guard-tests.py`

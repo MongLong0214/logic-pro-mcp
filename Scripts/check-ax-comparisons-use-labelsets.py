@@ -41,7 +41,14 @@ to match" -- so a FRAGMENT of a translated label (`Input Port` of `Input Port:`)
 corpus does not hold, or this product's own prose all passed unexamined. Each literal is now one of
 
   apple_translated   Apple ships it and translates it: a LabelSet, or the separator rule
-  apple_value        Apple ships it as a whole value and does not translate it: safe
+  apple_value        Apple ships it as a whole value and does not translate it: safe. First
+                     by a pinned ROW in a source no locale translates (`plugin_names`, `madsp`,
+                     `nib`): exact, by 48-bit digest, and `--classify` prints that row's
+                     citation. `Channel EQ` is the row
+                         logic-canon://plugin_names/EMAG%7C0236%7C0000/-/name#value
+                         Channel EQ
+                     Then by the 32-bit absence sets of the English and `-` corpora, which can
+                     only err towards "ships".
   identifier         a shape no locale translates: an UPPER_SNAKE sentinel this product emits
                      (with an optional `: detail`), punctuation, a `.ext` extension, a reverse-DNS
                      prefix, or a fragment of a sentinel-coded message a string literal in the
@@ -264,6 +271,10 @@ def _apple_ships(literal: str) -> bool:
     `apple_value`. A present one never looks absent.
     """
     for source, block in (canon.load_manifest().get("sources") or {}).items():
+        if source in canon.PIN_EVERY_ROW:
+            # Every row of it is in the key index, so `citation` answers exactly and names the
+            # row. Asking its 32-bit set as well would only add the collisions.
+            continue
         for locale in ("en", "-"):
             if locale in (block.get("locales") or []) and not canon.is_absent(source, locale, literal):
                 return True
@@ -291,6 +302,12 @@ def _fragment_of_own_message(literal: str, paths) -> bool:
     return False
 
 
+def citation(literal: str):
+    """The pinned row a locale-independent source holds `literal` in, or None. Exact value only."""
+    found = canon.locale_independent_citations(literal)
+    return found[0] if found else None
+
+
 def classify(literal: str, paths=()) -> str:
     if canon.is_translated(literal):
         return APPLE_TRANSLATED
@@ -298,6 +315,9 @@ def classify(literal: str, paths=()) -> str:
         return IDENTIFIER
     if any(pattern.fullmatch(literal) for pattern in (_SENTINEL, _EXTENSION, _REVERSE_DNS)):
         return IDENTIFIER
+    if citation(literal):
+        # Apple's data holds it in a file with no language: the same bytes in every locale.
+        return APPLE_VALUE
     if _apple_ships(literal):
         return APPLE_VALUE
     if _fragment_of_own_message(literal, paths):
@@ -412,7 +432,9 @@ def main() -> int:
     if "--classify" in sys.argv[1:]:
         for literal, paths in sorted(comparisons_outside_labelsets().items()):
             where = ", ".join(sorted(os.path.basename(p) for p in paths))
-            print(f"{classify(literal, paths):17s} {literal!r}  ({where})")
+            cited = citation(literal)
+            print(f"{classify(literal, paths):17s} {literal!r}  ({where})"
+                  + (f"  <- {cited}" if cited else ""))
         return 0
     problems = check()
     if problems:
@@ -422,9 +444,12 @@ def main() -> int:
         return 1
     found = comparisons_outside_labelsets()
     kinds = collections.Counter(classify(literal, paths) for literal, paths in found.items())
+    by_row = {literal: citation(literal) for literal in found}
+    by_row = {literal: cited for literal, cited in sorted(by_row.items()) if cited}
     print(f"every AX comparison outside a LabelSet is classified: {len(found)} literal(s) -- "
           + ", ".join(f"{kind} {count}" for kind, count in sorted(kinds.items()))
-          + f"; {len(waived())} exempted by reason")
+          + f"; {len(waived())} exempted by reason"
+          + "".join(f"; {literal!r} <- {cited}" for literal, cited in by_row.items()))
     return 0
 
 
