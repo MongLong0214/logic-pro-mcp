@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 115)   // #884 system.setup_control_surface, #862 mixer.bank
+        #expect(OperationRegistry.specs.count == 116)   // #884 system.setup_control_surface, #862 mixer.bank, #965 project.inspect_session
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -93,7 +93,7 @@ struct OperationRegistryCoverageTests {
                                         // target — it configures the application, not a track;
                                         // #862 added mixer.bank, which moves the MCU strip
                                         // window and so bears no track target either
-        #expect(readOnly.count == 23)
+        #expect(readOnly.count == 24)   // #965 added project.inspect_session
         #expect(targetBearingIDs == expectedTargetBearingIDs)
         #expect(targetless.count == 77)   // #448 sort_verified, #884 setup_control_surface and #862 bank bear no target
         #expect(targetBearingIDs.count + targetless.count == mutating.count)

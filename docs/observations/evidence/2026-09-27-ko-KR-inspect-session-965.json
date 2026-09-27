@@ -1,0 +1,2062 @@
+{
+  "name": "live_965_inspect_session_reports_the_cached_population",
+  "head": "04081d1acae684d109c062301e2a926dca5b5e12",
+  "artifact": {
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin965/LogicProMCP-04081d1acae684d109c062301e2a926dca5b5e12",
+    "sha256": "aba7a2a50597ec88d6a1c48fcedd171d6a837b6442bb082bc5a7801e65c99690",
+    "built_from": "04081d1acae684d109c062301e2a926dca5b5e12",
+    "worktree_clean": true,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": false
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "non_ui"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/precondition-tracks",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "complete": false,
+        "reason": "collapsed_track_stack",
+        "names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "track_refs": [
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/precondition-the-product-can-see-the-document-and-the-mixer",
+      "passed": true,
+      "expected": "logic://tracks reports a live read of a non-empty rail and logic://mixer a fresh poll, so the reports below are compared against a real document and a visible Mixer rather than the cold cache",
+      "observed": {
+        "x_presses": 0,
+        "tracks_readable": true,
+        "tracks_source": "ax_live",
+        "rows": 19,
+        "mixer_fresh": true
+      },
+      "mutation": null,
+      "mutation_claimed": false,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/tracks-before-the-report",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "complete": false,
+        "reason": "collapsed_track_stack",
+        "names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "track_refs": [
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/report-with-default-params",
+      "payload": {
+        "attempts": [
+          {
+            "schema": "logic_pro_mcp_session_population.v1",
+            "coverage": {
+              "tracks": "partial",
+              "strips": "partial",
+              "associations": "unavailable",
+              "hierarchy": "unavailable"
+            }
+          }
+        ],
+        "reply": {
+          "associations": {
+            "coverage": "unavailable",
+            "reasons": [
+              "no_observed_association_evidence"
+            ]
+          },
+          "capture": {
+            "began_at": "2026-09-27T00:36:28.011Z",
+            "ended_at": "2026-09-27T00:36:28.139Z"
+          },
+          "hierarchy": {
+            "coverage": "unavailable",
+            "reasons": [
+              "parent_depth_not_observed"
+            ]
+          },
+          "overall": {
+            "complete": false,
+            "incomplete_domains": [
+              "tracks",
+              "strips",
+              "associations",
+              "hierarchy"
+            ]
+          },
+          "project": {
+            "file_path": "~/Music/Logic/lpm-locale-campaign.logicx",
+            "name": "lpm-locale-campaign",
+            "project_epoch": 1,
+            "project_ref": "prj_770FA3E3-A9F4-419A-B3F1-526016B6B93C",
+            "status": "issued"
+          },
+          "read_only": true,
+          "requested_domains": [
+            "tracks",
+            "strips",
+            "associations",
+            "hierarchy"
+          ],
+          "schema": "logic_pro_mcp_session_population.v1",
+          "scope": "whole_project",
+          "snapshot_id": "snap_1_t36_m174_p3",
+          "sources": {
+            "expected_count": "project_file",
+            "strips": "ax_poll",
+            "tracks": "ax_poll_cache"
+          },
+          "strips": {
+            "coverage": "partial",
+            "reasons": [
+              "mixer_filters_unread"
+            ],
+            "rows": [
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 0
+              },
+              {
+                "input": "입력 1",
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 0,
+                "plugins_source": "ax",
+                "strip_index": 1
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 2
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 3
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 4
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 5
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 6
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 7
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 8
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 9
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 10
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 11
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 12
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 13
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 14
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 15
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 16
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 17
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 18
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "plugin_count": 0,
+                "plugins_source": "ax",
+                "strip_index": 19
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "plugin_count": 0,
+                "plugins_source": "ax",
+                "strip_index": 20
+              }
+            ],
+            "witnesses": {
+              "count": 21
+            }
+          },
+          "tracks": {
+            "ambiguous_track_indices": [],
+            "collapsed_stack_rows": [
+              0
+            ],
+            "coverage": "partial",
+            "reasons": [
+              "collapsed_track_stack",
+              "track_readback_gap"
+            ],
+            "rows": [
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": true,
+                "is_stack_header": true,
+                "name": "Absolute Zero",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 0,
+                "stack_collapsed": true,
+                "track_index": 0,
+                "track_ref": "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Audio 1",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 1,
+                "stack_collapsed": null,
+                "track_index": 1,
+                "track_ref": "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 2,
+                "stack_collapsed": null,
+                "track_index": 2,
+                "track_ref": "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 3,
+                "stack_collapsed": null,
+                "track_index": 3,
+                "track_ref": "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 4,
+                "stack_collapsed": null,
+                "track_index": 4,
+                "track_ref": "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 5,
+                "stack_collapsed": null,
+                "track_index": 5,
+                "track_ref": "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 6,
+                "stack_collapsed": null,
+                "track_index": 6,
+                "track_ref": "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 7,
+                "stack_collapsed": null,
+                "track_index": 7,
+                "track_ref": "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 8,
+                "stack_collapsed": null,
+                "track_index": 8,
+                "track_ref": "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 9,
+                "stack_collapsed": null,
+                "track_index": 9,
+                "track_ref": "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 10,
+                "stack_collapsed": null,
+                "track_index": 10,
+                "track_ref": "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 11,
+                "stack_collapsed": null,
+                "track_index": 11,
+                "track_ref": "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 12,
+                "stack_collapsed": null,
+                "track_index": 12,
+                "track_ref": "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 13,
+                "stack_collapsed": null,
+                "track_index": 13,
+                "track_ref": "trk_7C592A47-5184-4266-806E-A18910BE727C",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 14,
+                "stack_collapsed": null,
+                "track_index": 14,
+                "track_ref": "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 15,
+                "stack_collapsed": null,
+                "track_index": 15,
+                "track_ref": "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 16,
+                "stack_collapsed": null,
+                "track_index": 16,
+                "track_ref": "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 17,
+                "stack_collapsed": null,
+                "track_index": 17,
+                "track_ref": "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 18,
+                "stack_collapsed": null,
+                "track_index": 18,
+                "track_ref": "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              }
+            ],
+            "witnesses": {
+              "count": 19,
+              "expected_count": 42,
+              "expected_count_matches_rail": false,
+              "expected_count_source": "project_file",
+              "first_row": 0,
+              "last_row": 18
+            }
+          },
+          "ui_effects": {
+            "navigation_performed": false,
+            "restoration": "not_applicable"
+          }
+        }
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/rows-compared",
+      "payload": {
+        "schema": "logic_pro_mcp_session_population.v1",
+        "resource_names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "resource_refs": [
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
+        ],
+        "report_names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "report_refs": [
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
+        ],
+        "coverage": "partial",
+        "reasons": [
+          "collapsed_track_stack",
+          "track_readback_gap"
+        ]
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/the-report-lists-the-rows-logic-tracks-issues",
+      "passed": true,
+      "expected": "a default inspect_session, taken right after a logic://tracks read in the same server, lists the same row names in the same order under the same trk_ references, and its tracks coverage is complete, or partial with its reasons named. THE COUNTEREXAMPLE is the same rows under references a second issuer minted",
+      "observed": {
+        "observation": "{'schema': 'logic_pro_mcp_session_population.v1', 'resource_names': ['Absolute Zero', 'Audio 1', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand'], 'resource_re",
+        "accepted_the_observation": true,
+        "counterexample": "{'schema': 'logic_pro_mcp_session_population.v1', 'resource_names': ['Absolute Zero', 'Audio 1', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand'], 'resource_re",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "hand SessionPopulationObservation.capture a TargetRegistry of its own instead of the server's, so it mints references logic://tracks never issued",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/mixer-before-the-report",
+      "payload": {
+        "data_source": "ax_poll",
+        "cache_age_sec": 0.0026149749755859375,
+        "strip_count": 21,
+        "strip_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/report-with-a-fresh-mixer",
+      "payload": {
+        "attempts": [
+          {
+            "schema": "logic_pro_mcp_session_population.v1",
+            "coverage": {
+              "tracks": "partial",
+              "strips": "partial",
+              "associations": "unavailable",
+              "hierarchy": "unavailable"
+            }
+          }
+        ],
+        "reply": {
+          "associations": {
+            "coverage": "unavailable",
+            "reasons": [
+              "no_observed_association_evidence"
+            ]
+          },
+          "capture": {
+            "began_at": "2026-09-27T00:36:30.342Z",
+            "ended_at": "2026-09-27T00:36:30.469Z"
+          },
+          "hierarchy": {
+            "coverage": "unavailable",
+            "reasons": [
+              "parent_depth_not_observed"
+            ]
+          },
+          "overall": {
+            "complete": false,
+            "incomplete_domains": [
+              "tracks",
+              "strips",
+              "associations",
+              "hierarchy"
+            ]
+          },
+          "project": {
+            "file_path": "~/Music/Logic/lpm-locale-campaign.logicx",
+            "name": "lpm-locale-campaign",
+            "project_epoch": 1,
+            "project_ref": "prj_770FA3E3-A9F4-419A-B3F1-526016B6B93C",
+            "status": "issued"
+          },
+          "read_only": true,
+          "requested_domains": [
+            "tracks",
+            "strips",
+            "associations",
+            "hierarchy"
+          ],
+          "schema": "logic_pro_mcp_session_population.v1",
+          "scope": "whole_project",
+          "snapshot_id": "snap_1_t37_m175_p4",
+          "sources": {
+            "expected_count": "project_file",
+            "strips": "ax_poll",
+            "tracks": "ax_poll_cache"
+          },
+          "strips": {
+            "coverage": "partial",
+            "reasons": [
+              "mixer_filters_unread"
+            ],
+            "rows": [
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 0
+              },
+              {
+                "input": "입력 1",
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 0,
+                "plugins_source": "ax",
+                "strip_index": 1
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 2
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 3
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 4
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 5
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 6
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 7
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 8
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 9
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 1,
+                "plugins_source": "ax",
+                "strip_index": 10
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 11
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 12
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 13
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 14
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 15
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 16
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 17
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "output": "Stereo Output",
+                "plugin_count": 4,
+                "plugins_source": "ax",
+                "strip_index": 18
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "plugin_count": 0,
+                "plugins_source": "ax",
+                "strip_index": 19
+              },
+              {
+                "name": null,
+                "name_status": "not_read",
+                "plugin_count": 0,
+                "plugins_source": "ax",
+                "strip_index": 20
+              }
+            ],
+            "witnesses": {
+              "count": 21
+            }
+          },
+          "tracks": {
+            "ambiguous_track_indices": [],
+            "collapsed_stack_rows": [
+              0
+            ],
+            "coverage": "partial",
+            "reasons": [
+              "collapsed_track_stack",
+              "track_readback_gap"
+            ],
+            "rows": [
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": true,
+                "is_stack_header": true,
+                "name": "Absolute Zero",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 0,
+                "stack_collapsed": true,
+                "track_index": 0,
+                "track_ref": "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Audio 1",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 1,
+                "stack_collapsed": null,
+                "track_index": 1,
+                "track_ref": "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 2,
+                "stack_collapsed": null,
+                "track_index": 2,
+                "track_ref": "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 3,
+                "stack_collapsed": null,
+                "track_index": 3,
+                "track_ref": "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 4,
+                "stack_collapsed": null,
+                "track_index": 4,
+                "track_ref": "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 5,
+                "stack_collapsed": null,
+                "track_index": 5,
+                "track_ref": "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 6,
+                "stack_collapsed": null,
+                "track_index": 6,
+                "track_ref": "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 7,
+                "stack_collapsed": null,
+                "track_index": 7,
+                "track_ref": "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 8,
+                "stack_collapsed": null,
+                "track_index": 8,
+                "track_ref": "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 9,
+                "stack_collapsed": null,
+                "track_index": 9,
+                "track_ref": "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Deluxe Classic",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 10,
+                "stack_collapsed": null,
+                "track_index": 10,
+                "track_ref": "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 11,
+                "stack_collapsed": null,
+                "track_index": 11,
+                "track_ref": "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 12,
+                "stack_collapsed": null,
+                "track_index": 12,
+                "track_ref": "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 13,
+                "stack_collapsed": null,
+                "track_index": 13,
+                "track_ref": "trk_7C592A47-5184-4266-806E-A18910BE727C",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 14,
+                "stack_collapsed": null,
+                "track_index": 14,
+                "track_ref": "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 15,
+                "stack_collapsed": null,
+                "track_index": 15,
+                "track_ref": "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 16,
+                "stack_collapsed": null,
+                "track_index": 16,
+                "track_ref": "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 17,
+                "stack_collapsed": null,
+                "track_index": 17,
+                "track_ref": "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              },
+              {
+                "depth": "unknown",
+                "hidden": "unknown",
+                "is_selected": false,
+                "is_stack_header": false,
+                "name": "Studio Grand",
+                "parent": "unknown",
+                "placeholder": null,
+                "row": 18,
+                "stack_collapsed": null,
+                "track_index": 18,
+                "track_ref": "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00",
+                "type": "unknown",
+                "type_source": "header_aggregate"
+              }
+            ],
+            "witnesses": {
+              "count": 19,
+              "expected_count": 42,
+              "expected_count_matches_rail": false,
+              "expected_count_source": "project_file",
+              "first_row": 0,
+              "last_row": 18
+            }
+          },
+          "ui_effects": {
+            "navigation_performed": false,
+            "restoration": "not_applicable"
+          }
+        }
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/strips-compared",
+      "payload": {
+        "schema": "logic_pro_mcp_session_population.v1",
+        "mixer_data_source": "ax_poll",
+        "mixer_strip_count": 21,
+        "mixer_strip_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "report_strip_count": 21,
+        "report_strip_rows": 21,
+        "report_strip_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "report_strips_source": "ax_poll",
+        "coverage": "partial",
+        "reasons": [
+          "mixer_filters_unread"
+        ]
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/strips-come-from-the-mixer-the-product-read",
+      "passed": true,
+      "expected": "with logic://mixer fresh (data_source ax_poll) and publishing strips, the report taken right after it counts the same strips, in rows keyed by the same trackIndex values, and its strips coverage is not complete while it names any reason. THE COUNTEREXAMPLE is a report that counted no strips beside a mixer resource that published them",
+      "observed": {
+        "observation": "{'schema': 'logic_pro_mcp_session_population.v1', 'mixer_data_source': 'ax_poll', 'mixer_strip_count': 21, 'mixer_strip_indices': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], 'report_strip_count': 21, 'report_strip_rows': 21, 'report_strip_indices': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], 'report_strips_source': 'ax_poll', 'coverag",
+        "accepted_the_observation": true,
+        "counterexample": "{'schema': 'logic_pro_mcp_session_population.v1', 'mixer_data_source': 'ax_poll', 'mixer_strip_count': 21, 'mixer_strip_indices': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], 'report_strip_count': 0, 'report_strip_rows': 0, 'report_strip_indices': [], 'report_strips_source': 'ax_poll', 'coverage': 'partial', 'reasons': ['mixer_filters_unread']}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "build the report's strips from a second mixer read, or from none, instead of the snapshot.channelStrips the capture took from the cache logic://mixer reads",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "observation",
+      "tag": "965/associations-and-overall",
+      "payload": {
+        "schema": "logic_pro_mcp_session_population.v1",
+        "associations": {
+          "coverage": "unavailable",
+          "reasons": [
+            "no_observed_association_evidence"
+          ]
+        },
+        "overall": {
+          "complete": false,
+          "incomplete_domains": [
+            "tracks",
+            "strips",
+            "associations",
+            "hierarchy"
+          ]
+        }
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/no-association-is-claimed-without-evidence",
+      "passed": true,
+      "expected": "the default report's associations coverage is not complete and names no_observed_association_evidence, and overall.complete is false with associations among the incomplete domains. THE COUNTEREXAMPLE is an associations block claiming complete coverage, which only an ordinal strip-to-track join could have produced",
+      "observed": {
+        "observation": "{'schema': 'logic_pro_mcp_session_population.v1', 'associations': {'coverage': 'unavailable', 'reasons': ['no_observed_association_evidence']}, 'overall': {'complete': False, 'incomplete_domains': ['tracks', 'strips', 'associations', 'hierarchy']}}",
+        "accepted_the_observation": true,
+        "counterexample": "{'schema': 'logic_pro_mcp_session_population.v1', 'associations': {'coverage': 'complete', 'reasons': []}, 'overall': {'complete': False, 'incomplete_domains': ['tracks', 'strips', 'associations', 'hierarchy']}}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "have SessionPopulationObservation.build mark associations complete by joining strip.trackIndex to track.id",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {
+        "allow_ui_navigation": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "not_implemented",
+        "hint": "inspect_session: allow_ui_navigation=true is a later increment of #965. This build reads the state cache only and performs no UI navigation; omit the flag or pass false for the cache-only report.",
+        "verified": null,
+        "write_attempted": false
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/navigation-refusal-raw-reply",
+      "payload": {
+        "raw": {
+          "id": 13,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"error\":\"not_implemented\",\"hint\":\"inspect_session: allow_ui_navigation=true is a later increment of #965. This build reads the state cache only and performs no UI navigation; omit the flag or pass false for the cache-only report.\",\"navigation_performed\":false,\"state\":\"C\",\"success\":false,\"write_attempted\":false}",
+                "type": "text"
+              }
+            ],
+            "isError": true,
+            "structuredContent": {
+              "error": "not_implemented",
+              "hint": "inspect_session: allow_ui_navigation=true is a later increment of #965. This build reads the state cache only and performs no UI navigation; omit the flag or pass false for the cache-only report.",
+              "navigation_performed": false,
+              "state": "C",
+              "success": false,
+              "write_attempted": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/navigation-is-refused-before-anything-is-written",
+      "passed": true,
+      "expected": "inspect_session with allow_ui_navigation true comes back as an error result whose payload is State C not_implemented with write_attempted false and navigation_performed false. THE COUNTEREXAMPLE is the same refusal reporting that a write was attempted",
+      "observed": {
+        "observation": "{'is_error': True, 'payload': {'error': 'not_implemented', 'hint': 'inspect_session: allow_ui_navigation=true is a later increment of #965. This build reads the state cache only and performs no UI navigation; omit the flag or pass false for the cache-only report.', 'navigation_performed': False, 'state': 'C', 'success': False, 'write_attempted': False}}",
+        "accepted_the_observation": true,
+        "counterexample": "{'is_error': True, 'payload': {'error': 'not_implemented', 'hint': 'inspect_session: allow_ui_navigation=true is a later increment of #965. This build reads the state cache only and performs no UI navigation; omit the flag or pass false for the cache-only report.', 'navigation_performed': False, 'state': 'C', 'success': False, 'write_attempted': True}}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "drop the allow_ui_navigation guard in ProjectDispatcher's inspect_session case, so the flag is parsed and the cache-only report comes back as a success",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/tracks-before-three-inspections",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "complete": false,
+        "reason": "collapsed_track_stack",
+        "names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "track_refs": [
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/tracks-after-three-inspections",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "complete": false,
+        "reason": "collapsed_track_stack",
+        "names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "track_refs": [
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
+        ]
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/logic-before-and-after-three-inspections",
+      "payload": {
+        "calls": [
+          {
+            "schema": "logic_pro_mcp_session_population.v1",
+            "read_only": true,
+            "snapshot_id": "snap_1_t39_m177_p6",
+            "ui_effects": {
+              "navigation_performed": false,
+              "restoration": "not_applicable"
+            },
+            "state": null,
+            "error": null,
+            "hint": null
+          },
+          {
+            "schema": "logic_pro_mcp_session_population.v1",
+            "read_only": true,
+            "snapshot_id": "snap_1_t39_m177_p6",
+            "ui_effects": {
+              "navigation_performed": false,
+              "restoration": "not_applicable"
+            },
+            "state": null,
+            "error": null,
+            "hint": null
+          },
+          {
+            "schema": "logic_pro_mcp_session_population.v1",
+            "read_only": true,
+            "snapshot_id": "snap_1_t39_m177_p6",
+            "ui_effects": {
+              "navigation_performed": false,
+              "restoration": "not_applicable"
+            },
+            "state": null,
+            "error": null,
+            "hint": null
+          }
+        ],
+        "windows_before": [
+          "lpm-locale-campaign - 마커 목록",
+          "lpm-locale-campaign - 트랙"
+        ],
+        "windows_before_error": null,
+        "windows_after": [
+          "lpm-locale-campaign - 마커 목록",
+          "lpm-locale-campaign - 트랙"
+        ],
+        "windows_after_error": null,
+        "tracks_before": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "tracks_after": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ]
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/inspecting-changes-nothing-in-logic",
+      "passed": true,
+      "expected": "three consecutive default inspect_session calls each return a report, and Logic's window titles and logic://tracks row names read after a refresh are identical before and after them. THE COUNTEREXAMPLE is one more window after the calls than before",
+      "observed": {
+        "observation": "{'calls': [{'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t39_m177_p6', 'ui_effects': {'navigation_performed': False, 'restoration': 'not_applicable'}, 'state': None, 'error': None, 'hint': None}, {'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t39_m177_p6', 'ui_effects': {'navigation_performed': False, 'resto",
+        "accepted_the_observation": true,
+        "counterexample": "{'calls': [{'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t39_m177_p6', 'ui_effects': {'navigation_performed': False, 'restoration': 'not_applicable'}, 'state': None, 'error': None, 'hint': None}, {'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t39_m177_p6', 'ui_effects': {'navigation_performed': False, 'resto",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "let SessionPopulationObservation.capture refresh the tracks it reports by driving the UI (a poll that expands a collapsed stack, or opens the Mixer) instead of reading the cache",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "965/the-mixer-pane-is-as-it-was",
+      "restored": true,
+      "detail": "{\"x_presses\": 0}"
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    }
+  ]
+}

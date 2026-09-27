@@ -324,6 +324,43 @@ enum SemanticOracleFixtures {
                 "findings":[],"cleanup_plan":[]}
                 """
         ),
+        // #965: the cache-only population report on a cold cache. Nothing was
+        // read yet, so every domain is `unavailable` with a named reason and
+        // `overall.complete` is false — the honest shape, not a green one.
+        .projectInspectSession: SemanticOracleFixture(
+            response: """
+                {"schema":"logic_pro_mcp_session_population.v1","read_only":true,\
+                "snapshot_id":"snap_0_t0_m0_p0","scope":"whole_project",\
+                "requested_domains":["tracks","strips","associations","hierarchy"],\
+                "project":{"status":"references_disabled","name":"","project_epoch":0},\
+                "capture":{"began_at":"1970-01-01T00:00:00.000Z","ended_at":"1970-01-01T00:00:00.000Z"},\
+                "sources":{"tracks":"ax_poll_cache","strips":"mixer_not_visible","expected_count":"project_file"},\
+                "tracks":{"coverage":"unavailable","reasons":["no_live_track_read_yet"],\
+                "witnesses":{"first_row":null,"last_row":null,"count":0},"rows":[],\
+                "ambiguous_track_indices":[],"collapsed_stack_rows":[]},\
+                "strips":{"coverage":"unavailable","reasons":["mixer_not_visible"],"witnesses":{"count":0},"rows":[]},\
+                "associations":{"coverage":"unavailable","reasons":["no_observed_association_evidence"]},\
+                "hierarchy":{"coverage":"unavailable","reasons":["parent_depth_not_observed"]},\
+                "overall":{"complete":false,"incomplete_domains":["tracks","strips","associations","hierarchy"]},\
+                "ui_effects":{"navigation_performed":false,"restoration":"not_applicable"}}
+                """,
+            readback: """
+                {"schema":"logic_pro_mcp_session_population.v1","read_only":true,\
+                "snapshot_id":"snap_0_t0_m0_p0","scope":"whole_project",\
+                "requested_domains":["tracks","strips","associations","hierarchy"],\
+                "project":{"status":"references_disabled","name":"","project_epoch":0},\
+                "capture":{"began_at":"1970-01-01T00:00:00.000Z","ended_at":"1970-01-01T00:00:00.000Z"},\
+                "sources":{"tracks":"ax_poll_cache","strips":"mixer_not_visible","expected_count":"project_file"},\
+                "tracks":{"coverage":"unavailable","reasons":["no_live_track_read_yet"],\
+                "witnesses":{"first_row":null,"last_row":null,"count":0},"rows":[],\
+                "ambiguous_track_indices":[],"collapsed_stack_rows":[]},\
+                "strips":{"coverage":"unavailable","reasons":["mixer_not_visible"],"witnesses":{"count":0},"rows":[]},\
+                "associations":{"coverage":"unavailable","reasons":["no_observed_association_evidence"]},\
+                "hierarchy":{"coverage":"unavailable","reasons":["parent_depth_not_observed"]},\
+                "overall":{"complete":false,"incomplete_domains":["tracks","strips","associations","hierarchy"]},\
+                "ui_effects":{"navigation_performed":false,"restoration":"not_applicable"}}
+                """
+        ),
         .projectCleanupPlan: SemanticOracleFixture(
             response: """
                 {"schema":"logic_pro_mcp_project_cleanup_plan.v1",\

@@ -287,6 +287,7 @@
         "export_resume",
         "audit",
         "cleanup_plan",
+        "inspect_session",
         "cleanup_apply"
       ],
       "mutating": [
@@ -318,6 +319,7 @@
         "export_resume": 300,
         "audit": 25,
         "cleanup_plan": 25,
+        "inspect_session": 25,
         "cleanup_apply": 90
       }
     },
