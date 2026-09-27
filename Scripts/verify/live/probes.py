@@ -204,32 +204,47 @@ def track_flags_parse(raw):
             "children_read_failures": walk["value"]["children_read_failures"], "raw": raw}
 
 
-def _flags(run):
+FLAGS = ("arm", "mute", "solo")
+#: The order the positive control sets them in, each alone (logic_tracks commands).
+FLAG_COMMANDS = ("mute", "solo", "arm")
+
+
+def flags_show(spec, run, flag=None):
+    """True when `run` reads the fixture's tracks (count, names, every flag found once, no child
+    failure) with `flag` set on spec["flag_track"] and nothing else set; `flag=None`: nothing set.
+
+    Soloing a track makes Logic draw other tracks' Mute as -1 (the solo-implied mute), not all at
+    once and not at once: in verify-live-selftest/c07f3f1c (2026-09-27) the reading right after
+    Solo had none, and one taken seconds later had 4 of 18 (ko) and 18 of 18 (de); none after
+    Solo was unset. So while `flag` is solo, 0 or -1 is accepted for another track's mute, and
+    only there."""
     observation = (run or {}).get("observation") or {}
-    if not observation.get("readable"):
-        return None
-    return observation
+    if not observation.get("readable") or observation["children_read_failures"]:
+        return False
+    tracks, target = observation["tracks"], spec["flag_track"]
+    if (observation["track_count"] != spec["track_count"]
+            or [t["name"] for t in tracks] != spec["names"]
+            or not all(t["matches"] == {"arm": 1, "mute": 1, "solo": 1} for t in tracks)):
+        return False
+    for track in tracks:
+        for name in FLAGS:
+            want = 1 if (name == flag and track["index"] == target) else 0
+            implied = flag == "solo" and name == "mute" and track["index"] != target
+            if track[name] != want and not (implied and track[name] == -1):
+                return False
+    return True
 
 
 def track_flags_known(spec, control):
     """The positive control (controls.track_flags_control): before, every track found and at 0;
-    with the fixture's flag_track muted, soloed and armed, exactly that track reads 1/1/1 and every
-    other 0/0/0; after, every track 0 again. A probe returning zeros or nothing fails it."""
-    readings = [_flags(control.get(k)) for k in ("pre", "post", "after")]
-    if any(r is None for r in readings):
-        return False
-    target = spec["flag_track"]
-    for reading in readings:
-        tracks = reading["tracks"]
-        if (reading["track_count"] != spec["track_count"]
-                or [t["name"] for t in tracks] != spec["names"]
-                or not all(t["matches"] == {"arm": 1, "mute": 1, "solo": 1} for t in tracks)
-                or reading["children_read_failures"]):
-            return False
-    pre, post, after = ([(t["arm"], t["mute"], t["solo"]) for t in r["tracks"]] for r in readings)
-    expected = [(1, 1, 1) if i == target else (0, 0, 0) for i in range(spec["track_count"])]
-    zeros = [(0, 0, 0)] * spec["track_count"]
-    return pre == zeros and post == expected and after == zeros
+    then for Mute, Solo and Record Enable in turn, the fixture's flag_track with that flag alone set
+    and no other track changed, then every track at 0 again. A probe returning zeros or nothing
+    fails it at the first set."""
+    cycles = control.get("cycles") or []
+    return (flags_show(spec, control.get("pre"))
+            and [c.get("flag") for c in cycles] == list(FLAG_COMMANDS)
+            and all(flags_show(spec, c.get("post"), c["flag"])
+                    and flags_show(spec, c.get("after")) for c in cycles))
 
 
 # ---------------------------------------------------------------------------------------------

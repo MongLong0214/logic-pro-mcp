@@ -175,7 +175,9 @@ def pred_positive_control(name):
         return known(spec, o.get("control") or {})
 
     predicate.__name__ = f"positive_control_{name}"
-    predicate.source = inspect.getsource(known)
+    # the helpers the predicate calls are part of what it judges, so they go into the record too
+    helpers = [probes.flags_show] if "flags_show(" in inspect.getsource(known) else []
+    predicate.source = "".join(inspect.getsource(f) for f in [known, *helpers])
     return predicate
 
 

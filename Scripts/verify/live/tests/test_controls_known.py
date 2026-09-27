@@ -34,14 +34,31 @@ class FakeLogic:
     def __init__(self):
         self.flags = {i: {"arm": 0, "mute": 0, "solo": 0} for i in range(FLAGS_SPEC["track_count"])}
         self.occupied = set()
+        self.failures_left = 0
+        self.calls = 0
 
     def tool(self, name, command, args, timeout_s=None):
+        self.calls += 1
+        if self.failures_left:
+            self.failures_left -= 1
+            return {"body": {"success": False, "error": "channels_exhausted"}}
         self.flags[args["index"]][command] = 1 if args["enabled"] else 0
-        return {"ok": True, "tool": name, "command": command}
+        return {"body": {"success": True, "tool": name, "command": command}}
+
+    def drawn(self, i):
+        """As Logic draws it (measured 2026-09-27): a soloed track's Mute reads 0, and while any
+        track is soloed every other track's Mute reads -1."""
+        flags = dict(self.flags[i])
+        soloed = any(f["solo"] for f in self.flags.values())
+        if flags["solo"]:
+            flags["mute"] = 0
+        elif soloed and not flags["mute"]:
+            flags["mute"] = -1
+        return flags
 
     def flags_observation(self):
         tracks = [{"index": i, "name": FLAGS_SPEC["names"][i], "matches": dict(ALL_MATCH),
-                   **self.flags[i]} for i in range(FLAGS_SPEC["track_count"])]
+                   **self.drawn(i)} for i in range(FLAGS_SPEC["track_count"])]
         return {"readable": True, "track_count": len(tracks), "tracks": tracks,
                 "children_read_failures": 0}
 
@@ -79,8 +96,10 @@ class Harness(unittest.TestCase):
         self.logic = FakeLogic()
         self.distort = None
         self.saved = (probes.run, controls.FLAG_WAIT_S, controls.SEND_WAIT_S,
-                      controls.select_send_bus, controls.input_label, fixture.reset)
-        controls.FLAG_WAIT_S = controls.SEND_WAIT_S = 0.0
+                      controls.select_send_bus, controls.input_label, fixture.reset,
+                      controls.CALL_WAIT_S, controls.CALL_RETRY_S)
+        controls.FLAG_WAIT_S = controls.SEND_WAIT_S = controls.CALL_RETRY_S = 0.0
+        controls.CALL_WAIT_S = 1.0
 
         def run(name, args):
             observation = (self.logic.flags_observation() if name == "track_flags_ax"
@@ -104,7 +123,8 @@ class Harness(unittest.TestCase):
 
     def tearDown(self):
         (probes.run, controls.FLAG_WAIT_S, controls.SEND_WAIT_S,
-         controls.select_send_bus, controls.input_label, fixture.reset) = self.saved
+         controls.select_send_bus, controls.input_label, fixture.reset,
+         controls.CALL_WAIT_S, controls.CALL_RETRY_S) = self.saved
 
     def drive(self, name):
         return controls.drive(name, "ko", self.logic)["control"]
@@ -134,11 +154,33 @@ class TrackFlags(Harness):
                                                  for t in o["tracks"]])
         self.assertFalse(known("track_flags_ax")(self.drive("track_flags_ax")))
 
-    def test_a_flag_left_set_after_the_control_fails(self):
-        # Kills: the `after == zeros` clause dropped; the unset calls are what restore the fixture.
+    def test_a_flag_left_set_after_its_cycle_fails(self):
+        # Kills: the per-cycle `after` reading not required to show nothing set.
         record = self.drive("track_flags_ax")
-        record["after"] = record["post"]
+        record["cycles"][0]["after"] = record["cycles"][0]["post"]
         self.assertFalse(known("track_flags_ax")(record))
+
+    def test_a_missing_cycle_fails(self):
+        # Kills: the cycle list not compared with the three flags (a control that set only one).
+        record = self.drive("track_flags_ax")
+        del record["cycles"][2]
+        self.assertFalse(known("track_flags_ax")(record))
+
+    def test_the_solo_implied_mute_is_accepted_only_while_solo_is_set(self):
+        # Kills: -1 accepted for another track's mute whatever flag is set.
+        def implied_everywhere(o):
+            return dict(o, tracks=[dict(t, mute=-1) if t["index"] != FLAGS_SPEC["flag_track"]
+                                   and t["mute"] == 0 else t for t in o["tracks"]])
+        self.distort = implied_everywhere
+        self.assertFalse(known("track_flags_ax")(self.drive("track_flags_ax")))
+
+    def test_a_builder_that_fails_once_is_retried(self):
+        # Kills: the logic_tracks call not retried while the product reports no success (the
+        # first Mute after the server started failed in de on 2026-09-27).
+        self.logic.failures_left = 1
+        record = self.drive("track_flags_ax")
+        self.assertTrue(known("track_flags_ax")(record))
+        self.assertEqual(len(record["cycles"][0]["set"]["calls"]), 2)
 
 
 class RoutingSlots(Harness):

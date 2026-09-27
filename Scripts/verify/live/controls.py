@@ -6,10 +6,10 @@ state into the reset fixture, reads it through the registered probe, then puts t
 reads again. The judgement is the probe's `known` predicate in probes.REGISTRY, over what is
 recorded here; nothing in this module decides a pass.
 
-  track_flags_ax    Mute, Solo and Record Enable of the fixture's `flag_track` set through the
-                    product's logic_tracks tools (the MCP builder the brief allows), each confirmed
-                    by the probe with a bounded wait, then unset the same way. The probe must see
-                    exactly that track change, and see every track at 0 again afterwards.
+  track_flags_ax    Mute, Solo and Record Enable of the fixture's `flag_track`, each alone, set
+                    through the product's logic_tracks tools and confirmed by the probe with a
+                    bounded wait, then unset the same way. The probe must see that flag on that
+                    track and nothing else set, then every track at 0 again.
   routing_slots_ax  The known input label of the fixture's `input_strip` (Apple's `Input` row + " 1":
                     #291 read 입력 1 / Eingang 1 / Input 1 / 入力 1 on strip 1 in ko/de/en/ja,
                     /Users/isaac/lpm-evidence/291-ten/<lproj>/*/live_291_*.evidence.json), and a send:
@@ -28,9 +28,10 @@ import re
 from . import cfbridge, fixture, obs, probes, screen
 from . import locale as live_locale
 
-FLAG_COMMANDS = ("mute", "solo", "arm")
 FLAG_WAIT_S = 30.0
 TOOL_TIMEOUT_S = 90.0
+CALL_WAIT_S = 60.0
+CALL_RETRY_S = 3.0
 MENU_WAIT_S = 8.0
 MENU_WALK_DEPTH = 14
 SEND_WAIT_S = 10.0
@@ -40,37 +41,45 @@ SEND_WAIT_S = 10.0
 # track_flags_ax
 # ---------------------------------------------------------------------------------------------
 
-def _flag_of(run, index, flag):
-    observation = (run or {}).get("observation") or {}
-    if not observation.get("readable"):
-        return None
-    for track in observation["tracks"]:
-        if track["index"] == index:
-            return track[flag]
-    return None
+def _tool_succeeded(call):
+    return isinstance(call.get("body"), dict) and call["body"].get("success") is True
 
 
-def set_track_flag(server, lproj, index, flag, value):
-    """One logic_tracks call, then a bounded wait for the probe to read `value`. Raw record."""
-    call = server.tool("logic_tracks", flag, {"index": index, "enabled": bool(value)},
-                       timeout_s=TOOL_TIMEOUT_S)
+def set_track_flag(server, lproj, spec, flag, value):
+    """logic_tracks <flag> on the fixture's flag_track, retried (bounded) while the product reports
+    no success, then a bounded wait for the probe to read that flag alone set (value 1) or nothing
+    set (value 0). Every attempt and every probe sample is kept, raw.
+
+    The retry is for the builder, not the probe: on 2026-09-27 (de) the first Mute after the server
+    started came back channels_exhausted in 1.5 s, and the Solo sent after the 30 s probe wait
+    worked through the MCU rung (verify-live-selftest/c07f3f1c)."""
+    index = spec["flag_track"]
+    calls = obs.wait_until(
+        lambda: server.tool("logic_tracks", flag, {"index": index, "enabled": bool(value)},
+                            timeout_s=TOOL_TIMEOUT_S),
+        CALL_WAIT_S, interval_s=CALL_RETRY_S, done=_tool_succeeded)
+    shown = flag if value else None
     waited = obs.wait_until(lambda: probes.run("track_flags_ax", {"lproj": lproj}), FLAG_WAIT_S,
-                            interval_s=1.0, done=lambda run: _flag_of(run, index, flag) == value)
-    return {"flag": flag, "index": index, "value": value, "call": call,
+                            interval_s=1.0, done=lambda run: probes.flags_show(spec, run, shown))
+    return {"flag": flag, "index": index, "value": value,
+            "calls": [sample["result"] for sample in calls["samples"]],
+            "call_wait": {k: calls[k] for k in ("timed_out", "elapsed_s", "polls")},
             "wait": {k: waited[k] for k in ("timed_out", "elapsed_s", "polls")},
             "last": waited["last"]}
 
 
 def track_flags_control(lproj, server, spec):
-    target = spec["flag_track"]
-    record = {"target": target, "pre": probes.run("track_flags_ax", {"lproj": lproj}),
-              "set": [], "unset": []}
-    for flag in FLAG_COMMANDS:
-        record["set"].append(set_track_flag(server, lproj, target, flag, 1))
-    record["post"] = probes.run("track_flags_ax", {"lproj": lproj})
-    for flag in FLAG_COMMANDS:
-        record["unset"].append(set_track_flag(server, lproj, target, flag, 0))
-    record["after"] = probes.run("track_flags_ax", {"lproj": lproj})
+    """Each flag in turn, alone: set, read, unset, read. One at a time because Logic draws a soloed
+    track's own Mute as 0 while it is soloed (measured 2026-09-27 ko: mute 1 -> 0 on solo, back to
+    1 after), so flags set together do not read back as set together."""
+    record = {"target": spec["flag_track"],
+              "pre": probes.run("track_flags_ax", {"lproj": lproj}), "cycles": []}
+    for flag in probes.FLAG_COMMANDS:
+        cycle = {"flag": flag, "set": set_track_flag(server, lproj, spec, flag, 1)}
+        cycle["post"] = probes.run("track_flags_ax", {"lproj": lproj})
+        cycle["unset"] = set_track_flag(server, lproj, spec, flag, 0)
+        cycle["after"] = probes.run("track_flags_ax", {"lproj": lproj})
+        record["cycles"].append(cycle)
     return record
 
 
