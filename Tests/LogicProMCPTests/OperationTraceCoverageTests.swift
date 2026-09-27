@@ -15,18 +15,36 @@ private func replaceOperationTraceCoverageFlag(with value: String?) -> String? {
     return previous
 }
 
+/// The operations the census's channels were asked to execute, in order. A trace's
+/// `channel.started` names only the channel, so this is where the census learns which routed
+/// operation each channel ran, and so whether it was a read or a write.
+private actor OperationTraceRoutedLog {
+    private(set) var operations: [String] = []
+
+    func record(_ operation: String) {
+        operations.append(operation)
+    }
+
+    func clear() {
+        operations = []
+    }
+}
+
 private actor OperationTraceCoverageChannel: Channel {
     nonisolated let id: ChannelID
+    private let routedLog: OperationTraceRoutedLog?
 
-    init(id: ChannelID) {
+    init(id: ChannelID, routedLog: OperationTraceRoutedLog? = nil) {
         self.id = id
+        self.routedLog = routedLog
     }
 
     func start() async throws {}
     func stop() async {}
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
-        .error(HonestContract.encodeStateC(
+        await routedLog?.record(operation)
+        return .error(HonestContract.encodeStateC(
             error: .axWriteFailed,
             hint: "Operation trace coverage mock refused \(operation)",
             extras: ["operation": operation]
@@ -63,6 +81,51 @@ private actor OperationTraceReadOnlyProbeChannel: Channel {
     }
 }
 
+/// Answers the transport reads with a playing transport whose playhead moves, and accepts every
+/// write, so pause gets past its reads to its keystroke. The refusing mock stops pause at its first
+/// read, so the census alone never reaches pause's write.
+private actor OperationTracePlayingTransportChannel: Channel {
+    nonisolated let id: ChannelID
+    private let routedLog: OperationTraceRoutedLog
+    private var positions: [String]
+
+    init(id: ChannelID, routedLog: OperationTraceRoutedLog, positions: [String]) {
+        self.id = id
+        self.routedLog = routedLog
+        self.positions = positions
+    }
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        await routedLog.record(operation)
+        switch operation {
+        case "transport.get_state":
+            guard !positions.isEmpty else { return .error("no transport reading left") }
+            let position = positions.removeFirst()
+            let reading = TransportState(
+                isPlaying: true,
+                position: position,
+                positionReadback: TransportPositionReadback(value: position, observedComponents: [.bar, .beat]),
+                lastUpdated: Date()
+            )
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            guard let data = try? encoder.encode(reading) else { return .error("transport reading did not encode") }
+            return .success(String(decoding: data, as: UTF8.self))
+        case "transport.get_tempo":
+            return .success("{\"tempo\":120.0}")
+        default:
+            return .success(HonestContract.encodeStateA(extras: ["operation": operation]))
+        }
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(detail: "operation trace playing transport")
+    }
+}
+
 /// Counts `recordWriteBoundary` calls independently of the trace store. This
 /// is the load-bearing part of the zero-write census: `recordWriteBoundary`
 /// fires the `onWriteBoundary` hook BEFORE its `guard let traceID` early
@@ -92,6 +155,7 @@ private struct OperationTraceCensusContext {
     let cache: StateCache
     let targetRegistry: TargetRegistry
     let mutatingSpecs: [OperationSpec]
+    let routedLog: OperationTraceRoutedLog
     let cleanup: @Sendable () -> Void
 }
 
@@ -108,9 +172,10 @@ private func makeOperationTraceCensusContext() async throws -> OperationTraceCen
     let midiFile = try SMFWriter.temporaryMIDIFile()
     try Data([0x4D, 0x54, 0x68, 0x64]).write(to: midiFile.fileURL)
 
+    let routedLog = OperationTraceRoutedLog()
     let router = ChannelRouter()
     for channelID in ChannelID.allCases {
-        await router.register(OperationTraceCoverageChannel(id: channelID))
+        await router.register(OperationTraceCoverageChannel(id: channelID, routedLog: routedLog))
     }
     let cache = StateCache()
     let targetRegistry = TargetRegistry()
@@ -137,6 +202,7 @@ private func makeOperationTraceCensusContext() async throws -> OperationTraceCen
         cache: cache,
         targetRegistry: targetRegistry,
         mutatingSpecs: OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` },
+        routedLog: routedLog,
         cleanup: {
             try? FileManager.default.removeItem(at: projectRoot)
             try? FileManager.default.removeItem(at: outputRoot)
@@ -152,6 +218,64 @@ private let operationTraceCoverageFileReader = LogicProjectFileReader.Runtime(
     mtime: { _ in nil },
     sleep: { _ in }
 )
+
+/// Routed operations the presence census counts as reads. A spec whose channels ran only these,
+/// and crossed no boundary, refused before writing and has no boundary to carry.
+private let operationTraceCensusReadRoutes: Set<String> = [
+    // RoutingTable.swift:50 routes it to Accessibility alone: the transport reading.
+    "transport.get_state",
+    // RoutingTable.swift:54 routes it to Accessibility alone, under the comment "Internal read".
+    "transport.get_tempo",
+]
+
+/// Router operations that write but have no registry spec, so `Mutability` cannot say they write:
+/// the ones the census context routes (measured), plus `transport.resume`, which only play's
+/// paused-transport path reaches.
+private let operationTraceCensusInternalWriteRoutes: Set<String> = [
+    "mmc.play", "mmc.record_strobe", "mmc.stop",
+    "nav.delete_marker", "nav.open_marker_list", "nav.rename_marker", "nav.zoom_to_fit",
+    "plugin.insert", "plugin.insert_verified", "plugin.set_eq_band_verified", "plugin.set_param_verified",
+    "region.move_to_playhead",
+    "track.create_audio", "track.create_drummer", "track.create_external_midi", "track.create_instrument",
+    "track.rename", "track.select", "track.set_arm", "track.set_automation", "track.set_instrument",
+    "track.set_mute", "track.set_solo", "track.sort_verified",
+    "transport.resume",
+    "view.toggle_mixer",
+]
+
+/// Writes: every registry spec marked mutating, under its own id, plus the internal writes.
+private let operationTraceCensusWriteRoutes: Set<String> = Set(
+    OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }.map(\.id.rawValue)
+).union(operationTraceCensusInternalWriteRoutes)
+
+/// What the presence census concludes for one mutating spec, from the operations its channels ran
+/// (in order) and the phases its trace recorded. `channel.started` names the channel only, so which
+/// operation ran, and so whether it wrote, comes from the routed log.
+private enum OperationTraceCensusVerdict: Equatable {
+    /// Operations in neither set. The census cannot tell whether they wrote, so it fails.
+    case unclassified([String])
+    case noChannel
+    /// Only reads ran and no boundary was crossed: the spec refused before writing.
+    case refusedBeforeWriting
+    case boundaryMissing
+    case boundaryBeforeChannel(boundary: Int, channel: Int)
+    case covered
+}
+
+private func operationTraceCensusVerdict(routed: [String], phases: [TracePhase]) -> OperationTraceCensusVerdict {
+    let unclassified = Set(routed.filter {
+        !operationTraceCensusReadRoutes.contains($0) && !operationTraceCensusWriteRoutes.contains($0)
+    }).sorted()
+    if !unclassified.isEmpty { return .unclassified(unclassified) }
+    guard let firstChannel = phases.firstIndex(of: .channelStarted) else { return .noChannel }
+    let boundary = phases.firstIndex(of: .writeBoundaryCrossed)
+    // An empty log is not "only reads": a channel ran that the log did not see.
+    let onlyReads = !routed.isEmpty && routed.allSatisfy { operationTraceCensusReadRoutes.contains($0) }
+    if onlyReads, boundary == nil { return .refusedBeforeWriting }
+    guard let boundary else { return .boundaryMissing }
+    guard boundary >= firstChannel else { return .boundaryBeforeChannel(boundary: boundary, channel: firstChannel) }
+    return .covered
+}
 
 extension OperationTraceTests {
     @Test func OperationTraceCoverageAllRegistryMutations() async throws {
@@ -444,7 +568,9 @@ extension OperationTraceTests {
         let context = try await makeOperationTraceCensusContext()
         defer { context.cleanup() }
 
-        // `eligible` = ops observed dispatching a channel in THIS run; `covered`
+        // `eligible` = ops observed dispatching a channel in THIS run, less those
+        // whose channels only read and that crossed no boundary (they refused
+        // before writing: pause when its transport read fails); `covered`
         // = those that also carried the boundary. The invariant is equality:
         // every op that reached a channel crossed a write boundary and must say
         // so. Deriving `eligible` from the run (rather than a hardcoded floor)
@@ -452,8 +578,10 @@ extension OperationTraceTests {
         // scale, not just below an arbitrary threshold.
         var eligible: [String] = []
         var covered: [String] = []
+        var refusedBeforeWriting: [String] = []
         for spec in context.mutatingSpecs {
             await OperationTraceStore.shared.clear()
+            await context.routedLog.clear()
             let traceContext = OperationTraceContext(mutationGateAcquired: true)
             // The probe counts commits independently of the store, so an op that
             // dispatches a channel with a nil/unregistered trace is still seen.
@@ -472,26 +600,36 @@ extension OperationTraceTests {
                 }
             }
 
-            guard let trace = await OperationTraceStore.shared.recent(limit: 128)
-                .first(where: { $0.operationID == spec.id.rawValue }) else { continue }
-            let phases = trace.events.map(\.phase)
-            guard let firstChannel = phases.firstIndex(of: .channelStarted) else { continue }
-            eligible.append(spec.id.rawValue)
-            // A channel executed for a mutating op ⇒ the write boundary was
-            // crossed and must be recorded at/after that channel.
-            guard let boundary = phases.firstIndex(of: .writeBoundaryCrossed) else {
-                Issue.record(Comment(rawValue: "\(spec.id.rawValue): dispatched a channel but recorded NO writeBoundaryCrossed"))
+            let routed = await context.routedLog.operations
+            // This dispatch's own trace, by the id its context registered. Looking it up
+            // by operation id can return another suite's trace of the same op, since
+            // suites run in parallel over the one shared store.
+            var trace: OperationTrace?
+            if let traceID = traceContext.traceID { trace = await OperationTraceStore.shared.trace(traceID) }
+            // A channel executed a write for a mutating op ⇒ the write boundary was
+            // crossed and must be recorded at/after the first channel. A spec whose
+            // channels only read and that crossed no boundary refused before writing.
+            switch operationTraceCensusVerdict(routed: routed, phases: trace?.events.map(\.phase) ?? []) {
+            case .unclassified(let operations):
+                Issue.record(Comment(rawValue: "\(spec.id.rawValue): routed \(operations), which are in neither the census's read set nor its write set; classify them"))
+            case .noChannel:
                 continue
+            case .refusedBeforeWriting:
+                refusedBeforeWriting.append(spec.id.rawValue)
+            case .boundaryMissing:
+                eligible.append(spec.id.rawValue)
+                Issue.record(Comment(rawValue: "\(spec.id.rawValue): routed \(routed) but recorded NO writeBoundaryCrossed"))
+            case .boundaryBeforeChannel(let boundary, let channel):
+                eligible.append(spec.id.rawValue)
+                Issue.record(Comment(rawValue: "\(spec.id.rawValue): boundary at \(boundary) precedes channelStarted at \(channel)"))
+            case .covered:
+                eligible.append(spec.id.rawValue)
+                #expect(
+                    await boundaryProbe.count > 0,
+                    Comment(rawValue: "\(spec.id.rawValue): recorded a boundary but never fired the parent hook")
+                )
+                covered.append(spec.id.rawValue)
             }
-            #expect(
-                boundary >= firstChannel,
-                Comment(rawValue: "\(spec.id.rawValue): boundary at \(boundary) precedes channelStarted at \(firstChannel)")
-            )
-            #expect(
-                await boundaryProbe.count > 0,
-                Comment(rawValue: "\(spec.id.rawValue): recorded a boundary but never fired the parent hook")
-            )
-            covered.append(spec.id.rawValue)
         }
         // The honest invariant: channel-dispatching ⇒ boundary-carrying, for
         // every op, with no coverage floor to hide behind.
@@ -506,8 +644,103 @@ extension OperationTraceTests {
             eligible.count >= 40,
             Comment(rawValue: "presence census only saw \(eligible.count) channel-dispatching ops: \(eligible.sorted())")
         )
+        // Guard the exclusion: if nothing refused before writing in this run, the
+        // read-only branch above went unexercised and could be wrong unnoticed.
+        #expect(
+            refusedBeforeWriting.count > 0,
+            Comment(rawValue: "no spec refused before writing in this run, so the read-only exclusion was not exercised")
+        )
 
         await OperationTraceStore.shared.clear()
+    }
+
+    /// #1045 review: pause reads the transport before it presses anything, and when
+    /// that read fails it refuses having written nothing. The census must call that a
+    /// refusal before writing, not a missing boundary.
+    @Test func OperationTraceCensusCallsThePauseRefusalARefusalBeforeWriting() async throws {
+        let previous = replaceOperationTraceCoverageFlag(with: "1")
+        defer { _ = replaceOperationTraceCoverageFlag(with: previous) }
+        let context = try await makeOperationTraceCensusContext()
+        defer { context.cleanup() }
+        let pause = try #require(context.mutatingSpecs.first { $0.id.rawValue == "transport.pause" })
+
+        await OperationTraceStore.shared.clear()
+        await context.routedLog.clear()
+        let traceContext = OperationTraceContext(mutationGateAcquired: true)
+        _ = await OperationTraceContext.$current.withValue(traceContext) {
+            await dispatchOperationTraceCoverageSpec(
+                pause,
+                params: operationTraceCoverageParams(for: pause.id, fixtures: context.fixtures),
+                router: context.router,
+                cache: context.cache,
+                targetRegistry: context.targetRegistry
+            )
+        }
+        let routed = await context.routedLog.operations
+        let traceID = try #require(traceContext.traceID)
+        let trace = try #require(await OperationTraceStore.shared.trace(traceID))
+        let phases = trace.events.map(\.phase)
+
+        #expect(routed == ["transport.get_state"])
+        #expect(phases.contains(.channelStarted))
+        #expect(!phases.contains(.writeBoundaryCrossed))
+        #expect(operationTraceCensusVerdict(routed: routed, phases: phases) == .refusedBeforeWriting)
+        await OperationTraceStore.shared.clear()
+    }
+
+    /// The census context stops pause at its first read, so it never reaches pause's
+    /// keystroke. Here the reads succeed (Play on, playhead moving), pause presses, and
+    /// that write must carry the boundary.
+    @Test func OperationTraceCensusHoldsThePauseWriteToTheBoundaryWhenItsReadsSucceed() async throws {
+        let previous = replaceOperationTraceCoverageFlag(with: "1")
+        defer { _ = replaceOperationTraceCoverageFlag(with: previous) }
+        let routedLog = OperationTraceRoutedLog()
+        let router = ChannelRouter()
+        for channelID in ChannelID.allCases {
+            await router.register(OperationTracePlayingTransportChannel(
+                id: channelID,
+                routedLog: routedLog,
+                positions: ["12.1", "12.3", "12.4", "12.4"]
+            ))
+        }
+        let pause = try #require(OperationRegistry.specs.first { $0.id.rawValue == "transport.pause" })
+
+        await OperationTraceStore.shared.clear()
+        let traceContext = OperationTraceContext(mutationGateAcquired: true)
+        _ = await OperationTraceContext.$current.withValue(traceContext) {
+            await dispatchOperationTraceCoverageSpec(pause, params: [:], router: router, cache: StateCache())
+        }
+        let routed = await routedLog.operations
+        let traceID = try #require(traceContext.traceID)
+        let trace = try #require(await OperationTraceStore.shared.trace(traceID))
+
+        // The keystroke was reached, so this run is about pause's write path.
+        #expect(routed.contains("transport.pause"), "pause never reached its write: \(routed)")
+        #expect(operationTraceCensusVerdict(routed: routed, phases: trace.events.map(\.phase)) == .covered)
+        await OperationTraceStore.shared.clear()
+    }
+
+    /// The census fails closed: an operation in neither set is named as unclassified,
+    /// never taken for a read or a write.
+    @Test func OperationTraceCensusNamesARouteInNeitherSet() async throws {
+        #expect(operationTraceCensusReadRoutes.isDisjoint(with: operationTraceCensusWriteRoutes))
+        let routedLog = OperationTraceRoutedLog()
+        let double = OperationTraceCoverageChannel(id: .accessibility, routedLog: routedLog)
+        _ = await double.execute(operation: "census.planted_unclassified", params: [:])
+        let planted = await routedLog.operations
+        #expect(planted == ["census.planted_unclassified"])
+
+        // Alone with no boundary, and after a write that carried one.
+        #expect(
+            operationTraceCensusVerdict(routed: planted, phases: [.channelStarted])
+                == .unclassified(["census.planted_unclassified"])
+        )
+        #expect(
+            operationTraceCensusVerdict(
+                routed: ["transport.stop"] + planted,
+                phases: [.channelStarted, .writeBoundaryCrossed, .channelStarted]
+            ) == .unclassified(["census.planted_unclassified"])
+        )
     }
 
     @Test func OperationTraceCoverageProjectBlockingDialogsTraceWithoutBoundary() async throws {
