@@ -59,6 +59,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   I/O-label rename reads `unclassified` rather than as a bus and `main_output` says so; the
   strip-to-track attribution is still positional; bus-to-aux input edges are `not_observed`;
   which bus a send goes to is not read; `no_output` and `unclassified` were seen in fixtures only.
+- **An internal intent model and one main-output rule for the project audit (#966 P1, ADR-021;
+  refs #966).** `ProjectSessionAudit.parseIntentPolicy` reads a
+  `logic_pro_mcp_repair_policy.v1` object (exact keys, `trk_` targets, an optional `prj_`
+  `project_ref`, proposed roles, and per-subject main outputs of `bus: n` or
+  `output: "no_output"`), and `assessIntent` checks it against one #965 capture and the #291 R1
+  graph published from it (`SessionPopulationObservation.routingGraph(capture:)`, which
+  `inspect_session`'s routing section now also builds from, unchanged on the wire). `compliant`
+  and `violation` need the `main_output` and `strip_track_association` domains both `complete`;
+  otherwise the finding is `unverified` with `main_output_coverage_incomplete` /
+  `strip_track_association_incomplete` and the domains' own reasons copied as evidence. A capture
+  that moved, a graph from another capture, an inconsistent graph, no document, occlusion, a stale
+  reference snapshot or an unissued project reference is `unverified` with its own token; a policy
+  for another project or a target outside the snapshot is `outside_scope`. The source is found by
+  reference, never by name, and send and input edges, levels, enabled flags and automation are
+  never read. Limits: `publish` leaves both domains `partial` on every read today, so every real
+  assessment is `unverified`; no command, resource or documented surface exposes this yet.
 
 ### Fixed
 - MCU button presses now send the button release: bank left/right (`mixer.bank` and the bank walk behind every strip-relative MCU operation), track select, automation mode, the mute / solo / arm / select strip buttons, and the MCU transport buttons (play, stop, record, rewind, fast forward, cycle). Before, each press was a Note On with no release, so Logic saw every button as held, and it auto-repeats held bank buttons: after one bank walk left and one press right, the LCD kept redrawing between two bank windows for seconds. The `enabled: false` branch of `track.set_mute` / `set_solo` / `set_arm`, which sent a single release with no press, is replaced under #1020 below. (#862)
