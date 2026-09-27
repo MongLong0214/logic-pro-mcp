@@ -413,6 +413,7 @@ struct TrackDispatcher: OperationTraceDispatching {
                         isMuted: track.isMuted,
                         isSoloed: track.isSoloed,
                         isArmed: track.isArmed,
+                        isInputMonitoring: track.isInputMonitoring,
                         isSelected: track.isSelected,
                         volume: track.volume,
                         pan: track.pan,

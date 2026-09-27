@@ -254,6 +254,140 @@ private actor RecordingArmChannel: Channel {
     }
 }
 
+/// #1040 residual 1: Input Monitoring had no LabelSet, so nothing read it into `TrackState`. It is now
+/// found by `AXLocalePolicy.trackInputMonitoringButton`, whose members are Apple's own rows in every
+/// locale Logic ships, and read on the same terms as Mute and Solo: true, false, or unread.
+@Suite("Issue1040 Input Monitoring reads through its LabelSet")
+struct Issue1040InputMonitoringReadTests {
+    private struct Header {
+        let builder: FakeAXRuntimeBuilder
+        let header: AXUIElement
+        let monitor: AXUIElement?
+    }
+
+    /// A header with lit Mute, Solo and Record Enable checkboxes, plus an Input Monitoring checkbox
+    /// described `monitorLabel` (none when nil). The lit neighbours show that the header was read.
+    private func makeHeader(monitorLabel: String?, on: Bool) -> Header {
+        let b = FakeAXRuntimeBuilder()
+        let header = b.element(1)
+        b.setAttribute(header, kAXRoleAttribute, "AXLayoutItem")
+        var children: [AXUIElement] = []
+        let neighbours = [
+            AXLocalePolicy.trackMuteButton.canonical, AXLocalePolicy.trackSoloButton.canonical, "Record Enable",
+        ]
+        for (offset, label) in neighbours.enumerated() {
+            let e = b.element(10 + offset)
+            b.setAttribute(e, kAXRoleAttribute, "AXCheckBox")
+            b.setAttribute(e, kAXDescriptionAttribute, label)
+            b.setAttribute(e, kAXValueAttribute, 1)
+            children.append(e)
+        }
+        var monitor: AXUIElement?
+        if let monitorLabel {
+            let e = b.element(20)
+            b.setAttribute(e, kAXRoleAttribute, "AXCheckBox")
+            b.setAttribute(e, kAXDescriptionAttribute, monitorLabel)
+            b.setAttribute(e, kAXValueAttribute, on ? 1 : 0)
+            children.append(e)
+            monitor = e
+        }
+        b.setChildren(header, children)
+        return Header(builder: b, header: header, monitor: monitor)
+    }
+
+    private func isUnread(_ value: Bool?) -> Bool { value == nil }
+
+    private func neighboursRead(_ track: TrackState) -> Bool {
+        track.isMuted == true && track.isSoloed == true && track.isArmed == true
+    }
+
+    /// Kills: dropping the read from `extractTrackState` (the field left nil), and dropping
+    /// `trackInputMonitoringButton` from `extractTrackButtonState`'s label map, where the English
+    /// fallback still finds `Input Monitoring` but no other language.
+    @Test("each member of the LabelSet is found and read as true or false",
+          arguments: AXLocalePolicy.trackInputMonitoringButton.labels)
+    func everyMemberReads(_ label: String) throws {
+        for on in [true, false] {
+            let h = makeHeader(monitorLabel: label, on: on)
+            let track = AXValueExtractors.extractTrackState(
+                from: h.header, index: 0, runtime: h.builder.makeAXRuntime())
+            let read = try #require(track.isInputMonitoring, "\(label) on=\(on)")
+            #expect(on ? read : !read, "\(label) on=\(on)")
+        }
+    }
+
+    /// The set is Apple's row in all ten locales Logic ships, one member each (English is the base).
+    /// Kills: a member dropped from `variants`, which leaves that locale's control unread.
+    @Test("the LabelSet holds one member per locale Logic ships")
+    func memberPerLocale() {
+        let expected: Set<String> = [
+            "Input Monitoring", "입력 모니터링", "入力モニタリング", "Input-Monitoring",
+            "Monitorización de entrada", "Monitoring de l’entrée", "Monitoraggio ingresso",
+            "Monitoramento de Entrada", "输入监听", "輸入監聽",
+        ]
+        #expect(Set(AXLocalePolicy.trackInputMonitoringButton.labels) == expected)
+    }
+
+    /// `allLabelSets` is the allowlist an AX snapshot records labels verbatim under; a set missing
+    /// from it is written as a shape, and a fixture taken from that snapshot no longer matches it.
+    /// Kills: leaving `trackInputMonitoringButton` out of `allLabelSets`.
+    @Test("the set is registered in allLabelSets")
+    func registered() {
+        #expect(AXLocalePolicy.allLabelSets.contains(AXLocalePolicy.trackInputMonitoringButton))
+    }
+
+    /// Kills: `?? false` after the Input Monitoring read.
+    @Test("a header without the control, or with a description outside the set, reads it as unread",
+          arguments: [nil, "Monitor de entrada"] as [String?])
+    func missingOrUnknownLabelIsUnread(_ label: String?) {
+        let h = makeHeader(monitorLabel: label, on: true)
+        let track = AXValueExtractors.extractTrackState(
+            from: h.header, index: 0, runtime: h.builder.makeAXRuntime())
+        #expect(neighboursRead(track))
+        #expect(isUnread(track.isInputMonitoring), "\(label ?? "no control")")
+    }
+
+    /// Kills: `?? false` after the Input Monitoring read.
+    @Test("a control whose value will not read is unread")
+    func unreadableValueIsUnread() throws {
+        let h = makeHeader(monitorLabel: AXLocalePolicy.trackInputMonitoringButton.canonical, on: true)
+        let builder = h.builder
+        let targetID = builder.elementID(try #require(h.monitor))
+        let runtime = builder.makeAXRuntime(
+            attributeValueResultHandler: { element, attribute in
+                guard attribute == kAXValueAttribute as String, builder.elementID(element) == targetID else {
+                    return nil
+                }
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+        let track = AXValueExtractors.extractTrackState(from: h.header, index: 0, runtime: runtime)
+        #expect(neighboursRead(track))
+        #expect(isUnread(track.isInputMonitoring))
+    }
+
+    /// Kills: `decode` in place of `decodeIfPresent` for `isInputMonitoring`, under which a row
+    /// written without the key no longer decodes.
+    @Test("an unread Input Monitoring is an absent key; a read one round-trips")
+    func wireShape() throws {
+        let unread = TrackState(id: 0, name: "Vox", type: .audio)
+        let unreadWire = String(decoding: try JSONEncoder().encode(unread), as: UTF8.self)
+        #expect(!unreadWire.contains("\"isInputMonitoring\""), "\(unreadWire)")
+        let unreadBack = try JSONDecoder().decode(TrackState.self, from: Data(unreadWire.utf8))
+        #expect(isUnread(unreadBack.isInputMonitoring))
+
+        var read = TrackState(id: 1, name: "Gtr", type: .audio)
+        read.isInputMonitoring = true
+        let readWire = String(decoding: try JSONEncoder().encode(read), as: UTF8.self)
+        #expect(readWire.contains("\"isInputMonitoring\":true"), "\(readWire)")
+        let readBack = try JSONDecoder().decode(TrackState.self, from: Data(readWire.utf8))
+        let on = try #require(readBack.isInputMonitoring)
+        #expect(on)
+    }
+}
+
 /// #1040, live on 2026-09-28 (ko, Logic 12.3): in the `logic://tracks` read taken right after a
 /// track was armed, the rows came from MCU feedback, not from a header read, and the armed track
 /// was published `isArmed: false`. MCU feedback never writes `isArmed` (the Rec LED blinks, #1020),

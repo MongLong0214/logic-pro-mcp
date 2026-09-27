@@ -6702,6 +6702,34 @@
     "zh-TW": "derived"
    }
   },
+  "trackInputMonitoringButton": {
+   "canonical": "Input Monitoring",
+   "variants": [
+    "입력 모니터링",
+    "入力モニタリング",
+    "Input-Monitoring",
+    "Monitorización de entrada",
+    "Monitoring de l’entrée",
+    "Monitoraggio ingresso",
+    "Monitoramento de Entrada",
+    "输入监听",
+    "輸入監聽"
+   ],
+   "rationale": "Identifies the track header's Input Monitoring checkbox by description substring; read-only state extraction (#1040).",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "trackMenuBar": {
    "canonical": "Track",
    "variants": [

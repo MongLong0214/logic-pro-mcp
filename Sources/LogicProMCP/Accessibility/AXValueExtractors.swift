@@ -321,6 +321,9 @@ enum AXValueExtractors {
         // The arm is read from the control the arm write verifies against (#1020), not by keyword.
         let armed = AXLogicProElements.trackArmControl(in: header, ax: runtime)
             .flatMap { extractButtonState($0, runtime: runtime) }
+        // Input Monitoring is read the way Mute and Solo are, through its own label set (#1040), and
+        // is unread (nil) on the same terms.
+        let inputMonitoring = extractTrackButtonState(from: header, prefix: "Input Monitoring", runtime: runtime)
         let selected = extractSelectedState(header, runtime: runtime) ?? false
         let trackType = inferTrackType(from: header, runtime: runtime)
         let stack = extractTrackStackState(from: header, runtime: runtime)
@@ -332,6 +335,7 @@ enum AXValueExtractors {
             isMuted: muted,
             isSoloed: soloed,
             isArmed: armed,
+            isInputMonitoring: inputMonitoring,
             isSelected: selected,
             volume: extractTrackHeaderVolume(from: header, runtime: runtime),
             pan: extractTrackHeaderPan(from: header, runtime: runtime),
@@ -758,7 +762,8 @@ enum AXValueExtractors {
     ) -> Bool? {
         let localizedKeywords: [String: AXLocalePolicy.LabelSet] = [
             "Mute": AXLocalePolicy.trackMuteButton,
-            "Solo": AXLocalePolicy.trackSoloButton
+            "Solo": AXLocalePolicy.trackSoloButton,
+            "Input Monitoring": AXLocalePolicy.trackInputMonitoringButton,
         ]
         let labels = localizedKeywords[prefix]
         let controls = AXHelpers.findAllDescendants(of: header, role: kAXButtonRole, maxDepth: 4, runtime: runtime)

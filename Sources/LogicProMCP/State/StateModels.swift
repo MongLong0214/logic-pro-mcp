@@ -73,6 +73,11 @@ struct TrackState: Sendable, Codable, Identifiable {
     var isMuted: Bool?
     var isSoloed: Bool?
     var isArmed: Bool?
+    /// Input Monitoring as the track header's checkbox reads (#1040), found by
+    /// `AXLocalePolicy.trackInputMonitoringButton`. `nil` means unread, as for the three above, and it
+    /// is also where a row built without a header read starts: nothing else in the server reads this
+    /// control, so there is no `false` to default to.
+    var isInputMonitoring: Bool?
     var isSelected: Bool = false
     var volume: Double = 0.0   // dB, 0 = unity
     var pan: Double = 0.0      // -1.0 (L) to 1.0 (R)
@@ -109,7 +114,7 @@ struct TrackState: Sendable, Codable, Identifiable {
     var stackCollapsed: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, type, isMuted, isSoloed, isArmed, isSelected
+        case id, name, type, isMuted, isSoloed, isArmed, isInputMonitoring, isSelected
         case volume, pan, automationMode, color, placeholder
         case isStackHeader = "is_stack_header"
         case stackCollapsed = "stack_collapsed"
@@ -126,6 +131,7 @@ extension TrackState {
         isMuted = try container.decodeIfPresent(Bool.self, forKey: .isMuted)
         isSoloed = try container.decodeIfPresent(Bool.self, forKey: .isSoloed)
         isArmed = try container.decodeIfPresent(Bool.self, forKey: .isArmed)
+        isInputMonitoring = try container.decodeIfPresent(Bool.self, forKey: .isInputMonitoring)
         isSelected = try container.decode(Bool.self, forKey: .isSelected)
         volume = try container.decode(Double.self, forKey: .volume)
         pan = try container.decode(Double.self, forKey: .pan)
