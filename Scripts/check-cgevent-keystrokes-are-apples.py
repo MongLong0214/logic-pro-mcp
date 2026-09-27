@@ -66,6 +66,8 @@ JOIN = {
     "transport.stop": ("global-commands", "Stop"),
     "transport.record": ("global-commands", "Record"),
     "transport.pause": ("global-commands", "Pause"),
+    # The play dispatcher's route for a paused transport: the same Play command, by key.
+    "transport.resume": ("global-commands", "Play"),
     "transport.rewind": ("global-commands", "Rewind"),
     # `Forward | Period`, the counterpart of `Rewind | Comma` and of the control bar's Forward
     # button. `Fast Forward | Shift-Period` is a different command in the same table.

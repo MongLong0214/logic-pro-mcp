@@ -148,6 +148,7 @@ actor CGEventChannel: Channel {
         "transport.stop":             .keypad(82),      // Stop: keypad 0
         "transport.record":           .key(15),         // Record: R
         "transport.pause":            .keypad(65),      // Pause: keypad Period
+        "transport.resume":           .keypad(76),      // Play: keypad Enter, sent only when paused
         "transport.rewind":           .key(43),         // Rewind: Comma
         "transport.fast_forward":     .key(47),         // Forward: Period
         "transport.toggle_cycle":     .key(8),          // Toggle Cycle Mode: C

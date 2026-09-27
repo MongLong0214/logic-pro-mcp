@@ -35,6 +35,10 @@ extension ChannelRouter {
         // best-effort fallback. #1029: the CGEvent keystroke is Apple's Pause
         // (keypad Period), not Space; not yet driven live.
         "transport.pause":            [.cgEvent, .accessibility, .coreMIDI],
+        // #1029: internal, not a tool command. The play dispatcher sends it only to a paused
+        // transport (Play on, playhead still), where the AX Play control already reads on and
+        // would do nothing. Apple's Play key (keypad Enter) was measured to resume it.
+        "transport.resume":           [.cgEvent],
         "transport.rewind":           [.mcu, .coreMIDI, .cgEvent],
         "transport.fast_forward":     [.mcu, .coreMIDI, .cgEvent],
         "transport.toggle_cycle":     [.accessibility, .midiKeyCommands, .cgEvent, .mcu],

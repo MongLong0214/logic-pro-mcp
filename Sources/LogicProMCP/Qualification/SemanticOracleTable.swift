@@ -1560,12 +1560,13 @@ enum SemanticOracleTable {
     /// mouse-click) is caught.
     static let controlBarClickActions = ["axpress", "axconfirm"]
 
-    // TransportDispatcher `handleVerifiedTransportCommand(.play)` → encodeStateA.
-    // BOTH State-A branches (already-playing fast path, and the post-write poll)
-    // emit `operation:"transport.play"`, `verify_source:"transport_state"`, and an
-    // `observed_after` transportStateSummary whose `isPlaying == true` (State A is
-    // reached ONLY when `action.matches(observed)`, i.e. the readback showed
-    // playback). `observed_after.isPlaying == true` is the GENUINE invariant — it
+    // TransportDispatcher `verifiedPlayResult` → encodeStateA. Every State-A branch
+    // (from stopped, the post-write poll of `routeAndVerifyTransportCommand(.play)`;
+    // already playing, Play on with the playhead moving; resumed from pause, the
+    // play key then a moving playhead) emits `operation:"transport.play"`,
+    // `verify_source:"transport_state"`, and an `observed_after` transportStateSummary
+    // whose `isPlaying == true` (no branch reaches State A without a readback that
+    // showed playback). `observed_after.isPlaying == true` is the GENUINE invariant — it
     // relates the AX transport readback to the operation's target semantics, NOT a
     // same-source echo. `write_attempted`/`poll_attempts` differ per branch and
     // are not pinned.
