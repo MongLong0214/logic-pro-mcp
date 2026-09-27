@@ -440,7 +440,18 @@ class AStringsDictEntryIsCompleteOrItFails(unittest.TestCase):
     an entry holding only a `one` form extracted as that one row, with no error. Each test removes
     one required field from a complete entry.
 
-    Mutation killed, per test: deleting the one requirement it names from `_stringsdict_entry`."""
+    Mutation killed, per test: deleting the one requirement it names from `_stringsdict_entry`.
+
+    Round 3: the round-2 fix still let a format or a plural form's string name a `%#@variable@`
+    with no rule dict for it in the same entry -- a successful, incomplete extraction, the
+    reviewer's own residual. The tests below named `..._reference.../_positional.../_nested...`
+    cover that: the reviewer's exact case, a nested reference (a plural form's own string naming
+    a second variable), two references where only one resolves, a positional reference
+    (`%1$#@name@`, Apple's own syntax once a format has more than one argument -- measured live
+    in two of Logic 12.3's own files), and a control where the nested reference does resolve.
+    Mutation killed: removing the reference-resolution loop at the end of `_stringsdict_entry` --
+    every `_fails` case above goes red; the `_extracts` control stays green throughout, since it
+    names nothing the mutant would catch."""
 
     def _refused(self, entry, *, needle):
         with tempfile.TemporaryDirectory() as tmp:
@@ -492,6 +503,52 @@ class AStringsDictEntryIsCompleteOrItFails(unittest.TestCase):
             rows = sorted(r[2:] for r in canon.extract_stringsdict(fake.app))
         self.assertEqual(rows, [("tracks", "format", "%#@n@"), ("tracks/n", "one", "%d track"),
                                 ("tracks/n", "other", "%d tracks")])
+
+    def test_the_reviewers_format_with_no_rule_for_its_reference_fails(self):
+        """Review of #1034 R1-02, round 3: `_stringsdict_entry` did not check that a `%#@n@`
+        reference resolves to a rule dict in the same entry. This entry yielded one format row
+        and no plural rows -- a successful, incomplete extraction."""
+        self._refused({"NSStringLocalizedFormatKey": "%#@n@"}, needle="references 'n'")
+
+    def test_a_nested_reference_with_no_rule_fails(self):
+        """Apple allows a plural form's string to itself reference a second variable. Removing
+        fields *inside* a rule (the R1-02 round 2 tests) never removes the whole referenced rule,
+        so this case -- a nested `%#@m@` reference naming a rule that does not exist -- is new."""
+        entry = self._complete()
+        entry["n"]["other"] = "%d tracks (%#@m@)"
+        self._refused(entry, needle="references 'm'")
+
+    def test_two_references_where_only_one_has_a_rule_fails(self):
+        entry = self._complete()
+        entry["NSStringLocalizedFormatKey"] = "%#@n@ %#@m@"
+        self._refused(entry, needle="references 'm'")
+
+    def test_a_positional_reference_with_no_rule_fails(self):
+        """A format with more than one argument carries a positional specifier before `#@`, as in
+        `%1$#@sound_packs@` -- measured live in Logic 12.3's own
+        Localizable-UniversalContentManager.stringsdict and Localizable.stringsdict. The bare
+        `%#@n@` this class's other fixtures use is the one-argument case of the same syntax; a
+        first version of this reference check matched only the bare form and missed this one."""
+        entry = self._complete()
+        entry["NSStringLocalizedFormatKey"] = "%2$@ of %1$#@n@ %3$#@m@"
+        self._refused(entry, needle="references 'm'")
+
+    def test_a_nested_reference_with_its_own_rule_extracts(self):
+        """Control: the nested reference this time DOES have a rule dict, so the entry is
+        complete and extracts on both a0e99669 and this change."""
+        entry = self._complete()
+        entry["n"]["other"] = "%d tracks (%#@m@)"
+        entry["m"] = {"NSStringFormatSpecTypeKey": "NSStringPluralRuleType",
+                      "NSStringFormatValueTypeKey": "d", "one": "%d byte", "other": "%d bytes"}
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = FakeLogic(tmp, {"Contents/Resources/en.lproj/Short.stringsdict":
+                                   plistlib.dumps({"tracks": entry})})
+            rows = sorted(r[2:] for r in canon.extract_stringsdict(fake.app))
+        self.assertEqual(rows, [("tracks", "format", "%#@n@"),
+                                ("tracks/m", "one", "%d byte"),
+                                ("tracks/m", "other", "%d bytes"),
+                                ("tracks/n", "one", "%d track"),
+                                ("tracks/n", "other", "%d tracks (%#@m@)")])
 
 
 # ---------------------------------------------------------------------------------------------

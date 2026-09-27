@@ -894,6 +894,13 @@ def load_stringsdict(path: str) -> dict:
 #: The plural categories a `NSStringPluralRuleType` variable may carry (Unicode CLDR).
 PLURAL_CATEGORIES = ("zero", "one", "two", "few", "many", "other")
 _STRINGSDICT_VARIABLE = re.compile(r"[A-Za-z0-9_]+")
+#: A `%#@name@` reference to a rule, in the format or in a plural form's own string -- Apple
+#: allows a plural form to name a second variable (review of #1034 R1-02, round 3). A reference
+#: with more than one format argument carries a positional specifier before the `#@`, as in
+#: `%1$#@sound_packs@` (measured live in Logic 12.3's own `Localizable-UniversalContentManager`
+#: and `Localizable.stringsdict`) -- the bare `%#@n@` this module's own tests use is the
+#: one-argument case of the same syntax, not a different one.
+_STRINGSDICT_REFERENCE = re.compile(r"%(?:\d+\$)?#@([A-Za-z0-9_]+)@")
 
 
 def extract_stringsdict(app: str):
@@ -932,8 +939,18 @@ def _stringsdict_entry(path: str, unit: str, locale: str, key: str, entry) -> li
     `NSStringFormatSpecTypeKey`, `NSStringFormatValueTypeKey` and an `other` form -- the one form
     CLDR gives every language. Rows used to be yielded as each field was met and nothing was
     required, so an entry holding only a `one` form extracted as that row, and the index pinned a
-    partial account of the file as the whole one. All 1,060 entries in Logic 12.3 (6674) are
-    complete; this is about the next bundle.
+    partial account of the file as the whole one.
+
+    Round 3: every `%#@name@` reference -- in the format, or nested inside a plural form's own
+    string, since Apple allows a plural form to name a second variable -- must resolve to a rule
+    dict in this same entry, or this refuses naming the variable and where it was referenced. A
+    reference with more than one format argument carries a positional specifier before the `#@`
+    (`%1$#@name@`); the bare `%#@n@` is the one-argument case of the same syntax, not a different
+    one, and both are checked. A rule that nothing references is NOT refused here -- measured 0 of
+    1,190 rules in Logic 12.3 (Limit).
+
+    All 1,060 entries in Logic 12.3 (6674) are complete and reference only rules they carry; this
+    is about the next bundle.
     """
     def refuse(what: str) -> CanonDecodeError:
         return CanonDecodeError(f"{path}: entry {key!r} {what}")
@@ -943,11 +960,18 @@ def _stringsdict_entry(path: str, unit: str, locale: str, key: str, entry) -> li
     if "NSStringLocalizedFormatKey" not in entry:
         raise refuse("has no NSStringLocalizedFormatKey, so its plural forms format nothing")
     rows = []
+    rule_names = set()
+    # (text, where) for every string that may itself carry a `%#@name@` reference -- the format,
+    # and every plural form, since Apple allows a plural form's string to reference a second
+    # variable. Checked once the loop below has seen every rule, so order within the entry never
+    # matters (MUTATION: checking this per-item instead would reject an entry naming a later rule).
+    referencing = []
     for variable, spec in entry.items():
         if variable == "NSStringLocalizedFormatKey":
             if not isinstance(spec, str):
                 raise refuse("has a format that is not a string")
             rows.append((unit, locale, key, "format", spec))
+            referencing.append((spec, "its format"))
             continue
         if variable == "Comment" and isinstance(spec, str):
             continue
@@ -963,6 +987,7 @@ def _stringsdict_entry(path: str, unit: str, locale: str, key: str, entry) -> li
             raise refuse(f"has a plural rule {variable!r} with no NSStringFormatValueTypeKey")
         if "other" not in spec:
             raise refuse(f"has a plural rule {variable!r} with no `other` form")
+        rule_names.add(variable)
         for category, text in spec.items():
             if category in ("NSStringFormatSpecTypeKey", "NSStringFormatValueTypeKey"):
                 continue
@@ -970,6 +995,15 @@ def _stringsdict_entry(path: str, unit: str, locale: str, key: str, entry) -> li
                 raise refuse(f"has {variable}/{category!r}, which is not a plural category "
                              f"holding a string")
             rows.append((unit, locale, f"{key}/{variable}", category, text))
+            referencing.append((text, f"{variable}/{category}"))
+    # MUTATION: removing this loop lets `{"NSStringLocalizedFormatKey": "%#@n@"}`, with no `n`
+    # rule, extract as one format row and silent nothing -- the incomplete extraction reported
+    # complete that review of #1034 R1-02 found.
+    for text, where in referencing:
+        for name in _STRINGSDICT_REFERENCE.findall(text):
+            if name not in rule_names:
+                raise refuse(f"references {name!r} in {where}, which has no rule dict in this "
+                             f"entry")
     return rows
 
 
