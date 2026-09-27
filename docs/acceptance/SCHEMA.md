@@ -40,6 +40,11 @@ the last of two equal keys silently, so a document could say `"locales": "all"` 
 text and something else to the engine. Such a document is refused (exit 2), naming the key. A raw
 reading with a key given twice is UNREADABLE, for the same reason.
 
+The same parse refuses `NaN`, `Infinity` and `-Infinity`. They are not JSON, but Python's `json`
+reads them as numbers, and a NaN equals nothing, itself included: a reading of NaN would pass
+`changed`, `ne` and `not_in` without being a reading at all. A document that holds one is refused
+(exit 2), and a raw reading that holds one is UNREADABLE. The writer refuses them too.
+
 ### Only `run` certifies clean
 
 Every field of an evidence document on disk is written by whoever wrote the file: `binary_path`,

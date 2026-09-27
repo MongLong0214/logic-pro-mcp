@@ -168,6 +168,12 @@ MUTANTS = [
     {"id": "duplicate-keys-kept-silently", "file": "evidence_doc.py",
      "old": "        if key in out:",
      "new": "        if False:"},
+    {"id": "nan-accepted", "file": "evidence_doc.py",
+     "old": ", parse_constant=_refuse_constant)",
+     "new": ")"},
+    {"id": "nan-written", "file": "evidence_doc.py",
+     "old": "sort_keys=False, allow_nan=False)",
+     "new": "sort_keys=False)"},
     {"id": "closed-stdout-changes-the-exit", "file": "verify.py",
      "old": "    sys.stdout = _StdoutWithoutReader(sys.stdout)\n",
      "new": ""},
@@ -785,7 +791,21 @@ def check_closed_stdout_keeps_the_exit(case: dict, where: dict):
     return None
 
 
+def check_nan_not_written(case: dict, where: dict):
+    """W02: the writer refuses a float that is not JSON rather than writing text the reader then
+    refuses. NaN, Infinity and -Infinity must each raise ValueError from `serialize`."""
+    import evidence_doc as E
+    for value in (float("nan"), float("inf"), float("-inf")):
+        try:
+            E.serialize({"reading": value})
+        except ValueError:
+            continue
+        return f"serialize wrote {value!r}, which is not JSON and which loads refuses"
+    return None
+
+
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
+          "nan_not_written": check_nan_not_written,
           "closed_stdout_keeps_the_exit": check_closed_stdout_keeps_the_exit,
           "attestation_built_only_in_process": check_attestation_built_only_in_process,
           "attestation_check_sees_the_whole_repository": check_attestation_check_sees_the_whole_repository}

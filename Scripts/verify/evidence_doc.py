@@ -146,9 +146,19 @@ def _refuse_duplicate_keys(pairs: list) -> dict:
     return out
 
 
+def _refuse_constant(name: str):
+    """The parse_constant of every spec, evidence and observation read. Python's json reads `NaN`,
+    `Infinity` and `-Infinity` as numbers, and none of them is JSON. A NaN equals nothing, itself
+    included, so a reading of NaN would pass `changed`, `ne` and `not_in` without being a reading
+    at all (W02). The text is refused as not JSON: a document is refused, an observation UNREADABLE."""
+    raise ValueError(f"{name} is not JSON; Python's json would read it as a number, so the text is "
+                     f"refused rather than read")
+
+
 def loads(text: str):
-    """Parse a spec or evidence document's text, refusing a duplicate key (ValueError)."""
-    return json.loads(text, object_pairs_hook=_refuse_duplicate_keys)
+    """Parse a spec, evidence document or observation's text, refusing a duplicate key and the
+    non-JSON constants NaN, Infinity and -Infinity (ValueError)."""
+    return json.loads(text, object_pairs_hook=_refuse_duplicate_keys, parse_constant=_refuse_constant)
 
 
 def load(path: str) -> dict:
@@ -163,8 +173,10 @@ def load(path: str) -> dict:
 
 
 def serialize(doc) -> bytes:
-    """The bytes a document is written as."""
-    return (json.dumps(doc, ensure_ascii=False, indent=1, sort_keys=False) + "\n").encode("utf-8")
+    """The bytes a document is written as. A NaN or infinite float raises ValueError rather than
+    being written as text that `loads` refuses."""
+    return (json.dumps(doc, ensure_ascii=False, indent=1, sort_keys=False, allow_nan=False)
+            + "\n").encode("utf-8")
 
 
 def write_atomic(path: str, doc) -> None:
