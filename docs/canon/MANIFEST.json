@@ -109,12 +109,12 @@
     "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/quickhelp.tsv": "2d68dc5b1b7c1d81526c0f6822b73c724de01e723590eaeed225b7db6c2cdee5",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/strings.tsv": "fa7228b975a73eb080a8de18a5de7d57a818a78e9e2867aa572cb55c33feb2c0",
+    "index/strings.tsv": "f2b2175cd284007d902abd539ecfd0d6ecdbbea18dd0ab1cf03fe637efd7292c",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "ledger/casefold.tsv": "3135bfaf21a75e9b8698575d737167458af15834aec33d35bfc7a920326f06f2",
-    "ledger/presence.tsv": "37d04512264c92a061d3abe4084a2f25ab294185d69c15e5bcc6e6a57a78534c"
+    "ledger/casefold.tsv": "46d3df1bc89fef0f6887999c684645987865de216caea730e4505d8699032fb1",
+    "ledger/presence.tsv": "c8325941b01a69c317b7f5d3f78a054d00d0ef136f297d10914677d733ad0815"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
@@ -148,16 +148,16 @@
     },
     "strings": {
       "-": 2,
-      "de": 159,
+      "de": 160,
       "en": 179,
       "es": 163,
       "fr": 153,
-      "it": 158,
-      "ja": 170,
+      "it": 159,
+      "ja": 171,
       "ko": 175,
-      "pt": 164,
+      "pt": 165,
       "zh_CN": 146,
-      "zh_TW": 144
+      "zh_TW": 145
     }
   },
   "ledger_presence_entries": {
@@ -194,16 +194,16 @@
     },
     "strings": {
       "-": 3,
-      "de": 144,
+      "de": 145,
       "en": 160,
       "es": 154,
       "fr": 143,
-      "it": 151,
-      "ja": 156,
+      "it": 152,
+      "ja": 157,
       "ko": 173,
-      "pt": 154,
+      "pt": 155,
       "zh_CN": 145,
-      "zh_TW": 139
+      "zh_TW": 140
     }
   },
   "logic": {
@@ -855,7 +855,7 @@
         "zh_CN": 1.1548866e-05,
         "zh_TW": 1.087226e-05
       },
-      "cited_rows": 4899,
+      "cited_rows": 4929,
       "cited_values": 2,
       "corpus_digest": "830a5131378ede72bb0a20211985166f367b7a35a30a85d875c9c25ff0b89e1a",
       "english_equal_rows_in_translated_units": {

@@ -14,23 +14,25 @@ enum AXLocaleValues {
     /// ArmKeyCommandSetup.searchQuery types this into the Key Commands filter, and the filter is a
     /// live search -- the wrong language collapses the list to nothing and the setup then reports
     /// `could not find the command` having never had a chance.
-    /// Apple's row: logic-canon://quickhelp/QuickHelp/en/KCE_390_ToggTrackRec#Title
+    /// Apple's row: logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Toggle%20Track%20Record%20Enable#value
     static let recordArmKeyCommandName: [String: String] = [
         "en-US": "Toggle Track Record Enable",
         "ko-KR": "트랙 녹음 활성화 토글",
-        "ja-JP": "トラックの録音可能を切り替える",
-        "de-DE": "Spur für die Aufnahme aktivieren ein-/ausschalten",
+        "ja-JP": "トラックの録音可能を切り替え",
+        "de-DE": "Spur für die Aufnahme aktivieren ein-/aus",
         "es-ES": "Activar/desactivar grabación de pista",
         "fr-FR": "Activer/Désactiver l’enregistrement sur piste",
+        "it-IT": "Attiva/disattiva abilitazione registrazione traccia",
+        "pt-BR": "Ativar/Desativar Gravação das Pistas",
         "zh-CN": "开关轨道录音启用",
-        "de": "Spur für die Aufnahme aktivieren ein-/ausschalten",
+        "zh-TW": "切換音軌錄音啟用",
+        "de": "Spur für die Aufnahme aktivieren ein-/aus",
         "en": "Toggle Track Record Enable",
         "es": "Activar/desactivar grabación de pista",
         "fr": "Activer/Désactiver l’enregistrement sur piste",
-        "ja": "トラックの録音可能を切り替える",
+        "it": "Attiva/disattiva abilitazione registrazione traccia",
+        "ja": "トラックの録音可能を切り替え",
         "ko": "트랙 녹음 활성화 토글",
-        // "it-IT": not localized -- Apple ships the English file
-        // "pt-BR": not localized -- Apple ships the English file
-        // "zh-TW": not localized -- Apple ships the English file
+        "pt": "Ativar/Desativar Gravação das Pistas",
     ]
 }

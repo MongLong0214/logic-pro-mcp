@@ -1379,21 +1379,24 @@ import Testing
     /// (`?? commandName` / `return commandName` for a locale the table lacks).
     @Test("a language with no Apple spelling gets no search query, never the English name")
     func searchQueryRefusesALanguageItCannotSpell() {
-        for locale in ["it-IT", "pt-BR", "zh-TW", "zh", "xx-YY", ""] {
+        // `zh` names two languages, so the table deliberately has no bare entry; `nl-NL` is a
+        // language Logic does not ship. Both are readings, and neither may become English.
+        for locale in ["zh", "nl-NL", "xx-YY", ""] {
             let query: String? = ArmKeyCommandSetup.searchQuery(locale: locale)
             #expect(query == nil, "\(locale) has no Apple spelling and must not type \(query ?? "nil")")
         }
     }
 
-    /// #1028 P1b. Italian, Portuguese and Traditional Chinese Logic were typed the English name,
-    /// because the table has no entry for them and the query fell back to English. The run must
-    /// refuse with its own reason BEFORE the Key Commands window is opened: no Option+K, nothing
-    /// typed, no Learn press, no configuration write.
+    /// #1028 P1b. Italian, Portuguese and Traditional Chinese Logic were typed the English name
+    /// while the table had no entry for them, because the query fell back to English. A language
+    /// the table does not carry must refuse with its own reason BEFORE the Key Commands window is
+    /// opened: no Option+K, nothing typed, no Learn press, no configuration write. The three now
+    /// have Apple's spelling (below), so the case is driven with readings the table still lacks.
     ///
     /// Kills two mutations: the fallback restored in `searchQuery` (English is typed and the run
     /// reaches the GUI), and the refusal moved below the Option+K post (a chord is recorded).
     @Test("a Logic whose language has no Apple spelling refuses before Key Commands opens",
-          arguments: ["it-IT", "pt-BR", "zh-TW"])
+          arguments: ["zh", "nl-NL", "xx-YY"])
     func unknownSpellingRefusesBeforeTheWindowOpens(locale: String) throws {
         let fixture = Self.fixture(
             windowInitiallyOpen: false,
@@ -1426,7 +1429,7 @@ import Testing
     /// Kills the mutation that moves the refusal above verify-first.
     @Test("an already-configured Logic is not refused for its language")
     func alreadyConfiguredHostIsNotRefusedForItsLanguage() {
-        let fixture = Self.fixture(uiLocale: "it-IT", firstVerify: .verified)
+        let fixture = Self.fixture(uiLocale: "nl-NL", firstVerify: .verified)
         guard case .alreadyConfigured = Self.run(fixture) else {
             Issue.record("an already-working chord must be reported as configured")
             return
@@ -1458,6 +1461,37 @@ import Testing
             return
         }
         #expect(fixture.probe.typed == [typed])
+    }
+
+    /// #1028 P1b. Every language Logic ships has a spelling to type, and none but English types
+    /// the English name. Italian, Portuguese and Traditional Chinese lost theirs when QuickHelp
+    /// (byte-identical to English in those three) stopped counting as a translation; the table now
+    /// derives from `Localizable.strings`, which Apple translates in all ten. Written against the
+    /// table, not literals, for the reason the case above it gives.
+    ///
+    /// Kills the table losing any of the ten again (for example the pre-P1b `AXLocaleValues.swift`,
+    /// derived from QuickHelp, restored): that language then refuses instead of completing.
+    @Test("every language Logic ships types its own spelling and completes the setup",
+          arguments: ["en-US", "ko-KR", "ja-JP", "de-DE", "es-ES", "fr-FR",
+                      "it-IT", "pt-BR", "zh-CN", "zh-TW"])
+    func everyShippedLanguageTypesItsOwnSpelling(locale: String) throws {
+        let query = try #require(ArmKeyCommandSetup.searchQuery(locale: locale),
+                                 "\(locale) has no spelling to type")
+        if !locale.hasPrefix("en") {
+            #expect(query != ArmKeyCommandSetup.commandName,
+                    "\(locale) would type the English name into a translated search")
+        }
+        let fixture = Self.fixture(
+            commandValues: [query],
+            uiLocale: locale,
+            firstVerify: .unmapped,
+            verify: .verified
+        )
+        guard case .configuredAndVerified = Self.run(fixture) else {
+            Issue.record("\(locale): expected a completed assignment")
+            return
+        }
+        #expect(fixture.probe.typed == [query])
     }
 
 }

@@ -1262,17 +1262,27 @@ enum AXLocalePolicy {
 
     static let recordArmKeyCommandName = LabelSet(
         canonical: "Toggle Track Record Enable",
-        variants: ["트랙 녹음 활성화 토글", "トラックの録音可能を切り替える",
+        variants: ["트랙 녹음 활성화 토글", "トラックの録音可能を切り替え", "トラックの録音可能を切り替える",
+                   "Spur für die Aufnahme aktivieren ein-/aus",
                    "Spur für die Aufnahme aktivieren ein-/ausschalten",
                    "Activar/desactivar grabación de pista",
-                   "Activer/Désactiver l’enregistrement sur piste", "开关轨道录音启用"],
-        rationale: "The Key Commands entry `system.setup_arm_key` assigns a chord to. Apple keys it in"
-            + " QuickHelp as `KCE_390_ToggTrackRec`; the ko value is what was read live 2026-09-14"
-            + " alongside the two sibling commands it must not be confused with. Italian, Portuguese"
-            + " and Traditional Chinese leave it in English, so six distinct members cover ten"
-            + " languages. Apple's French value carries a trailing space; `.exact` trims surrounding"
-            + " whitespace, so it is stored without one.",
-        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/KCE_390_ToggTrackRec#Title"
+                   "Activer/Désactiver l’enregistrement sur piste", "开关轨道录音启用",
+                   "Attiva/disattiva abilitazione registrazione traccia",
+                   "Ativar/Desativar Gravação das Pistas", "切換音軌錄音啟用"],
+        rationale: "The Key Commands entry `system.setup_arm_key` assigns a chord to. Apple names it"
+            + " twice: `Localizable.strings` keys the command by its English name, and QuickHelp"
+            + " titles it `KCE_390_ToggTrackRec`. The Key Commands list reads the first: the ko"
+            + " search read live 2026-09-14 returned `채널 스트립 녹음 활성화 토글` and"
+            + " `퍼포먼스 녹음 활성화 켬/끔` beside this command, and both are values of that file and"
+            + " of no QuickHelp title. QuickHelp is English in Italian, Portuguese and Traditional"
+            + " Chinese (the file is byte-identical to English, #1028); `Localizable.strings` is"
+            + " translated in all ten, so it is the row the typed query derives from (#1028 P1b)."
+            + " The two rows differ in German (`ein-/aus` against `ein-/ausschalten`) and Japanese"
+            + " (`切り替え` against `切り替える`); both spellings are members so a reading of either"
+            + " matches. Apple's French QuickHelp value carries a trailing no-break space; `.exact`"
+            + " trims surrounding whitespace, so it is stored without one.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Toggle%20Track%20Record%20Enable#value",
+        alsoDerivedFrom: ["logic-canon://quickhelp/QuickHelp/en/KCE_390_ToggTrackRec#Title"]
     )
 
     static let learnByKeyLabelCheckbox = LabelSet(
