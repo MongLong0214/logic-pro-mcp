@@ -120,6 +120,7 @@ check time   (needs nothing)   resolve a citation against what was committed
 | `absence/<source>.<locale>.folded.u32` | the same, over each value with decoration removed — the near-miss question below |
 | `ledger/casefold.tsv` | source, locale and the case-folded string itself, for each label-ledger string Apple ships up to case, found by string comparison at build time — whether a LabelSet member is shipped the way the product matches it (#981) |
 | `ledger/presence.tsv` | source, locale, two verdicts and the string itself, for each string a guard asked about whose 32-bit prefix is in an absence set, compared as a string by `confirm` or `build` — the only thing that says a string ships (#992) |
+| `web/logicpro-key-commands/` | Apple's Logic Pro User Guide key-command tables, each the exact bytes of one fetched page's table, with the URL, fetch date and digests in its `SOURCE.json` — which keystroke Apple's U.S. preset binds to a function. The bundle ships that preset only as an opaque binary blob nothing here decodes. `check-cgevent-keystrokes-are-apples.py` reads it |
 | `WITHOUT-CANON.json` | records written before the rule. May only shrink. |
 | `PROSE-NUMBERS.json` | numbers this README may state that no artifact and no record carries, and why each has none. May only shrink |
 | `NOT-A-RECORD.json` | files under `docs/observations/` that are not observation records. May only shrink |
