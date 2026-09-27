@@ -76,6 +76,14 @@ GATE CASES (`"check": "gate"`)
     fixture's declaration, and a `baseline` [walk, row] made the same way. The gate must name
     exactly as many problems as `problems` lists, each containing its string; [] must pass.
 
+PROBE CASES (`"check": "probe"`)
+    A declared probe run through probes.run as the runner runs it, with live/probes.py's walker
+    replaced by a walk recorded live (`walk`, a file of live/tests/samples/, after `walk_ops` patch
+    ops on it), or with a server whose logic://mcu/state is `resource_text`. The fixture is the
+    #1020 one, as setups.py declares it. The reading must equal `reads` once its `walk_sha256` is
+    checked against the walk the probe kept as a sidecar, or the probe must be unreadable saying
+    `unreadable`.
+
 REPLY CASES (`"check": "reply"`)
     What a `call` or `read` step stores (D2), over a real stdio server: live/tests/
     fake_mcp_server.py is started through runner_live.McpSession, one step goes through
@@ -416,6 +424,15 @@ MUTANTS = [
              '                out.append(f"track {i} {word}")\n'),
      "new": ('            elif False:\n'
              '                out.append(f"track {i} {word}")\n')},
+    {"id": "armed-false-when-unread", "file": "live/spec_probes.py",
+     "old": '        raise Unreadable(f"track_armed: {why}")\n',
+     "new": '        return {"track": index, "armed": False, "name": None}\n'},
+    {"id": "armed-set-empty-when-unread", "file": "live/spec_probes.py",
+     "old": '        raise Unreadable(f"armed_set: {why}")\n',
+     "new": '        return {"armed": []}\n'},
+    {"id": "index-off-by-one", "file": "live/spec_probes.py",
+     "old": "else _armed(rows[index])",
+     "new": "else _armed(rows[index - 1])"},
     {"id": "live-fixture-unchecked", "file": "runner_live.py",
      "old": '            return [f"fixture {decl[\'id\']!r} has no live declaration',
      "new": '            return [] and [f"fixture {decl[\'id\']!r} has no live declaration'},
@@ -1239,6 +1256,81 @@ def check_gate(case: dict, where: dict):
     return None
 
 
+class _ResourceSession:
+    """A server whose only resource is one text, for the mcu_upper_row probe cases."""
+
+    def __init__(self, text: str):
+        self.text = text
+
+    def read(self, uri, timeout_s):
+        if uri != "logic://mcu/state":
+            raise runner.StepUnreadable(f"no resource {uri}")
+        return self.text
+
+
+def check_probe(case: dict, where: dict):
+    """A declared probe over a recorded walk or a resource text (see PROBE CASES)."""
+    import evidence_doc as E
+    import probes
+    import setups
+    from live import spec_probes
+    probe = case["probe"]
+    walk, asked, kept = None, [], []
+    if "walk" in probe:
+        sample = _sample(probe["walk"])
+        _apply(sample, probe.get("walk_ops", []), case["name"], where)
+        walk = sample["probe_output"]
+    life = FakeLifecycle({}, where, case["name"], {})
+    life.sidecar = lambda data: kept.append(data) or E.sha256_of_bytes(data)
+    ctx = {"life": life, "lproj": "ko", "decl": setups.declaration("lpm-locale-campaign-19"),
+           "session": _ResourceSession(probe["resource_text"]) if "resource_text" in probe else None}
+    saved = spec_probes.live_probes.run
+    spec_probes.live_probes.run = lambda name, args: asked.append((name, args)) or copy.deepcopy(walk)
+    try:
+        text = probes.run(probe["name"], ctx, probe.get("args", {}))
+    except probes.ProbeUnreadable as exc:
+        if "unreadable" in case and case["unreadable"] in str(exc):
+            return None
+        return f"unreadable: {exc}; wanted {case.get('reads', case.get('unreadable'))!r}"
+    finally:
+        spec_probes.live_probes.run = saved
+    got = E.loads(text)
+    if walk is not None:
+        if asked != [("track_flags_ax", {"lproj": "ko", "fixture": probes_fixture_path()})]:
+            return f"the probe asked the walker for {asked}"
+        if not kept or got.pop("walk_sha256", None) != E.sha256_of_bytes(kept[-1]) \
+                or json.loads(kept[-1]) != walk:
+            return f"the reading does not cite the walk it was read from as a sidecar: {text[:200]}"
+    if "reads" in case and got == case["reads"]:
+        return None
+    wanted = f"exactly {case['reads']!r}" if "reads" in case else f"unreadable saying {case['unreadable']!r}"
+    return f"read {got!r}; wanted {wanted}"
+
+
+def probes_fixture_path() -> str:
+    import setups
+    from live import fixture
+    return fixture.FIXTURES[setups.declaration("lpm-locale-campaign-19")["live"]]["path"]
+
+
+def check_probes_implemented(case: dict, where: dict):
+    """Every declared probe has an implementation in live/spec_probes.py taking the runner's ctx
+    and exactly the declared args, and the #1020 spec uses none that lacks one."""
+    import inspect
+    import probes
+    from live import spec_probes
+    for name, declared in sorted(probes.PROBES.items()):
+        fn = getattr(spec_probes, name, None)
+        if not callable(fn):
+            return f"probe {name!r} is declared and not implemented in live/spec_probes.py"
+        params = list(inspect.signature(fn).parameters)
+        if params != ["ctx"] + list(declared["args"]):
+            return f"probe {name!r} takes {params}, not ctx and its declared args {list(declared['args'])}"
+    with open(os.path.join(ROOT, "docs", "acceptance", "1020.json"), encoding="utf-8") as handle:
+        missing = probes.unimplemented(json.load(handle))
+    return f"docs/acceptance/1020.json: {missing}" if missing else None
+
+
 def check_live_fixtures(case: dict, where: dict):
     """The live lifecycle accepts every registered fixture that has a live declaration and refuses
     every other one before anything is built. Nothing is driven: fixture_problems reads only the
@@ -1263,7 +1355,9 @@ CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
           "life_seam_named_outside_selftest": check_life_seam_named_outside_selftest,
           "reply": check_reply,
           "gate": check_gate,
-          "live_fixtures": check_live_fixtures}
+          "live_fixtures": check_live_fixtures,
+          "probe": check_probe,
+          "probes_implemented": check_probes_implemented}
 
 
 def run_case(case: dict, where: dict):
