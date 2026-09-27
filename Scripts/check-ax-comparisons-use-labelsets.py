@@ -54,9 +54,10 @@ corpus does not hold, or this product's own prose all passed unexamined. Each li
                      prefix, or a literal that itself carries a sentinel code and its delimiter
                      (`... MENU_PICK_FAILED: ...`) -- this product's own words, which Logic never
                      draws. Being a fragment of such a message elsewhere in the file is not
-                     enough (review of #1034 R1-04). Or a constant this product concatenates
-                     into another constant a string literal interpolates -- the phrase it
-                     writes into its own script or refusal -- asked only after every Apple route
+                     enough (review of #1034 R1-04), and neither is being a constant the product
+                     also writes into its own script or refusal (round 2). Or, asked only after
+                     every Apple route, the accessibility API's own vocabulary: a role or
+                     subrole name (`AXDialog`) or a boolean AX value read as text (`true`)
   unknown            anything else -- FAILS, unless `docs/canon/AX-COMPARISON-WAIVERS.json` gives
                      it a reason. That file is the ONE exemption list; an entry nothing matches
                      fails too, so it only shrinks.
@@ -71,9 +72,24 @@ static one. What is NOT followed: a value that reaches the comparison through a 
 an instance member, an interpolation or any other expression. Measured on this tree: 17 such
 operands, none of them classified by this guard.
 
+WHAT COUNTS AS AX TEXT, AND HOW COARSELY
+----------------------------------------
+The compared variable is AX text when THIS FILE assigns a variable of that NAME from an accessor
+(`ax_backed_names`), anywhere in the file. Since round 2 of the review of #1034 every such name is
+scanned, not only names that look like an attribute (`_variable_pattern`), so renaming a reading
+is not a way out. The model is by name and per file, not by data flow, and it errs both ways:
+
+  too wide    a parameter or binding that shares its name with a reading elsewhere in the file
+              is taken for AX text. `postLeafCleanup(_ value:)` in
+              AccessibilityChannel+Transport.swift was, because that file reads a `value` from
+              AX; it holds the script's own result and is named `scriptResult` now.
+  too narrow  AX text that reaches a comparison through a parameter, a derived value, a property
+              or an accessor this pattern does not list is not seen at all.
+
 Exit: 0 = every AX comparison goes through a LabelSet or is declared · 1 = one does not
 """
 import collections
+import functools
 import importlib.util
 import json
 import os
@@ -103,32 +119,6 @@ _unescape = _ll._unescape
 _AX_VAR = (r"(?:ax\w*|title|titles|desc|description|label|value|roleDescription|help"
            r"|placeholder|windowTitle|menuTitle|\w*[Nn]ame)")
 
-_COMPARISONS = [
-    re.compile(_AX_VAR + r"\w*\s*(?:==|!=)\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
-    re.compile(r"\"((?:[^\"\\\n]|\\.)+)\"\s*(?:==|!=)\s*" + _AX_VAR, re.I),
-    re.compile(_AX_VAR + r"\w*(?:\?)?\.(?:contains|hasPrefix|hasSuffix"
-               r"|localizedCaseInsensitiveContains)\(\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
-    #: The three shapes an outside review walked the same defect through with every guard green.
-    #: Each is the SAME comparison wearing different syntax, and each was invisible:
-    #:
-    #:     title.lowercased() == "mixer"          a method call between the name and the operator
-    #:     ["Mixer", "Show Library"].contains(title)   the literal on the collection's side
-    #:     switch title { case "Mixer": }         no operator at all
-    #:
-    #: A rule that names one spelling of a thing is a rule about spelling.
-    re.compile(_AX_VAR + r"\w*(?:\?)?\.(?:trimmingCharacters)\([^)]*\)\s*(?:==|!=)"
-               r"\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
-    re.compile(_AX_VAR + r"\w*(?:\?)?\.(?:caseInsensitiveCompare|localizedStandardContains"
-               r"|localizedCaseInsensitiveCompare)\(\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
-]
-
-#: A comparison that CASE-FOLDS first. `title.lowercased() == "mixer"` compares the same label as
-#: `title == "Mixer"`, but the literal it carries is lowercase and Apple ships `Mixer`, so the
-#: corpus lookup in condition 2 misses it and the comparison passes. The literal must be folded
-#: back before it is looked up, or case-folding is a way to spell your way out of the rule.
-_CASE_FOLDED = re.compile(
-    _AX_VAR + r"\w*(?:\?)?\.(?:lowercased|uppercased|localizedLowercase|localizedUppercase)"
-    r"\([^)]*\)\s*(?:==|!=)\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I)
 
 
 def _folded_candidates(literal: str):
@@ -141,16 +131,6 @@ def _folded_candidates(literal: str):
     return out
 
 
-#: `["A", "B"].contains(axVar)` -- the literals sit in a collection and the AX reading is the
-#: ARGUMENT, so every pattern above, which anchors on the variable, looks straight past it.
-_COLLECTION_CONTAINS = re.compile(
-    r"\[((?:\s*\"(?:[^\"\\\n]|\\.)*\"\s*,?)+)\]\s*\.contains\(\s*(" + _AX_VAR + r"\w*)", re.I)
-
-#: `switch axVar { case "A", "B": }` -- no comparison operator exists to match on. The body is
-#: taken non-greedily to the first closing brace at the switch's own indentation, which is coarse;
-#: over-reading a nested block reports a literal the switch does not compare, and that is the safe
-#: direction for a rule whose failure mode is silence.
-_SWITCH = re.compile(r"switch\s+(" + _AX_VAR + r"\w*)\b[^{\n]*\{(.*?)\n\s*\}", re.I | re.S)
 _CASE_LITERAL = re.compile(r"case\s+((?:\"(?:[^\"\\\n]|\\.)*\"\s*,?\s*)+):")
 
 _LINE_COMMENT = re.compile(r"//[^\n]*")
@@ -207,22 +187,87 @@ _COMPUTED_CONSTANT = re.compile(r'(?:\b(static|class)\s+)?\bvar\s+(\w+)\s*:\s*St
 _NAME = r'((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)'
 _NOT_A_CONSTANT = {"nil", "true", "false", "self", "Self", "super"}
 
-#: The comparison shapes above, with a NAME where they have a literal. Review of #1034: a literal
-#: moved into a constant left every shape above, so `static let label = "Mixer"` compared with an
-#: AX value passed -- and moving a literal into a constant is what a refactor does. `(axvar, name)`.
-_NAME_COMPARISONS = [
-    (1, 2, re.compile(r'\b(' + _AX_VAR + r'\w*)\s*(?:==|!=)\s*' + _NAME + r'(?![\w.(\["])', re.I)),
-    (2, 1, re.compile(_NAME + r'\s*(?:==|!=)\s*(' + _AX_VAR + r'\w*)\b(?!\s*[.(])', re.I)),
-    (1, 2, re.compile(r'\b(' + _AX_VAR + r'\w*)(?:\?)?\.(?:contains|hasPrefix|hasSuffix'
-                      r'|localizedCaseInsensitiveContains|caseInsensitiveCompare'
-                      r'|localizedStandardContains|localizedCaseInsensitiveCompare)\(\s*' + _NAME
-                      + r'\s*\)', re.I)),
-    (1, 2, re.compile(r'\b(' + _AX_VAR + r'\w*)(?:\?)?\.(?:lowercased|uppercased|localizedLowercase'
-                      r'|localizedUppercase|trimmingCharacters)\([^)]*\)\s*(?:==|!=)\s*' + _NAME
-                      + r'(?![\w.(\["])', re.I)),
-]
-_NAME_COLLECTION = re.compile(r'\[\s*(' + _NAME[1:-1] + r'(?:\s*,\s*' + _NAME[1:-1]
-                              + r')*)\s*,?\s*\]\s*\.contains\(\s*(' + _AX_VAR + r'\w*)', re.I)
+
+
+@functools.lru_cache(maxsize=None)
+def _shapes(var: str) -> dict:
+    """Every comparison shape, with `var` as the pattern a compared variable's name must match.
+
+    Built per file with that file's AX-backed names added to `_AX_VAR` (review of #1034, round 2).
+    A variable assigned from an accessor but named `scriptResult` or `raw` used to be invisible:
+    every shape anchored on the NAME looking like an attribute, and the backed check ran only on
+    names that already did. So renaming a variable was a way out of the rule, and renaming one
+    that does not hold AX text could not be told apart from that.
+    """
+    v = var
+    comparisons = [
+        re.compile(v + r"\w*\s*(?:==|!=)\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
+        re.compile(r"\"((?:[^\"\\\n]|\\.)+)\"\s*(?:==|!=)\s*" + v, re.I),
+        re.compile(v + r"\w*(?:\?)?\.(?:contains|hasPrefix|hasSuffix"
+                   r"|localizedCaseInsensitiveContains)\(\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
+        #: The three shapes an outside review walked the same defect through with every guard green.
+        #: Each is the SAME comparison wearing different syntax, and each was invisible:
+        #:
+        #:     title.lowercased() == "mixer"          a method call between name and operator
+        #:     ["Mixer", "Show Library"].contains(title)   the literal on the collection's side
+        #:     switch title { case "Mixer": }         no operator at all
+        #:
+        #: A rule that names one spelling of a thing is a rule about spelling.
+        re.compile(v + r"\w*(?:\?)?\.(?:trimmingCharacters)\([^)]*\)\s*(?:==|!=)"
+                   r"\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
+        re.compile(v + r"\w*(?:\?)?\.(?:caseInsensitiveCompare|localizedStandardContains"
+                   r"|localizedCaseInsensitiveCompare)\(\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
+    ]
+
+    #: A comparison that CASE-FOLDS first. `title.lowercased() == "mixer"` compares the same label
+    #: as `title == "Mixer"`, but the literal it carries is lowercase and Apple ships `Mixer`, so
+    #: the corpus lookup in condition 2 misses it and the comparison passes. The literal must be
+    #: folded back before it is looked up, or case-folding is a way to spell your way out of the
+    #: rule.
+    case_folded = re.compile(
+        v + r"\w*(?:\?)?\.(?:lowercased|uppercased|localizedLowercase|localizedUppercase)"
+        r"\([^)]*\)\s*(?:==|!=)\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I)
+
+    #: `["A", "B"].contains(axVar)` -- the literals sit in a collection and the AX reading is the
+    #: ARGUMENT, so every pattern above, which anchors on the variable, looks straight past it.
+    collection = re.compile(
+        r"\[((?:\s*\"(?:[^\"\\\n]|\\.)*\"\s*,?)+)\]\s*\.contains\(\s*(" + v + r"\w*)", re.I)
+
+    #: `switch axVar { case "A", "B": }` -- no comparison operator exists to match on. The body is
+    #: taken non-greedily to the first closing brace at the switch's own indentation, which is
+    #: coarse; over-reading a nested block reports a literal the switch does not compare, and that
+    #: is the safe direction for a rule whose failure mode is silence.
+    switch = re.compile(r"switch\s+(" + v + r"\w*)\b[^{\n]*\{(.*?)\n\s*\}", re.I | re.S)
+
+    #: The comparison shapes above, with a NAME where they have a literal. Review of #1034: a
+    #: literal moved into a constant left every shape above, so `static let label = "Mixer"`
+    #: compared with an AX value passed -- and moving a literal into a constant is what a refactor
+    #: does. `(axvar, name)`.
+    name_comparisons = [
+        (1, 2, re.compile(r'\b(' + v + r'\w*)\s*(?:==|!=)\s*' + _NAME + r'(?![\w.(\["])', re.I)),
+        (2, 1, re.compile(_NAME + r'\s*(?:==|!=)\s*(' + v + r'\w*)\b(?!\s*[.(])', re.I)),
+        (1, 2, re.compile(r'\b(' + v + r'\w*)(?:\?)?\.(?:contains|hasPrefix|hasSuffix'
+                          r'|localizedCaseInsensitiveContains|caseInsensitiveCompare'
+                          r'|localizedStandardContains|localizedCaseInsensitiveCompare)\(\s*'
+                          + _NAME + r'\s*\)', re.I)),
+        (1, 2, re.compile(r'\b(' + v + r'\w*)(?:\?)?\.(?:lowercased|uppercased|localizedLowercase'
+                          r'|localizedUppercase|trimmingCharacters)\([^)]*\)\s*(?:==|!=)\s*' + _NAME
+                          + r'(?![\w.(\["])', re.I)),
+    ]
+    name_collection = re.compile(r'\[\s*(' + _NAME[1:-1] + r'(?:\s*,\s*' + _NAME[1:-1]
+                                  + r')*)\s*,?\s*\]\s*\.contains\(\s*(' + v + r'\w*)', re.I)
+    return {"comparisons": comparisons, "case_folded": case_folded, "collection": collection,
+            "switch": switch, "name_comparisons": name_comparisons,
+            "name_collection": name_collection}
+
+
+def _variable_pattern(backed: set) -> str:
+    """`_AX_VAR`, or any name this file assigned from an accessor as a whole word: a backed `i`
+    must not turn every `items == "x"` into a candidate."""
+    if not backed:
+        return _AX_VAR
+    names = sorted(backed, key=len, reverse=True)
+    return r"(?:" + _AX_VAR + r"|\b(?:" + "|".join(re.escape(n) for n in names) + r")\b)"
 
 
 def literal_constants(sources: dict) -> dict:
@@ -252,31 +297,6 @@ def resolve_constant(operand: str, path: str, constants: dict) -> list:
     return []
 
 
-def emitting_constants(sources: dict, constants: dict) -> set:
-    """`{(name, path)}`: literal constants this product concatenates into another constant that a
-    string literal in the same file interpolates -- the phrase it WRITES into a script or a
-    refusal, like `PostLeafCleanupSite.notObservedMarker` in `": dialog " + notObservedMarker`,
-    interpolated as `\\(Self.dialogRefusal)`. Consulted only after every Apple route, so a Logic
-    label the product also embeds in a script is still classed as Apple's first."""
-    out = set()
-    for name, declarations in constants.items():
-        for _literal, path, _static in declarations:
-            source = sources[path]
-            ref = r'(?:(?:Self|[A-Z]\w*)\.)?' + re.escape(name) + r'\b'
-            built = re.compile(r'\blet\s+(\w+)\s*(?::\s*String\s*)?=\s*(?:' + _LITERAL + r'\s*\+\s*'
-                               + ref + r'|' + ref + r'\s*\+\s*' + _LITERAL + r')')
-            for match in built.finditer(source):
-                derived = match.group(1)
-                if re.search(r'\\\(\s*(?:(?:Self|[A-Z]\w*)\.)?' + re.escape(derived) + r'\s*\)',
-                             source):
-                    out.add((name, path))
-    return out
-
-
-#: Literals that reached an AX comparison ONLY through an emitting constant, from the last scan.
-_EMITTED_ONLY: set = set()
-
-
 def comparisons_outside_labelsets():
     """{literal: {paths}} for every AX comparison whose literal is not a LabelSet's.
 
@@ -302,35 +322,32 @@ def comparisons_outside_labelsets():
         source = _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub(" ", source))
         sources[path] = _LABELSET_BLOCK.sub(" ", source)
     constants = literal_constants(sources)
-    emitters = emitting_constants(sources, constants)
-    via_emitter, direct = set(), set()
 
     for path, source in sources.items():
         backed = ax_backed_names(source)
         if not backed:
             continue
+        shapes = _shapes(_variable_pattern(backed))
 
         def through_constant(variable: str, operand: str) -> None:
             if variable.split(".")[0] not in backed:
                 return
-            for literal, declared_in, _static in resolve_constant(operand, path, constants):
+            for literal, _declared_in, _static in resolve_constant(operand, path, constants):
                 if keep(literal):
                     found[literal].add(os.path.relpath(path, REPO))
-                    name = operand.split(".")[-1]
-                    (via_emitter if (name, declared_in) in emitters else direct).add(literal)
 
-        for variable_group, operand_group, pattern in _NAME_COMPARISONS:
+        for variable_group, operand_group, pattern in shapes["name_comparisons"]:
             for match in pattern.finditer(source):
                 through_constant(match.group(variable_group), match.group(operand_group))
-        for match in _NAME_COLLECTION.finditer(source):
+        for match in shapes["name_collection"].finditer(source):
             for operand in re.split(r"\s*,\s*", match.group(1).strip()):
                 through_constant(match.group(match.lastindex), operand)
-        for match in _SWITCH.finditer(source):
+        for match in shapes["switch"].finditer(source):
             for case in re.finditer(r"case\s+([^:\n]+):", match.group(2)):
                 for operand in re.split(r"\s*,\s*", case.group(1).strip()):
                     if re.fullmatch(_NAME, operand):
                         through_constant(match.group(1), operand)
-        for pattern in _COMPARISONS:
+        for pattern in shapes["comparisons"]:
             for match in pattern.finditer(source):
                 variable = re.match(r"[\w.]+", match.group(0).lstrip('"')).group(0).split(".")[0]
                 if variable not in backed and match.group(0).lstrip()[0] != '"':
@@ -338,8 +355,7 @@ def comparisons_outside_labelsets():
                 literal = _unescape(match.group(1))
                 if keep(literal):
                     found[literal].add(os.path.relpath(path, REPO))
-                    direct.add(literal)
-        for match in _CASE_FOLDED.finditer(source):
+        for match in shapes["case_folded"].finditer(source):
             variable = re.match(r"[\w.]+", match.group(0)).group(0).split(".")[0]
             if variable not in backed:
                 continue
@@ -351,16 +367,14 @@ def comparisons_outside_labelsets():
             # translate was dropped here, before anything could classify it.
             shipped = next((c for c in _folded_candidates(raw) if canon.is_translated(c)), None)
             found[shipped or raw].add(os.path.relpath(path, REPO))
-            direct.add(shipped or raw)
-        for match in _COLLECTION_CONTAINS.finditer(source):
+        for match in shapes["collection"].finditer(source):
             if match.group(2).split(".")[0] not in backed:
                 continue
             for raw in re.findall(r'"((?:[^"\\\n]|\\.)*)"', match.group(1)):
                 literal = _unescape(raw)
                 if keep(literal):
                     found[literal].add(os.path.relpath(path, REPO))
-                    direct.add(literal)
-        for match in _SWITCH.finditer(source):
+        for match in shapes["switch"].finditer(source):
             if match.group(1).split(".")[0] not in backed:
                 continue
             for group in _CASE_LITERAL.findall(match.group(2)):
@@ -368,9 +382,6 @@ def comparisons_outside_labelsets():
                     literal = _unescape(raw)
                     if keep(literal):
                         found[literal].add(os.path.relpath(path, REPO))
-                        direct.add(literal)
-    _EMITTED_ONLY.clear()
-    _EMITTED_ONLY.update(via_emitter - direct)
     return found
 
 
@@ -421,6 +432,16 @@ def _apple_ships(literal: str) -> bool:
 #: code itself.
 _OWN_CODE = re.compile(r"(?<![A-Za-z0-9_])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+:")
 
+#: The accessibility API's own vocabulary: a role, subrole or attribute name (`AXDialog`,
+#: `AXSearchField`, `AXLayoutArea`), and the two spellings a boolean AX value reads as when it
+#: arrives as text. None of them is text Logic draws, and no locale translates them. They became
+#: visible when the scan began following every name a file assigns from an accessor, not only the
+#: names that look like an attribute (review of #1034, round 2): `role == "AXLayoutArea"` in
+#: AXLogicProElements+Mixer.swift and `switch text.lowercased() { case "1", "true": }` in
+#: ArmKeyCommandSetup.swift. Asked only after every Apple route, like `_OWN_CODE`.
+_AX_API_NAME = re.compile(r"AX[A-Z][A-Za-z]+")
+_BOOLEAN_TEXT = {"true", "false"}
+
 
 def citation(literal: str):
     """The pinned row a locale-independent source holds `literal` in, or None. Exact value only."""
@@ -448,9 +469,7 @@ def classify(literal: str, paths=()) -> str:
         return APPLE_VALUE
     if _OWN_CODE.search(literal):
         return IDENTIFIER
-    if literal in _EMITTED_ONLY:
-        # It reached the comparison only through a constant this product writes into its own
-        # script or refusal (`emitting_constants`), and no Apple route above claimed it.
+    if _AX_API_NAME.fullmatch(literal) or literal in _BOOLEAN_TEXT:
         return IDENTIFIER
     return UNKNOWN
 

@@ -352,39 +352,142 @@ class AConstantIsClassifiedByItsLiteral(unittest.TestCase):
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("'Mixer'", problems[0])
 
-    #: The shape of `AccessibilityChannel.PostLeafCleanupSite`: the phrase is one constant, two
-    #: refusals are built from it, and the script interpolates one of them.
-    _EMITTED = ('struct Site {\n'
-                '    static let notObservedMarker = "cleanup was not observed"\n'
-                '    static let dialogRefusal = ": dialog " + notObservedMarker\n'
-                '    var appleScript: String { "return \\"X\\(Self.dialogRefusal)\\"" }\n'
-                '}\n')
-
-    def test_the_products_own_emitted_phrase_passes(self):
-        self.assertEqual(self._scan(self._READ + self._EMITTED
-                                    + 'if value.contains(Site.notObservedMarker) { }\n'), [])
-
-    def test_the_same_phrase_not_emitted_is_refused(self):
-        """The control for the rule above: no concatenation feeding an interpolation."""
-        source = (self._READ + 'struct Site { static let notObservedMarker = "cleanup was not observed" }\n'
-                  + 'if value.contains(Site.notObservedMarker) { }\n')
-        problems = self._scan(source)
-        self.assertEqual(len(problems), 1, problems)
-        self.assertIn("'cleanup was not observed'", problems[0])
-
-    def test_an_emitted_constant_holding_a_logic_label_is_still_apples(self):
-        """The emission rule is consulted after every Apple route."""
-        source = (self._READ + self._EMITTED.replace("cleanup was not observed", "Mixer")
-                  + 'if value.contains(Site.notObservedMarker) { }\n')
-        problems = self._scan(source)
-        self.assertEqual(len(problems), 1, problems)
-        self.assertIn("TRANSLATES", problems[0])
-
     def test_an_instance_member_is_not_a_constant(self):
         source = (self._READ + 'enum K { static let title = "Mixer" }\n'
                   + 'if value == before.title { }\n')
         self.assertEqual(self._scan(source), [])
 
+
+class AnOperandIsAxTextOnlyIfSomethingReadIt(unittest.TestCase):
+    """Review of #1034, round 2. `emitting_constants` passed a constant because the product ALSO
+    wrote it into its own script or refusal, and that is authority by co-location again: with an
+    AX-backed `title`, `fragment = "Input Po"`, `"MENU_PICK_FAILED: " + fragment` interpolated into
+    a string, and `title.hasPrefix(fragment)`, the guard reported nothing. The rule is gone, and
+    `PostLeafCleanupSite.notObservedMarker` passes for the true reason: the operand it is compared
+    with holds the script's own output, so the parameter is named `scriptResult`, not `value`.
+
+    A rename is only honest if a rename cannot also hide AX text, so the scan now follows every
+    name a file assigns from an accessor (`_variable_pattern`), not only names that look like an
+    attribute. The taint is still by NAME and per FILE -- see the Limit in the docstring."""
+
+    def _scan(self, source):
+        return TheGuardActuallyRefusesSomething._scan(self, source, None)
+
+    def _scan_files(self, files):
+        """`{file name: source}` under one `Sources/`, so a declaration can live in another file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.join(tmp, "Sources")
+            os.makedirs(root)
+            for name, source in files.items():
+                with open(os.path.join(root, name), "w", encoding="utf-8") as handle:
+                    handle.write(source)
+            before = os.environ.get("LPM_AX_COMPARISON_ROOTS")
+            os.environ["LPM_AX_COMPARISON_ROOTS"] = root
+            try:
+                return guard.check()
+            finally:
+                if before is None:
+                    os.environ.pop("LPM_AX_COMPARISON_ROOTS", None)
+                else:
+                    os.environ["LPM_AX_COMPARISON_ROOTS"] = before
+
+    _READ = 'let title = AXHelpers.getTitle(element) ?? ""\n'
+
+    def _refused(self, problems, literal):
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn(repr(literal), problems[0])
+
+    def test_the_reviewers_emitted_fragment_is_refused(self):
+        """The reviewer's case, through `hasPrefix`, `contains` and `==`. Red at 435de2ee (0
+        problems each). Mutation killed: reinstating `emitting_constants` and its branch in
+        `classify`."""
+        emitted = ('let fragment = "Input Po"\n'
+                   'let error = "MENU_PICK_FAILED: " + fragment\n'
+                   'let message = "refused: \\(error)"\n')
+        for shape in ("title.hasPrefix(fragment)", "title.contains(fragment)", "title == fragment"):
+            with self.subTest(shape=shape):
+                self._refused(self._scan(self._READ + emitted + f"if {shape} {{ }}\n"), "Input Po")
+
+    #: The shape of `AccessibilityChannel.PostLeafCleanupSite` and its parser: the phrase is one
+    #: constant, a refusal is built from it and interpolated into the script, and `value` is read
+    #: from AX ELSEWHERE in the file -- which is what made the parser's `value` look like AX text.
+    _SITE = ('struct Site {\n'
+             '    static let notObservedMarker = "cleanup was not observed"\n'
+             '    static let dialogRefusal = ": dialog " + notObservedMarker\n'
+             '    var appleScript: String { "return \\"X\\(Self.dialogRefusal)\\"" }\n'
+             '}\n'
+             'func read(field: AXUIElement) {\n'
+             '    let value: String? = AXHelpers.getAttribute(field, kAXValueAttribute)\n'
+             '}\n')
+
+    def test_a_script_result_compared_with_the_products_marker_passes(self):
+        """The positive. Green at 435de2ee too, where `scriptResult` was not scanned at all; after,
+        it would be scanned if anything read it from AX, and nothing does. Mutation killed:
+        `ax_backed_names` counting every name in a file that reads AX at all."""
+        source = (self._SITE + 'func cleanup(_ scriptResult: String) -> Bool {\n'
+                  '    scriptResult.contains(Site.notObservedMarker)\n}\n')
+        self.assertEqual(self._scan(source), [])
+
+    def test_the_marker_compared_with_the_name_ax_backs_is_refused(self):
+        """The same comparison through `value`, which this file reads from AX: an emitted phrase
+        buys nothing. Red at 435de2ee (the emitter rule passed it)."""
+        source = (self._SITE + 'func cleanup(_ value: String) -> Bool {\n'
+                  '    value.contains(Site.notObservedMarker)\n}\n')
+        self._refused(self._scan(source), "cleanup was not observed")
+
+    def test_the_renamed_name_read_from_ax_is_refused(self):
+        """`scriptResult` assigned from an AX read in the same function: a name that does not look
+        like an attribute is no way out. Red at 435de2ee (0 problems). Mutation killed:
+        `_variable_pattern` returning `_AX_VAR` alone."""
+        source = (self._SITE + 'func cleanup(element: AXUIElement) -> Bool {\n'
+                  '    let scriptResult = AXHelpers.getValue(element) ?? ""\n'
+                  '    return scriptResult.contains(Site.notObservedMarker)\n}\n')
+        self._refused(self._scan(source), "cleanup was not observed")
+
+    def test_a_code_in_another_literal_on_the_line_authorizes_nothing(self):
+        """Self-attack (a). Mutation killed: restoring the pre-R1-04 rule that excused a literal
+        found inside a sentinel-coded message elsewhere in the file."""
+        source = (self._READ + 'if title.hasPrefix("Input Po") || title == "MENU_PICK_FAILED: '
+                  'Input Po" { }\n')
+        self._refused(self._scan(source), "Input Po")
+
+    def test_a_same_named_constant_in_another_file_authorizes_nothing(self):
+        """Self-attack (b): a coded constant of the same name, declared in another file, bare and
+        as a static member. Mutation killed: `resolve_constant` answering with the first
+        declaration of the name in any file."""
+        other = ('let fragment = "MENU_PICK_FAILED: ok"\n'
+                 'enum Site { static let fragment = "MENU_PICK_FAILED: ok" }\n')
+        cases = {
+            "bare": 'let fragment = "Input Po"\nif title.hasPrefix(fragment) { }\n',
+            "static": 'enum Site { static let fragment = "Input Po" }\n'
+                      'if title.hasPrefix(Site.fragment) { }\n',
+        }
+        for shape, code in cases.items():
+            with self.subTest(shape=shape):
+                problems = self._scan_files({"Another.swift": other,
+                                             "Offender.swift": self._READ + code})
+                self._refused(problems, "Input Po")
+
+    def test_a_fragment_interpolated_into_a_coded_literal_is_still_refused(self):
+        """Self-attack (c). The coded literal is not indexed as a constant (it interpolates), and
+        the fragment it interpolates is classified on its own bytes. Mutation killed: a rule that
+        excuses a constant a sentinel-coded literal interpolates."""
+        source = (self._READ + 'let fragment = "Input Po"\n'
+                  'let error = "MENU_PICK_FAILED: \\(fragment)"\n'
+                  'if title.hasPrefix(fragment) { }\n')
+        self._refused(self._scan(source), "Input Po")
+
+    def test_the_accessibility_apis_own_vocabulary_is_an_identifier(self):
+        """What the wider scan found on this tree: `role == "AXLayoutArea"`, `subrole ==
+        "AXDialog"`, and a boolean AX value read as text. Mutation killed: dropping
+        `_AX_API_NAME` or `_BOOLEAN_TEXT` from `classify` (the real tree fails too)."""
+        for literal in ("AXDialog", "AXFloatingWindow", "AXLayoutArea", "AXSearchField",
+                        "true", "false"):
+            with self.subTest(literal=literal):
+                self.assertEqual(guard.classify(literal), guard.IDENTIFIER)
+        for literal in ("AX", "AX Dialog", "AXDialog: x", "TRUE"):
+            with self.subTest(control=literal):
+                self.assertEqual(guard.classify(literal), guard.UNKNOWN)
 
 class TheEntryPointRefuses(unittest.TestCase):
     """The cases above call `check()`. A `main()` that returned 0 without ever calling it would
