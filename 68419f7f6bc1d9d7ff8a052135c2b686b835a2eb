@@ -1,0 +1,14 @@
+Limit: a single CJK character is still not tested; the floor of two was chosen, not measured, so a false declaration resting only on a one-character label such as 끔 still stands.
+Limit: a Latin-script reading under eight characters is still not tested, even one Logic ships whole, such as Track.
+Limit: a short CJK reading whose 32-bit prefix matches with no pinned comparison is refused with the confirm message, not "A citation was available"; 設定 is one (niblabels/ja), and a record quoting it waits on Scripts/logic_canon.py confirm on a machine with Logic. None of the 78 declaring records has one today.
+Ruled-out: also testing Latin strings under eight characters that match a corpus value exactly | measured to newly refuse 21 of the 78 declaring records, on off, output and tracks, and 24 more carry short Latin strings (A, B, C, control) whose prefix matches with no pinned comparison; the Latin floor stays because a hit on a short Latin fragment says nothing about the record
+Warn: test_a_short_fragment_does_not_trigger_the_bound does not go red when the Latin floor is dropped, because AXGroup resolves in no corpus; the case that holds the Latin floor is test_a_short_latin_label_the_corpus_holds_is_still_not_tested.
+Provenance: inherited 7126e280cf9689df9d5ffd66b1ffb907f987e3e0
+
+Limit: the boundaries were checked against Unicode 18.0.0 Blocks.txt and NamesList.txt fetched on 2026-09-28. Python 3.14's unicodedata carries 16.0.0, so its names confirm the blocks through Extension H and not Extension J.
+Limit: enclosed, squared and radical forms and the iteration marks in CJK Symbols and Punctuation, such as 々, are not classified CJK. A two-character reading made only of them is still not tested.
+Limit: the halfwidth Katakana case does not go red under the old ranges, which already held U+FF66-FF9F. Dropping that row is the mutant that kills it.
+Limit: check-shipped-python-has-no-ui-literals.py, check-policy-literals-against-canon.py and check-variants-appear-in-a-census.py keep their own narrower CJK patterns. They were not widened here.
+Ruled-out: classifying by unicodedata names or script data | the runner's Python would decide the answer, and 3.14 carries Unicode 16.0, which has no Extension J
+Warn: a later Unicode version can add a block these scripts use. The table is extended by hand from Blocks.txt; nothing reads the runner's Unicode data to notice.
+Provenance: inherited ce1fbf5eb228e34f60c6df3510edd442fe9eea15
