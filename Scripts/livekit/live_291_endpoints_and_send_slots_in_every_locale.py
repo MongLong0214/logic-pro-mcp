@@ -96,8 +96,10 @@ THE ELEVEN CHECKS (tag `291e/<lproj>/<check>`), EACH ev.falsifiable WITH A DERIV
   coverage_never_complete_with_filters_unread  while inspect_session names mixer_filters_unread the
       graph is not complete, population is not complete, and the routing section is not complete.
       Counterexample: population complete with filters unread.
-  positive_control_mute                        every probe run moved its Mute and moved it back, and
-      read it back at the value it found. Counterexample: `control mute moved: 0`.
+  positive_control_mute                        every probe run moved its Mute (at most three focused
+      presses) and read it back at the value it found (at most three more). The attempt counts are
+      reported and do not decide the check. A run whose control lines cannot be parsed from the
+      probe's full stdout is None and fails. Counterexample: `control mute moved: 0`.
   track_flags_as_found                         every track's isMuted / isSoloed / isArmed
       (logic://tracks after a forced poll) and every track Mute's AXValue (the witness), read after
       the last probe run and undo, equal what they read before the first probe run. Counterexample:
@@ -763,8 +765,8 @@ def pred_coverage_never_complete_with_filters_unread(o):
 
 def pred_positive_control_mute(o):
     runs = o["probe_runs"]
-    return bool(runs) and all(run["control_mute_moved"] == 1 and run["control_mute_restored"] == 1
-                              for run in runs)
+    return bool(runs) and all(run["control"] is not None and run["control"]["control_mute_moved"] == 1
+                              and run["control"]["control_mute_restored"] == 1 for run in runs)
 
 
 def pred_track_flags_as_found(o):
@@ -886,8 +888,8 @@ def counter_coverage(o):
 def counter_mute(o):
     """2026-09-09: an instrument aimed at nothing -- `control mute moved: 0`."""
     c = copy.deepcopy(o)
-    c["probe_runs"] = (c["probe_runs"] or [{"label": "none"}])[:]
-    c["probe_runs"][0] = dict(c["probe_runs"][0], control_mute_moved=0)
+    c["probe_runs"] = c["probe_runs"] or [{"label": "none", "control": {"control_mute_restored": 1}}]
+    c["probe_runs"][0]["control"] = dict(c["probe_runs"][0]["control"] or {}, control_mute_moved=0)
     return c
 
 
@@ -957,8 +959,9 @@ EXPECTED = {
         "while inspect_session names mixer_filters_unread, population is not complete, the graph is "
         "not complete and the routing section is not complete",
     "positive_control_mute":
-        "every probe run moved its track Mute and moved it back, so a silence from it is a reading, "
-        "and read it back at the value it found",
+        "every probe run moved its track Mute within three focused presses, so a silence from it is a "
+        "reading, and read it back at the value it found within three more; a run whose control lines "
+        "could not be parsed fails; the attempt counts are reported and do not decide",
     "track_flags_as_found":
         "every track's isMuted, isSoloed and isArmed, and every track Mute's AXValue, read after the "
         "last probe run and undo equal what they read before the first probe run",
@@ -1240,8 +1243,18 @@ def build_probe(directory):
     return binary, None
 
 
+def count_field(value):
+    """A non-negative count the probe printed, or None when it printed none or something else."""
+    return int(value) if value is not None and value.isdigit() else None
+
+
 def parse_probe(stdout):
-    """The probe's `key: value` lines, the menu titles it printed, and what it selected."""
+    """The probe's `key: value` lines, the menu titles it printed, and what it selected.
+
+    It reads the whole stdout. The first Korean run's evidence cut the positive control's
+    observation at 400 characters and lost its fourth run; what a predicate reads is parsed here,
+    before any cut, and kept as values.
+    """
     lines = (stdout or "").splitlines()
     fields, titles = {}, []
     for line in lines:
@@ -1257,7 +1270,8 @@ def parse_probe(stdout):
             "control_mute_restored": int(put_back) if put_back in ("0", "1") else None,
             "control_mute_before": fields.get("control mute before"),
             "control_mute_after": fields.get("control mute after"),
-            "control_mute_restore_presses": fields.get("control mute restore presses"),
+            "control_mute_move_attempts": count_field(fields.get("control mute move attempts")),
+            "control_mute_restore_attempts": count_field(fields.get("control mute restore attempts")),
             "menus_opened": fields.get("menus opened"),
             "duplicated_titles": fields.get("titles appearing more than once"),
             "menus_after_escape": fields.get("menus after escape"),
@@ -1275,18 +1289,50 @@ def run_probe(binary, prefix, index, mute_labels, select=None):
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=120)
         parsed = parse_probe(result.stdout)
-        parsed.update({"exit": result.returncode, "stderr": (result.stderr or "")[-300:]})
+        # A convenience only: nothing reads it. The fields above come from the full text.
+        parsed.update({"exit": result.returncode, "stderr": (result.stderr or "")[-300:],
+                       "stdout_head": (result.stdout or "")[:400]})
     except subprocess.TimeoutExpired:
-        parsed = dict(parse_probe(""), exit=None, stderr="probe timed out")
+        parsed = dict(parse_probe(""), exit=None, stderr="probe timed out", stdout_head="")
     parsed["arguments"] = {"slot_index": index, "select": select, "prefix_chars": len(prefix)}
     return parsed
 
 
+CONTROL_FIELDS = ("control_mute_moved", "control_mute_restored", "control_mute_before",
+                  "control_mute_after", "control_mute_move_attempts", "control_mute_restore_attempts")
+
+
 def probe_run(label, probe):
-    """What the positive-control check keeps of one probe run."""
-    return {"label": label, **{key: probe.get(key) for key in (
-        "control_mute_moved", "control_mute_restored", "control_mute_before", "control_mute_after",
-        "control_mute_restore_presses")}}
+    """What the positive-control check keeps of one probe run.
+
+    `control` is None when the probe's moved or restored line could not be parsed (a timeout, a
+    crash, an old probe), so the run stays in the list and fails the check instead of vanishing.
+    """
+    parsed = probe.get("control_mute_moved") in (0, 1) and probe.get("control_mute_restored") in (0, 1)
+    return {"label": label, "exit": probe.get("exit"),
+            "control": {key: probe.get(key) for key in CONTROL_FIELDS} if parsed else None}
+
+
+def control_totals(runs):
+    """The positive control's attempts across runs: data for the records, not part of any check.
+
+    A dropped move is an attempt that did not move the Mute; a dropped restore is a restore attempt
+    other than the one that brought it back.
+    """
+    controls = [run["control"] for run in runs if run["control"] is not None]
+    moves = [c["control_mute_move_attempts"] or 0 for c in controls]
+    restores = [c["control_mute_restore_attempts"] or 0 for c in controls]
+    return {
+        "runs": len(runs), "runs_unparsed": len(runs) - len(controls),
+        "runs_moved": sum(1 for c in controls if c["control_mute_moved"] == 1),
+        "runs_restored": sum(1 for c in controls if c["control_mute_restored"] == 1),
+        "move_attempts": sum(moves), "restore_attempts": sum(restores),
+        "runs_needing_a_second_move": sum(1 for m in moves if m > 1),
+        "dropped_move_presses": sum(m - (1 if c["control_mute_moved"] == 1 else 0)
+                                    for m, c in zip(moves, controls)),
+        "dropped_restore_presses": sum(r - (1 if r and c["control_mute_restored"] == 1 else 0)
+                                       for r, c in zip(restores, controls)),
+    }
 
 
 def choose_target(reading, labels):
@@ -1461,6 +1507,7 @@ def summary_of(lproj, readings, target, bus, send_probe, output_probe, parity, c
         "coverage_states": {d: ((coverage or {}).get("coverage") or {}).get(d, {}).get("state") for d in DOMAINS},
         "inspect_routing_coverage": (coverage or {}).get("inspect_routing_coverage"),
         "probe_runs": len(state["probe_runs"]),
+        "control_mute": control_totals(state["probe_runs"]),
         "menu_samples": len(state["menu_samples"]),
         "mutations": [{"label": m["label"], "undo_exit": m["undo_exit"],
                        "changed": m["after"] != m["before"], "restored": m["after_undo"] == m["before"]}
@@ -1580,7 +1627,8 @@ def run_locale(ev, args, canon, labels, lproj, probe_binary, band, subject):
                       why="every mutation was undone through Logic's Edit menu")
         observations["send_slot_count_matches_witness"] = slots_observation(list(readings.values()))
         observations["occupancy_matches_knob_witness"] = slots_observation(list(readings.values()))
-        observations["positive_control_mute"] = {"probe_runs": state["probe_runs"]}
+        observations["positive_control_mute"] = {"probe_runs": state["probe_runs"],
+                                                 "totals": control_totals(state["probe_runs"])}
         observations["menus_closed_and_modal_clean"] = {"samples": [
             {"label": s["label"], "open_menus": s["open_menus"], "modal": s["modal"]}
             for s in state["menu_samples"]]}
@@ -1599,6 +1647,8 @@ def run_locale(ev, args, canon, labels, lproj, probe_binary, band, subject):
         ev.falsifiable(f"{prefix}/{check}", PREDICATES[check], observation,
                        COUNTER[check](observation) if "not_run" not in observation else observation,
                        EXPECTED[check], mutation=MUTATIONS[check])
+    # The check's record keeps a 400-character repr; this note keeps every run as values.
+    ev.note(f"{prefix}/probe-runs", {"runs": state["probe_runs"], "totals": control_totals(state["probe_runs"])})
     ev.note(f"{prefix}/summary", summary_of(lproj, readings, target, number, send_probe, output_probe,
                                              parity, coverage, state))
 
@@ -1693,6 +1743,15 @@ def _fixture_reading(label="before", assigned=False):
             "witness": witness_of(tree, labels), "tree": tree, "answered": True, "fresh": True}
 
 
+def _fixture_control(**change):
+    """What parse_probe gives for a control that moved on its first press and came back on its first."""
+    control = {"exit": 0, "control_mute_moved": 1, "control_mute_restored": 1, "control_mute_before": "0",
+               "control_mute_after": "0", "control_mute_move_attempts": 1,
+               "control_mute_restore_attempts": 1}
+    control.update(change)
+    return control
+
+
 def _fixture_observations():
     labels = _fixture_labels()
     occupied = _fixture_reading("send-after", assigned=True)
@@ -1726,8 +1785,7 @@ def _fixture_observations():
             "mixer_filters_unread": True, "graph_complete": False, "coverage": graph_coverage,
             "inspect_routing_coverage": "partial"},
         "positive_control_mute": {"probe_runs": [
-            {"label": "a", "control_mute_moved": 1, "control_mute_restored": 1},
-            {"label": "b", "control_mute_moved": 1, "control_mute_restored": 1}]},
+            probe_run("a", _fixture_control()), probe_run("b", _fixture_control())]},
         "track_flags_as_found": {"product_before": flags, "product_after": copy.deepcopy(flags),
                                  "witness_before": mutes_of(empty["tree"]),
                                  "witness_after": mutes_of(_fixture_reading("final")["tree"])},
@@ -1785,10 +1843,12 @@ def _helper_cases():
                                         ({"path": [0, 0, 0, 1], "role": AX_SLIDER}, "Send Level knob. Set"),
                                         ({"path": [0, 0, 0, 2], "role": AX_SLIDER}, "Send Level knob. Set")]],
               "children_read_failures": []}
-    stdout = "\n".join(["slot destination: send button", "control mute moved: 1", "menus opened: 3",
+    stdout = "\n".join(["slot destination: send button", "control mute moved: 1",
+                        "control mute move attempts: 2", "menus opened: 3",
                         "title: Bus 3", "title: Bus 12", "selected: skipped", "control mute before: 0",
-                        "control mute after: 0", "control mute restore presses: 0",
+                        "control mute after: 0", "control mute restore attempts: 1",
                         "control mute restored: 1"])
+    long_stdout = "\n".join([f"title: Bus {n}" for n in range(1, 200)] + [stdout])
     parsed = parse_probe(stdout)
     reading = _fixture_reading()
     send = _fixture_observations()["send_assignment_then_undo"]
@@ -1853,12 +1913,32 @@ def _helper_cases():
          probe_slot_index([dict(nodes[3], depth=PROBE_DEPTH + 1)], 0, "Send slot.") is None),
         ("parse_probe keeps titles and reads a skipped select as none", parsed["titles"] == ["Bus 3", "Bus 12"]
          and parsed["selected"] is None and parsed["control_mute_moved"] == 1),
-        ("parse_probe reads the control's pre/post lines, and an old probe's absence as unknown",
+        ("parse_probe reads the control's pre/post lines and attempts, and an old probe's absence as unknown",
          parsed["control_mute_restored"] == 1 and parsed["control_mute_before"] == "0"
+         and parsed["control_mute_move_attempts"] == 2 and parsed["control_mute_restore_attempts"] == 1
          and parse_probe("control mute moved: 1")["control_mute_restored"] is None),
+        ("parse_probe reads the control past the first 400 characters of stdout",
+         len(long_stdout) > 400 and parse_probe(long_stdout)["control_mute_restored"] == 1
+         and parse_probe(long_stdout)["control_mute_move_attempts"] == 2),
         ("the positive control rejects a run that moved and was not put back",
          not pred_positive_control_mute({"probe_runs": [
-             {"control_mute_moved": 1, "control_mute_restored": 0}]})),
+             probe_run("a", _fixture_control()),
+             probe_run("b", _fixture_control(control_mute_restored=0, control_mute_restore_attempts=3))]})),
+        ("the positive control accepts a run that moved on its second attempt and came back",
+         pred_positive_control_mute({"probe_runs": [
+             probe_run("a", _fixture_control(control_mute_move_attempts=2, control_mute_restore_attempts=2))]})),
+        ("the positive control keeps an unparsed run as None and rejects it",
+         probe_run("t", dict(parse_probe(""), exit=None))["control"] is None
+         and not pred_positive_control_mute({"probe_runs": [
+             probe_run("a", _fixture_control()), probe_run("t", dict(parse_probe(""), exit=None))]})),
+        ("the control totals count dropped presses from the attempts",
+         control_totals([probe_run("a", _fixture_control(control_mute_move_attempts=3)),
+                         probe_run("b", _fixture_control(control_mute_moved=0, control_mute_move_attempts=3,
+                                                         control_mute_restore_attempts=0)),
+                         probe_run("t", {})])
+         == {"runs": 3, "runs_unparsed": 1, "runs_moved": 1, "runs_restored": 2, "move_attempts": 6,
+             "restore_attempts": 1, "runs_needing_a_second_move": 2, "dropped_move_presses": 5,
+             "dropped_restore_presses": 0}),
         ("choose_bus prefers the bus an input already receives",
          choose_bus(["Bus 3", "Bus 12"], reading, labels)[0] == 3),
         ("choose_target takes the audio strip with every slot empty", choose_target(reading, labels) == (0, "trk_a")),

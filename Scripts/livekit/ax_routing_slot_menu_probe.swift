@@ -133,13 +133,20 @@ print("slot destination: \(originalDestination)")
 // only when AXFocused had been set on it just before, and not reliably even then, so the old pair —
 // focus once, press, wait 0.7 s, press, wait 0.7 s — applied one press of the two, printed `moved: 0`
 // and left the Mute flipped. Four runs in #291's first Korean live run left track 0 muted that way.
-// So every press is preceded by focus, every change is waited for rather than slept past, and the
-// value read before the first press is what the control puts back, with a bounded number of presses.
+// So every press is preceded by focus and every change is waited for rather than slept past.
+//
+// A press can still be dropped while the server polls. A press that is dropped and then repeated
+// still shows that this probe's AX actuation reaches this Logic, so the move is tried at most three
+// times, and so is the way back to the value read first. Both counts are printed. A Mute that never
+// moves prints `moved: 0` after three attempts; one that does not come back prints `restored: 0`.
+// After the value reads back as found, it is read again once more a second later, so a dropped
+// press that Logic applies late is seen here and not left behind.
 let muteLabels: [String] = {
     guard let index = CommandLine.arguments.firstIndex(of: "--mute-labels") else { return ["Mute"] }
     let rest = CommandLine.arguments.dropFirst(index + 1).prefix { !$0.hasPrefix("--") }
     return rest.isEmpty ? ["Mute"] : Array(rest)
 }()
+let muteAttemptLimit = 3
 func muteValue(_ mute: AXUIElement) -> Int? { attribute(mute, kAXValueAttribute as String) as? Int }
 /// Focus, press, then poll up to three seconds for the value to differ from `from`.
 func pressMute(_ mute: AXUIElement, from: Int?) -> Int? {
@@ -156,24 +163,36 @@ if let mute = sweep().first(where: {
     text($0, kAXRoleAttribute as String) == "AXCheckBox" && muteLabels.contains(text($0, kAXDescriptionAttribute as String))
 }) {
     let before = muteValue(mute)
-    let during = pressMute(mute, from: before)
-    let moved = before != nil && during != nil && during != before
-    // Only a press that was seen to move is answered by a press back; one that was not seen is left
-    // to the restore loop below, which acts on the value it reads and not on what it assumes.
-    let after = moved ? pressMute(mute, from: during) : during
-    print("control mute moved: \((moved && after == before) ? 1 : 0)")
-    var restorePresses = 0
-    while let wanted = before, let now = muteValue(mute), now != wanted, restorePresses < 4 {
-        _ = pressMute(mute, from: now)
-        restorePresses += 1
+    var moveAttempts = 0
+    var moved = false
+    while let found = before, !moved, moveAttempts < muteAttemptLimit {
+        let now = pressMute(mute, from: found)
+        moveAttempts += 1
+        moved = now != nil && now != found
+    }
+    // The way back acts on the value it reads, not on what it assumes: a press that was not seen to
+    // move is not answered by a press back.
+    var restoreAttempts = 0
+    func settled(_ wanted: Int) -> Bool {
+        guard muteValue(mute) == wanted else { return false }
+        usleep(1_000_000)
+        return muteValue(mute) == wanted
+    }
+    while let wanted = before, !settled(wanted), restoreAttempts < muteAttemptLimit {
+        _ = pressMute(mute, from: muteValue(mute))
+        restoreAttempts += 1
     }
     let final = muteValue(mute)
+    print("control mute moved: \(moved ? 1 : 0)")
+    print("control mute move attempts: \(moveAttempts)")
     print("control mute before: \(before.map(String.init) ?? "unread")")
     print("control mute after: \(final.map(String.init) ?? "unread")")
-    print("control mute restore presses: \(restorePresses)")
+    print("control mute restore attempts: \(restoreAttempts)")
     print("control mute restored: \((before != nil && final == before) ? 1 : 0)")
 } else {
     print("control mute moved: 0")
+    print("control mute move attempts: 0")
+    print("control mute restore attempts: 0")
     print("control mute restored: 1")
 }
 
