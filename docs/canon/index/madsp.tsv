@@ -3,3 +3,5 @@
 # a digest of bytes inside Logic, and a typed one is a claim about Apple's
 # data that nothing measured.
 Compressor	-	1	name	154962a37c36
+Compressor	-	1	name#ci	a1f2f543a268
+Compressor	-	1	name#cit	a1f2f543a268

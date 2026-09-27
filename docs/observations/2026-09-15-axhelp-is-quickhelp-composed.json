@@ -166,10 +166,9 @@
     {
       "ref": "logic-canon://quickhelp/QuickHelp/ko/KCE_024_Record#composed",
       "value": "녹음 버튼. 선택한 트랙 또는 녹음 준비된 여러 트랙에 녹음합니다.",
-      "used_for": "the key the AXHelp parser returns for the transport record button, and the value it anchors on",
+      "used_for": "the composition at the end of the transport record button's live AXHelp in this record's examples (`KCE_024_Record -> '녹음   R, 녹음 버튼. …'`): the key the AXHelp parser returns for that button, and the value it anchors on. Bound to this record, which holds the reading, rather than to Scripts/test_logic_canon.py, which a change that only re-searches this record's absence claim does not open (#1028).",
       "binding": {
-        "kind": "code",
-        "path": "Scripts/test_logic_canon.py"
+        "kind": "record"
       }
     },
     {
@@ -269,6 +268,10 @@
           "locale": "en"
         },
         {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
           "source": "quickhelp",
           "locale": "de"
         },
@@ -351,6 +354,50 @@
         {
           "source": "strings",
           "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
         }
       ],
       "why_runtime": "An exhaustive scan of all 75,535 non-media files in the bundle, in UTF-8 and both UTF-16 byte orders, found it nowhere, and a separate scan of all 1,169 nibs found it nowhere. It is most plausibly drawn from AppKit, whose localised strings live in the dyld shared cache rather than in files this corpus can hold -- and that plausibility is stated as unverified: the shared cache was not opened."

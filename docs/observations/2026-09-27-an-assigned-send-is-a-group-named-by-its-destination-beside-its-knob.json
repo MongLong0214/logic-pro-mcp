@@ -1,0 +1,462 @@
+{
+  "schema": 3,
+  "id": "2026-09-27-an-assigned-send-is-a-group-named-by-its-destination-beside-its-knob",
+  "date": "2026-09-27",
+  "subject": "Channel-strip send slots in the Mixer: the Accessibility shape of an assigned send beside an empty one",
+  "question": "Which element is an ASSIGNED send slot, and how does it differ from an empty one in role, description, help, title and value?",
+  "verdict": "works",
+  "surface": "mixer.routing",
+  "issues": [
+    291
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_291_endpoints_and_send_slots_in_every_locale.py --locale ko (with LPM_EVIDENCE_ROOT exported, Logic in Korean on lpm-locale-campaign with the Mixer shown; --locale en after switching to English)",
+    "expected": "send_slot_count_matches_witness, occupancy_matches_knob_witness and send_assignment_then_undo pass: in the send-after reading the target strip's witnessed sends are [button, unoccupied] then [group, occupied, described by the chosen bus], the product reads observed_empty then occupied_unknown_destination with level_raw 0, no knob belongs to no slot, and the Mixer has one more strip whose input reads the bus; the after-undo reading equals the before reading. The manual dump that first took this reading: On lpm-locale-campaign with the Mixer showing: `swift Scripts/livekit/ax_mixer_strip_dump.swift --strip 1 --probe-index`; select a bus in strip 1's send slot with `Scripts/livekit/ax_routing_slot_menu_probe.swift --slot-prefix <that slot's help> --slot-index <its probe-index> --mute-labels none --select <bus title>`; dump strip 1 and strip 2 again; then undo with Edit menu item 1 and dump strip 1 once more.",
+    "cost": "Logic running with the fixture and the Mixer shown; one send assignment and one undo per language; ~3 min, plus a relaunch per language switch"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift:sendSlotObservations",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:sendSlotHelpKeyword",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:sendLevelKnobHelpKeyword",
+    "Scripts/livekit/live_291_endpoints_and_send_slots_in_every_locale.py"
+  ],
+  "evidence": [
+    "evidence/2026-09-27-send-slot-strip-dumps-ko-KR-en-US.json"
+  ],
+  "method": "Logic 12.3 on lpm-locale-campaign, first in Korean, then quit and relaunched in English, then back in Korean. With the Mixer showing, Scripts/livekit/ax_mixer_strip_dump.swift dumped strip 1 (Audio 1) and strip 2 pre-order, every element to 20 levels, with AXRole, AXRoleDescription, AXDescription, AXHelp, AXTitle, AXValue, AXValueDescription, AXPosition and AXSize. A send was then assigned on strip 1 by ax_routing_slot_menu_probe.swift: AXPress on the send slot, AXPress on the menu item titled `버스 256` (`Bus 256` in English) — the bus #291's first live run had chosen. The probe's Mute control was disabled for these runs (`--mute-labels` given a label no element carries), so no Mute was pressed. The assignment was confirmed by Logic's own Edit menu item 1, not by the slot. Strips 1 and 2 and the new strip were dumped, then Edit menu item 1 undid the send and strip 1 was dumped again. The raw dumps are in the evidence file; the rows below are copied from it verbatim.",
+  "observations": [
+    {
+      "what": "Mixer strips before the assignment",
+      "locale": "ko-KR",
+      "count": 21
+    },
+    {
+      "what": "strip 1's send area before the assignment, verbatim rows",
+      "locale": "ko-KR",
+      "rows": [
+        {
+          "path": "1.11",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "Stereo Output",
+          "help": "출력 슬롯. 채널 스트립 신호가 전송되는 채널 스트립 출력 대상을 선택하려면 길게 클릭합니다. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>"
+        },
+        {
+          "path": "1.12",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "보내기 버튼",
+          "help": "센드 슬롯. 신호를 Aux 채널 스트립으로 라우팅합니다. 센드를 사용하여 여러 개의 트랙 출력 신호를 처리하거나 서브믹싱합니다. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>"
+        },
+        {
+          "path": "1.13",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "오디오 플러그인",
+          "help": "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다. 사용 중인 슬롯을 클릭하여 플러그인을 엽니다. 이펙트를 사용하여 실시간으로 신호를 변경합니다. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>"
+        }
+      ]
+    },
+    {
+      "what": "Logic's Edit menu item 1 after the selection",
+      "locale": "ko-KR",
+      "title": "채널 스트립의 센드 변경 실행 취소"
+    },
+    {
+      "what": "Mixer strips after the assignment",
+      "locale": "ko-KR",
+      "count": 22
+    },
+    {
+      "what": "strip 1's send area after the assignment, verbatim rows",
+      "locale": "ko-KR",
+      "rows": [
+        {
+          "path": "1.11",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "Stereo Output",
+          "help": "출력 슬롯. 채널 스트립 신호가 전송되는 채널 스트립 출력 대상을 선택하려면 길게 클릭합니다. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(737,661)",
+          "size": "58x18"
+        },
+        {
+          "path": "1.12",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "보내기 버튼",
+          "help": "센드 슬롯. 신호를 Aux 채널 스트립으로 라우팅합니다. 센드를 사용하여 여러 개의 트랙 출력 신호를 처리하거나 서브믹싱합니다. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(737,644)",
+          "size": "40x9"
+        },
+        {
+          "path": "1.13",
+          "role": "AXGroup",
+          "roledesc": "그룹",
+          "desc": "버스 256",
+          "help": "<-25212>",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(737,624)",
+          "size": "40x18"
+        },
+        {
+          "path": "1.13.0",
+          "role": "AXCheckBox",
+          "roledesc": "체크상자",
+          "desc": "바이패스",
+          "help": "<-25212>",
+          "title": "<-25212>",
+          "value": "#0",
+          "valuedesc": "<-25212>",
+          "pos": "(737,624)",
+          "size": "20x18"
+        },
+        {
+          "path": "1.13.1",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "목록",
+          "help": "<-25212>",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(757,624)",
+          "size": "20x18"
+        },
+        {
+          "path": "1.14",
+          "role": "AXSlider",
+          "roledesc": "슬라이더",
+          "desc": "센드 노브",
+          "help": "센드 레벨 노브. Aux 채널 스트립으로 전송되는 신호의 양을 제어하려면 수직으로 드래그합니다. 센드를 사용하여 여러 개의 트랙 출력 신호를 처리하거나 서브믹싱합니다. ",
+          "title": "<-25212>",
+          "value": "#0",
+          "valuedesc": "-∞",
+          "pos": "(779,624)",
+          "size": "18x18"
+        },
+        {
+          "path": "1.15",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "오디오 플러그인",
+          "help": "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다. 사용 중인 슬롯을 클릭하여 플러그인을 엽니다. 이펙트를 사용하여 실시간으로 신호를 변경합니다. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(737,589)",
+          "size": "58x9"
+        }
+      ]
+    },
+    {
+      "what": "strip 2 after the assignment: elements described `보내기 버튼`",
+      "locale": "ko-KR",
+      "count": 2,
+      "rows": [
+        {
+          "path": "2.10",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "보내기 버튼",
+          "help": "센드 슬롯. 신호를 Aux 채널 스트립으로 라우팅합니다. 센드를 사용하여 여러 개의 트랙 출력 신호를 처리하거나 서브믹싱합니다. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(804,644)",
+          "size": "40x9"
+        },
+        {
+          "path": "2.11",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "보내기 버튼",
+          "help": "센드 슬롯. 신호를 Aux 채널 스트립으로 라우팅합니다. 센드를 사용하여 여러 개의 트랙 출력 신호를 처리하거나 서브믹싱합니다. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(804,624)",
+          "size": "40x18"
+        }
+      ]
+    },
+    {
+      "what": "the strip that appeared with the assignment: its name field and its input slot",
+      "locale": "ko-KR",
+      "rows": [
+        {
+          "path": "19",
+          "role": "AXLayoutItem",
+          "roledesc": "채널 스트립 그룹",
+          "desc": "Aux 4",
+          "help": "<-25212>",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(1939,395)",
+          "size": "67x685"
+        },
+        {
+          "path": "19.0",
+          "role": "AXTextField",
+          "roledesc": "텍스트 필드",
+          "desc": "이름",
+          "help": "이름 필드. 채널 스트립의 이름을 변경하려면 두 번 클릭합니다. ",
+          "title": "<-25212>",
+          "value": "Aux 4",
+          "valuedesc": "<-25212>",
+          "pos": "(1939,1050)",
+          "size": "66x24"
+        },
+        {
+          "path": "19.17",
+          "role": "AXButton",
+          "roledesc": "버튼",
+          "desc": "버스 256",
+          "help": "입력 슬롯. 채널 스트립 입력 소스를 선택합니다. 오디오 기기(마이크 또는 악기의 연결 대상)의 입력 또는 내장 버스(다른 채널 스트립의 신호 수신)일 수 있습니다. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(1962,512)",
+          "size": "39x18"
+        }
+      ]
+    },
+    {
+      "what": "Mixer strips after the undo, and Edit menu item 1",
+      "locale": "ko-KR",
+      "count": 21,
+      "title": "실행 취소할 수 없음"
+    },
+    {
+      "what": "Mixer strips before the assignment",
+      "locale": "en-US",
+      "count": 21
+    },
+    {
+      "what": "strip 1's send area before the assignment, verbatim rows",
+      "locale": "en-US",
+      "rows": [
+        {
+          "path": "1.11",
+          "role": "AXButton",
+          "roledesc": "button",
+          "desc": "Stereo Output",
+          "help": "Output slot. Click and hold to choose the channel strip output destination—where the channel strip signal is sent. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(766,661)",
+          "size": "58x18"
+        },
+        {
+          "path": "1.12",
+          "role": "AXButton",
+          "roledesc": "button",
+          "desc": "send button",
+          "help": "Send slot. Route the signal to an aux channel strip. Use sends to process or submix multiple track output signals. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(766,635)",
+          "size": "40x18"
+        },
+        {
+          "path": "1.13",
+          "role": "AXButton",
+          "roledesc": "button",
+          "desc": "audio plug-in",
+          "help": "Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(766,600)",
+          "size": "58x9"
+        }
+      ]
+    },
+    {
+      "what": "Logic's Edit menu item 1 after the selection",
+      "locale": "en-US",
+      "title": "Undo Change Send in Channel Strip"
+    },
+    {
+      "what": "strip 1's send area after the assignment, verbatim rows",
+      "locale": "en-US",
+      "rows": [
+        {
+          "path": "1.11",
+          "role": "AXButton",
+          "roledesc": "button",
+          "desc": "Stereo Output",
+          "help": "Output slot. Click and hold to choose the channel strip output destination—where the channel strip signal is sent. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(766,661)",
+          "size": "58x18"
+        },
+        {
+          "path": "1.12",
+          "role": "AXButton",
+          "roledesc": "button",
+          "desc": "send button",
+          "help": "Send slot. Route the signal to an aux channel strip. Use sends to process or submix multiple track output signals. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(766,644)",
+          "size": "40x9"
+        },
+        {
+          "path": "1.13",
+          "role": "AXGroup",
+          "roledesc": "group",
+          "desc": "B256",
+          "help": "<-25212>",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(766,624)",
+          "size": "40x18"
+        },
+        {
+          "path": "1.13.0",
+          "role": "AXCheckBox",
+          "roledesc": "checkbox",
+          "desc": "bypass",
+          "help": "<-25212>",
+          "title": "<-25212>",
+          "value": "#0",
+          "valuedesc": "<-25212>",
+          "pos": "(766,624)",
+          "size": "20x18"
+        },
+        {
+          "path": "1.13.1",
+          "role": "AXButton",
+          "roledesc": "button",
+          "desc": "list",
+          "help": "<-25212>",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(786,624)",
+          "size": "20x18"
+        },
+        {
+          "path": "1.14",
+          "role": "AXSlider",
+          "roledesc": "slider",
+          "desc": "send knob",
+          "help": "Send Level knob. Drag vertically to control the amount of signal sent to an aux channel strip. Use sends to process or submix multiple track output signals. ",
+          "title": "<-25212>",
+          "value": "#0",
+          "valuedesc": "-∞",
+          "pos": "(808,624)",
+          "size": "18x18"
+        },
+        {
+          "path": "1.15",
+          "role": "AXButton",
+          "roledesc": "button",
+          "desc": "audio plug-in",
+          "help": "Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ",
+          "title": "<-25212>",
+          "value": "<-25212>",
+          "valuedesc": "<-25212>",
+          "pos": "(766,589)",
+          "size": "58x9"
+        }
+      ]
+    },
+    {
+      "what": "strip 2 after the assignment: elements described `send button`",
+      "locale": "en-US",
+      "count": 2
+    },
+    {
+      "what": "Mixer strips after the undo, and Edit menu item 1",
+      "locale": "en-US",
+      "count": 21,
+      "title": "Can’t Undo"
+    },
+    {
+      "what": "strip 1 after the undo compared with before, every attribute but position and size",
+      "locale": "en-US",
+      "identical": true
+    }
+  ],
+  "conclusion": "An assigned send is not a send-slot button. In both languages it is an AXGroup with no help, described by the DESTINATION (`버스 256` in Korean, `B256` in English), holding a bypass checkbox and a list button, and its next sibling is the AXSlider whose help begins with the send-level-knob title. The button that precedes the group in the walk is a NEW empty slot: it sits below the group on screen, and the strip's children run bottom to top. The same assignment gave every other strip a second empty `send button` and the Mixer one more strip, an Aux whose input reads the bus; the undo removed both. What distinguishes the two slot shapes is therefore the ROLE (AXButton vs AXGroup), the HELP (the send-slot title vs none) and the DESCRIPTION (`send button` vs the destination), and it is the same in both languages except for the words: role is not localised, the help and the knob's description are, and the destination is abbreviated in English only.\n\nThis contradicts the 2026-09-13 record on its own stated limit: it identified the assigned slot as the `send button` immediately preceding the knob, which these dumps show to be the empty slot, so its reading of that slot's menu mark was taken on an empty slot. A reader that looks for the knob right after a send button finds none, and one that counts send buttons counts the empty ones only.",
+  "limits": [
+    "One strip (an audio track with no inserts), one send, one destination bus, one project, two languages. A strip with two assigned sends was not dumped, so the order of two groups and their knobs is inferred from the bottom-to-top order seen here, not measured.",
+    "The destination named in the group's description was read for one bus. A renamed bus, a send to an existing Aux, and the eight other languages were not read, so the description is not established as a stable destination identifier.",
+    "The group's list button and its menu were not opened, so whether that menu marks the destination is unmeasured; the 2026-09-13 mark reading is undermined for the slot it was taken on and not replaced.",
+    "The destination bus had no receiving strip, so Logic created one (`Aux 4`). Whether a send to a bus some strip already receives also adds the empty send row was not measured.",
+    "`pos` and `size` were added to the dump tool after the first Korean dump of strip 1 was taken; that dump carries none."
+  ],
+  "supersedes": "2026-09-13-the-send-slot-menu-does-not-mark-its-assignment-but-an-assigned-send-grows-a-level-knob",
+  "canon": [
+    {
+      "ref": "logic-canon://quickhelp/QuickHelp/ko/INS_010_SendSlot#Title",
+      "value": "센드 슬롯",
+      "used_for": "the help prefix of the EMPTY send slot button (AXHelp begins with this title) -- the element sendSlotHelpKeyword matches",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/QuickHelp/ko/INS_011_SendLevelKnob#Title",
+      "value": "센드 레벨 노브",
+      "used_for": "the help prefix of the send level knob that is the assigned send group's next sibling -- the element sendLevelKnobHelpKeyword matches",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/QuickHelp/en/INS_010_SendSlot#Title",
+      "value": "Send slot",
+      "used_for": "the help prefix of the EMPTY send slot button (AXHelp begins with this title) -- the element sendSlotHelpKeyword matches",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/QuickHelp/en/INS_011_SendLevelKnob#Title",
+      "value": "Send Level knob",
+      "used_for": "the help prefix of the send level knob that is the assigned send group's next sibling -- the element sendLevelKnobHelpKeyword matches",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    }
+  ]
+}

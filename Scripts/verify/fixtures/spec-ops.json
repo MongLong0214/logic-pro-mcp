@@ -1,0 +1,64 @@
+{
+ "format": "lpm-acceptance/1",
+ "issue": 1028,
+ "surface": "arrange.track_headers",
+ "sources": [
+  {
+   "doc": "docs/adr/ADR-019-observation-ledger.md",
+   "sha": "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea",
+   "quote": "The observation system exists so that when Logic moves"
+  }
+ ],
+ "fixture": {
+  "id": "selftest-every-operator",
+  "note": "A self-test fixture: one row that uses every operator of the closed set, so each operator has a passing reading and, in fixtures/cases.json, a failing one."
+ },
+ "locales": {
+  "subset": ["en"],
+  "reason": "self-test: the matches_canon row is pinned for en, and one locale is enough to exercise each operator"
+ },
+ "rows": [
+  {
+   "id": "every-operator",
+   "criterion": 0,
+   "steps": [
+    {"as": "before", "read": {"uri": "logic://tracks"}},
+    {"as": "other", "read": {"uri": "logic://tracks"}},
+    {"as": "again", "read": {"uri": "logic://tracks"}},
+    {"as": "op", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 15, "enabled": true}}},
+    {"as": "after", "read": {"uri": "logic://tracks"}}
+   ],
+   "operation": "op",
+   "expect": [
+    {"path": "after.armed", "op": "eq", "value": [15]},
+    {"path": "after.mode", "op": "ne", "value": "idle"},
+    {"path": "after.mode", "op": "in", "value": ["armed", "recording"]},
+    {"path": "after.mode", "op": "not_in", "value": ["idle", "off"]},
+    {"path": "after.armed", "op": "subset", "value": [15, 16]},
+    {"path": "after.armed", "op": "superset", "value": [15]},
+    {"path": "after.armed", "op": "count_eq", "value": 1},
+    {"path": "after.armed", "op": "count_ge", "value": 1},
+    {"path": "after.armed", "op": "changed", "ref": {"obs": "before.armed"}},
+    {"path": "after.stable", "op": "unchanged", "ref": {"obs": "before.stable"}},
+    {"path": "after.gone", "op": "is_null"},
+    {"path": "after.title", "op": "not_null"},
+    {"path": "after.title", "op": "matches_canon",
+     "ref": {
+      "canon": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Smart%20Controls#value",
+      "locale": "$locale",
+      "quote": "Smart Controls"
+     }},
+    {"path": "op.state", "op": "eq", "value": "A"},
+    {"path": "before.stable", "op": "not_null", "invariant": true}
+   ],
+   "counterexample": [
+    {"observation": "before", "replaces": "after", "must_fail": [0, 1, 2, 3, 5, 6, 7, 12]},
+    {"observation": "other", "replaces": "after", "must_fail": [4, 9, 10, 11]},
+    {"observation": "again", "replaces": "after", "must_fail": [8]}
+   ],
+   "restore": [],
+   "restore_expect": [],
+   "independence": ["before", "other", "again", "after"]
+  }
+ ]
+}

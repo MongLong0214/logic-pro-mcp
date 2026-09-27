@@ -120,6 +120,58 @@
         "A nib in no `.lproj` is locale `-`. That it is shown untranslated on every locale is measured for the Compressor on de-DE only.",
         "Presence is not use, the same as for `strings`: `Loop` is a segment label in MAContentTaggingUI's STORMMainWindow.nib in zh_CN, which makes `docs/locale/ui-labels.json` read two labels' zh-CN coverage as `derived` although nothing has shown that window is reachable."
       ]
+    },
+    "pluginsettings": {
+      "path": "Contents/Resources/Plug-In Settings/<folder> and Contents/Resources/Plug-In Settings Internal/<folder>",
+      "answers": "which factory plug-in settings folders the Logic bundle ships: the folder NAME, one per plug-in whose factory settings Apple ships, which is the key StockPluginCatalog reads a plug-in's factory presets by",
+      "fields": [
+        "folder"
+      ],
+      "files": 3713,
+      "entries": 147,
+      "locale_names": 1,
+      "why": "Issue #1030. The catalog read presets from the bundle root only, one level deep, and only for folders a seed named: Studio Piano's folder ships only under `Plug-In Settings Internal` and no seed named it. `Scripts/check-factory-settings-folders.py` compares the seeds and `factorySettingsFolderExclusions` with this set in CI, where no Logic is installed.",
+      "how": "`extract_pluginsettings` lists the directories directly under both roots; a file beside them (`CSParameterOrder.plist`) is not a folder. The corpus digest covers every file under both roots, so a preset added, removed or moved inside a folder is a different corpus even when no folder name changed, and every folder's path under its root, so a folder with no file in it is a different corpus too (#1036).",
+      "limits": [
+        "Folder names only. The presets inside a folder are not pinned; the digest says that they changed, not which.",
+        "Four names ship under both roots, so the rows outnumber the distinct names the absence set holds.",
+        "The shared `/Library/Application Support/Logic/Plug-In Settings` root is outside the bundle and outside this corpus. Folders that ship only there are checked by `StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()` on a host that has the shared root; CI has none, so there it is skipped.",
+        "Not localised: the bundle holds one directory per folder, not one per `.lproj`, and nothing here says what name a localised Logic shows for the plug-in."
+      ]
+    },
+    "stringsdict": {
+      "path": "**/<locale>.lproj/*.stringsdict",
+      "answers": "the plural FORMS of a counted label, per locale: the format string and one row per plural category the file declares (measured on this build: format 1,060, other 1,190, one 714, zero 20; no two, few or many)",
+      "fields": [
+        "format",
+        "zero",
+        "one",
+        "other"
+      ],
+      "files": 100,
+      "entries": 2984,
+      "locale_names": 10,
+      "how": "The unit is the file, the key is the stringsdict key (with `/<variable>` for a plural rule), and the field is `format` or the category. Five en.lproj files are UTF-16LE with a byte-order mark while their XML declaration says UTF-8, which plistlib refuses; they are decoded by the BOM and parsed as the same plist, and the result agrees with plutil on 100 of 100 files. Any other shape -- a rule type other than NSStringPluralRuleType, a non-string value -- stops the build naming the file.",
+      "limits": [
+        "Nothing cites a plural form yet, so the ten sets carry no index row; they answer absence and presence questions only.",
+        "The ten-locale check covers this source, and the proof of translation compares each unit with its English file; measured on this build no stringsdict is byte-identical to its English file."
+      ]
+    },
+    "plugin_names": {
+      "path": "Contents/Frameworks/MAContentTagging.framework/Versions/A/Resources/DefaultPluginMapping.plist",
+      "answers": "the display NAME Logic gives an Audio Unit, by its identity: EMAG|0236|0000 is Channel EQ",
+      "fields": [
+        "value"
+      ],
+      "files": 1,
+      "entries": 242,
+      "locale_names": 1,
+      "how": "One flat dict. The unit is the AU identity exactly as the file writes it, the key is `name`, the field is `value`. Every row is pinned, not only cited ones (PIN_EVERY_ROW), so an offline guard can cite the row a plug-in name comes from. Anything but a dict of strings stops the build naming the file.",
+      "limits": [
+        "LOCALE-INDEPENDENT: the file is in no .lproj, so its locale is `-` and the ten-locale check demands no language folder for it. That says the string has no translation in Apple's data; that the plug-in menu SHOWS it untranslated is read on a Korean Logic only (f4b8d5a0).",
+        "242 entries hold 237 distinct names: a name can belong to more than one identity, so a name alone does not say which plug-in it is.",
+        "It names the plug-ins Logic maps for content tagging. A plug-in absent from it is not thereby absent from Logic."
+      ]
     }
   },
   "not_canonical": {

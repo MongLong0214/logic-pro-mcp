@@ -140,6 +140,18 @@ struct ChannelStripState: Sendable, Codable {
     /// `AXTitle`, so there is nothing to read a destination from — and a send list cannot be
     /// published until there is.
     var sends: [SendState]?
+    /// Per-slot send OCCUPANCY, when the strip's descendants were read (#291).
+    ///
+    /// Three answers, kept apart on the wire. Key absent: nobody could look — a children read
+    /// below the strip failed with a status that is not an answer, or a role or help read that
+    /// decides whether an element is a send slot at all did. `[]`: the strip was read and
+    /// carries no send slot. A list: one entry per send slot in the reader's walk. An empty slot
+    /// is a send-slot button. An assigned send, dumped live on 2026-09-27 in Korean and English,
+    /// is a group whose next sibling is the send-level knob, and the reader takes that group as an
+    /// occupied slot (`AXLogicProElements.sendSlotObservations`). The group's description names
+    /// the destination, but that was read for one bus in two languages and is not read here, so
+    /// this is occupancy and not a send list, and `sends` above stays absent.
+    var sendSlots: [SendSlotObservation]?
     var input: String?
     var output: String?
     var eqEnabled: Bool = false
@@ -154,6 +166,7 @@ struct ChannelStripState: Sendable, Codable {
 
     enum CodingKeys: String, CodingKey {
         case trackIndex, volume, pan, sends, input, output, eqEnabled, plugins
+        case sendSlots = "send_slots"
         case pluginsSource = "plugins_source"
         case pluginsReadError = "plugins_read_error"
     }
@@ -165,6 +178,40 @@ struct SendState: Sendable, Codable {
     var destination: String
     var level: Double
     var isPreFader: Bool
+}
+
+/// What one send slot was seen to be (#291, ADR-008 section 5's endpoint-and-edge-observations requirement).
+///
+/// `occupiedKnownDestination` is declared and produced by nothing this increment: the destination
+/// an assigned send's group names is not read, so a consumer that later learns one can say so
+/// without the unknown case silently changing meaning. `unreadable` is a slot whose button was
+/// found but whose successor would not say whether it is the send knob — unknown for that slot
+/// alone, not for the strip. A successor whose role will not read may be a slot of its own, and
+/// then the strip's whole list is unknown.
+enum SendSlotState: String, Sendable, Codable {
+    case observedEmpty = "observed_empty"
+    case occupiedUnknownDestination = "occupied_unknown_destination"
+    case occupiedKnownDestination = "occupied_known_destination"
+    case unreadable = "unreadable"
+}
+
+/// One send slot on a channel strip, by its position among the strip's send slots in the reader's walk.
+///
+/// `levelRaw` is the knob's `AXValue` when it read as a finite number and `levelDescription` its
+/// `AXValueDescription` when readable. Neither decides `state`: a send at minus infinity or under
+/// automation is still a send, and minus infinity cannot be written as JSON, so it is carried as
+/// no raw level beside whatever the description says.
+struct SendSlotObservation: Sendable, Codable, Equatable {
+    var ordinal: Int
+    var state: SendSlotState
+    var levelRaw: Double?
+    var levelDescription: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ordinal, state
+        case levelRaw = "level_raw"
+        case levelDescription = "level_description"
+    }
 }
 
 /// A plugin slot.

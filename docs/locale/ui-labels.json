@@ -184,10 +184,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "audioPluginSlotLabel": {
@@ -310,7 +310,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "automationModeRead": {
@@ -367,10 +367,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "automationModeWrite": {
@@ -612,6 +612,29 @@
     "即時"
    ],
    "rationale": "Apple's own Bounce nib keys this control `afY-gP-VHS.title`, which is the",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "busOutputLabelPrefix": {
+   "canonical": "bus",
+   "variants": [
+    "버스",
+    "バス",
+    "总线",
+    "匯流排"
+   ],
+   "rationale": "Classifies an output slot description as a bus by its leading word; read-only",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -1547,10 +1570,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
+    "it-IT": "unmeasured",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "displayModePopupLabel": {
@@ -2765,7 +2788,12 @@
   "inputSlotHelpKeyword": {
    "canonical": "input slot",
    "variants": [
-    "입력 슬롯"
+    "입력 슬롯",
+    "入力スロット",
+    "Input-Slot",
+    "Ranura de entrada",
+    "Slot d’entrée",
+    "输入插槽"
    ],
    "rationale": "Detects a channel strip's input slot by its AXHelp string; read-only classifier.",
    "provenance": {
@@ -2789,14 +2817,14 @@
    "coverage": {
     "en-US": "derived",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
+    "zh-CN": "derived",
+    "zh-TW": "unmeasured"
    }
   },
   "inspectorChannelStripHelpPrefix": {
@@ -2839,10 +2867,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "keyCommandsWindowTitle": {
@@ -3107,10 +3135,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "midiFileMenuItem": {
@@ -3867,6 +3895,34 @@
     "zh-TW": "derived"
    }
   },
+  "noOutputLabel": {
+   "canonical": "no output",
+   "variants": [
+    "출력 없음",
+    "出力なし",
+    "Kein Ausgang",
+    "Sin salida",
+    "Pas de sortie",
+    "Nessuna uscita",
+    "Sem Saída",
+    "没有输出",
+    "沒有輸出"
+   ],
+   "rationale": "Classifies an output slot description as routed to no output; read-only",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "nonInsertButtonText": {
    "canonical": "send",
    "variants": [
@@ -3911,7 +3967,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "okButton": {
@@ -4038,7 +4094,12 @@
   "outputSlotHelpKeyword": {
    "canonical": "output slot",
    "variants": [
-    "출력 슬롯"
+    "출력 슬롯",
+    "出力スロット",
+    "Output-Slot",
+    "Ranura de salida",
+    "Slot de sortie",
+    "输出插槽"
    ],
    "rationale": "Detects a channel strip's output slot by its AXHelp string; read-only classifier.",
    "provenance": {
@@ -4061,13 +4122,40 @@
    "coverage": {
     "en-US": "derived",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
     "fr-FR": "unmeasured",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
+    "zh-CN": "derived",
+    "zh-TW": "unmeasured"
+   }
+  },
+  "physicalOutputLabelPrefix": {
+   "canonical": "output",
+   "variants": [
+    "출력",
+    "出力",
+    "Salida",
+    "Sortie",
+    "Uscita",
+    "Saída",
+    "输出",
+    "輸出"
+   ],
+   "rationale": "Classifies an output slot description as a physical output by its leading word;",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -4085,10 +4173,10 @@
     "de-DE": "derived",
     "es-ES": "unmeasured",
     "fr-FR": "derived",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "playheadPositionGroupLabel": {
@@ -4760,10 +4848,10 @@
     "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "derived",
+    "it-IT": "unmeasured",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "pluginWindowViewSwitcher": {
@@ -5014,10 +5102,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "recordArmKeyCommandName": {
@@ -5039,10 +5127,10 @@
     "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "regionBarsSentence": {
@@ -5284,7 +5372,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "savePanelFolderRadio": {
@@ -5370,6 +5458,31 @@
     "zh-TW": "derived"
    }
   },
+  "sendLevelKnobHelpKeyword": {
+   "canonical": "Send Level knob",
+   "variants": [
+    "센드 레벨 노브",
+    "センドレベルノブ",
+    "Send-Drehregler",
+    "Botón “Nivel de envío”",
+    "Potentiomètre Niveau d’envoi",
+    "“发送电平”旋钮"
+   ],
+   "rationale": "Detects the send level knob that appears beside an assigned send; read-only",
+   "match": "contains",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "unmeasured",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
+    "zh-CN": "derived",
+    "zh-TW": "unmeasured"
+   }
+  },
   "sendOrIOControlLabel": {
    "canonical": "send",
    "variants": [
@@ -5391,7 +5504,32 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
+   }
+  },
+  "sendSlotHelpKeyword": {
+   "canonical": "Send slot",
+   "variants": [
+    "센드 슬롯",
+    "センドスロット",
+    "Send-Slot",
+    "Ranura de envío",
+    "Slot d’envoi",
+    "发送插槽"
+   ],
+   "rationale": "Detects a channel strip's send slot by its AXHelp string; read-only classifier.",
+   "match": "contains",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "unmeasured",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
+    "zh-CN": "derived",
+    "zh-TW": "unmeasured"
    }
   },
   "setLocatorsMenuItem": {
@@ -5748,7 +5886,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "sortTracksByAudioChannelMenuItem": {
@@ -6186,6 +6324,32 @@
     "zh-TW": "derived"
    }
   },
+  "stereoOutputLabel": {
+   "canonical": "Stereo Output",
+   "variants": [
+    "Stereo-Ausgabe",
+    "Salida estéreo",
+    "Sortie stéréo",
+    "Uscita stereo",
+    "Saída Estéreo",
+    "立体声输出",
+    "立體聲輸出"
+   ],
+   "rationale": "Classifies an output slot description as the main stereo output; read-only",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "subdivisionSliderLabel": {
    "canonical": "division",
    "variants": [
@@ -6495,10 +6659,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-regions-census",
@@ -6615,6 +6779,7 @@
     "음소거",
     "ミュート",
     "Ton aus",
+    "Stumm",
     "Silenciar",
     "Muet",
     "Muto",
@@ -6950,8 +7115,8 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-CN": "unmeasured",
+    "zh-TW": "unmeasured"
    }
   },
   "transportContainerMetadata": {
@@ -7250,10 +7415,10 @@
     "de-DE": "measured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    },
    "coverage_records": {
     "de-DE": "2026-09-12-de-DE-arrange-menus-census",
