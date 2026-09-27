@@ -277,6 +277,18 @@ private func operationTraceCensusVerdict(routed: [String], phases: [TracePhase])
     return .covered
 }
 
+/// The traces one dispatch made: the one its context registered, and any whose request names it as
+/// parent (a saga step's). Other suites run beside these tests over the one shared store, some with
+/// tracing on, so a store-wide read also sees their traces.
+private func operationTraceCensusOwnTraces(of context: OperationTraceContext) async -> [OperationTrace] {
+    guard let id = context.traceID else { return [] }
+    return await OperationTraceStore.shared.recent(limit: 128).filter { trace in
+        trace.traceID == id || trace.events.contains {
+            $0.phase == .requestReceived && $0.attributes["parent_trace_id"] == id.rawValue
+        }
+    }
+}
+
 extension OperationTraceTests {
     @Test func OperationTraceCoverageAllRegistryMutations() async throws {
         let previous = replaceOperationTraceCoverageFlag(with: "1")
@@ -348,18 +360,26 @@ extension OperationTraceTests {
 
         for spec in mutatingSpecs {
             await OperationTraceStore.shared.clear()
-            _ = await dispatchOperationTraceCoverageSpec(
-                spec,
-                params: operationTraceCoverageParams(for: spec.id, fixtures: fixtures),
-                router: router,
-                cache: cache,
-                targetRegistry: targetRegistry
-            )
+            // This dispatch's own trace is the one its context registers. Looked up by operation
+            // id, a test running beside this one that dispatches the same op with tracing on
+            // supplied its own unfinished trace here (round 2).
+            let traceContext = OperationTraceContext()
+            _ = await OperationTraceContext.$current.withValue(traceContext) {
+                await dispatchOperationTraceCoverageSpec(
+                    spec,
+                    params: operationTraceCoverageParams(for: spec.id, fixtures: fixtures),
+                    router: router,
+                    cache: cache,
+                    targetRegistry: targetRegistry
+                )
+            }
 
-            let matchingTrace = await OperationTraceStore.shared.recent(limit: 128)
-                .first { $0.operationID == spec.id.rawValue }
+            var matchingTrace: OperationTrace?
+            if let traceID = traceContext.traceID {
+                matchingTrace = await OperationTraceStore.shared.trace(traceID)
+            }
             if notOracledDeferrals.contains(spec.id) {
-                #expect(matchingTrace == nil, "NOT-oracled deferral unexpectedly claimed trace coverage: \(spec.id.rawValue)")
+                #expect(traceContext.traceID == nil, "NOT-oracled deferral unexpectedly claimed trace coverage: \(spec.id.rawValue)")
                 continue
             }
             #expect(matchingTrace != nil, "Missing trace for \(spec.tool.rawValue).\(spec.command)")
@@ -383,10 +403,10 @@ extension OperationTraceTests {
     /// by design, so the contract is an ABSENCE: for EVERY read-only registry
     /// spec — not a hand-picked sample — invoking the real bound handler must
     /// record no trace and cross no write boundary. Two independent assertions,
-    /// because neither alone is sufficient: the store-empty check proves no
-    /// trace was started, and the `onWriteBoundary` probe proves no write
+    /// because neither alone is sufficient: the context check proves this
+    /// dispatch started no trace, and the `onWriteBoundary` probe proves no write
     /// boundary was crossed even in the (correct) absence of a trace, which a
-    /// store-only check is structurally blind to.
+    /// trace-only check is structurally blind to.
     ///
     /// Side-effect safety mirrors the executable dispatch census: every channel
     /// is a probe, the project lifecycle executor is stubbed through the
@@ -468,13 +488,19 @@ extension OperationTraceTests {
             )
             await OperationTraceStore.shared.clear()
             let boundaryProbe = WriteBoundaryProbe()
+            // Every trace start registers on the current context (`startTraceIfEnabled`), so an
+            // id here is a trace this dispatch started. The store as a whole also holds traces
+            // from tests running beside this one with tracing on (round 2).
+            let traceContext = OperationTraceContext()
             _ = await OperationTraceParentBoundary.$onWriteBoundary.withValue({
                 await boundaryProbe.record()
             }) {
-                await handler(
-                    dependencies,
-                    operationTraceCoverageParams(for: spec.id, fixtures: fixtures)
-                )
+                await OperationTraceContext.$current.withValue(traceContext) {
+                    await handler(
+                        dependencies,
+                        operationTraceCoverageParams(for: spec.id, fixtures: fixtures)
+                    )
+                }
             }
 
             let boundaryCount = await boundaryProbe.count
@@ -482,24 +508,28 @@ extension OperationTraceTests {
                 boundaryCount == 0,
                 Comment(rawValue: "Read-only command crossed a write boundary: \(spec.id.rawValue)")
             )
-            let traces = await OperationTraceStore.shared.recent(limit: 128)
             #expect(
-                traces.isEmpty,
+                traceContext.traceID == nil,
                 Comment(rawValue: "Read-only command traced: \(spec.tool.rawValue).\(spec.command)")
             )
-            #expect(
-                !traces.contains { trace in
-                    trace.events.contains { $0.phase == .writeBoundaryCrossed }
-                },
-                Comment(rawValue: "Read-only command recorded writeBoundaryCrossed: \(spec.id.rawValue)")
-            )
         }
+
+        // Control for the check above: the same handler seam, given a mutating spec, registers
+        // the trace it starts on the context, so a nil id is an answer and not a context the
+        // dispatch never saw.
+        let stop = try #require(OperationHandlerRegistry.handler(for: .transportStop))
+        let controlContext = OperationTraceContext()
+        _ = await OperationTraceContext.$current.withValue(controlContext) {
+            await stop(dependencies, [:])
+        }
+        #expect(controlContext.traceID != nil, "a mutating handler registered no trace on the context")
 
         await OperationTraceStore.shared.clear()
     }
 
-    /// #389 store-wide ORDERING census. For every mutating registry spec, no
-    /// trace may place `writeBoundaryCrossed` before its first `channelStarted`:
+    /// #389 ORDERING census. For every mutating registry spec, no trace of its
+    /// dispatch (its own and any child it started, such as a saga step's) may
+    /// place `writeBoundaryCrossed` before its first `channelStarted`:
     /// the boundary is committed BY the router at the channel it dispatches, so
     /// a boundary that precedes every channel is a boundary the op never crossed.
     /// Traces that have one phase but not the other are exempt — non-router
@@ -531,7 +561,7 @@ extension OperationTraceTests {
                     targetRegistry: context.targetRegistry
                 )
             }
-            for trace in await OperationTraceStore.shared.recent(limit: 128) {
+            for trace in await operationTraceCensusOwnTraces(of: traceContext) {
                 let phases = trace.events.map(\.phase)
                 guard let boundary = phases.firstIndex(of: .writeBoundaryCrossed),
                       let firstChannel = phases.firstIndex(of: .channelStarted) else { continue }
@@ -769,23 +799,26 @@ extension OperationTraceTests {
 
         for testCase in cases {
             await OperationTraceStore.shared.clear()
-            _ = await ProjectDispatcher.handle(
-                command: testCase.command,
-                params: testCase.params,
-                router: ChannelRouter(),
-                cache: StateCache(),
-                dialogPresent: { true },
-                cleanupAuditFileReader: operationTraceCoverageFileReader,
-                exportOptions: fastOptions(identity: { nil })
-            )
+            let traceContext = OperationTraceContext()
+            _ = await OperationTraceContext.$current.withValue(traceContext) {
+                await ProjectDispatcher.handle(
+                    command: testCase.command,
+                    params: testCase.params,
+                    router: ChannelRouter(),
+                    cache: StateCache(),
+                    dialogPresent: { true },
+                    cleanupAuditFileReader: operationTraceCoverageFileReader,
+                    exportOptions: fastOptions(identity: { nil })
+                )
+            }
 
             let operationID = try #require(
                 OperationRegistry.spec(tool: ProjectDispatcher.tool.name, command: testCase.command)?.id
             )
-            let trace = try #require(
-                await OperationTraceStore.shared.recent(limit: 8)
-                    .first { $0.operationID == operationID.rawValue }
-            )
+            // By the id this dispatch registered, not by operation id (round 2).
+            let traceID = try #require(traceContext.traceID)
+            let trace = try #require(await OperationTraceStore.shared.trace(traceID))
+            #expect(trace.operationID == operationID.rawValue)
             #expect(trace.events.contains { $0.phase == .requestReceived })
             #expect(!trace.events.contains { $0.phase == .writeBoundaryCrossed })
             #expect(trace.events.contains { $0.phase == .resultEmitted })
