@@ -26,6 +26,7 @@
     {"as": "open", "call": {"tool": "logic_navigate", "command": "show_smart_controls", "params": {}}},
     {"as": "after", "read": {"uri": "logic://system/ui"}}
    ],
+   "operation": "open",
    "expect": [
     {"path": "open.state", "op": "eq", "value": "A"},
     {"path": "after.title", "op": "matches_canon",

@@ -48,6 +48,7 @@
       }
      }
     ],
+    "operation": "open",
     "expect": [
      {
       "path": "open.state",
@@ -87,12 +88,13 @@
    }
   ]
  },
- "spec_sha256": "c145b2ce65a7a9e1c86690a0f7b2c1f7d5a8bc331d881dc7f7375a804e1b0e61",
+ "spec_sha256": "65c0cc272561d953b3f780f0f6562d39098e67073258b6c6dd9263e2d4ad6ee3",
  "binary": {
-  "sha256": "0000000000000000000000000000000000000000000000000000000000000001",
+  "binary_path": null,
+  "binary_sha256": null,
   "head": "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea",
-  "binding": "built-by-verifier",
-  "note": "self-test fixture: no binary exists; the digest is a placeholder the engine only checks for shape"
+  "binding": "unbound",
+  "note": "self-test fixture: no binary exists, so none is claimed; cases that need one bind a temporary file (selftest.py, the `bind` patch op)"
  },
  "runs": {
   "en": {
@@ -103,6 +105,26 @@
     "build": "6674",
     "locale": "en-US",
     "os": "macOS 26.3 (25D125)"
+   },
+   "locale_reading": {
+    "lproj": "en",
+    "code": "en",
+    "expected_title": {
+     "readable": true,
+     "value": "lpm-locale-campaign - Tracks"
+    },
+    "language_setting": {
+     "readable": true,
+     "value": [
+      "en"
+     ]
+    },
+    "window_names": {
+     "readable": true,
+     "value": [
+      "lpm-locale-campaign - Tracks"
+     ]
+    }
    },
    "rows": {
     "label-is-apples": {

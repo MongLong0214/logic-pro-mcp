@@ -31,6 +31,7 @@
     {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
     {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
    ],
+   "operation": "reply",
    "expect": [
     {"path": "reply.state", "op": "eq", "value": "A"},
     {"path": "reply.write_attempted", "op": "eq", "value": true},
