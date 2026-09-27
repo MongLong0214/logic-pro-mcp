@@ -195,7 +195,7 @@ Also open, outside the ADR set:
 | #1039 | OPEN | Filed 2026-09-27 from the #1029 live runs: under the Korean 2-Set input source, ten plain letter keys reach Logic as nothing, and eight CGEvent fallback operations send them with no modifier. |
 | #1040 | OPEN | Filed 2026-09-27 from #291 R1: the Input Monitoring checkbox has no LabelSet, and three track-header reads turn an unreadable value into false. |
 | #1041 | OPEN | Filed 2026-09-27 from the #1029 pause work: `logic://transport` declares `isPaused`, but nothing that reads Logic ever writes it. |
-| #1042 | OPEN | Filed 2026-09-27 from the #1029 pause work (code reading, not yet measured live): a cycle or metronome readback mismatch is not marked unsafe to fall back from, so the key-command fallback can press the checkbox a second time. |
+| #1042 | OPEN | Filed 2026-09-27 from the #1029 pause work, by reading the code; Logic has not been driven for it yet. A cycle or metronome readback mismatch is not marked unsafe to fall back from, so the key-command fallback can press the checkbox a second time. |
 
 ### Three reopen reasons, checked rather than inferred
 
