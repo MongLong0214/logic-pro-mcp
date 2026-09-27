@@ -1359,15 +1359,105 @@ import Testing
                 == ArmKeyCommandSetup.commandName)
     }
 
-    /// The fallback, and it is the whole safety story: a host whose language was not read, or one
-    /// Logic does not ship, types the English canonical and fails closed exactly as before.
-    @Test("an unread or unknown locale types the English canonical")
-    func searchQueryFallsBackToEnglish() {
-        for unknown in ["zh", "unknown", "xx-YY", "", nil] {
-            #expect(ArmKeyCommandSetup.searchQuery(locale: unknown)
-                        == ArmKeyCommandSetup.commandName,
-                    "\(unknown ?? "nil") names no table entry and must type the canonical")
+    /// An unread language keeps the English canonical, and so does English itself.
+    ///
+    /// Kills the mutation `guard let locale else { return nil }` in `searchQuery`: an unread
+    /// reading would then refuse a host that is most often English.
+    @Test("an unread language, or English, types the English canonical")
+    func searchQueryKeepsEnglishForEnglishOrUnread() {
+        for locale in [nil, "en", "en-US"] as [String?] {
+            let query: String? = ArmKeyCommandSetup.searchQuery(locale: locale)
+            #expect(query == ArmKeyCommandSetup.commandName,
+                    "\(locale ?? "nil") must type the English canonical")
         }
+    }
+
+    /// A language that WAS read and has no Apple spelling in the table gets no query at all.
+    /// English typed into a translated Key Commands search is not a fallback; it is a guess.
+    ///
+    /// Kills the mutation that restores the fallback in `searchQuery`
+    /// (`?? commandName` / `return commandName` for a locale the table lacks).
+    @Test("a language with no Apple spelling gets no search query, never the English name")
+    func searchQueryRefusesALanguageItCannotSpell() {
+        for locale in ["it-IT", "pt-BR", "zh-TW", "zh", "xx-YY", ""] {
+            let query: String? = ArmKeyCommandSetup.searchQuery(locale: locale)
+            #expect(query == nil, "\(locale) has no Apple spelling and must not type \(query ?? "nil")")
+        }
+    }
+
+    /// #1028 P1b. Italian, Portuguese and Traditional Chinese Logic were typed the English name,
+    /// because the table has no entry for them and the query fell back to English. The run must
+    /// refuse with its own reason BEFORE the Key Commands window is opened: no Option+K, nothing
+    /// typed, no Learn press, no configuration write.
+    ///
+    /// Kills two mutations: the fallback restored in `searchQuery` (English is typed and the run
+    /// reaches the GUI), and the refusal moved below the Option+K post (a chord is recorded).
+    @Test("a Logic whose language has no Apple spelling refuses before Key Commands opens",
+          arguments: ["it-IT", "pt-BR", "zh-TW"])
+    func unknownSpellingRefusesBeforeTheWindowOpens(locale: String) throws {
+        let fixture = Self.fixture(
+            windowInitiallyOpen: false,
+            uiLocale: locale,
+            firstVerify: .unmapped,
+            verify: .verified
+        )
+        let outcome = Self.run(fixture)
+        guard case .failed(let stage, let hint, let evidence) = outcome else {
+            Issue.record("\(locale): expected a refusal, got \(outcome)")
+            return
+        }
+        #expect(stage == "key_command_name_unknown_for_locale")
+        #expect(hint.contains(locale), "the refusal must name the language it read")
+        #expect(fixture.probe.typed.isEmpty, "\(locale) typed \(fixture.probe.typed)")
+        #expect(fixture.probe.chords.isEmpty, "no Option+K and no assignment chord")
+        #expect(fixture.probe.learnPresses == 0)
+        #expect(!evidence.windowOpened)
+        #expect(!evidence.searchTyped)
+        #expect(!evidence.configurationWriteAttempted)
+        #expect(evidence.writeSource == ArmKeyCommandSetup.WriteSource.none)
+        #expect(evidence.safeToRetry)
+        // Verify-first still ran: a host whose chord already works is not refused for its language.
+        #expect(fixture.probe.verifyCalls == 1)
+    }
+
+    /// The same hosts, already configured: verify-first proves the chord works and nothing needs
+    /// to be typed, so the missing spelling is irrelevant and the run must not refuse.
+    ///
+    /// Kills the mutation that moves the refusal above verify-first.
+    @Test("an already-configured Logic is not refused for its language")
+    func alreadyConfiguredHostIsNotRefusedForItsLanguage() {
+        let fixture = Self.fixture(uiLocale: "it-IT", firstVerify: .verified)
+        guard case .alreadyConfigured = Self.run(fixture) else {
+            Issue.record("an already-working chord must be reported as configured")
+            return
+        }
+        #expect(fixture.probe.typed.isEmpty)
+    }
+
+    /// English and Korean are unchanged by the refusal: each completes the setup and types the
+    /// spelling it typed before.
+    ///
+    /// Kills a refusal widened to every locale that is not bare English (for example a check on
+    /// `locale == nil` alone), which would refuse `en-US` and `ko-KR`.
+    @Test("an English or Korean Logic still completes the setup and types its own spelling",
+          arguments: [
+              ("en-US", ArmKeyCommandSetup.commandName),
+              ("en", ArmKeyCommandSetup.commandName),
+              ("ko-KR", "트랙 녹음 활성화 토글"),
+              ("ko", "트랙 녹음 활성화 토글"),
+          ])
+    func englishAndKoreanAreUnchanged(locale: String, typed: String) {
+        let fixture = Self.fixture(
+            commandValues: [typed],
+            uiLocale: locale,
+            firstVerify: .unmapped,
+            verify: .verified
+        )
+        guard case .configuredAndVerified = Self.run(fixture) else {
+            Issue.record("\(locale): expected a completed assignment")
+            return
+        }
+        #expect(fixture.probe.typed == [typed])
     }
 
 }

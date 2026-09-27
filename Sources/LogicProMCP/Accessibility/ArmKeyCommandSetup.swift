@@ -76,19 +76,23 @@ enum ArmKeyCommandSetup {
     /// Typing is not matching: the filter collapses the list, and a query in the wrong language
     /// collapses it to nothing, so this has to commit to ONE string. It asks Logic what language
     /// its menus are in and takes Apple's own value for that language out of
-    /// `AXLocaleValues` -- GENERATED from the LabelSet's row, so the ten spellings are Apple's
-    /// bytes rather than a dictionary somebody maintained. With no reading, or a locale the
-    /// table does not carry, it types the English canonical: the behaviour that existed before,
-    /// failing closed the same way.
-    /// Matching afterwards accepts ANY label in the set, so a host that types the canonical and
-    /// still shows a known localized cell is not refused for it.
-    static func searchQuery(locale: String?) -> String {
-        guard let locale,
-              let localised = AXLocaleValues.recordArmKeyCommandName[locale] else {
-            return commandName
-        }
-        return localised
+    /// `AXLocaleValues` -- GENERATED from the LabelSet's row, so the spellings are Apple's
+    /// bytes rather than a dictionary somebody maintained.
+    ///
+    /// With no reading it types the English canonical, as before. A language that WAS read and
+    /// that the table does not carry answers nil, and `run` refuses before the Key Commands
+    /// window opens (#1028 P1b): English typed into an Italian, Portuguese or Traditional Chinese
+    /// search is a guess, and it was the fallback here until the table lost those three entries
+    /// for being English presented as a translation. `en` and `en-US` are in the table.
+    /// Matching afterwards accepts ANY label in the set, so a host that types one spelling and
+    /// shows another known one is not refused for it.
+    static func searchQuery(locale: String?) -> String? {
+        guard let locale else { return commandName }
+        return AXLocaleValues.recordArmKeyCommandName[locale]
     }
+
+    /// The `stage` of the refusal above, surfaced verbatim in the result envelope.
+    static let keyCommandNameUnknownForLocale = "key_command_name_unknown_for_locale"
 
     /// How a State-A record-arm mapping was reached.
     enum WriteSource: String, Equatable {
@@ -253,8 +257,8 @@ enum ArmKeyCommandSetup {
         var ownsGate: @Sendable () -> Bool = { true }
         /// OBSERVED: the language Logic's own menus are in (`ko-KR`, `en-US`, …), or nil when it
         /// could not be read. Only ever used to DECIDE WHICH STRING TO TYPE into the Key Commands
-        /// filter; nothing is matched on it, so a nil reading costs the English canonical and the
-        /// same fail-closed refusal that existed before this was here.
+        /// filter, or that there is none to type; nothing is matched on it, so a nil reading costs
+        /// the English canonical and the same fail-closed refusal that existed before this was here.
         var uiLocale: @Sendable () -> String? = { nil }
         var ax: AXHelpers.Runtime
         var elements: AXLogicProElements.Runtime
@@ -401,6 +405,23 @@ enum ArmKeyCommandSetup {
                 evidence: evidence
             )
         }
+
+        // Decide WHAT TO TYPE before the window opens, not after. A host whose language was read
+        // and has no Apple spelling in the table refuses here -- no Option+K, no keystroke, no
+        // Learn press -- instead of typing English into a translated search (#1028 P1b). It sits
+        // below verify-first on purpose: a host whose chord already works needs nothing typed.
+        let hostLocale = runtime.uiLocale()
+        guard let typedQuery = searchQuery(locale: hostLocale) else {
+            return .failed(
+                stage: keyCommandNameUnknownForLocale,
+                hint: "Logic's menus read as \(hostLocale ?? "an unknown language"), and this server has no Apple "
+                    + "spelling of the record-arm command for it, so it refused to type the English name into "
+                    + "a translated Key Commands search. No Key Commands window was opened and no key was "
+                    + "typed. Assign \"\(commandName)\" (under its name in Logic's language) to "
+                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) manually.",
+                evidence: evidence
+            )
+        }
         evidence.writeSource = .guiAssignment
 
         func fail(stage: String, hint: String) -> Outcome {
@@ -532,10 +553,10 @@ enum ArmKeyCommandSetup {
         if mutationBlocked() { return timedOut() }
         // typeText checks cancellation before EACH code unit; a false return means
         // the deadline fired mid-string, so fail closed (no more keys posted).
-        // TYPE THE STRING THIS HOST'S LOGIC USES. The filter is a live search: an English name
-        // typed into a Korean Logic collapses the list to nothing, and the setup then reported
-        // "could not find the command — Logic may be non-English" having never had a chance.
-        let typedQuery = searchQuery(locale: runtime.uiLocale())
+        // TYPE THE STRING THIS HOST'S LOGIC USES, chosen above before the window opened. The
+        // filter is a live search: an English name typed into a Korean Logic collapses the list
+        // to nothing, and the setup then reported "could not find the command — Logic may be
+        // non-English" having never had a chance.
         guard runtime.typeText(typedQuery) else { return timedOut() }
         evidence.searchTyped = true
         runtime.sleep(1.0)  // let the filter collapse the list
