@@ -330,6 +330,9 @@ extension ResourceHandlers {
             "logic_version": snapshot.logicVersion ?? NSNull(),
             "catalog_source": snapshot.catalogSource,
             "entry": jsonObject(entry),
+            // Every preset, uncapped, with its category subfolder: `entry.known_presets` is the
+            // first `preset_name_cap` of these names.
+            "factory_presets": jsonObject(StockPluginCatalog.factoryPresets(id: entry.id)),
             "validation": jsonObject(snapshot.validation),
         ])
         return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])

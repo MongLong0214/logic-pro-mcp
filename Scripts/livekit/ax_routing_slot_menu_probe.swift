@@ -127,26 +127,73 @@ print("slot destination: \(originalDestination)")
 // The spelling comes from the caller, parsed out of `AXLocalePolicy.trackMuteButton`, which carries
 // `음소거` and `ミュート` as well. An English literal here would lose the control on a Japanese Logic
 // and the run would then report a wall it had no instrument to see.
+//
+// The control must leave the Mute as it found it whether or not it saw it move. Measured 2026-09-27
+// on a Korean Logic 12.3 while a LogicProMCP server was polling: a press on this checkbox was applied
+// only when AXFocused had been set on it just before, and not reliably even then, so the old pair —
+// focus once, press, wait 0.7 s, press, wait 0.7 s — applied one press of the two, printed `moved: 0`
+// and left the Mute flipped. Four runs in #291's first Korean live run left track 0 muted that way.
+// So every press is preceded by focus and every change is waited for rather than slept past.
+//
+// A press can still be dropped while the server polls. A press that is dropped and then repeated
+// still shows that this probe's AX actuation reaches this Logic, so the move is tried at most three
+// times, and so is the way back to the value read first. Both counts are printed. A Mute that never
+// moves prints `moved: 0` after three attempts; one that does not come back prints `restored: 0`.
+// After the value reads back as found, it is read again once more a second later, so a dropped
+// press that Logic applies late is seen here and not left behind.
 let muteLabels: [String] = {
     guard let index = CommandLine.arguments.firstIndex(of: "--mute-labels") else { return ["Mute"] }
     let rest = CommandLine.arguments.dropFirst(index + 1).prefix { !$0.hasPrefix("--") }
     return rest.isEmpty ? ["Mute"] : Array(rest)
 }()
+let muteAttemptLimit = 3
+func muteValue(_ mute: AXUIElement) -> Int? { attribute(mute, kAXValueAttribute as String) as? Int }
+/// Focus, press, then poll up to three seconds for the value to differ from `from`.
+func pressMute(_ mute: AXUIElement, from: Int?) -> Int? {
+    _ = AXUIElementSetAttributeValue(mute, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    usleep(400_000)
+    _ = AXUIElementPerformAction(mute, kAXPressAction as CFString)
+    for _ in 0..<30 {
+        usleep(100_000)
+        if muteValue(mute) != from { break }
+    }
+    return muteValue(mute)
+}
 if let mute = sweep().first(where: {
     text($0, kAXRoleAttribute as String) == "AXCheckBox" && muteLabels.contains(text($0, kAXDescriptionAttribute as String))
 }) {
-    _ = AXUIElementSetAttributeValue(mute, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-    usleep(400_000)
-    let before = attribute(mute, kAXValueAttribute as String) as? Int
-    _ = AXUIElementPerformAction(mute, kAXPressAction as CFString)
-    usleep(700_000)
-    let during = attribute(mute, kAXValueAttribute as String) as? Int
-    _ = AXUIElementPerformAction(mute, kAXPressAction as CFString)
-    usleep(700_000)
-    let after = attribute(mute, kAXValueAttribute as String) as? Int
-    print("control mute moved: \((before != during && before == after) ? 1 : 0)")
+    let before = muteValue(mute)
+    var moveAttempts = 0
+    var moved = false
+    while let found = before, !moved, moveAttempts < muteAttemptLimit {
+        let now = pressMute(mute, from: found)
+        moveAttempts += 1
+        moved = now != nil && now != found
+    }
+    // The way back acts on the value it reads, not on what it assumes: a press that was not seen to
+    // move is not answered by a press back.
+    var restoreAttempts = 0
+    func settled(_ wanted: Int) -> Bool {
+        guard muteValue(mute) == wanted else { return false }
+        usleep(1_000_000)
+        return muteValue(mute) == wanted
+    }
+    while let wanted = before, !settled(wanted), restoreAttempts < muteAttemptLimit {
+        _ = pressMute(mute, from: muteValue(mute))
+        restoreAttempts += 1
+    }
+    let final = muteValue(mute)
+    print("control mute moved: \(moved ? 1 : 0)")
+    print("control mute move attempts: \(moveAttempts)")
+    print("control mute before: \(before.map(String.init) ?? "unread")")
+    print("control mute after: \(final.map(String.init) ?? "unread")")
+    print("control mute restore attempts: \(restoreAttempts)")
+    print("control mute restored: \((before != nil && final == before) ? 1 : 0)")
 } else {
     print("control mute moved: 0")
+    print("control mute move attempts: 0")
+    print("control mute restore attempts: 0")
+    print("control mute restored: 1")
 }
 
 let pressRC = AXUIElementPerformAction(slot, kAXPressAction as CFString)

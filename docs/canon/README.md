@@ -187,10 +187,12 @@ they must be complete, because proving absence needs the whole corpus.
 
 ### The corpus is bounded, and the bound is the claim's bound
 
-The absence sets cover six sources: `QuickHelp.plist`, every `.strings` file, MADSP's parameter
-tables, nib runtime attributes, the English compiled into `Base.lproj` nibs, and the labels in the
+The absence sets cover nine sources: `QuickHelp.plist`, every `.strings` file, MADSP's parameter
+tables, nib runtime attributes, the English compiled into `Base.lproj` nibs, the labels in the
 1,007 nibs Apple does not base-internationalise, read only at the (class, key) sites AppKit draws as
-text (#902). They do **not** cover strings compiled into the Logic binary, text a plug-in screen
+text (#902), the plural forms in every `.stringsdict` file, the plug-in name map
+`DefaultPluginMapping.plist` (#1028), and the names of the folders under the bundle's `Plug-In Settings` and
+`Plug-In Settings Internal`, one per factory plug-in whose settings Apple ships (#1030). They do **not** cover strings compiled into the Logic binary, text a plug-in screen
 sets through a custom class's runtime attribute (`text` and `labelString`, which `niblabels` does
 not read because nothing says what they mean), strings a designer typed into a nib and a class
 cannot tell from a label, AppKit strings in the dyld shared cache, or the Help Book, which Logic
@@ -214,10 +216,10 @@ the same way: twelve sets truncated to 50 entries each, counts and digests rewri
 bounded by CITATION: it checks every committed index row against its corpus's absence set, and a
 value nobody has cited has no row to check. This paragraph used to say only six carried a
 committed index row, "blind to the other seventeen" of twenty-three; measured 2026-09-19 that is
-wrong twice over. Re-measured once `stringsdict` and `plugin_names` were pinned, the manifest carries
-FORTY-SIX corpora and THIRTY-FIVE of them carry at least one row; `strings/-` and the ten
-`stringsdict` sets carry none (nothing cites a plural form yet), `plugin_names/-` pins every row it
-has, and the eleven
+wrong twice over. Re-measured once `stringsdict`, `plugin_names` and `pluginsettings` (#1030) were
+pinned, the manifest carries FORTY-SEVEN corpora and THIRTY-SIX of them carry at least one row;
+`strings/-` and the ten `stringsdict` sets carry none (nothing cites a plural form yet),
+`plugin_names/-` pins every row it has, and the eleven
 `niblabels` sets carry only the rows the #902 record cites. Number WORDS are
 invisible to `check-canon-prose-numbers.py`, which reads digits, which is how it rotted unnoticed.
 A set may not lose entries while `MANIFEST.json` names the same Logic; a different Logic is allowed to hold different
@@ -237,7 +239,7 @@ claim — and the exemption is declared, so a structural number added later is r
 ### Absent as bytes is not the same as uncitable
 
 `absent` proves a BYTE STRING is not in the corpus. That is exactly true and half an answer:
-`Input Port:` is absent from all 46 corpora (re-measured with `stringsdict` and `plugin_names`) and Logic ships `Input Port` — measured 2026-09-20, it
+`Input Port:` is absent from all 47 corpora (re-measured with `stringsdict`, `plugin_names` and `pluginsettings`) and Logic ships `Input Port` — measured 2026-09-20, it
 is in `strings/en` and in no other — so adding a colon proves anything uncitable. Three literals on the control-surface branch were proved absent that way and
 all three are shipped labels.
 

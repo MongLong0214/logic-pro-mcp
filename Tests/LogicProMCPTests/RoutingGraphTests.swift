@@ -142,6 +142,50 @@ struct RoutingGraphTests {
         #expect(diff.outputChanges == [RoutingEdgeChange(before: beforeOutput, after: afterOutput)])
     }
 
+    /// Kills: removing the coverage clause from `isConsistent` — a graph that claims `complete`
+    /// with any one domain partial, unread, moved or not observed would then pass the gate. The
+    /// all-complete control in the same run is what shows the refusal is about the coverage.
+    @Test func completeWithANonCompleteDomainIsInconsistentAndTheGateRejects() {
+        let control = graph()
+        #expect(control.isConsistent)
+        #expect(evaluate(request(replaceExisting: true), against: control).allowed)
+
+        let others: [RoutingCoverageState] = [.partial, .unavailable, .unstable, .notObserved]
+        for state in others {
+            let domain = RoutingDomainCoverage(state: state, reasons: ["not read"])
+            for (name, coverage) in allComplete.eachDomainReplaced(by: domain) {
+                let claimed = graph(complete: true, partialReason: nil, coverage: coverage)
+                let decision = evaluate(request(replaceExisting: true), against: claimed)
+
+                #expect(!claimed.isConsistent, "\(name) \(state.rawValue)")
+                #expect(!decision.allowed, "\(name) \(state.rawValue)")
+                #expect(decision.rejections.contains(
+                    .partialGraphUnsafe(reason: "routing graph is incomplete or inconsistent")
+                ), "\(name) \(state.rawValue)")
+                #expect(!decision.writeAttempted)
+            }
+        }
+    }
+
+    /// Kills: dropping the edge-domain clause from `isConsistent` — a partial graph carrying a
+    /// send edge while `sends` was never observed would read as consistent.
+    @Test func anEdgeFromADomainThatWasNotReadIsInconsistent() {
+        let edges = [sendEdge(send(slot: 0, bus: 1, level: 0.5), destination: "bus-1")]
+        let readSends = graph(complete: false, partialReason: "partial", edges: edges)
+        let unreadSends = graph(
+            complete: false,
+            partialReason: "partial",
+            edges: edges,
+            coverage: allComplete.with(
+                population: partialDomain,
+                sends: RoutingDomainCoverage(state: .notObserved, reasons: ["not observed"])
+            )
+        )
+
+        #expect(readSends.isConsistent)
+        #expect(!unreadSends.isConsistent)
+    }
+
     @Test func routingGraphCodableRoundTrip() throws {
         let original = graph()
         let decoded = try JSONDecoder().decode(
@@ -210,11 +254,13 @@ struct RoutingGraphTests {
         )
     }
 
+    /// Coverage defaults to what `complete` claims: every domain complete, or population partial.
     private func graph(
         complete: Bool = true,
         partialReason: String? = nil,
         nodes: [RoutingNode]? = nil,
-        edges: [RoutingEdge]? = nil
+        edges: [RoutingEdge]? = nil,
+        coverage: RoutingCoverage? = nil
     ) -> RoutingGraph {
         RoutingGraph(
             projectReference: projectRef,
@@ -223,8 +269,16 @@ struct RoutingGraphTests {
             partialReason: partialReason,
             nodes: nodes ?? [trackNode, busNode(1)],
             edges: edges ?? [sendEdge(send(slot: 0, bus: 1, level: 0.5), destination: "bus-1")],
-            provenance: [.axMixerStrip]
+            provenance: [.axMixerStrip],
+            snapshotId: "snap_7_t1_m1_p1",
+            coverage: coverage ?? (complete ? allComplete : allComplete.with(population: partialDomain))
         )
+    }
+
+    private let partialDomain = RoutingDomainCoverage(state: .partial, reasons: ["mixer filters unread"])
+
+    private var allComplete: RoutingCoverage {
+        .uniform(RoutingDomainCoverage(state: .complete, reasons: []))
     }
 
     private func request(
@@ -242,5 +296,44 @@ struct RoutingGraphTests {
             replaceExisting: replaceExisting,
             expectedProjectEpoch: expectedProjectEpoch
         )
+    }
+}
+
+private extension RoutingCoverage {
+    func with(
+        population: RoutingDomainCoverage? = nil,
+        sends: RoutingDomainCoverage? = nil
+    ) -> RoutingCoverage {
+        RoutingCoverage(
+            population: population ?? self.population,
+            stripTrackAssociation: stripTrackAssociation,
+            mainOutput: mainOutput,
+            physicalOutput: physicalOutput,
+            busToAuxInput: busToAuxInput,
+            sends: sends ?? self.sends
+        )
+    }
+
+    func eachDomainReplaced(by domain: RoutingDomainCoverage) -> [(String, RoutingCoverage)] {
+        [
+            ("population", RoutingCoverage(population: domain, stripTrackAssociation: stripTrackAssociation,
+                                           mainOutput: mainOutput, physicalOutput: physicalOutput,
+                                           busToAuxInput: busToAuxInput, sends: sends)),
+            ("strip_track_association", RoutingCoverage(population: population, stripTrackAssociation: domain,
+                                                        mainOutput: mainOutput, physicalOutput: physicalOutput,
+                                                        busToAuxInput: busToAuxInput, sends: sends)),
+            ("main_output", RoutingCoverage(population: population, stripTrackAssociation: stripTrackAssociation,
+                                            mainOutput: domain, physicalOutput: physicalOutput,
+                                            busToAuxInput: busToAuxInput, sends: sends)),
+            ("physical_output", RoutingCoverage(population: population, stripTrackAssociation: stripTrackAssociation,
+                                                mainOutput: mainOutput, physicalOutput: domain,
+                                                busToAuxInput: busToAuxInput, sends: sends)),
+            ("bus_to_aux_input", RoutingCoverage(population: population, stripTrackAssociation: stripTrackAssociation,
+                                                 mainOutput: mainOutput, physicalOutput: physicalOutput,
+                                                 busToAuxInput: domain, sends: sends)),
+            ("sends", RoutingCoverage(population: population, stripTrackAssociation: stripTrackAssociation,
+                                      mainOutput: mainOutput, physicalOutput: physicalOutput,
+                                      busToAuxInput: busToAuxInput, sends: domain)),
+        ]
     }
 }
