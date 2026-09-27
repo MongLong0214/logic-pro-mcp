@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUARD = os.path.join(REPO, "Scripts", "check-canon-citations.py")
@@ -884,6 +885,72 @@ class ARecordMayDeclareTheAxisInapplicable(unittest.TestCase):
         self.assertTrue(self._corpora_holding("값"))
         result = self._declines_over("값")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class TheCjkFloorReadsEveryLetterBlock(unittest.TestCase):
+    """Review round 1 of #1047: the classifier stopped at U+3134F and left out blocks its comment
+    named, so a two-character reading in one of them never reached the corpus lookup at all.
+
+    No pinned corpus holds a Hangul Jamo Extended-A or an Extension H string, so presence is faked
+    in-process, and only for the reading under test: a refusal naming that reading means the
+    reading reached the lookup.
+    """
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("canon_guard_cjk_blocks", GUARD)
+        self.guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.guard)
+        self.manifest = self.guard.canon.load_manifest()
+
+    def _assert_refused_over(self, reading):
+        canon = self.guard.canon
+
+        def presence(source, locale, text):
+            return canon.SHIPS if text == reading else canon.ABSENT
+
+        record = {"schema": 3, "id": "probe",
+                  "canon_not_applicable": {"reason": "claims to be about behaviour"},
+                  "observations": [{"read": reading}]}
+        failures = []
+        with unittest.mock.patch.object(canon, "presence", presence):
+            self.guard.check_not_applicable("probe.json", record, self.manifest, failures)
+        self.assertEqual(len(failures), 1, failures)
+        self.assertIn("A citation was available", failures[0])
+        self.assertIn(repr(reading), failures[0])
+
+    def test_a_two_character_reading_in_hangul_jamo_extended_a_may_not_decline(self):
+        """Killed by `old-cjk-ranges`. U+A960 and U+A961, two Hangul Jamo Extended-A choseong."""
+        self._assert_refused_over("ꥠꥡ")
+
+    def test_a_two_character_reading_in_extension_h_may_not_decline(self):
+        """Killed by `old-cjk-ranges`. U+31350 and U+31351, two CJK Extension H ideographs."""
+        self._assert_refused_over("\U00031350\U00031351")
+
+    def test_a_two_character_halfwidth_hangul_reading_may_not_decline(self):
+        """Killed by `old-cjk-ranges`. U+FFA1 and U+FFC2, halfwidth Hangul KIYEOK and A."""
+        self._assert_refused_over("ﾡￂ")
+
+    def test_a_two_character_halfwidth_katakana_reading_may_not_decline(self):
+        """Killed by `halfwidth-katakana-dropped`, not by `old-cjk-ranges`: the first version
+        already held U+FF66-FF9F. `ｵﾝ` is U+FF75 and U+FF9D."""
+        self._assert_refused_over("ｵﾝ")
+
+    def test_the_codepoint_just_outside_each_block_is_not_cjk(self):
+        """Killed by `old-cjk-ranges` on the inside edges and by `halfwidth-from-ff61` on the
+        outside ones. Copied from Unicode 18.0.0 Blocks.txt and, for the halfwidth span, from the
+        NamesList subheadings; adjacent blocks are merged, so each neighbour tested lies outside
+        every block the classifier reads."""
+        spans = ((0x1100, 0x11FF), (0x3040, 0x30FF), (0x3130, 0x318F), (0x31F0, 0x31FF),
+                 (0x3400, 0x4DBF), (0x4E00, 0x9FFF), (0xA960, 0xA97F), (0xAC00, 0xD7FF),
+                 (0xF900, 0xFAFF), (0xFF65, 0xFFDC), (0x1AFF0, 0x1B16F), (0x20000, 0x2A6DF),
+                 (0x2A700, 0x2EE5F), (0x2F800, 0x2FA1F), (0x30000, 0x3347F))
+        for lo, hi in spans:
+            for inside in (lo, hi):
+                with self.subTest(inside=f"U+{inside:04X}"):
+                    self.assertTrue(self.guard._contains_cjk(chr(inside)))
+            for outside in (lo - 1, hi + 1):
+                with self.subTest(outside=f"U+{outside:04X}"):
+                    self.assertFalse(self.guard._contains_cjk(chr(outside)))
 
 
 class ABindingIsNotSatisfiedByAComment(unittest.TestCase):
