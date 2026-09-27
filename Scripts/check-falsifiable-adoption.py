@@ -57,7 +57,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # resolution is the union rather than either side.
 # 23 -> 24 on 2026-09-27, the same shape again: #862's bank harness and #291's read-order harness
 # were each the 23rd on their own branch.
-FLOOR = 24
+# 24 -> 25 on 2026-09-27: live_1022_project_name_has_no_view_suffix, whose counterexample for every
+# check is the arrange window's raw title read through System Events — the value `name` held before
+# the change — so a predicate that would still accept the old reading fails in the same run.
+FLOOR = 25
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )
