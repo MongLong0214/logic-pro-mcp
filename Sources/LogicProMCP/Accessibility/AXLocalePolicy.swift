@@ -2500,8 +2500,8 @@ enum AXLocalePolicy {
     /// ten languages. Italian, Portuguese and Traditional Chinese keep the English title, so six
     /// members cover ten. Apple's French value carries a trailing space; the match is a substring,
     /// so it is stored without one. The Korean member stays the 2026-09-04 live reading, which is
-    /// also the row's value; the other eight are Apple's bytes and have not been watched on a
-    /// running Logic in those languages yet.
+    /// also the row's value. On 2026-09-27 it matched 19 output slots in each of the ten languages
+    /// (`docs/observations/2026-09-27-<locale>-endpoints-and-send-slots.json`).
     static let outputSlotHelpKeyword = LabelSet(
         canonical: "output slot",
         variants: ["출력 슬롯", "出力スロット", "Output-Slot", "Ranura de salida", "Slot de sortie",
@@ -2559,7 +2559,8 @@ enum AXLocalePolicy {
     /// assigned slot; it was the empty slot Logic adds below it.
     ///
     /// Ten locales by derivation from QuickHelp row `INS_010_SendSlot`; it, pt and zh_TW keep the
-    /// English title. Only the English rendering has been watched live.
+    /// English title. On 2026-09-27 it found 19 empty send slots in each of the ten languages
+    /// (`docs/observations/2026-09-27-<locale>-endpoints-and-send-slots.json`).
     static let sendSlotHelpKeyword = LabelSet(
         canonical: "Send slot",
         variants: ["센드 슬롯", "センドスロット", "Send-Slot", "Ranura de envío", "Slot d’envoi",
@@ -2639,8 +2640,10 @@ enum AXLocalePolicy {
     ///
     /// MAMixer's own `Bus` row keeps English for ko where this one says `버스`; the canonical
     /// covers a ko `Bus 3` case-insensitively and the row's value is carried beside it, so a Korean
-    /// Logic drawing either is recognised. Which it draws is unmeasured: the 2026-09-04 ko-KR
-    /// record saw only strips on the stereo output.
+    /// Logic drawing either is recognised. Read on 2026-09-27: a Korean strip sent to a bus was
+    /// described with this row's Korean value, and a Japanese one with a space before the number,
+    /// unlike the Japanese template
+    /// (`docs/observations/evidence/2026-09-27-<locale>-endpoints-and-send-slots.json`).
     static let busOutputLabelPrefix = LabelSet(
         canonical: "bus",
         variants: ["버스", "バス", "总线", "匯流排"],

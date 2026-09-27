@@ -24,7 +24,8 @@ enum RoutingProjectBinding: Sendable {
 /// label that classifies as a bus becomes a `bus_<n>` node whose only identity is the number parsed
 /// from the source's own slot description, and `main_output` coverage says so. A physical output
 /// or no output is recorded on the source node and publishes no node and no edge. No send edge is
-/// published: occupancy is readable at the source slot, the destination is not.
+/// published: occupancy is read at the source strip, and the destination an assigned send's group
+/// names is not read.
 ///
 /// This function is pure: it never sees the registry and never reads another resource. Every
 /// domain it cannot answer carries its reasons in `coverage`, and `partialReason` is those reasons

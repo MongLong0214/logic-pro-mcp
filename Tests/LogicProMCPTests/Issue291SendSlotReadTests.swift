@@ -3,18 +3,18 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-// MARK: - #291 — send-slot occupancy from the knob that follows the button
+// MARK: - #291 — send-slot occupancy from the send-level knob
 //
 // Measured 2026-09-13 on Logic 12.3 (6674), en: an empty send slot is an `AXButton` whose help
-// begins "Send slot." and names no destination anywhere; an assigned send adds an `AXSlider`
-// described "send knob" whose help begins "Send Level knob.", immediately after its button in
-// pre-order. The slot's own menu still marked "No Send" while the send existed, so the knob is the
-// only evidence of occupancy the tree offers — and the destination is not in it.
+// begins "Send slot." and names no destination anywhere. That record read an assigned send as the
+// button with an `AXSlider` described "send knob" (help "Send Level knob.") right after it in
+// pre-order.
 //
-// The 2026-09-27 dumps at the end of this file did not reproduce that shape: an assigned send is an
-// `AXGroup` whose next sibling is the knob, and the button before it is a new empty slot. The tests
-// here keep the button-then-knob shape because the reader still reads it; the ones at the end are
-// the shape a running Logic draws.
+// The 2026-09-27 dumps at the end of this file superseded that reading: an assigned send is an
+// `AXGroup` described by its destination, whose next sibling is the knob, and the button before it
+// is a new empty slot. The 2026-09-13 menu reading was taken on that empty slot. The tests here
+// keep the button-then-knob shape because the reader still reads it; the ones at the end are the
+// shape a running Logic draws.
 //
 // Every test names the mutation it kills.
 

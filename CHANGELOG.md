@@ -48,11 +48,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   cache-only capture as `inspect_session`, and `inspect_session`'s `routing` section carries the
   graph's coverage instead of `routing_deferred_to_issue_291_r1`. Removed with the name join:
   the `unresolved output destination endpoint "<label>" … no unique live track carries that name`
-  clause and the `sends are not covered: …` clause. Limits: the bus number is parsed from the
-  source slot's description, so an I/O-label rename reads `unclassified` rather than as a bus and
-  `main_output` says so; the strip-to-track attribution is still positional; bus-to-aux input edges
-  are `not_observed`; whether Logic localises these descriptions in the eight locales other than
-  en and ko is unmeasured, and nothing here was driven against a live Logic.
+  clause and the `sends are not covered: …` clause. Each strip's `send_slots` reads an assigned
+  send as the group beside its send-level knob. Driven live on Logic 12.3 in all ten languages,
+  one run each (`docs/observations/2026-09-27-<locale>-endpoints-and-send-slots.json`), 11 of 11
+  checks in each: 21 strips against 21 found by an independent Accessibility walk, 19 outputs
+  classified, a bus in send slot 0 read as the one occupied slot and a bus output as one
+  `mainOutput` edge, each undone. German passed only after `trackMuteButton` was also derived from
+  the plain `Mute` row, which names the track header's Mute in German; before that no track Mute
+  was found there. Limits: the bus number is parsed from the source slot's description, so an
+  I/O-label rename reads `unclassified` rather than as a bus and `main_output` says so; the
+  strip-to-track attribution is still positional; bus-to-aux input edges are `not_observed`;
+  which bus a send goes to is not read; `no_output` and `unclassified` were seen in fixtures only.
 
 ### Fixed
 - MCU button presses now send the button release: bank left/right (`mixer.bank` and the bank walk behind every strip-relative MCU operation), track select, automation mode, the mute / solo / arm / select strip buttons, and the MCU transport buttons (play, stop, record, rewind, fast forward, cycle). Before, each press was a Note On with no release, so Logic saw every button as held, and it auto-repeats held bank buttons: after one bank walk left and one press right, the LCD kept redrawing between two bank windows for seconds. The `enabled: false` branch of `track.set_mute` / `set_solo` / `set_arm`, which sent a single release with no press, is replaced under #1020 below. (#862)
