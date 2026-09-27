@@ -76,6 +76,13 @@ enum HonestContract {
         /// readback, not unsettable, and `ChannelRouter` walks on to the next channel where
         /// `readback_unavailable` would stop it with nothing done.
         case trackStateUnreadable = "track_state_unreadable"
+        /// A strip-relative MCU write (strip mute / solo / arm / select, automation, fader, V-Pot)
+        /// needed the bank moved, and a bank step could not be verified from the LCD upper row —
+        /// the row was never received, or a press produced no quiescent, changed redraw — so the
+        /// strip was not pressed and the steps that did move were walked back (#1020). NOT
+        /// terminal on purpose: the MCU window could not be placed, which says nothing about
+        /// whether another channel can do the operation.
+        case bankWalkUnverified = "bank_walk_unverified"
         /// Operation explicitly not implemented via this channel / build of
         /// Logic. Distinct from `.elementNotFound` (target absent) and
         /// `.axWriteFailed` (write attempt rejected): the surface itself does

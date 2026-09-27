@@ -34,8 +34,20 @@ refresh. Logic blinks the Rec LED of an armed track, and before #1020 `MCUFeedba
 frame into the cache, so the reads came back `FFFTTTTTTTFFFFFFFTTTTTTTFFFFFF` on an armed track
 (measured 2026-09-27, en-US). That pattern is the counterexample for the hold check.
 
+THE SECOND PHASE: A TRACK IN BANK 2
+-----------------------------------
+The same arm -> hold reads -> disarm sequence then runs on track 16, which the MCU reaches only by
+walking the fader bank two steps right and two back. Logic 12.3 was measured moving ONE bank for two
+bank presses sent back to back (docs/observations/2026-09-27-*-a-bank-step-answers-from-the-redrawn-
+upper-row.json), and before review round 1 of #1020 `withBanking` sent exactly that: a strip byte
+behind two unverified presses, which would land on bank 1 and toggle track 8. So this phase records
+the MCU reply's bank fields raw (`bank_presses_sent`, `banks_moved`, `bank_restored`, `step_windows`)
+and reads track 8's arm from `logic://tracks` before the arm, after it and after the disarm. The
+fixture has 19 tracks; with fewer than 17 listed the precondition fails with a message, it does not
+skip.
+
 Restoring: the run ends by disarming through a second server started WITHOUT the bad variable, so the
-restore does not depend on the code under test.
+restore does not depend on the code under test. It puts back track 16 and track 8 as well.
 """
 import json
 import os
@@ -118,6 +130,20 @@ def summary(body):
     return {k: body.get(k) for k in ("state", "reason", "error", "write_source", "verification_source",
                                      "write_attempted", "observed", "fallback_from_channel",
                                      "fallback_from_error")}
+
+
+BANK_FIELDS = ("bank_presses_sent", "banks_moved", "banks_requested", "bank_restored", "step_windows",
+               "bank_bookkeeping_after")
+
+
+def bank_fields(body):
+    """The bank walk's own fields of an MCU reply, raw; a field the reply lacks reads None."""
+    return {k: body.get(k) for k in BANK_FIELDS}
+
+
+# The track the second phase drives: strip 0 of bank 2. One bank short of it is TRACK_ONE_BANK_SHORT.
+BANK_2_TRACK = 16
+TRACK_ONE_BANK_SHORT = 8
 
 
 # ---- A server whose Accessibility arm rung refuses -------------------------------------------------
@@ -203,21 +229,147 @@ ev.falsifiable(
     "release that Logic ignores, State B, and the track still armed",
     mutation="send enabled:false as the bare velocity-0 release, as MCUChannel did before #1020",
 )
+
+# ---- Second phase: a track two banks away ----------------------------------------------------------
+listed = len(census["rows"])
+b2_before = armed_of(d, BANK_2_TRACK) if listed > BANK_2_TRACK else None
+t8_before = armed_of(d, TRACK_ONE_BANK_SHORT) if listed > BANK_2_TRACK else None
+b2_ready = listed > BANK_2_TRACK and b2_before is False and isinstance(t8_before, bool)
+ev.check("1020/precondition-bank-2-track-is-listed-and-disarmed",
+         b2_ready,
+         f"logic://tracks lists at least {BANK_2_TRACK + 1} tracks (the fixture has 19), track "
+         f"{BANK_2_TRACK} reads disarmed and track {TRACK_ONE_BANK_SHORT}'s arm reads as a boolean",
+         {"tracks_listed": listed, "track_16_armed": b2_before, "track_8_armed": t8_before,
+          "message": None if b2_ready else
+          f"cannot drive bank 2: need track {BANK_2_TRACK} listed and disarmed and track "
+          f"{TRACK_ONE_BANK_SHORT}'s arm readable; open the 19-track fixture and disarm track {BANK_2_TRACK}"},
+         "open a project with 16 or fewer tracks: the phase has no bank-2 track to drive")
+
+b2_on, b2_off, b2_held = {}, {}, []
+t8_after_on = t8_after_off = b2_after_on = b2_after_off = None
+if b2_ready:
+    b2_on = arm(d, f"arm-track-{BANK_2_TRACK}", BANK_2_TRACK, True)
+    b2_after_on = armed_of(d, BANK_2_TRACK)
+    t8_after_on = armed_of(d, TRACK_ONE_BANK_SHORT)
+    for _ in range(HOLD_SAMPLES):
+        b2_held.append(armed_unrefreshed(d, BANK_2_TRACK))
+        time.sleep(HOLD_INTERVAL_S)
+    b2_off = arm(d, f"disarm-track-{BANK_2_TRACK}", BANK_2_TRACK, False)
+    b2_after_off = armed_of(d, BANK_2_TRACK)
+    t8_after_off = armed_of(d, TRACK_ONE_BANK_SHORT)
+ev.note("1020/bank-2-bank-fields", {"arm": bank_fields(b2_on), "disarm": bank_fields(b2_off)})
+
+# What 71c2ead3 answered on the measured cadence: the second of two back-to-back bank presses
+# absorbed, the strip byte on bank 1, track 16 unchanged, and no bank fields at all.
+PRE_REPAIR_BANK_FIELDS = {k: None for k in BANK_FIELDS}
+
+b2_arm_reading = {**summary(b2_on), **bank_fields(b2_on), "track": BANK_2_TRACK,
+                  "armed_in_track_list_after": b2_after_on}
+ev.falsifiable(
+    "1020/bank-2-arm-through-the-mcu-sets-and-confirms",
+    lambda o: (o["write_source"] == "mcu" and o["state"] == "A" and o["write_attempted"] is True
+               and o["observed"] is True and o["armed_in_track_list_after"] is True
+               and o["banks_moved"] == 2 and o["bank_restored"] is True),
+    b2_arm_reading,
+    {**b2_arm_reading, **PRE_REPAIR_BANK_FIELDS, "state": "B", "reason": "readback_mismatch",
+     "observed": False, "armed_in_track_list_after": False},
+    f"arming disarmed track {BANK_2_TRACK} through the MCU rung walks two verified bank steps, answers "
+    "State A with write_attempted true and observed true, walks back (bank_restored true), and the "
+    "refreshed track list shows it armed. THE COUNTEREXAMPLE is the reply at 71c2ead3 on the measured "
+    "cadence: the strip byte lands on bank 1, track 16 never flips, State B readback_mismatch, no bank fields",
+    mutation="send withBanking's bank presses back to back with no per-step reading, as at 71c2ead3",
+)
+
+ev.falsifiable(
+    "1020/bank-2-the-cached-arm-holds-through-the-rec-led-blink",
+    lambda o: len(o["reads"]) == HOLD_SAMPLES and all(v is True for v in o["reads"]),
+    {"track": BANK_2_TRACK, "reads": b2_held},
+    {"track": BANK_2_TRACK, "reads": [c == "T" for c in MEASURED_BLINK]},
+    f"while track {BANK_2_TRACK} is armed, {HOLD_SAMPLES} reads of logic://tracks "
+    f"{int(HOLD_INTERVAL_S * 1000)} ms apart with no refresh all report it armed. THE COUNTEREXAMPLE is "
+    "what they read before #1020, when every dark frame of the blinking Rec LED was written as a disarm",
+    mutation="write isArmed from the Rec LED frame in MCUFeedbackParser.handleButton, as before #1020",
+)
+
+b2_disarm_reading = {**summary(b2_off), **bank_fields(b2_off), "track": BANK_2_TRACK,
+                     "armed_in_track_list_after": b2_after_off}
+ev.falsifiable(
+    "1020/bank-2-disarm-through-the-mcu-clears-the-arm",
+    lambda o: (o["write_source"] == "mcu" and o["state"] == "A" and o["write_attempted"] is True
+               and o["observed"] is False and o["armed_in_track_list_after"] is False
+               and o["banks_moved"] == 2 and o["bank_restored"] is True),
+    b2_disarm_reading,
+    {**b2_disarm_reading, **PRE_REPAIR_BANK_FIELDS, "state": "B", "reason": "readback_mismatch",
+     "observed": True, "armed_in_track_list_after": True},
+    f"disarming track {BANK_2_TRACK} through the MCU rung walks two verified bank steps and back, answers "
+    "State A with observed false, and the refreshed track list shows it disarmed. THE COUNTEREXAMPLE is "
+    "the defect review round 1 named: enabled false pressed strip 0 on bank 1, track 16 stayed armed",
+    mutation="send withBanking's bank presses back to back with no per-step reading, as at 71c2ead3",
+)
+
+ev.falsifiable(
+    "1020/bank-2-replies-came-from-the-mcu-rung-over-a-verified-walk",
+    lambda o: all(
+        r["write_source"] == "mcu" and r["bank_presses_sent"] == 4 and r["banks_moved"] == 2
+        and r["banks_requested"] == 2 and r["bank_restored"] is True
+        and isinstance(r["step_windows"], list) and len(r["step_windows"]) == 4
+        for r in (o["arm"], o["disarm"])
+    ),
+    {"arm": {"write_source": b2_on.get("write_source"), **bank_fields(b2_on)},
+     "disarm": {"write_source": b2_off.get("write_source"), **bank_fields(b2_off)}},
+    {"arm": {"write_source": "mcu", **PRE_REPAIR_BANK_FIELDS},
+     "disarm": {"write_source": "mcu", **PRE_REPAIR_BANK_FIELDS}},
+    "both bank-2 replies came from the MCU rung and carry the walk's own fields: four bank presses, two "
+    "banks moved of two requested, restored, and one upper-row window per press. THE COUNTEREXAMPLE is "
+    "the MCU reply at 71c2ead3, which sent its presses unverified and reported none of these fields",
+    mutation="drop the addExtras of the bank fields from MCUChannel.withBanking's success path",
+)
+
+t8_reading = {"before": t8_before, "after_arm": t8_after_on, "after_disarm": t8_after_off}
+ev.falsifiable(
+    "1020/bank-2-writes-leave-track-8-arm-unchanged",
+    lambda o: (isinstance(o["before"], bool) and o["after_arm"] is o["before"]
+               and o["after_disarm"] is o["before"]),
+    t8_reading,
+    {"before": False, "after_arm": True, "after_disarm": True},
+    f"track {TRACK_ONE_BANK_SHORT}'s arm, read from logic://tracks before the bank-2 arm, after it and "
+    "after the disarm, never changes. THE COUNTEREXAMPLE is the strip byte landing one bank short: the "
+    f"arm meant for track {BANK_2_TRACK} arms track {TRACK_ONE_BANK_SHORT}, and the disarm leaves it armed",
+    mutation="run the strip write in MCUChannel.withBanking even when a bank step did not move",
+)
 d.close()
 
 # ---- Restore through a server that does not depend on the code under test ---------------------------
 os.environ.pop(ARM_KEYCODE_ENV, None)
-if chosen is not None:
+if chosen is not None or b2_ready:
     restorer = E.Driver()
     time.sleep(5)
-    final = armed_of(restorer, chosen)
-    if final is True:
-        ev.note("1020/restore-disarm",
-                restorer.tool("logic_tracks", "arm", {"index": chosen, "enabled": False}) or {})
+    if chosen is not None:
         final = armed_of(restorer, chosen)
+        if final is True:
+            ev.note("1020/restore-disarm",
+                    restorer.tool("logic_tracks", "arm", {"index": chosen, "enabled": False}) or {})
+            final = armed_of(restorer, chosen)
+        ev.restored("1020/track-disarmed-again", final is False,
+                    json.dumps({"track": chosen, "armed_in_track_list": final}))
+    if b2_ready:
+        final_16 = armed_of(restorer, BANK_2_TRACK)
+        if final_16 is True:
+            ev.note("1020/restore-disarm-track-16",
+                    restorer.tool("logic_tracks", "arm", {"index": BANK_2_TRACK, "enabled": False}) or {})
+            final_16 = armed_of(restorer, BANK_2_TRACK)
+        ev.restored("1020/track-16-disarmed-again", final_16 is False,
+                    json.dumps({"track": BANK_2_TRACK, "armed_in_track_list": final_16}))
+        final_8 = armed_of(restorer, TRACK_ONE_BANK_SHORT)
+        if isinstance(final_8, bool) and final_8 is not t8_before:
+            ev.note("1020/restore-track-8",
+                    restorer.tool("logic_tracks", "arm",
+                                  {"index": TRACK_ONE_BANK_SHORT, "enabled": t8_before}) or {})
+            final_8 = armed_of(restorer, TRACK_ONE_BANK_SHORT)
+        ev.restored("1020/track-8-arm-as-found", final_8 is t8_before,
+                    json.dumps({"track": TRACK_ONE_BANK_SHORT, "armed_before": t8_before,
+                                "armed_in_track_list": final_8}))
     restorer.close()
-    ev.restored("1020/track-disarmed-again", final is False,
-                json.dumps({"track": chosen, "armed_in_track_list": final}))
 
 out = ev.write()
 print(json.dumps(out, indent=1))

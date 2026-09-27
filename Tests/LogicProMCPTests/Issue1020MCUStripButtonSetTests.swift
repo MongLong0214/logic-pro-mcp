@@ -22,27 +22,64 @@ private struct FlagKey: Hashable {
 /// `.ignoresPress`: the press is recorded and nothing moves. `.unreadableAfterPress`: the press
 /// lands and the state can no longer be read. A track with no entry reads nil, which is
 /// "could not read", not "off".
+///
+/// A strip press names `bank * 8 + strip`, where `bank` is the window THIS surface is showing, not
+/// the one the channel believes it is showing: a press that lands in the wrong bank toggles the
+/// wrong track here as it does in Logic. With `windows` set, the bank is Logic's as measured on
+/// 12.3 (#862): each bank press moves one window and redraws the LCD upper row it lands on through
+/// the channel's own feedback path (`LCDBankSurface.lcdFrame`, delivered reentrantly from inside
+/// `send` as `LCDBankSurface` does), and a press past either end redraws the row it is already on.
+/// A bank press whose 1-based ordinal is in `absorbedBankPresses` neither moves nor redraws: the
+/// second of two presses that Logic took as one (#1020 review round 1). With `windows` nil every
+/// bank press moves and nothing redraws, so a walk has no readback at all.
 private actor ToggleSurface: MCUTransportProtocol {
     enum Response: Sendable { case toggles, ignoresPress, unreadableAfterPress }
 
     private(set) var sentBytes: [[UInt8]] = []
-    private var bank = 0
+    private(set) var bank = 0
     private var states: [FlagKey: Bool]
     private let response: Response
+    private let windows: [String]?
+    private let absorbedBankPresses: Set<Int>
+    private var bankPressesSeen = 0
+    private var channel: MCUChannel?
 
-    init(response: Response = .toggles, states: [FlagKey: Bool] = [:]) {
+    init(
+        response: Response = .toggles,
+        states: [FlagKey: Bool] = [:],
+        windows: [String]? = nil,
+        absorbedBankPresses: Set<Int> = []
+    ) {
         self.response = response
         self.states = states
+        self.windows = windows
+        self.absorbedBankPresses = absorbedBankPresses
     }
 
-    func send(_ bytes: [UInt8]) {
+    func attach(channel: MCUChannel) {
+        self.channel = channel
+    }
+
+    /// What Logic does on connect: one full upper-row write of the window it is showing.
+    func seedUpperRow() async {
+        guard let windows else { return }
+        await deliverUpperRow(windows[bank])
+    }
+
+    func send(_ bytes: [UInt8]) async {
         sentBytes.append(bytes)
         guard let button = MCUProtocol.decodeButton(bytes), button.on else { return }
         switch button.function {
-        case .bankLeft:
-            bank = max(0, bank - 1)
-        case .bankRight:
-            bank += 1
+        case .bankLeft, .bankRight:
+            bankPressesSeen += 1
+            let step = button.function == .bankRight ? 1 : -1
+            guard let windows else {
+                bank = max(0, bank + step)
+                return
+            }
+            guard !absorbedBankPresses.contains(bankPressesSeen) else { return }
+            bank = min(max(bank + step, 0), windows.count - 1)
+            await deliverUpperRow(windows[bank])
         case .mute, .solo, .recArm:
             let key = FlagKey(function: button.function, track: bank * 8 + button.strip)
             switch response {
@@ -65,6 +102,11 @@ private actor ToggleSurface: MCUTransportProtocol {
     func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async throws {}
     func stop() {}
     func endpointCensus() -> VirtualMIDIEndpointCensus { .none }
+
+    private func deliverUpperRow(_ row: String) async {
+        guard let channel else { return }
+        await channel.handleFeedback(.sysEx(LCDBankSurface.lcdFrame(row, offset: 0)))
+    }
 }
 
 private struct SetRig {
@@ -93,6 +135,45 @@ private func makeSetRig(response: ToggleSurface.Response = .toggles, states: [Fl
         sleep: sleeper.closure
     )
     return SetRig(channel: channel, surface: surface, sleeper: sleeper)
+}
+
+/// Eight distinct six-character names per window, so every bank move redraws a different row.
+private func windowRow(_ bank: Int) -> String {
+    (0..<8).map { "B\(bank)S\($0)".padding(toLength: 7, withPad: " ", startingAt: 0) }.joined()
+}
+
+/// Three windows: tracks 0-7, 8-15 and 16-23.
+private let threeWindows = (0..<3).map(windowRow)
+
+/// A rig whose surface banks the way Logic 12.3 does, with the upper row already drawn unless
+/// `seedUpperRow` is false (a server that has never received the row).
+private func makeBankedSetRig(
+    states: [FlagKey: Bool],
+    absorbedBankPresses: Set<Int> = [],
+    seedUpperRow: Bool = true
+) async -> SetRig {
+    let surface = ToggleSurface(states: states, windows: threeWindows, absorbedBankPresses: absorbedBankPresses)
+    let sleeper = CountingSleeper()
+    let channel = MCUChannel(
+        transport: surface,
+        cache: StateCache(),
+        axReadback: readback(of: surface),
+        sleep: sleeper.closure
+    )
+    await surface.attach(channel: channel)
+    if seedUpperRow { await surface.seedUpperRow() }
+    return SetRig(channel: channel, surface: surface, sleeper: sleeper)
+}
+
+/// Every Mute, Solo or Rec strip byte on the wire, press or release.
+private func stripToggleBytes(_ sent: [[UInt8]]) -> [[UInt8]] {
+    sent.filter { bytes in
+        guard let button = MCUProtocol.decodeButton(bytes) else { return false }
+        switch button.function {
+        case .mute, .solo, .recArm: return true
+        default: return false
+        }
+    }
 }
 
 /// A momentary press: Note On velocity 127, then velocity 0, on the strip's note.
@@ -314,7 +395,7 @@ struct Issue1020MCUStripButtonSetTests {
     /// itself and pressed as its strip, inside the bank walk every strip-relative write takes.
     @Test func aTrackInAnotherBankIsReadAsItselfAndPressedAsItsStrip() async throws {
         // Track 11 → bank 1, strip 3.
-        let rig = makeSetRig(states: [FlagKey(function: .mute, track: 11): false])
+        let rig = await makeBankedSetRig(states: [FlagKey(function: .mute, track: 11): false])
 
         let result = await rig.channel.execute(operation: "track.set_mute", params: ["index": "11", "enabled": "true"])
 
@@ -326,6 +407,169 @@ struct Issue1020MCUStripButtonSetTests {
         #expect(obj["track"] as? Int == 11)
         let held = try #require(await rig.surface.read(.mute, track: 11))
         #expect(held)
+    }
+
+    // MARK: - The bank walk under a strip write (#1020 review round 1, R1-001)
+
+    /// The regression witness. Logic 12.3 moved ONE bank for two bank presses sent back to back
+    /// (docs/observations/2026-09-27-ko-KR-a-bank-step-answers-from-the-redrawn-upper-row.json);
+    /// here the second press is absorbed. Before the walk was verified, the strip byte went out
+    /// on bank 1: `enabled: false` for armed track 16 pressed strip 0 there, arming track 8 and
+    /// leaving 16 armed. Now the step that did not move stops the walk, no strip byte is sent,
+    /// the step that did move is walked back, and the refusal is one the router walks past.
+    @Test func aSecondBankPressThatDoesNotMoveSendsNoStripByteAndWalksBack() async throws {
+        let states: [FlagKey: Bool] = [
+            FlagKey(function: .recArm, track: 16): true,
+            FlagKey(function: .recArm, track: 8): false,
+        ]
+        let rig = await makeBankedSetRig(states: states, absorbedBankPresses: [2])
+
+        let result = await rig.channel.execute(operation: "track.set_arm", params: ["index": "16", "enabled": "false"])
+
+        let sent = await rig.surface.sentBytes
+        #expect(stripToggleBytes(sent).isEmpty, "no strip byte may go out on a bank that was not reached")
+        #expect(bit(await rig.surface.read(.recArm, track: 8)) == "off")
+        #expect(bit(await rig.surface.read(.recArm, track: 16)) == "on")
+        // Two presses toward bank 2 (the second absorbed), one back for the one that moved.
+        let expected = [pressPair(.bankRight, strip: 0), pressPair(.bankRight, strip: 0), pressPair(.bankLeft, strip: 0)]
+            .flatMap { $0 }
+        #expect(sent == expected)
+        #expect(await rig.surface.bank == 0)
+        #expect(await rig.channel.currentBank == 0)
+
+        #expect(!result.isSuccess)
+        let obj = try setEnvelope(result)
+        #expect(obj["state"] as? String == "C")
+        #expect(obj["error"] as? String == "bank_walk_unverified")
+        let attempted = try #require(obj["write_attempted"] as? Bool)
+        #expect(!attempted)
+        #expect(obj["banks_moved"] as? Int == 1)
+        #expect(obj["banks_requested"] as? Int == 2)
+        #expect(obj["bank_presses_sent"] as? Int == 3)
+        let restored = try #require(obj["bank_restored"] as? Bool)
+        #expect(restored)
+        let windows = try #require(obj["step_windows"] as? [String])
+        #expect(windows == [threeWindows[1], threeWindows[1], threeWindows[0]])
+        #expect(obj["operation"] as? String == "track.set_arm")
+        #expect(obj["channel"] as? String == "MCU")
+        let hint = try #require(obj["hint"] as? String)
+        #expect(hint.contains("not pressed"))
+        #expect(!HonestContract.isTerminalStateC(result.message))
+        #expect(!HonestContract.isFallbackUnsafeStateC(result.message))
+
+        // The same cadence through the real router: the refusal is walked past to the next channel.
+        let routed = await makeBankedSetRig(states: states, absorbedBankPresses: [2])
+        await routed.channel.handleFeedback(.noteOn(channel: 0, note: 0x5E, velocity: 0x7F))
+        let router = ChannelRouter()
+        let cgEvent = MockChannel(id: .cgEvent, successEnvelope: HonestContract.encodeStateA(extras: ["track": 16]))
+        await router.register(routed.channel)
+        await router.register(cgEvent)
+
+        let routedResult = await router.route(operation: "track.set_arm", params: ["index": "16", "enabled": "false"])
+
+        #expect(stripToggleBytes(await routed.surface.sentBytes).isEmpty)
+        #expect(bit(await routed.surface.read(.recArm, track: 8)) == "off")
+        let routedObj = try setEnvelope(routedResult)
+        #expect(routedObj["fallback_from_channel"] as? String == ChannelID.mcu.rawValue)
+        #expect(routedObj["fallback_from_error"] as? String == "bank_walk_unverified")
+        #expect(await cgEvent.executedOps.count == 1)
+    }
+
+    /// Two banks, every step moving: one strip press, on strip 0 of bank 2, State A, and the walk
+    /// back reaches bank 0.
+    @Test func aTwoBankWalkWhoseStepsAllMovePressesTheRightStripAndWalksBack() async throws {
+        let rig = await makeBankedSetRig(states: [
+            FlagKey(function: .recArm, track: 16): true,
+            FlagKey(function: .recArm, track: 8): false,
+        ])
+
+        let result = await rig.channel.execute(operation: "track.set_arm", params: ["index": "16", "enabled": "false"])
+
+        let expected = [
+            pressPair(.bankRight, strip: 0), pressPair(.bankRight, strip: 0),
+            pressPair(.recArm, strip: 0),
+            pressPair(.bankLeft, strip: 0), pressPair(.bankLeft, strip: 0),
+        ].flatMap { $0 }
+        #expect(await rig.surface.sentBytes == expected)
+        #expect(bit(await rig.surface.read(.recArm, track: 16)) == "off")
+        #expect(bit(await rig.surface.read(.recArm, track: 8)) == "off")
+        #expect(result.isSuccess)
+        let obj = try setEnvelope(result)
+        #expect(obj["state"] as? String == "A")
+        let attempted = try #require(obj["write_attempted"] as? Bool)
+        #expect(attempted)
+        #expect(obj["banks_moved"] as? Int == 2)
+        #expect(obj["bank_presses_sent"] as? Int == 4)
+        let restored = try #require(obj["bank_restored"] as? Bool)
+        #expect(restored)
+        #expect(await rig.surface.bank == 0)
+        #expect(await rig.channel.currentBank == 0)
+        // Each step waited for its own redraw and one quiet poll: two polls per step, four steps.
+        #expect(await rig.sleeper.count(of: .milliseconds(MCUChannel.bankWindowPollMilliseconds)) == 8)
+    }
+
+    /// No upper row has ever been received: a bank step has nothing to be compared against, so
+    /// nothing is sent at all, and the refusal is one the router walks past.
+    @Test func aWalkWithNoUpperRowSendsNothingAndTheRouterWalksPast() async throws {
+        let states: [FlagKey: Bool] = [FlagKey(function: .recArm, track: 16): true]
+        let rig = await makeBankedSetRig(states: states, seedUpperRow: false)
+
+        let result = await rig.channel.execute(operation: "track.set_arm", params: ["index": "16", "enabled": "false"])
+
+        #expect(await rig.surface.sentBytes.isEmpty)
+        #expect(!result.isSuccess)
+        let obj = try setEnvelope(result)
+        #expect(obj["state"] as? String == "C")
+        #expect(obj["error"] as? String == "bank_walk_unverified")
+        let attempted = try #require(obj["write_attempted"] as? Bool)
+        #expect(!attempted)
+        #expect(obj["bank_presses_sent"] as? Int == 0)
+        #expect(obj["banks_moved"] as? Int == 0)
+        #expect(obj["banks_requested"] as? Int == 2)
+        let windows = try #require(obj["step_windows"] as? [String])
+        #expect(windows.isEmpty)
+        #expect(!HonestContract.isTerminalStateC(result.message))
+        #expect(await rig.sleeper.requested.isEmpty)
+
+        let routed = await makeBankedSetRig(states: states, seedUpperRow: false)
+        await routed.channel.handleFeedback(.noteOn(channel: 0, note: 0x5E, velocity: 0x7F))
+        let router = ChannelRouter()
+        let cgEvent = MockChannel(id: .cgEvent, successEnvelope: HonestContract.encodeStateA(extras: ["track": 16]))
+        await router.register(routed.channel)
+        await router.register(cgEvent)
+
+        let routedResult = await router.route(operation: "track.set_arm", params: ["index": "16", "enabled": "false"])
+
+        #expect(await routed.surface.sentBytes.isEmpty)
+        let routedObj = try setEnvelope(routedResult)
+        #expect(routedObj["state"] as? String == "A")
+        #expect(routedObj["fallback_from_error"] as? String == "bank_walk_unverified")
+        #expect(await cgEvent.executedOps.count == 1)
+    }
+
+    /// The strip write happened and was confirmed; the one restore press was absorbed. The
+    /// operation's own answer stands, it says the restore did not complete, and the bookkeeping is
+    /// the bank the surface is actually on.
+    @Test func aRestoreStepThatDoesNotMoveLeavesTheReplyAndTheBookkeepingOnTheReachedBank() async throws {
+        // Track 11 → bank 1, strip 3. Bank press 1 is the walk out, press 2 the restore.
+        let rig = await makeBankedSetRig(states: [FlagKey(function: .mute, track: 11): false], absorbedBankPresses: [2])
+
+        let result = await rig.channel.execute(operation: "track.set_mute", params: ["index": "11", "enabled": "true"])
+
+        let expected = [pressPair(.bankRight, strip: 0), pressPair(.mute, strip: 3), pressPair(.bankLeft, strip: 0)]
+            .flatMap { $0 }
+        #expect(await rig.surface.sentBytes == expected)
+        #expect(result.isSuccess)
+        let obj = try setEnvelope(result)
+        #expect(obj["state"] as? String == "A")
+        let held = try #require(await rig.surface.read(.mute, track: 11))
+        #expect(held)
+        let restored = try #require(obj["bank_restored"] as? Bool)
+        #expect(!restored)
+        #expect(obj["banks_moved"] as? Int == 1)
+        #expect(obj["bank_presses_sent"] as? Int == 2)
+        #expect(await rig.surface.bank == 1)
+        #expect(await rig.channel.currentBank == 1)
     }
 
     /// `track.select` is not a toggle and is left exactly as it was: one press, State B
