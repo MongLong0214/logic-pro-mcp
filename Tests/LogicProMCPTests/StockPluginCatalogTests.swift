@@ -510,7 +510,10 @@ struct StockPluginResourceTests {
         let detail = try await stockPluginResourceObject("logic://stock-plugins/logic.stock.effect.gain")
         #expect((detail["entry"] as? [String: Any])?["id"] as? String == "logic.stock.effect.gain")
         #expect((detail["entry"] as? [String: Any])?["known_presets"] as? [String] != nil)
-        #expect((detail["entry"] as? [String: Any])?["known_presets_truncated"] as? Bool != nil)
+        let entry = try #require(detail["entry"] as? [String: Any])
+        let truncated = try #require(entry["known_presets_truncated"] as? Bool)
+        // Gain ships 7 factory settings, under the 12-name cap, and none where Logic is absent.
+        #expect(!truncated)
         #expect(detail["factory_presets"] as? [Any] != nil)
 
         let search = try await stockPluginResourceObject("logic://stock-plugins/search?query=gain")
