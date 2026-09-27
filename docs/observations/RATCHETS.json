@@ -393,6 +393,8 @@
         "pluginWindowSmartControlsControl",
         "projectPickerWindow",
         "recordArmKeyCommandName",
+        "sendLevelKnobHelpKeyword",
+        "sendSlotHelpKeyword",
         "showMixerMenuItem",
         "sliderSendHint",
         "trackContentGeneric",
@@ -433,6 +435,8 @@
         "pluginWindowControlsViewMenuItem",
         "projectPickerWindow",
         "recordArmKeyCommandName",
+        "sendLevelKnobHelpKeyword",
+        "sendSlotHelpKeyword",
         "settingPopupValue",
         "showMixerMenuItem",
         "trackContentGeneric",
@@ -486,7 +490,9 @@
         "projectPickerWindow",
         "recordArmKeyCommandName",
         "saveConfirmationButton",
+        "sendLevelKnobHelpKeyword",
         "sendOrIOControlLabel",
+        "sendSlotHelpKeyword",
         "settingPopupValue",
         "showMixerMenuItem",
         "sliderSendHint",
@@ -691,38 +697,18 @@
     "unmeasured_coverage.it-IT": {
       "date": "2026-09-27",
       "members": [
-        "assignControlHelpKeyword",
-        "automationModeTrim",
-        "deleteTracksPrimaryButton",
-        "inputSlotHelpKeyword",
-        "inspectorChannelStripHelpPrefix",
-        "midiEffectSlotHelpKeyword",
-        "outputSlotHelpKeyword",
-        "playheadPositionFieldLabel",
-        "pluginWindowSmartControlsControl",
-        "projectPickerWindow",
-        "recordArmKeyCommandName",
-        "trackContentGeneric",
-        "undoMenuItemPrefix"
+        "sendLevelKnobHelpKeyword",
+        "sendSlotHelpKeyword"
       ],
-      "reason": "#1028 (ADR-027 D6, audit B D1): it.lproj/QuickHelp.plist is the English file byte for byte and three .strings units are English row for row, so the canon now records them `not_localized` and neither the casefold ledger nor a derived LabelSet credits their English as Italian any more. These cells were `derived` only from that English; they were never measured. recordArmKeyCommandName is the one AXLocaleValues typed. Nothing in the product changed."
+      "reason": "#291 R1, merged over #1028 (ADR-027 D6, audit B D1): it.lproj/QuickHelp.plist is the English file byte for byte, so the canon records it `not_localized` and neither the casefold ledger nor a derived LabelSet credits the English QuickHelp titles these two sets derive from (INS_010_SendSlot, INS_011_SendLevelKnob) as it-IT. On this branch alone the cells were `derived` from that English; they were never credited as measured. The #291 live run in it-IT (docs/observations/2026-09-27-it-IT-endpoints-and-send-slots.json, raw evidence docs/observations/evidence/2026-09-27-it-IT-endpoints-and-send-slots.json) found the send slots with these sets -- 19 before and 40 after one assignment, with one Send Level knob where the product and the independent walk both put the occupied slot, 11 checks passed -- but it records counts and the members it matched WITH (evidence tag 291e/label-sets), not the AXHelp string it read, so no row there can back a `measured` cell and the cells stay unmeasured until a reading that stores the string. The #1034 raise of the same date for this key named its own members; those are in the base now and remain in history."
     },
     "unmeasured_coverage.pt-BR": {
       "date": "2026-09-27",
       "members": [
-        "assignControlHelpKeyword",
-        "automationModeTrim",
-        "inputSlotHelpKeyword",
-        "inspectorChannelStripHelpPrefix",
-        "midiEffectSlotHelpKeyword",
-        "outputSlotHelpKeyword",
-        "playheadPositionFieldLabel",
-        "projectPickerWindow",
-        "recordArmKeyCommandName",
-        "trackContentGeneric",
-        "undoMenuItemPrefix"
+        "sendLevelKnobHelpKeyword",
+        "sendSlotHelpKeyword"
       ],
-      "reason": "#1028 (ADR-027 D6, audit B D1): pt.lproj/QuickHelp.plist is the English file byte for byte and three .strings units are English row for row, so the canon now records them `not_localized` and nothing credits their English as Portuguese. These cells were `derived` only from that English; they were never measured. Nothing in the product changed."
+      "reason": "#291 R1, merged over #1028 (ADR-027 D6, audit B D1): pt.lproj/QuickHelp.plist is the English file byte for byte, so the canon records it `not_localized` and neither the casefold ledger nor a derived LabelSet credits the English QuickHelp titles these two sets derive from (INS_010_SendSlot, INS_011_SendLevelKnob) as pt-BR. On this branch alone the cells were `derived` from that English; they were never credited as measured. The #291 live run in pt-BR (docs/observations/2026-09-27-pt-BR-endpoints-and-send-slots.json, raw evidence docs/observations/evidence/2026-09-27-pt-BR-endpoints-and-send-slots.json) found the send slots with these sets -- 19 before and 40 after one assignment, with one Send Level knob where the product and the independent walk both put the occupied slot, 11 checks passed -- but it records counts and the members it matched WITH (evidence tag 291e/label-sets), not the AXHelp string it read, so no row there can back a `measured` cell and the cells stay unmeasured until a reading that stores the string. The #1034 raise of the same date for this key named its own members; those are in the base now and remain in history."
     },
     "unmeasured_coverage.zh-CN": {
       "date": "2026-09-27",
@@ -734,27 +720,10 @@
     "unmeasured_coverage.zh-TW": {
       "date": "2026-09-27",
       "members": [
-        "assignControlHelpKeyword",
-        "automationModeOff",
-        "automationModeTrim",
-        "deleteTracksPrimaryButton",
-        "inputSlotHelpKeyword",
-        "inspectorChannelStripHelpPrefix",
-        "midiEffectSlotHelpKeyword",
-        "nonInsertButtonText",
-        "outputSlotHelpKeyword",
-        "playheadPositionFieldLabel",
-        "pluginWindowSmartControlsControl",
-        "projectPickerWindow",
-        "recordArmKeyCommandName",
-        "saveConfirmationButton",
-        "sendOrIOControlLabel",
-        "sliderZoomHint",
-        "trackContentGeneric",
-        "transportContainerControlKeywords",
-        "undoMenuItemPrefix"
+        "sendLevelKnobHelpKeyword",
+        "sendSlotHelpKeyword"
       ],
-      "reason": "#1028 (ADR-027 D6, audit B D1): zh_TW.lproj/QuickHelp.plist is the English file byte for byte and one .strings unit is English row for row, so the canon now records them `not_localized` and nothing credits their English as Traditional Chinese. These cells were `derived` only from that English; they were never measured. Nothing in the product changed."
+      "reason": "#291 R1, merged over #1028 (ADR-027 D6, audit B D1): zh_TW.lproj/QuickHelp.plist is the English file byte for byte, so the canon records it `not_localized` and neither the casefold ledger nor a derived LabelSet credits the English QuickHelp titles these two sets derive from (INS_010_SendSlot, INS_011_SendLevelKnob) as zh-TW. On this branch alone the cells were `derived` from that English; they were never credited as measured. The #291 live run in zh-TW (docs/observations/2026-09-27-zh-TW-endpoints-and-send-slots.json, raw evidence docs/observations/evidence/2026-09-27-zh-TW-endpoints-and-send-slots.json) found the send slots with these sets -- 19 before and 40 after one assignment, with one Send Level knob where the product and the independent walk both put the occupied slot, 11 checks passed -- but it records counts and the members it matched WITH (evidence tag 291e/label-sets), not the AXHelp string it read, so no row there can back a `measured` cell and the cells stay unmeasured until a reading that stores the string. The #1034 raise of the same date for this key named its own members; those are in the base now and remain in history."
     },
     "records_from_a_superseded_build": {
       "date": "2026-09-24",
