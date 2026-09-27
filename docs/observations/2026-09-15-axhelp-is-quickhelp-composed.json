@@ -269,6 +269,10 @@
           "locale": "en"
         },
         {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
           "source": "quickhelp",
           "locale": "de"
         },

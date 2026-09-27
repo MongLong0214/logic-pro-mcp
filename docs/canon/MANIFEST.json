@@ -28,6 +28,8 @@
     "absence/niblabels.zh_TW.u32": "93e583c59300c520cbab52bc249d51dc3884c203169adc3c3a287daf74754bc5",
     "absence/nibstrings.en.folded.u32": "4126a61e469582b90578e149098ba1f1b9f98353530c3456295e7c720641420f",
     "absence/nibstrings.en.u32": "a417fdb909f57d7a44b43ed23ccdcd8521822c31ca55116f7e300797247b791e",
+    "absence/pluginsettings.-.folded.u32": "40b8fa85b5fc7402f1085182000d8aae2fbe576d5b60c634aa8ecb741f792498",
+    "absence/pluginsettings.-.u32": "344429aeaaddef36054e1b07936e2a04bf69007c65d27902e883585bad522f6b",
     "absence/quickhelp.de.folded.u32": "b31c23794ee49f1e61b9474bcbff555985890e7958e946022d612f35d28fb00d",
     "absence/quickhelp.de.u32": "a40ae686d5d934bd5de10c5c0dd80b5571a10972e9e47fbcb1162ade3c99dec9",
     "absence/quickhelp.en.folded.u32": "6fecc00c423c199ab2f082efac4642775171339c73d919efe20cd7cd4647570c",
@@ -79,6 +81,8 @@
     "index/niblabels.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nibstrings.tsv": "ac732bc853eb32faf7d61ad3665bcd1805dbb1e325fb12bfe9cceb3fa3ec2ef4",
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
+    "index/pluginsettings.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
+    "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/quickhelp.tsv": "0568c660242037aca4b2205e9049e08d4049f18b434517badf7e94b88d435630",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "6186e4025190c16d68d9db850e4189dd76b1273a497790ea41d1f99b4e3b9175",
@@ -300,6 +304,25 @@
       },
       "locales": [
         "en"
+      ]
+    },
+    "pluginsettings": {
+      "absence_entries": {
+        "-": 143
+      },
+      "absence_false_positive": {
+        "-": 3.3295e-08
+      },
+      "cited_rows": 0,
+      "cited_values": 0,
+      "corpus_digest": "c450c005b7d44ec1f880c2332b9fe534a2aa459a3d5f2c6bafb2bd17036fa466",
+      "entries": 147,
+      "files": 3713,
+      "folded_entries": {
+        "-": 143
+      },
+      "locales": [
+        "-"
       ]
     },
     "quickhelp": {

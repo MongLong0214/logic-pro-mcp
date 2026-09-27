@@ -1220,6 +1220,34 @@ def extract_niblabels(app: str, stats=None):
     if failures:
         raise CanonDecodeError(f"{len(failures)} nib(s) did not parse; first: {failures[0]}")
 
+#: The bundle's factory plug-in settings roots, relative to `Contents/Resources`. Issue #1030:
+#: the second one ships folders the first does not (Studio Piano's among them), and the catalog
+#: read only the first.
+PLUGIN_SETTINGS_ROOTS = ("Plug-In Settings", "Plug-In Settings Internal")
+
+
+def extract_pluginsettings(app: str):
+    """The name of every folder under the bundle's two factory plug-in settings roots. Issue #1030.
+
+    One row per folder: unit = the root, key = the folder, value = the folder's name. The stock
+    plug-in catalog keys its seeds by these names, and `check-factory-settings-folders.py` holds
+    every one of them to a seed or an exclusion. Files beside the folders (`CSParameterOrder.plist`)
+    are not rows, and the `.pst` files inside them are not either: a preset listing belongs to the
+    catalog's own probe, which reads every depth of every root on the machine it runs on.
+
+    Not localised -- Apple names each folder once. `/Library/Application Support/Logic/Plug-In
+    Settings` is outside the bundle, so it is outside this corpus and outside every proof over it.
+    """
+    for root_name in PLUGIN_SETTINGS_ROOTS:
+        root = os.path.join(app, "Contents", "Resources", root_name)
+        if not os.path.isdir(root):
+            continue
+        unit = _rel(app, root)
+        for name in sorted(os.listdir(root)):
+            if os.path.isdir(os.path.join(root, name)):
+                yield (unit, "-", name, "folder", name)
+
+
 EXTRACTORS = {
     "quickhelp": extract_quickhelp,
     "strings": extract_strings,
@@ -1227,6 +1255,7 @@ EXTRACTORS = {
     "nib": extract_nib_runtime_attributes,
     "nibstrings": extract_nibstrings,
     "niblabels": extract_niblabels,
+    "pluginsettings": extract_pluginsettings,
 }
 
 #: The field suffix under which a cited row's CASE-FOLDED digest is pinned beside its exact one.
@@ -2122,6 +2151,14 @@ def corpus_files(app: str, source: str) -> list[str]:
                 continue
             for name in files:
                 if name.endswith(".nib"):
+                    out.append(_rel(app, os.path.join(root, name)))
+    elif source == "pluginsettings":
+        # Every file under both roots. The rows are folder names, and a folder enters the digest
+        # through the paths of the files it holds -- measured on 12.3 (6674), no folder under
+        # either root is without one.
+        for root_name in PLUGIN_SETTINGS_ROOTS:
+            for root, _dirs, files in os.walk(os.path.join(app, "Contents", "Resources", root_name)):
+                for name in files:
                     out.append(_rel(app, os.path.join(root, name)))
     else:
         # A source with no branch here returned an EMPTY list, so its manifest entry recorded

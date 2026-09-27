@@ -1258,6 +1258,47 @@ class ACorpusMustKnowWhichBytesItIsMadeOf(unittest.TestCase):
                              f"{source} found files in an empty bundle")
 
 
+class TheFactorySettingsFoldersAreEveryFolderInBothRoots(unittest.TestCase):
+    """`pluginsettings` (#1030), over a bundle-shaped fixture rather than the installed Logic.
+
+    Each case names the mutant it kills: the Internal root dropped from `PLUGIN_SETTINGS_ROOTS`
+    (Studio Piano's folder is only there), a file beside the folders read as a folder, and a digest
+    over the top of each root only.
+    """
+
+    def setUp(self):
+        self.bundle = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.bundle, True)
+        resources = os.path.join(self.bundle, "Contents", "Resources")
+        for rel in ("Plug-In Settings/ES2/01 Synth Leads/Lead.pst",
+                    "Plug-In Settings/Auto-Funk/Fat Funk.pst",
+                    "Plug-In Settings/CSParameterOrder.plist",
+                    "Plug-In Settings Internal/Studio Piano/Grand.pst",
+                    "Plug-In Settings Internal/Studio Bass/Round.pst"):
+            path = os.path.join(resources, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write("preset")
+
+    def test_both_roots_are_read(self):
+        """Kills: the Internal root dropped from `PLUGIN_SETTINGS_ROOTS`."""
+        names = {value for _unit, _locale, _key, _field, value in canon.extract_pluginsettings(self.bundle)}
+        self.assertIn("Studio Piano", names)
+        self.assertEqual(names, {"ES2", "Auto-Funk", "Studio Piano", "Studio Bass"})
+
+    def test_a_file_beside_the_folders_is_not_a_folder(self):
+        """Kills: `os.path.isdir` removed, which reads `CSParameterOrder.plist` as a plug-in."""
+        rows = list(canon.extract_pluginsettings(self.bundle))
+        self.assertNotIn("CSParameterOrder.plist", {row[4] for row in rows})
+        self.assertEqual({(row[1], row[3]) for row in rows}, {("-", "folder")})
+
+    def test_the_digest_covers_the_files_of_both_roots(self):
+        """Kills: the digest reading only the top of each root, which leaves every preset out."""
+        files = canon.corpus_files(self.bundle, "pluginsettings")
+        self.assertIn("Contents/Resources/Plug-In Settings Internal/Studio Piano/Grand.pst", files)
+        self.assertIn("Contents/Resources/Plug-In Settings/ES2/01 Synth Leads/Lead.pst", files)
+
+
 class EnglishAndItsTranslationsMustMeet(unittest.TestCase):
     """The join `TRANSLATION_NAMESPACE` exists for, tested where it can fail rather than asserted."""
 
