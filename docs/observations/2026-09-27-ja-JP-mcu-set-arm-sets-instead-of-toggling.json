@@ -2,8 +2,8 @@
   "schema": 3,
   "id": "2026-09-27-ja-JP-mcu-set-arm-sets-instead-of-toggling",
   "date": "2026-09-27",
-  "subject": "track.set_arm on the MCU rung: whether a request for a state sets it, against a Rec button that toggles on every press",
-  "question": "When track.set_arm falls back to the MCU, does arming and then disarming a track leave it in the requested state each time, confirmed by a read of the track?",
+  "subject": "track.set_arm on the MCU rung: whether a request for a state sets it, against a Rec button that toggles on every press, and whether a track past the first bank gets the write or, in a last bank Logic stops short, a refusal",
+  "question": "When track.set_arm falls back to the MCU, does arming and then disarming a track leave it in the requested state each time, confirmed by a read of the track, does the same hold for a track in bank 1, and is a track in the short last bank refused with nothing armed?",
   "verdict": "works",
   "surface": "system.midi",
   "issues": [
@@ -19,8 +19,8 @@
   "reverify": {
     "kind": "script",
     "command": "/usr/bin/python3 Scripts/livekit/live_1020_mcu_set_arm_is_a_set.py <worktree> <full-40-char-head> [binary]",
-    "expected": "the arm reaches the MCU rung (write_source mcu); arming answers State A with observed true and the refreshed track list reads the track armed; 30 reads of the track list 100 ms apart with no refresh all read it armed; disarming answers State A with observed false and the track list reads it disarmed; the track ends disarmed",
-    "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository, a running Logic with a project open and the Mackie Control surface bound; starts two servers; arms and disarms one track and leaves it disarmed"
+    "expected": "the arm reaches the MCU rung (write_source mcu); arming answers State A with observed true and the refreshed track list reads the track armed; 30 reads of the track list 100 ms apart with no refresh all read it armed; disarming answers State A with observed false and the track list reads it disarmed; the same holds for track 15 in bank 1, with banks_moved 1 and the walk back; the census armed set is [15] after that arm and as found after the disarm, and track 7 never changes; arming track 16 in the clamped last bank answers State C with nothing armed, track 13 unchanged and the MCU upper row the same before and after; every track touched ends as found",
+    "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository, a running Logic with the 19-track lpm-locale-campaign fixture open and the Mackie Control surface bound; starts two servers; arms and disarms two tracks, tries to arm a third, and puts tracks 7, 13, 15 and 16 back as found"
   },
   "depends": [
     "Sources/LogicProMCP/Channels/MCUChannel.swift:MCUChannel",
@@ -28,15 +28,19 @@
     "Sources/LogicProMCP/MIDI/MCUFeedbackParser.swift:MCUFeedbackParser",
     "Sources/LogicProMCP/Accessibility/AXLogicProElements+Tracks.swift:trackArmControl",
     "Scripts/livekit/live_1020_mcu_set_arm_is_a_set.py:armed_of",
-    "Scripts/livekit/live_1020_mcu_set_arm_is_a_set.py:armed_unrefreshed"
+    "Scripts/livekit/live_1020_mcu_set_arm_is_a_set.py:armed_unrefreshed",
+    "Sources/LogicProMCP/Channels/MCUChannel.swift:withBanking",
+    "Sources/LogicProMCP/Channels/MCUChannel.swift:walkBank",
+    "Sources/LogicProMCP/Channels/MCUChannel.swift:probeAmbiguousRightStep",
+    "Sources/LogicProMCP/Channels/MCUChannel.swift:mayBeShortShift"
   ],
   "evidence": [
     "evidence/2026-09-27-ja-JP-mcu-set-arm-1020.json"
   ],
-  "method": "The release binary at 2d66c40de21a13e7caf06704fd0b0e3193b52e6f was started against the open project with LOGIC_PRO_MCP_ARM_KEYCODE set to a value that does not parse and nothing else talking to Logic. The harness armed the first disarmed track through logic_tracks arm, checked that the reply came from the MCU rung, refreshed the cache and read the track's isArmed from logic://tracks, read it 30 more times 100 ms apart without a refresh while Logic's Rec LED blinked, then disarmed it the same way. A second server started without the variable put the track back. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
+  "method": "The release binary at c7c0b7a791c1f010b67d4fa229e37b992bfce65e was started against the open project with LOGIC_PRO_MCP_ARM_KEYCODE set to a value that does not parse and nothing else talking to Logic. The harness armed the first disarmed track through logic_tracks arm, checked that the reply came from the MCU rung, refreshed the cache and read the track's isArmed from logic://tracks, read it 30 more times 100 ms apart without a refresh while Logic's Rec LED blinked, then disarmed it the same way. A second server started without the variable put the track back. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to. Then the harness armed and disarmed track 15, strip 7 of bank 1, reading the census armed set and track 7 after each, and tried to arm track 16, which sits in the last bank, reading the census, tracks 16 and 13 and the MCU upper row from logic://mcu/state before and after.",
   "observations": [
     {
-      "binary": "2d66c40de21a13e7caf06704fd0b0e3193b52e6f",
+      "binary": "c7c0b7a791c1f010b67d4fa229e37b992bfce65e",
       "mcu_connected": true,
       "track": 0,
       "arm_reply": {
@@ -65,20 +69,126 @@
       "checks_passed": [
         "1020/arm-through-the-mcu-sets-and-confirms",
         "1020/the-cached-arm-holds-through-the-rec-led-blink",
-        "1020/disarm-through-the-mcu-clears-the-arm"
+        "1020/disarm-through-the-mcu-clears-the-arm",
+        "1020/bank-1-arm-through-the-mcu-sets-and-confirms",
+        "1020/bank-1-the-cached-arm-holds-through-the-rec-led-blink",
+        "1020/bank-1-disarm-through-the-mcu-clears-the-arm",
+        "1020/bank-1-census-armed-set-is-15-then-as-found",
+        "1020/bank-1-writes-leave-track-7-arm-unchanged",
+        "1020/final-bank-arm-is-refused-with-nothing-armed",
+        "1020/final-bank-leaves-the-mcu-window-home"
       ],
-      "checks_passed_count": 3,
-      "checks_run": 3,
-      "track_disarmed_again": true
+      "checks_passed_count": 10,
+      "checks_run": 10,
+      "track_disarmed_again": true,
+      "bank_phases_ready": true,
+      "bank_1": {
+        "track": 15,
+        "arm_reply": {
+          "state": "A",
+          "reason": null,
+          "write_source": "mcu",
+          "verification_source": "ax_value",
+          "write_attempted": true,
+          "observed": true,
+          "fallback_from_error": "arm_key_config_invalid"
+        },
+        "arm_bank": {
+          "bank_presses_sent": 4,
+          "banks_moved": 1,
+          "banks_requested": 1,
+          "bank_restored": true,
+          "bank_steps_disambiguated": 1,
+          "bank_step_short_of_eight": false,
+          "bank_probe_unresolved": false,
+          "step_windows": [
+            "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+            "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+          ]
+        },
+        "armed_in_track_list_after_arm": null,
+        "unrefreshed_reads_while_armed": 30,
+        "unrefreshed_reads_armed": 30,
+        "disarm_reply": {
+          "state": "A",
+          "reason": null,
+          "write_source": "mcu",
+          "verification_source": "ax_value",
+          "write_attempted": true,
+          "observed": false,
+          "fallback_from_error": "arm_key_config_invalid"
+        },
+        "disarm_bank": {
+          "bank_presses_sent": 4,
+          "banks_moved": 1,
+          "banks_requested": 1,
+          "bank_restored": true,
+          "bank_steps_disambiguated": 1,
+          "bank_step_short_of_eight": false,
+          "bank_probe_unresolved": false,
+          "step_windows": [
+            "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+            "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+          ]
+        },
+        "armed_in_track_list_after_disarm": null,
+        "census_armed_sets": {
+          "as_found": [],
+          "after_arm": [
+            15
+          ],
+          "after_disarm": []
+        },
+        "neighbour_track": 7,
+        "track_7_arm": {
+          "before": false,
+          "after_arm": false,
+          "after_disarm": false
+        }
+      },
+      "final_bank": {
+        "track": 16,
+        "clamped_track": 13,
+        "reply": {
+          "state": "C",
+          "reason": null,
+          "success": false,
+          "error": "channels_exhausted",
+          "last_error": "No keyboard shortcut mapped for: track.set_arm",
+          "write_source": null,
+          "write_attempted": null
+        },
+        "armed_set_before": [],
+        "armed_set_after": [],
+        "track_16_armed_after": false,
+        "track_13_before": false,
+        "track_13_after": false,
+        "mcu_upper_row_before": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+        "mcu_upper_row_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+      },
+      "restored": {
+        "track-disarmed-again": true,
+        "track-15-arm-as-found": true,
+        "track-16-arm-as-found": true,
+        "track-7-arm-as-found": true,
+        "track-13-arm-as-found": true
+      }
     }
   ],
-  "conclusion": "On track 0 the arm reached the MCU rung after the Accessibility rung refused arm_key_config_invalid. It answered State A with observed True, and the track list read isArmed True; read 30 more times without a refresh, it read the track armed 30 times. The disarm answered State A with observed False, and the track list read isArmed False. All three checks passed.",
+  "conclusion": "On track 0 the arm reached the MCU rung after the Accessibility rung refused arm_key_config_invalid. It answered State A with observed True, and the track list read isArmed True; read 30 more times without a refresh, it read the track armed 30 times. The disarm answered State A with observed False, and the track list read isArmed False. Track 15 in bank 1 armed with State A after 4 bank presses, 1 bank moved and 1 step proved by the probe; the census armed set went [] -> [15] -> [], and track 7 stayed False. Track 16 in the last bank answered State C (channels_exhausted), the armed set stayed [], track 13 stayed False and the MCU upper row was the same before and after. All 10 checks passed and every track touched ended as found.",
   "limits": [
     "Only record-arm reaches the MCU rung this way. The run sets LOGIC_PRO_MCP_ARM_KEYCODE to a value that does not parse, so the Accessibility key rung refuses arm_key_config_invalid, which is not terminal. Mute and solo have no such setting; their MCU rung is covered by the unit tests only.",
     "Only a state that differs from the request reaches the MCU. When the track already holds the requested state, the Accessibility rung answers a verified no-op first, so the MCU's own 'already set' branch is not driven live.",
     "The track-list reading is isArmed from logic://tracks. Since this change the poller finds the record-enable checkbox with the same locator the handler's readback uses (AXLogicProElements.trackArmControl), so it is a second read at a later time, not a second way of finding the control.",
     "The parser still writes isMuted and isSoloed from the Mute and Solo LED frames. Whether Logic blinks those LEDs as it blinks Rec was not measured.",
-    "One track of one fixture, one arm and one disarm per language, one host.",
+    "A track in the last bank is refused whenever that bank is shorter than eight strips. Logic stops Bank Right at the last strip, so on this fixture's 21 strips the last bank shows strips 13-20 and the write cannot name strip 16 safely. Before this change it armed track 13.",
+    "The refusal for track 16 reaches the caller as State C channels_exhausted, with the keyboard rung's last_error. The MCU rung's own code (bank_walk_unverified) and its bank fields do not come through the router. The record proves the refusal from the census, track 13 and the MCU upper row instead of from the reply.",
+    "The bank-1 step was proved by the probe (one extra Bank Right, then Bank Left back to a byte-equal row), because on this fixture the names of banks 0 and 1 repeat (DelCls). A fixture whose adjacent banks share no name would prove the step from the row alone; that path ran in unit tests only.",
+    "Tracks 0 (the first disarmed track), 15 and 16 of one 19-track fixture, one arm and one disarm each (track 16: one refused arm), one host.",
     "The binary without this change was run only in Korean; in this language there is only the reading of the fixed binary."
   ],
   "supersedes": null,
