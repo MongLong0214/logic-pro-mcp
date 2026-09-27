@@ -131,5 +131,18 @@
  {"name": "record-twice-same-basename", "check": "records_cite_their_bytes"},
  {"name": "closed-stdout-keeps-the-exit", "check": "closed_stdout_keeps_the_exit"},
  {"name": "run-is-p0b", "cmd": ["run", "{fixtures}/spec-base.json", "--head", "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea", "--out", "{tmp}/run.json"], "exit": 2, "says": "P0b"},
- {"name": "batch-is-p0b", "cmd": ["batch", "--out-dir", "{tmp}/batch"], "exit": 2, "says": "P0b"}
+ {"name": "batch-is-p0b", "cmd": ["batch", "--out-dir", "{tmp}/batch"], "exit": 2, "says": "P0b"},
+ {"name": "run-fake-clean", "run": {"spec": "{fixtures}/spec-base.json"}, "exit": 0, "says": "clean (exit 0)"},
+ {"name": "run-output-rechecks-to-3", "run": {"spec": "{fixtures}/spec-base.json"}, "exit": 0, "says": "clean (exit 0)", "recheck": {"exit": 3, "says": "only `verify.py run` attests"}},
+ {"name": "run-probe-unreadable-stays-unreadable", "run": {"spec": "{fixtures}/spec-base.json", "script": {"answers": {"arm-sets/post": {"unreadable": "fake: the probe could not read"}}}}, "exit": 3, "says": "the runner could not read it: fake: the probe could not read"},
+ {"name": "run-modal-before-step-unreadable", "run": {"spec": "{fixtures}/spec-base.json", "script": {"dirt": {"before:arm-sets/reply": [{"kind": "modal_panel_level"}]}}}, "exit": 3, "says": "the machine was not clean before the step: modal_panel_level"},
+ {"name": "run-rival-server-unreadable", "run": {"spec": "{fixtures}/spec-base.json", "script": {"dirt": {"before:arm-sets/post": [{"kind": "rival_server", "pid": 4242}]}}}, "exit": 3, "says": "the machine was not clean before the step: rival_server"},
+ {"name": "run-timeout-then-restore-runs", "run": {"spec": "{fixtures}/spec-base.json", "script": {"answers": {"arm-sets/reply": {"timeout": true}}}}, "exit": 3, "says": "stored pre, reply (unreadable), post, undo, restored"},
+ {"name": "run-reading-names-another-locale", "run": {"spec": "{fixtures}/spec-base.json", "script": {"readings": {"en": {"language_setting": {"readable": true, "value": ["ko"]}}}}}, "exit": 2, "says": "Logic's AppleLanguages leads with ['ko'], not ['en']"},
+ {"name": "run-wait-polls-until", "run": {"spec": "{fixtures}/spec-base.json", "spec_ops": [{"set": ["rows", 0, "steps", 2], "value": {"as": "post", "wait": {"probe": {"name": "track_armed", "args": {"index": 0}}, "until": {"path": "armed", "op": "eq", "value": true}, "timeout_ms": 1000, "interval_ms": 100}}}], "script": {"answers": {"arm-sets/post": [{"value": {"track": 0, "armed": false}}, {"value": {"track": 0, "armed": false}}, {"value": {"track": 0, "armed": true}}]}}}, "exit": 0, "says": "wait ko/arm-sets/post: 3 poll(s), condition held"},
+ {"name": "run-wait-gives-up-at-bound", "run": {"spec": "{fixtures}/spec-base.json", "spec_ops": [{"set": ["rows", 0, "steps", 2], "value": {"as": "post", "wait": {"probe": {"name": "track_armed", "args": {"index": 0}}, "until": {"path": "armed", "op": "eq", "value": true}, "timeout_ms": 1000, "interval_ms": 100}}}], "script": {"answers": {"arm-sets/post": [{"value": {"track": 0, "armed": false}}]}, "poll_limit": 50}}, "exit": 1, "says": "wait ko/arm-sets/post: 11 poll(s), condition did not hold"},
+ {"name": "run-gate-miss-resets-then-runs", "run": {"spec": "{fixtures}/spec-base.json", "script": {"gate": {"ko": [["track 0 armed"], []]}}, "events": {"reset": 1}}, "exit": 0, "says": "ko/arm-sets: gate missed (track 0 armed); one reset"},
+ {"name": "run-gate-stays-dirty-row-unreadable", "run": {"spec": "{fixtures}/spec-base.json", "script": {"gate": {"ko": [["track 0 armed"], ["track 0 armed"]]}}}, "exit": 3, "says": "fixture not as declared after one reset: track 0 armed"},
+ {"name": "run-tuple-in-reading", "run": {"spec": "{fixtures}/spec-base.json", "script": {"tuple_in_reading": true}}, "exit": 0, "says": "clean (exit 0)"},
+ {"name": "life-keyword-outside-selftest-named", "check": "life_seam_named_outside_selftest"}
 ]

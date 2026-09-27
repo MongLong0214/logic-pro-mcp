@@ -46,6 +46,26 @@ ATTESTED CASES (`"attest": {...}`)
         "lookalike": true         pass an object with the same fields that is not an Attestation
         "after": [ops]            patch ops applied after the attestation was taken
 
+RUN CASES (`"run": {...}`)
+    The runner (runner.py) driven in this process over `FakeLifecycle`, a scripted world on a fake
+    clock: the case names a spec fixture (`spec`), patch ops for it (`spec_ops`), the locales, and
+    a `script` of what the world answers. `runner.run_spec(..., _life=FakeLifecycle(...))` builds
+    a temporary binary, "switches", drives every step, writes the evidence, attests it in process
+    and judges it; the case requires its exit code and a substring of its output. `events` counts
+    what the lifecycle was asked to do ({"switch": 0}); `recheck` then rechecks the written file
+    from the command line. The script:
+        "answers": {"[<lproj>/]<row>/<as>": answer | [answer, ...]}   a list answers successive
+                  reads in turn and repeats its last; an answer is {"value": v} (stored as its JSON
+                  text), {"text": s}, {"unreadable": why} or {"timeout": true}. Unscripted steps
+                  answer fixtures_build.READINGS for the spec.
+        "dirt":   {"before:<row>/<as>" | "after:<row>/<as>": [dirt, ...]}
+        "gate":   {lproj: [[problem, ...], ...]}   successive gates in that locale; then clean
+        "readings": {lproj: {key: value}}   merged over fixtures_build.locale_reading(lproj)
+        "tuple_in_reading": true            the window names come back as a tuple
+        "current": lproj                    the locale Logic is in when the run starts
+        "poll_limit": n                     the fake raises after n reads of one step, so a wait
+                                            that ignores its bound ends
+
 MUTANTS
     Each mutant is one textual rewrite of one file, applied to a temporary copy of Scripts/verify.
     The copy's `self-test --cases-only` must then fail, naming at least one case: that case is the
@@ -73,6 +93,8 @@ import subprocess
 import sys
 import tempfile
 import types
+
+import runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.dirname(HERE)
@@ -324,6 +346,44 @@ MUTANTS = [
      "old": '    "count_ge": (True, lambda a, b: _count(a, b) and len(a) >= b),',
      "new": ('    "count_ge": (True, lambda a, b: _count(a, b) and len(a) >= b),\n'
              '    "count_le": (True, lambda a, b: _count(a, b) and len(a) <= b),')},
+    {"id": "store-default-on-unreadable", "file": "runner.py",
+     "old": "        return E.unreadable_observation(step, str(exc) or type(exc).__name__)",
+     "new": '        return E.make_observation(step, "{}")'},
+    {"id": "lifecycle-ignored", "file": "runner.py",
+     "old": '    if dirt:\n        return E.unreadable_observation(step, f"the machine was not clean before',
+     "new": '    if False:\n        return E.unreadable_observation(step, f"the machine was not clean before'},
+    {"id": "restore-skipped-after-failure", "file": "runner.py",
+     "old": '        for step in row["restore"]:\n            entries[step["as"]] = execute_step(ctx, step)',
+     "new": ('        for step in (row["restore"] if all("raw" in e for e in entries.values()) else []):\n'
+             '            entries[step["as"]] = execute_step(ctx, step)')},
+    {"id": "digest-before-verdicts", "file": "runner.py",
+     "old": "    return data, parsed, _attest(built, readings, E.sha256_of(parsed))",
+     "new": "    return data, parsed, _attest(built, readings, E.sha256_of(dict(parsed, verdicts={})))"},
+    {"id": "reading-not-normalized", "file": "runner.py",
+     "old": "    reading = normalize(life.reading(lproj))",
+     "new": "    reading = life.reading(lproj)"},
+    {"id": "wait-reads-once", "file": "runner.py",
+     "old": "        if life.now() >= bound:\n            break",
+     "new": "        if True:\n            break"},
+    {"id": "wait-ignores-bound", "file": "runner.py",
+     "old": "        if life.now() >= bound:\n            break",
+     "new": "        if False:\n            break"},
+    {"id": "gate-skipped", "file": "runner.py",
+     "old": ('            dirty = life.gate(ctx, baseline) if ready else ["the fixture\'s surface is not ready"]\n'
+             '            log.append({"t": life.now(), "at": row["id"], "gate": dirty})'),
+     "new": ('            dirty = []\n'
+             '            log.append({"t": life.now(), "at": row["id"], "gate": dirty})')},
+    {"id": "attest-reads-document", "file": "runner.py",
+     "old": "locale_readings=readings,",
+     "new": "locale_readings=E.loads(json.dumps(readings)),"},
+    {"id": "life-guard-off", "file": "selftest.py",
+     # Split in two, so the anchor occurs once in selftest.py: here it is two strings.
+     "old": ('    if rel != SELFTEST_FILE and isinstance(node, ast.keyword)'
+             ' and node.arg == "_life":'),
+     "new": "    if False:"},
+    {"id": "runner-private-guard-off", "file": "selftest.py",
+     "old": "    if rel != RUNNER_FILE and named in RUNNER_" + "PRIVATE:",
+     "new": "    if False:"},
     {"id": "control", "file": "engine.py", "control": True,
      "old": '"""The verdict on one evidence document.',
      "new": '"""The verdict on one evidence document (control: a docstring edit, no behaviour).'},
@@ -527,6 +587,164 @@ def _run_attested(case: dict, where: dict):
     return code, out.getvalue()
 
 
+class FakeSession(runner.Session):
+    """A server that answers what the script says for the step the runner is on."""
+
+    def __init__(self, life, ctx: dict, env: dict):
+        self.life, self.ctx, self.env = life, ctx, env
+
+    def call(self, tool, command, params, timeout_s):
+        return self.life.answer(self.ctx, runner.StepUnreadable)
+
+    def read(self, uri, timeout_s):
+        return self.life.answer(self.ctx, runner.StepUnreadable)
+
+    def close(self):
+        return {"fake": True, "env": self.env}
+
+
+class FakeLifecycle(runner.Lifecycle):
+    """The world, scripted (see RUN CASES). Its clock moves only when the runner sleeps, in whole
+    microseconds, so a wait's poll count is exact. Every request is kept in `events`."""
+
+    def __init__(self, script: dict, where: dict, label: str, defaults: dict):
+        self.script, self.where, self.label, self.defaults = script, where, label, defaults
+        self.micros, self.events, self.reads, self.gates = 0, [], {}, {}
+        self.locale = script.get("current", "ko")
+
+    def count(self, kind: str) -> int:
+        return sum(1 for e in self.events if e[0] == kind)
+
+    def now(self):
+        return self.micros / 1e6
+
+    def sleep(self, seconds):
+        self.micros += int(round(seconds * 1e6))
+
+    def today(self):
+        import fixtures_build
+        return fixtures_build.DATE
+
+    def build(self, head):
+        import evidence_doc as E
+        self.events.append(("build", head))
+        path = os.path.join(self.where["tmp"], "bin", f"{self.label}.bin")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as handle:
+            handle.write(f"self-test binary for {self.label}\n".encode("utf-8"))
+        return runner.Built(head=head, sha256=E.sha256_of_file(path), path=path, record={"fake": True})
+
+    @contextlib.contextmanager
+    def claim(self, purpose):
+        self.events.append(("claim", purpose))
+        yield {"held": True}
+
+    def current_locale(self):
+        return self.locale
+
+    def switch(self, lproj):
+        self.events.append(("switch", lproj))
+        switched, self.locale = lproj != self.locale, lproj
+        return {"switched": switched}
+
+    def reading(self, lproj):
+        import fixtures_build
+        reading = fixtures_build.locale_reading(lproj)
+        reading.update(copy.deepcopy(self.script.get("readings", {}).get(lproj, {})))
+        if self.script.get("tuple_in_reading"):
+            reading["window_names"]["value"] = tuple(reading["window_names"]["value"])
+        return reading
+
+    def host(self, lproj):
+        import fixtures_build
+        return fixtures_build.host(lproj)
+
+    def start(self, ctx, env):
+        self.events.append(("start", env))
+        return FakeSession(self, ctx, env)
+
+    def ready(self, ctx):
+        return {"ready": True}
+
+    def baseline(self, ctx):
+        return {"upper_row": "home"}
+
+    def gate(self, ctx, baseline):
+        n = self.gates[ctx["lproj"]] = self.gates.get(ctx["lproj"], 0) + 1
+        scripted = self.script.get("gate", {}).get(ctx["lproj"], [])
+        return list(scripted[n - 1]) if n <= len(scripted) else []
+
+    def reset(self, ctx):
+        self.events.append(("reset", ctx["lproj"]))
+        return {"fake": True}
+
+    def settle(self, ctx):
+        return {"fake": True}
+
+    def problems(self, ctx, when):
+        return list(self.script.get("dirt", {}).get(f"{when}:{ctx['row']}/{ctx['step']['as']}", []))
+
+    def probe(self, name, ctx, args):
+        import probes
+        return self.answer(ctx, probes.ProbeUnreadable)
+
+    def rest(self):
+        self.events.append(("rest",))
+        return {"in_locale": True}
+
+    def sidecar(self, data):
+        import evidence_doc as E
+        return E.sha256_of_bytes(data)
+
+    def answer(self, ctx: dict, unreadable) -> str:
+        key = f"{ctx['row']}/{ctx['step']['as']}"
+        answers = self.script.get("answers", {})
+        scripted = answers.get(f"{ctx['lproj']}/{key}", answers.get(key))
+        n = self.reads[(ctx["lproj"], key)] = self.reads.get((ctx["lproj"], key), 0) + 1
+        if n > self.script.get("poll_limit", 1000):
+            raise RuntimeError(f"the fake stopped reading {key} after {n - 1} reads")
+        if scripted is None:
+            scripted = {"value": self.defaults[ctx["row"]][ctx["step"]["as"]]}
+        if isinstance(scripted, list):
+            scripted = scripted[min(n, len(scripted)) - 1]
+        if "unreadable" in scripted:
+            raise unreadable(scripted["unreadable"])
+        if scripted.get("timeout"):
+            raise runner.StepUnreadable(f"no reply within {runner.CALL_TIMEOUT_S:g} s")
+        if "text" in scripted:
+            return scripted["text"]
+        return json.dumps(scripted["value"], ensure_ascii=False, sort_keys=True)
+
+
+def _run_fake(case: dict, where: dict):
+    """(exit, output) of the runner driven over FakeLifecycle, as a run case asks."""
+    import fixtures_build
+    run = case["run"]
+    path = _fill(run["spec"], where)
+    with open(path, encoding="utf-8") as handle:
+        spec = json.load(handle)
+    _apply(spec, run.get("spec_ops", []), case["name"], where)
+    life = FakeLifecycle(run.get("script", {}), where, case["name"],
+                         fixtures_build.READINGS[os.path.basename(path)])
+    out = os.path.join(where["tmp"], f"{case['name']}.evidence.json")
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        try:
+            code = runner.run_spec(spec, os.path.relpath(path, ROOT), SELFTEST_HEAD, run.get("locales"),
+                                   out, _life=life)
+        except Exception as exc:  # a crash is a failed case, reported with its type
+            code = f"crash {type(exc).__name__}: {exc}"
+    text = printed.getvalue()
+    for kind, wanted in run.get("events", {}).items():
+        if life.count(kind) != wanted:
+            return f"the lifecycle was asked to {kind} {life.count(kind)} time(s), not {wanted}", text
+    if "recheck" in case and code == case["exit"]:
+        again, said = _verify(["recheck", out])
+        if again != case["recheck"]["exit"] or case["recheck"]["says"] not in said:
+            return f"recheck of the run's evidence: exit {again}; {said.strip().splitlines()[-1:]}", text
+    return code, text
+
+
 def _verify(argv: list):
     """(exit, output) of one verify.py command run in this process."""
     import verify
@@ -602,13 +820,18 @@ def check_records_cite_their_bytes(case: dict, where: dict):
 
 
 #: Where an `engine.Attestation` may be named, as (repo-relative file, top-level definition): the
-#: class itself, the engine's type check, and the self-test's in-process `attest`. ADR-027 D7 allows
-#: one more constructor, `verify.py run`; it is a stub today and names nothing, so it has no entry
-#: yet. P0b-2 adds its site here when it builds one, and the review of that change sees the entry.
+#: class itself, the engine's type check, the self-test's in-process `attest`, and the one
+#: constructor ADR-027 D7 allows, `verify.py run`'s: runner.py `_attest`.
 ATTESTATION_SITES = {("Scripts/verify/engine.py", "Attestation"),
                      ("Scripts/verify/engine.py", "attestation_problems"),
-                     ("Scripts/verify/selftest.py", "attest")}
+                     ("Scripts/verify/selftest.py", "attest"),
+                     ("Scripts/verify/runner.py", "_attest")}
 SELFTEST_FILE = "Scripts/verify/selftest.py"
+#: The runner. Its names that reach an Attestation (`_attest`, `_produce`) or drive a lifecycle
+#: given positionally and record what it produced (`_drive`, `_finish`) are referenced only inside
+#: it; `_attest`'s body is held to what the self-test's `attest` is held to.
+RUNNER_FILE = "Scripts/verify/runner.py"
+RUNNER_PRIVATE = ("_attest", "_produce", "_drive", "_finish")
 #: The verifier's own code. The rules that catch an Attestation built without naming it (unpickling,
 #: importlib, `__import__`, `__new__`, a dataclass copy) apply here only: elsewhere in the repository
 #: the same calls are ordinary code (guards load their helpers with importlib). Hiding a construction
@@ -705,6 +928,27 @@ def _attest_body_problems(here: str, node) -> list:
     return []
 
 
+def _seam_problems(here: str, node, rel: str) -> list:
+    """The runner's seams, refused outside their files in every tracked file: a reference to a
+    name of RUNNER_PRIVATE outside runner.py, and a `_life=` keyword -- a lifecycle other than
+    the live one -- outside the self-test. A fake lifecycle reaches clean only where the self-test
+    runs it."""
+    out = []
+    named = None
+    if isinstance(node, ast.Attribute):
+        named = node.attr
+    elif isinstance(node, ast.Name):
+        named = node.id
+    elif isinstance(node, ast.ImportFrom):
+        named = next((a.name for a in node.names if a.name in RUNNER_PRIVATE), None)
+    if rel != RUNNER_FILE and named in RUNNER_PRIVATE:
+        out.append(f"{here} reaches the runner's {named} outside runner.py")
+    if rel != SELFTEST_FILE and isinstance(node, ast.keyword) and node.arg == "_life":
+        out.append(f"{here} passes _life= outside the self-test: a lifecycle other than the live "
+                   f"one reaches clean only there")
+    return out
+
+
 def attestation_construction_problems(root: str = ROOT, repo: str = None) -> list:
     """Why something other than the in-process sites could build, alias or forge an Attestation.
 
@@ -731,8 +975,9 @@ def attestation_construction_problems(root: str = ROOT, repo: str = None) -> lis
             out += _naming_problems(here, node, (rel, site) in ATTESTATION_SITES, target)
             if inside:
                 out += _indirect_problems(here, node, rel, site, target)
-            if rel == SELFTEST_FILE and site == "attest":
+            if (rel, site) in ((SELFTEST_FILE, "attest"), (RUNNER_FILE, "_attest")):
                 out += _attest_body_problems(here, node)
+            out += _seam_problems(here, node, rel)
             if rel != SELFTEST_FILE and ((isinstance(node, ast.Attribute) and node.attr == "attest")
                                          or (isinstance(node, ast.Name) and node.id == "attest")):
                 out.append(f"{here} calls the self-test's attest outside the self-test")
@@ -772,6 +1017,35 @@ def check_attestation_check_sees_the_whole_repository(case: dict, where: dict):
     honest = [p for p in problems if p.startswith("Scripts/elsewhere/honest.py")]
     if missed or honest:
         return f"forgers not named: {missed}; honest file named: {honest}; problems: {problems}"
+    return None
+
+
+def check_life_seam_named_outside_selftest(case: dict, where: dict):
+    """The runner's seams are refused outside their files: a scratch repository tracks a file that
+    passes `_life=` to the runner, one that calls `_attest`, one that imports `_drive` to hand it a
+    lifecycle positionally, and one that runs the runner honestly. Every seam user must be named
+    and the honest file must not be."""
+    planted = {
+        "Scripts/elsewhere/fake_world.py": "import runner\n"
+                                           "code = runner.run_spec({}, 's', 'h', None, 'o', _life=object())\n",
+        "Scripts/elsewhere/own_attest.py": "import runner\nmade = runner._attest(None, {}, '0' * 64)\n",
+        "Scripts/elsewhere/own_drive.py": "from runner import _drive\ncode = _drive(object(), [], 'docs/observations')\n",
+        "Scripts/elsewhere/honest.py": "import runner\ncode = runner.run_spec({}, 's', 'h', None, 'o')\n",
+    }
+    repo = os.path.join(where["tmp"], "planted-seams")
+    for rel, text in planted.items():
+        os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
+        with open(os.path.join(repo, rel), "w", encoding="utf-8") as handle:
+            handle.write(text)
+    for argv in (["init", "-q"], ["add", "--", "Scripts"]):
+        proc = subprocess.run(["git", "-C", repo] + argv, capture_output=True, text=True)
+        if proc.returncode != 0:
+            return f"git {argv[0]} in the scratch repository: exit {proc.returncode}; {proc.stderr.strip()}"
+    problems = attestation_construction_problems(root=repo, repo=repo)
+    missed = [rel for rel in planted if "honest" not in rel and not any(p.startswith(rel + ":") for p in problems)]
+    honest = [p for p in problems if p.startswith("Scripts/elsewhere/honest.py")]
+    if missed or honest:
+        return f"seam users not named: {missed}; honest file named: {honest}; problems: {problems}"
     return None
 
 
@@ -828,7 +1102,8 @@ CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
           "nan_not_written": check_nan_not_written,
           "closed_stdout_keeps_the_exit": check_closed_stdout_keeps_the_exit,
           "attestation_built_only_in_process": check_attestation_built_only_in_process,
-          "attestation_check_sees_the_whole_repository": check_attestation_check_sees_the_whole_repository}
+          "attestation_check_sees_the_whole_repository": check_attestation_check_sees_the_whole_repository,
+          "life_seam_named_outside_selftest": check_life_seam_named_outside_selftest}
 
 
 def run_case(case: dict, where: dict):
@@ -841,6 +1116,8 @@ def run_case(case: dict, where: dict):
     where = dict(where)
     if "attest" in case:
         code, text = _run_attested(case, where)
+    elif "run" in case:
+        code, text = _run_fake(case, where)
     else:
         if "patch" in case:
             where["patched"] = _patched(case, where)
