@@ -402,8 +402,9 @@ func controlBarRecordReadsInEveryLanguage(locale: String, record: String, freeTe
     #expect(AXLogicProElements.findControlBarCheckbox(
         named: AXLocalePolicy.transportRecordControl, runtime: runtime
     ) == recordBox, "\(locale): \(record)")
-    // Unreadable (nil) fails the require, the neighbour's false fails the expect. Not written as
-    // `#expect(reading ?? false)`: measured 2026-09-28 on Swift 6.2.4, that form passes on nil.
+    // Unreadable (nil) fails the require, the neighbour's false fails the expect. Not written as one
+    // expectation over the reading nil-coalesced to false: measured 2026-09-28 on Swift 6.2.4, that
+    // form passed with the reading nil.
     let reading = try #require(AccessibilityChannel.transportRecordingState(runtime: runtime), "\(locale): \(record)")
     #expect(reading, "\(locale): \(record)")
 }
