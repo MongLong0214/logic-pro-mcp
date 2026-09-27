@@ -1,0 +1,35 @@
+Ruled-out: pinning the key sets through the logic://project/audit resource with a StateCache | the wire contract is a property of the pure audit; buildAudit(snapshot:) and the CleanupPlanReport memberwise init give the same shapes with no cache, router or wall clock
+Warn: swift test --filter ProjectSessionAudit selects zero tests: this file's tests are top-level functions with ids LogicProMCPTests.testProjectAudit...(); filter on testProjectAudit|testProjectSessionAudit (21 tests here at this commit)
+Record-Id: r-4937df3bb87a
+Provenance: inherited 583eaf6a7ba4a33de43e4e4ad139350c22f1a54e
+
+Limit: publish leaves main_output and strip_track_association partial on every real read (bus identity parsed from the slot description, I/O-label renames, positional strip-to-track association), so every real assessment is unverified; compliant and violation are reached only on hand-built complete graphs until #291 publishes those two domains complete
+Limit: fixture-proven only; nothing here was driven against a live Logic
+Limit: an occluded capture is unverified even for strips read before the occlusion; the cache flag does not say which reads it touched
+Ruled-out: a role member naming a handle that is not a policy target | a candidate is an existing track and the question reports its ref, which only a target carries; it rejects as unknownSubject at policy.roles[i].members[j]
+Ruled-out: rejecting buses above an upper bound | the bus namespace is #291/#967 evidence; P1 rejects only bus < 1 and guesses no maximum
+Ruled-out: deciding anything on displayName | a label is not an identity; the source is found by targetRef and the bus by busNumber, and displayName is copied into observed.display_name as evidence only
+Ruled-out: reading the coverage reason strings | the domain state decides; a reworded reason must not change a status, so reasons are copied as evidence and never parsed
+Warn: fixtures give bus nodes opaque ids (aux_drum_bus, aux_reverb) on purpose; the mutation that reads the bus from the id is caught only because the ids carry no number
+Warn: the Issue966 tests are wrapped in a @Suite struct so --filter Issue966 selects them (32 at this commit); a file-name filter on top-level @Test functions selects nothing
+Provenance: inherited a4b29bed86ccb2b1ba945e3bf2497171146557d7
+
+Limit: a missing destination node or one without a bus number stays output_edge_ambiguous, as before; only more than one match is output_destination_ambiguous
+Ruled-out: widening RoutingGraph.isConsistent to check node ids on a partial graph | it is a shared definition the write gate and publish depend on; the assessor validates only the structure its verdict reads, locally
+Provenance: inherited 015cc71dd1e4d1ed0b0358ccda5f95bc71455b06
+
+Limit: target_snapshot_stale and references off are per-target checks outside the assessment gate, so a role with no accepted member still asks when the capture's track references are stale or off; its candidates' references are the policy's, not checked against the capture
+Provenance: inherited e67262fb123fe126ab74ce16785ac1e85f2fd094
+
+Limit: a role's candidates carry the policy's references and are not each checked against the references the capture issued, so with references on and current a candidate the capture did not issue is still offered
+Provenance: inherited 5fd68de9c53a1ff7ac080399dc2b91b1bc0be274
+
+Limit: a mixed role's question does not name the candidates it dropped; neither the finding nor the question has a field for them, so they show only as a shorter candidate list
+Provenance: inherited c7b6bb8dd5932642718568c8f938318b7e9b2e5a
+
+Limit: publish leaves main_output and strip_track_association partial on every real read, so a role with no accepted member asks nothing on a real read until #291 publishes both complete; needs_input, like compliant and violation, is reached only on hand-built complete graphs
+Provenance: inherited 76ce565786276fde0191f708a4c50fc2d210c028
+
+Limit: only an unstable domain stops a role's question; an unavailable or not_observed domain does not, since neither says the capture moved
+Ruled-out: a role reading the direct target's any-state-but-complete domain check | publish leaves both domains partial on every real read, so no real read could ask; the question is about track identity, which a partial routing domain does not put in doubt
+Provenance: inherited 718bdf820a36b4883d58f464a166c73943007010
