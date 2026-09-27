@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lpm-acceptance/1",
+  "title": "Acceptance rows for one issue (ADR-027 D1). docs/acceptance/SCHEMA.md explains every field.",
+  "description": "SHAPE only. The rules that relate fields to each other (bound names, independence, counterexamples, product-source refusal, locale reasons, canon references) live in Scripts/verify/engine.py validate_spec, and nowhere else. Scripts/verify/engine.py validates this file with its own subset validator: type, enum, const, properties, required, additionalProperties, items, minItems, minLength, minimum, maximum, pattern, oneOf and local $ref. Do not use any other keyword here; the validator refuses a schema keyword it does not implement rather than ignoring it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "issue", "surface", "sources", "fixture", "locales", "rows"],
+  "properties": {
+    "format": {"const": "lpm-acceptance/1"},
+    "issue": {"type": "integer", "minimum": 1},
+    "surface": {"type": "string", "pattern": "^[a-z_]+\\.[a-z_]+$"},
+    "sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "note"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "note": {"type": "string", "minLength": 1}
+      }
+    },
+    "locales": {
+      "oneOf": [
+        {"const": "all"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["subset", "reason"],
+          "properties": {
+            "subset": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+            "reason": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "rows": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/row"}}
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["doc", "sha", "quote"],
+      "properties": {
+        "doc": {"type": "string", "minLength": 1},
+        "sha": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{40}$"}]},
+        "quote": {"type": "string", "minLength": 20}
+      }
+    },
+    "name": {"type": "string", "pattern": "^[A-Za-z0-9_$-]+$"},
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "criterion", "steps", "expect", "counterexample", "restore",
+                   "restore_expect", "independence"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "criterion": {"type": "integer", "minimum": 0},
+        "steps": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/step"}},
+        "expect": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/expectation"}},
+        "counterexample": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/counterexample"}},
+        "restore": {"type": "array", "items": {"$ref": "#/$defs/step"}},
+        "restore_expect": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/expectation"}},
+        "independence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/name"}}
+      }
+    },
+    "step": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["as", "call"],
+          "properties": {"as": {"$ref": "#/$defs/name"}, "call": {"$ref": "#/$defs/call"}}
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["as", "read"],
+          "properties": {"as": {"$ref": "#/$defs/name"}, "read": {"$ref": "#/$defs/read"}}
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["as", "probe"],
+          "properties": {"as": {"$ref": "#/$defs/name"}, "probe": {"$ref": "#/$defs/probe"}}
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["as", "wait"],
+          "properties": {"as": {"$ref": "#/$defs/name"}, "wait": {"$ref": "#/$defs/wait"}}
+        }
+      ]
+    },
+    "call": {
+      "type": "object", "additionalProperties": false, "required": ["tool", "command", "params"],
+      "properties": {
+        "tool": {"type": "string", "pattern": "^logic_[a-z_]+$"},
+        "command": {"type": "string", "minLength": 1},
+        "params": {"type": "object"}
+      }
+    },
+    "read": {
+      "type": "object", "additionalProperties": false, "required": ["uri"],
+      "properties": {"uri": {"type": "string", "pattern": "^logic://"}}
+    },
+    "probe": {
+      "type": "object", "additionalProperties": false, "required": ["name", "args"],
+      "properties": {"name": {"$ref": "#/$defs/name"}, "args": {"type": "object"}}
+    },
+    "wait": {
+      "type": "object", "additionalProperties": false,
+      "required": ["probe", "until", "timeout_ms", "interval_ms"],
+      "properties": {
+        "probe": {"$ref": "#/$defs/probe"},
+        "until": {"$ref": "#/$defs/until"},
+        "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
+        "interval_ms": {"type": "integer", "minimum": 10, "maximum": 60000}
+      }
+    },
+    "until": {
+      "type": "object", "additionalProperties": false, "required": ["path", "op"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "op": {"$ref": "#/$defs/op"},
+        "value": {}
+      }
+    },
+    "op": {"enum": ["eq", "ne", "in", "not_in", "subset", "superset", "count_eq", "count_ge",
+                    "changed", "unchanged", "is_null", "not_null", "matches_canon"]},
+    "expectation": {
+      "type": "object", "additionalProperties": false, "required": ["path", "op"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "op": {"$ref": "#/$defs/op"},
+        "value": {},
+        "ref": {"$ref": "#/$defs/ref"}
+      }
+    },
+    "ref": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["obs"],
+          "properties": {"obs": {"type": "string", "minLength": 1}}
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["canon", "locale", "quote"],
+          "properties": {
+            "canon": {"type": "string", "pattern": "^logic-canon://"},
+            "locale": {"type": "string", "minLength": 1},
+            "quote": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "counterexample": {
+      "type": "object", "additionalProperties": false,
+      "required": ["observation", "replaces", "must_fail"],
+      "properties": {
+        "observation": {"$ref": "#/$defs/name"},
+        "replaces": {"$ref": "#/$defs/name"},
+        "must_fail": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}}
+      }
+    }
+  }
+}
