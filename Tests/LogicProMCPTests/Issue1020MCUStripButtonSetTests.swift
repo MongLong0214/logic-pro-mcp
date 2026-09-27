@@ -257,6 +257,99 @@ private let toggles: [Issue1020Toggle] = [
 private let pollWait: Duration = .milliseconds(50)
 private let waitsForAnUnconfirmedPress = 9
 
+/// Holds the FIRST state read it is asked for open until the test releases it, and answers it with
+/// the value it read BEFORE suspending, so the request that made that read is parked between
+/// reading the track and acting on what it read. Every later read goes straight to the surface.
+/// Nothing here reads a clock: the test waits on `waitUntilHolding`, not on a delay.
+private actor FirstReadGate {
+    private let surface: ToggleSurface
+    private var armed = true
+    private var holding = false
+    private var held: CheckedContinuation<Void, Never>?
+    private var holdWatcher: CheckedContinuation<Void, Never>?
+
+    init(surface: ToggleSurface) {
+        self.surface = surface
+    }
+
+    func read(_ function: MCUProtocol.ButtonFunction, track: Int) async -> Bool? {
+        // Disarmed before the first await, so a second read that re-enters here is never held.
+        let holdThisOne = armed
+        armed = false
+        let value = await surface.read(function, track: track)
+        guard holdThisOne else { return value }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            held = continuation
+            holding = true
+            holdWatcher?.resume()
+            holdWatcher = nil
+        }
+        return value
+    }
+
+    func waitUntilHolding() async {
+        if holding { return }
+        await withCheckedContinuation { holdWatcher = $0 }
+    }
+
+    func release() {
+        held?.resume()
+        held = nil
+    }
+}
+
+private actor CompletionFlag {
+    private(set) var isSet = false
+    func set() { isSet = true }
+}
+
+private func gatedReadback(_ gate: FirstReadGate) -> MCUChannel.AXReadback {
+    MCUChannel.AXReadback(
+        readVolume: { _ in nil },
+        readPan: { _ in nil },
+        readMuted: { track in await gate.read(.mute, track: track) },
+        readSoloed: { track in await gate.read(.solo, track: track) },
+        readArmed: { track in await gate.read(.recArm, track: track) }
+    )
+}
+
+/// Two requests on track 2 of one channel: the first is parked inside its first state read, the
+/// second is started, and the first is released only once the second has either finished or is
+/// parked waiting for the bank lock. Returns both replies, first request's first.
+private func runOverlapping(
+    _ toggle: Issue1020Toggle,
+    initially: Bool,
+    first: Bool,
+    second: Bool
+) async -> (surface: ToggleSurface, channel: MCUChannel, sleeper: CountingSleeper, replies: (ChannelResult, ChannelResult)) {
+    let surface = ToggleSurface(states: [FlagKey(function: toggle.function, track: 2): initially])
+    let gate = FirstReadGate(surface: surface)
+    let sleeper = CountingSleeper()
+    let channel = MCUChannel(
+        transport: surface, cache: StateCache(), axReadback: gatedReadback(gate), sleep: sleeper.closure
+    )
+    let firstTask = Task {
+        await channel.execute(operation: toggle.operation, params: ["index": "2", "enabled": "\(first)"])
+    }
+    await gate.waitUntilHolding()
+    let secondDone = CompletionFlag()
+    let secondTask = Task {
+        let reply = await channel.execute(operation: toggle.operation, params: ["index": "2", "enabled": "\(second)"])
+        await secondDone.set()
+        return reply
+    }
+    // Either the second request is parked on the bank lock (the read is under it) or it ran to
+    // the end while the first sat on its read (the read is outside it). Both are reached without
+    // a clock; neither is assumed.
+    while await channel.bankExclusionWaiterCount == 0, await !secondDone.isSet {
+        await Task.yield()
+    }
+    await gate.release()
+    let firstReply = await firstTask.value
+    let secondReply = await secondTask.value
+    return (surface, channel, sleeper, (firstReply, secondReply))
+}
+
 // MARK: - Tests
 
 @Suite("Issue1020MCUStripButtonSetTests")
@@ -872,5 +965,82 @@ struct Issue1020MCUStripButtonSetTests {
         #expect(await surface.sentBytes.isEmpty)
         #expect(!result.isSuccess)
         #expect(HonestContract.stateCErrorCode(result.message) == "track_state_unreadable")
+    }
+
+    /// Kills the mutation that moves the state read and the no-op decision back OUTSIDE
+    /// `withBankExclusion` (the shape at 34e35bae, review round 2): there, both requests read "off"
+    /// before either pressed, the lock serialised their two presses, and the second press cleared
+    /// what the first set, with the second reply claiming State A for a write it undid. Under the
+    /// lock the second request reads the state the first one left and sends nothing.
+    @Test(arguments: toggles)
+    func twoConcurrentEnablesOnAnOffTrackPressOnceAndLeaveItOn(_ toggle: Issue1020Toggle) async throws {
+        let run = await runOverlapping(toggle, initially: false, first: true, second: true)
+
+        // One press and its release on strip 2, and no bank byte: track 2 is on bank 0.
+        #expect(await run.surface.sentBytes == pressPair(toggle.function, strip: 2))
+        #expect(bit(await run.surface.read(toggle.function, track: 2)) == "on")
+
+        let first = try setEnvelope(run.replies.0)
+        #expect(first["state"] as? String == "A")
+        let firstAttempted = try #require(first["write_attempted"] as? Bool)
+        #expect(firstAttempted)
+        #expect(bit(first["observed"] as? Bool) == "on")
+
+        let second = try setEnvelope(run.replies.1)
+        #expect(second["state"] as? String == "A")
+        let secondAttempted = try #require(second["write_attempted"] as? Bool)
+        #expect(!secondAttempted)
+        #expect(bit(second["observed"] as? Bool) == "on")
+
+        #expect(await run.channel.bankExclusionWaiterCount == 0)
+        #expect(await run.sleeper.requested.isEmpty)
+    }
+
+    /// The read now sits under the bank lock, and it still comes before the walk: a track in
+    /// another bank that already holds the requested state is answered from the read alone, with
+    /// no bank byte and no strip byte. Kills a restructure that walks the bank before reading.
+    @Test(arguments: toggles, [true, false])
+    func alreadyMatchingInAnotherBankSendsNoBankByte(_ toggle: Issue1020Toggle, enabled: Bool) async throws {
+        let rig = await makeBankedSetRig(states: [FlagKey(function: toggle.function, track: 10): enabled])
+
+        let result = await rig.channel.execute(
+            operation: toggle.operation, params: ["index": "10", "enabled": "\(enabled)"]
+        )
+
+        #expect(await rig.surface.sentBytes.isEmpty)
+        #expect(await rig.surface.bank == 0)
+        let obj = try setEnvelope(result)
+        #expect(obj["state"] as? String == "A")
+        let attempted = try #require(obj["write_attempted"] as? Bool)
+        #expect(!attempted)
+        #expect(bit(obj["observed"] as? Bool) == bit(enabled))
+        #expect(obj["bank_presses_sent"] == nil)
+    }
+
+    /// An `enabled: true` parked on its read and an `enabled: false` started behind it: the track
+    /// ends at the later request's value, and each reply says what its own press did. Read outside
+    /// the lock, the `false` request read the "off" the parked request had not changed yet, answered
+    /// "already off", and the parked press then left the track on.
+    @Test(arguments: toggles)
+    func aConcurrentEnableThenDisableEndsAtTheLaterValueAndBothRepliesAreTrue(_ toggle: Issue1020Toggle) async throws {
+        let run = await runOverlapping(toggle, initially: false, first: true, second: false)
+
+        #expect(await run.surface.sentBytes == pressPair(toggle.function, strip: 2) + pressPair(toggle.function, strip: 2))
+        #expect(bit(await run.surface.read(toggle.function, track: 2)) == "off")
+
+        let first = try setEnvelope(run.replies.0)
+        #expect(first["state"] as? String == "A")
+        let firstAttempted = try #require(first["write_attempted"] as? Bool)
+        #expect(firstAttempted)
+        #expect(bit(first["observed"] as? Bool) == "on")
+
+        let second = try setEnvelope(run.replies.1)
+        #expect(second["state"] as? String == "A")
+        let secondAttempted = try #require(second["write_attempted"] as? Bool)
+        #expect(secondAttempted)
+        #expect(bit(second["observed"] as? Bool) == "off")
+
+        #expect(await run.channel.bankExclusionWaiterCount == 0)
+        #expect(await run.sleeper.requested.isEmpty)
     }
 }

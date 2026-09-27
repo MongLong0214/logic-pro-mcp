@@ -878,6 +878,13 @@ actor MCUChannel: Channel {
     /// past it to the next channel, where a terminal one would end the walk with nothing done.
     /// After a press the readback did not confirm, nothing is pressed again — a second press on a
     /// toggle is the opposite write — and the answer is State B with `write_attempted: true`.
+    ///
+    /// The read, the decision, the press and the readback run under ONE `withBankExclusion`. Read
+    /// outside it, two concurrent `enabled: true` requests on a disarmed track both read "off", the
+    /// lock then serialises their presses, and the second press disarms what the first armed: the
+    /// actor re-enters at every `await`, so being an actor does not order them. Under the lock a
+    /// request reads the state the previous one left. The read still comes before any bank press,
+    /// so a request that already matches sends nothing at all, bank bytes included.
     private func executeStripButtonSet(
         _ function: MCUProtocol.ButtonFunction,
         operation: String,
@@ -892,53 +899,55 @@ actor MCUChannel: Channel {
             "verification_source": Self.stripButtonVerifySource,
         ]
         let read = stripButtonStateReader(function)
-        guard let read, let before = await read(track) else {
-            extras["write_attempted"] = false
-            extras["observed"] = NSNull()
-            extras["operation"] = operation
-            extras["channel"] = "MCU"
-            return .error(HonestContract.encodeStateC(
-                error: .trackStateUnreadable,
-                hint: "\(operation) sent nothing: the MCU \(function) button toggles, and track \(track)'s "
-                    + "\(function) state could not be read from its track header, so one press could set "
-                    + "it or clear it. Another channel may still set it.",
-                extras: extras
-            ))
-        }
-        if before == enabled {
-            extras["observed"] = before
-            extras["write_attempted"] = false
-            return .success(HonestContract.encodeStateA(extras: extras))
-        }
-
-        return await withBanking(targetTrack: track, operation: operation) { strip in
-            await self.pressButton(function, strip: strip)
-            extras["write_attempted"] = true
-            var observed: Bool?
-            for attempt in 0..<Self.stripButtonReadbackPollBudget {
-                observed = await read(track)
-                // ADR-005: every verification poll attempt is a traced phase (no-op without an
-                // active mutation trace).
-                await OperationTraceContext.record(.verificationPoll, attributes: [
-                    "outcome": observed == enabled ? "matched" : "pending",
-                ])
-                if observed == enabled { break }
-                if attempt < Self.stripButtonReadbackPollBudget - 1 {
-                    await self.sleep(.milliseconds(Self.stripButtonReadbackPollMilliseconds))
-                }
-            }
-            if let observed {
-                extras["observed"] = observed
-            } else {
+        return await withBankExclusion {
+            guard let read, let before = await read(track) else {
+                extras["write_attempted"] = false
                 extras["observed"] = NSNull()
-            }
-            guard observed == enabled else {
-                return .success(HonestContract.encodeStateB(
-                    reason: observed == nil ? .readbackUnavailable : .readbackMismatch,
+                extras["operation"] = operation
+                extras["channel"] = "MCU"
+                return .error(HonestContract.encodeStateC(
+                    error: .trackStateUnreadable,
+                    hint: "\(operation) sent nothing: the MCU \(function) button toggles, and track \(track)'s "
+                        + "\(function) state could not be read from its track header, so one press could set "
+                        + "it or clear it. Another channel may still set it.",
                     extras: extras
                 ))
             }
-            return .success(HonestContract.encodeStateA(extras: extras))
+            if before == enabled {
+                extras["observed"] = before
+                extras["write_attempted"] = false
+                return .success(HonestContract.encodeStateA(extras: extras))
+            }
+
+            return await bankedStripWrite(targetTrack: track, operation: operation) { strip in
+                await self.pressButton(function, strip: strip)
+                extras["write_attempted"] = true
+                var observed: Bool?
+                for attempt in 0..<Self.stripButtonReadbackPollBudget {
+                    observed = await read(track)
+                    // ADR-005: every verification poll attempt is a traced phase (no-op without an
+                    // active mutation trace).
+                    await OperationTraceContext.record(.verificationPoll, attributes: [
+                        "outcome": observed == enabled ? "matched" : "pending",
+                    ])
+                    if observed == enabled { break }
+                    if attempt < Self.stripButtonReadbackPollBudget - 1 {
+                        await self.sleep(.milliseconds(Self.stripButtonReadbackPollMilliseconds))
+                    }
+                }
+                if let observed {
+                    extras["observed"] = observed
+                } else {
+                    extras["observed"] = NSNull()
+                }
+                guard observed == enabled else {
+                    return .success(HonestContract.encodeStateB(
+                        reason: observed == nil ? .readbackUnavailable : .readbackMismatch,
+                        extras: extras
+                    ))
+                }
+                return .success(HonestContract.encodeStateA(extras: extras))
+            }
         }
     }
 
@@ -1666,84 +1675,101 @@ actor MCUChannel: Channel {
         operation: String,
         stripWrite: @escaping (Int) async -> ChannelResult
     ) async -> ChannelResult {
-        // Sanity cap: real Logic projects rarely exceed 256 tracks (32 MCU banks).
-        // A `track.select {index: 99999}` was seen to spend 25 s walking 12499
-        // bank-right presses then restoring — far past any client timeout. Reject
-        // up front rather than burning that time.
+        if let refusal = Self.bankTargetOutOfRange(targetTrack) { return refusal }
+        return await withBankExclusion {
+            await bankedStripWrite(targetTrack: targetTrack, operation: operation, stripWrite: stripWrite)
+        }
+    }
+
+    /// Sanity cap: real Logic projects rarely exceed 256 tracks (32 MCU banks). A
+    /// `track.select {index: 99999}` was seen to spend 25 s walking 12499 bank-right presses then
+    /// restoring — far past any client timeout. Reject up front rather than burning that time.
+    private static func bankTargetOutOfRange(_ targetTrack: Int) -> ChannelResult? {
         guard (0...255).contains(targetTrack) else {
             return .error("MCU bank target track \(targetTrack) out of range (0..255)")
         }
+        return nil
+    }
+
+    /// `withBanking`'s walk, write and walk home, for a caller that already holds
+    /// `withBankExclusion` — `executeStripButtonSet` takes the lock itself so its state read and
+    /// no-op decision sit under the same acquisition as its press (#1020). Acquiring nothing, it
+    /// cannot wait for itself.
+    private func bankedStripWrite(
+        targetTrack: Int,
+        operation: String,
+        stripWrite: (Int) async -> ChannelResult
+    ) async -> ChannelResult {
+        if let refusal = Self.bankTargetOutOfRange(targetTrack) { return refusal }
         let targetBank = targetTrack / 8
         let strip = targetTrack % 8
 
-        return await withBankExclusion {
-            // Decided under the lock: read outside it, `currentBank` can be the bank a suspended
-            // `executeBank` walk has already left.
-            if windowOffsetUnaligned, currentBank != Self.bankIndexRange.lowerBound {
-                return await bankWalkRefusal(
-                    operation: operation, track: targetTrack, strip: strip,
-                    requested: abs(targetBank - currentBank), out: BankWalkLeg(), back: BankWalkLeg(),
-                    reason: "an earlier bank move left the MCU window where Logic stopped the last bank "
-                        + "at the last strip, so its offset is not a multiple of eight and no strip index "
-                        + "names a known track; nothing was sent. Move the bank left to its end with "
-                        + "mixer.bank (the step that redraws unchanged) to clear this"
-                )
-            }
-            if targetBank == currentBank {
-                return await stripWrite(strip)
-            }
-
-            let origin = currentBank
-            let requested = abs(targetBank - origin)
-            let sign = targetBank > origin ? 1 : -1
-            let outward: MCUProtocol.ButtonFunction = sign > 0 ? .bankRight : .bankLeft
-            let homeward: MCUProtocol.ButtonFunction = sign > 0 ? .bankLeft : .bankRight
-
-            guard await cache.mcuUpperRowSnapshot().sequence > 0 else {
-                return await bankWalkRefusal(
-                    operation: operation, track: targetTrack, strip: strip, requested: requested,
-                    out: BankWalkLeg(), back: BankWalkLeg(),
-                    reason: "the MCU LCD upper row has never been received on this server, so no bank "
-                        + "step could be verified and no bank press was sent"
-                )
-            }
-
-            let out = await walkBank(outward, steps: requested, requireFullShift: true)
-            guard out.banksMoved == requested else {
-                let back = await walkBank(homeward, steps: out.windowMoves, requireFullShift: false)
-                settleBankBookkeeping(origin: origin, sign: sign, out: out, back: back)
-                let stopped = "bank step \(out.banksMoved + 1) of \(requested) toward track \(targetTrack)'s bank "
-                let short = stopped + "redrew the MCU LCD upper row, but the new row may be the old one slid by "
-                    + "fewer than eight strips: Logic stops the last bank at the last strip, so strip "
-                    + "\(strip) could name an earlier track"
-                let reason: String
-                if out.probeUnresolved {
-                    reason = short + "; the probe that settles it (one more Bank Right, then a Bank Left back "
-                        + "to the same row) did not read back as either answer"
-                } else if out.shortStepMoved {
-                    reason = short + "; one more Bank Right redrew the same row, so this is Logic's last bank"
-                } else {
-                    reason = stopped + "produced no quiescent redraw of the MCU LCD upper row to a different row, "
-                        + "so Logic cannot be shown to be on the bank the strip index would name (two "
-                        + "presses sent back to back were measured moving Logic 12.3 one bank)"
-                }
-                return await bankWalkRefusal(
-                    operation: operation, track: targetTrack, strip: strip, requested: requested,
-                    out: out, back: back, reason: reason
-                )
-            }
-
-            let result = await stripWrite(strip)
-
-            let back = await walkBank(homeward, steps: requested, requireFullShift: false)
-            settleBankBookkeeping(origin: origin, sign: sign, out: out, back: back)
-            // `addExtras` is the merge the router already uses on success envelopes; it leaves a
-            // refusal untouched, so a State C from the write is returned as the write gave it.
-            guard case .success(let message) = result else { return result }
-            return .success(HonestContract.addExtras(
-                bankWalkExtras(requested: requested, out: out, back: back), into: message
-            ))
+        // Decided under the lock: read outside it, `currentBank` can be the bank a suspended
+        // `executeBank` walk has already left.
+        if windowOffsetUnaligned, currentBank != Self.bankIndexRange.lowerBound {
+            return await bankWalkRefusal(
+                operation: operation, track: targetTrack, strip: strip,
+                requested: abs(targetBank - currentBank), out: BankWalkLeg(), back: BankWalkLeg(),
+                reason: "an earlier bank move left the MCU window where Logic stopped the last bank "
+                    + "at the last strip, so its offset is not a multiple of eight and no strip index "
+                    + "names a known track; nothing was sent. Move the bank left to its end with "
+                    + "mixer.bank (the step that redraws unchanged) to clear this"
+            )
         }
+        if targetBank == currentBank {
+            return await stripWrite(strip)
+        }
+
+        let origin = currentBank
+        let requested = abs(targetBank - origin)
+        let sign = targetBank > origin ? 1 : -1
+        let outward: MCUProtocol.ButtonFunction = sign > 0 ? .bankRight : .bankLeft
+        let homeward: MCUProtocol.ButtonFunction = sign > 0 ? .bankLeft : .bankRight
+
+        guard await cache.mcuUpperRowSnapshot().sequence > 0 else {
+            return await bankWalkRefusal(
+                operation: operation, track: targetTrack, strip: strip, requested: requested,
+                out: BankWalkLeg(), back: BankWalkLeg(),
+                reason: "the MCU LCD upper row has never been received on this server, so no bank "
+                    + "step could be verified and no bank press was sent"
+            )
+        }
+
+        let out = await walkBank(outward, steps: requested, requireFullShift: true)
+        guard out.banksMoved == requested else {
+            let back = await walkBank(homeward, steps: out.windowMoves, requireFullShift: false)
+            settleBankBookkeeping(origin: origin, sign: sign, out: out, back: back)
+            let stopped = "bank step \(out.banksMoved + 1) of \(requested) toward track \(targetTrack)'s bank "
+            let short = stopped + "redrew the MCU LCD upper row, but the new row may be the old one slid by "
+                + "fewer than eight strips: Logic stops the last bank at the last strip, so strip "
+                + "\(strip) could name an earlier track"
+            let reason: String
+            if out.probeUnresolved {
+                reason = short + "; the probe that settles it (one more Bank Right, then a Bank Left back "
+                    + "to the same row) did not read back as either answer"
+            } else if out.shortStepMoved {
+                reason = short + "; one more Bank Right redrew the same row, so this is Logic's last bank"
+            } else {
+                reason = stopped + "produced no quiescent redraw of the MCU LCD upper row to a different row, "
+                    + "so Logic cannot be shown to be on the bank the strip index would name (two "
+                    + "presses sent back to back were measured moving Logic 12.3 one bank)"
+            }
+            return await bankWalkRefusal(
+                operation: operation, track: targetTrack, strip: strip, requested: requested,
+                out: out, back: back, reason: reason
+            )
+        }
+
+        let result = await stripWrite(strip)
+
+        let back = await walkBank(homeward, steps: requested, requireFullShift: false)
+        settleBankBookkeeping(origin: origin, sign: sign, out: out, back: back)
+        // `addExtras` is the merge the router already uses on success envelopes; it leaves a
+        // refusal untouched, so a State C from the write is returned as the write gave it.
+        guard case .success(let message) = result else { return result }
+        return .success(HonestContract.addExtras(
+            bankWalkExtras(requested: requested, out: out, back: back), into: message
+        ))
     }
 
     /// State C `bank_walk_unverified`: the strip was not pressed because the bank could not be
