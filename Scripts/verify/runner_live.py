@@ -16,11 +16,14 @@
     gate      live.fixture.read (the verifier's own track_flags_ax walk, D1; the walk goes to a
               sidecar) plus display.upperRow of logic://mcu/state (the product's reading: nothing
               else reads the LCD), shaped for setups.gate_problems by `gate_reading_of`.
-    reset     live.fixture.reset: Don't Save, reopen from disk, read.
+    reset     live.fixture.reset: Don't Save, reopen from disk, read. The record, walk and all,
+              goes to a sidecar; the evidence keeps the fixture, the locale and its sha256.
     ready     with the declaration's ready "mcu", a bounded wait on logic://mcu/state until
               connection.isConnected and registeredAsDevice are both true (live_1020 slept 8 s
               twice instead); with none, ready at once.
     settle    live.screen.settle_to_clean, between rows only; it may send Escape, and says so.
+              Its samples go to a sidecar; the evidence keeps the dirt before and after, the
+              Escapes sent, whether it timed out, and the sidecar's sha256.
     problems  live.screen.clean_state's dirt, plus every LogicProMCP server or test bundle this
               run did not start. An unreadable process table is dirt of its own kind.
     rest      live.locale.restore_locale, confirmed by live.locale.in_locale over its reading.
@@ -264,7 +267,9 @@ class LiveLifecycle(runner.Lifecycle):
             return {"readable": False, "cause": str(exc)}
 
     def reset(self, ctx):
-        return fixture.reset(ctx["decl"]["live"], ctx["lproj"])
+        record = fixture.reset(ctx["decl"]["live"], ctx["lproj"])
+        return {"fixture": ctx["decl"]["live"], "lproj": ctx["lproj"],
+                "record_sha256": self._kept(record)}
 
     def ready(self, ctx):
         if ctx["decl"].get("ready") is None:
@@ -288,7 +293,11 @@ class LiveLifecycle(runner.Lifecycle):
                 "elapsed_s": round(waited["elapsed_s"], 3), "last": waited["last"]}
 
     def settle(self, ctx):
-        return screen.settle_to_clean(timeout_s=SETTLE_S)
+        record = screen.settle_to_clean(timeout_s=SETTLE_S)
+        dirt = {when: (record.get(when) if isinstance(record.get(when), dict) else {}).get("dirt")
+                for when in ("initial", "final")}
+        return {"dirt": dirt, "escapes_sent": record.get("escapes_sent"),
+                "timed_out": record.get("timed_out"), "record_sha256": self._kept(record)}
 
     def probe(self, name, ctx, args):
         return probes.run(name, ctx, args)
@@ -307,6 +316,11 @@ class LiveLifecycle(runner.Lifecycle):
         record = live_locale.restore_locale()
         after = record.get("after") or live_locale.reading(runner.RESTING)
         return {"in_locale": live_locale.in_locale(after), "record": record}
+
+    def _kept(self, record) -> str:
+        """A lifecycle record kept whole in a sidecar (D5); its sha256 is what the evidence holds."""
+        return self.sidecar(json.dumps(record, ensure_ascii=False, sort_keys=True,
+                                       default=repr).encode("utf-8"))
 
     def sidecar(self, data):
         sha = hashlib.sha256(data).hexdigest()

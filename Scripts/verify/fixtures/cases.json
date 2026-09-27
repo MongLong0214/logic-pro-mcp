@@ -141,6 +141,7 @@
  {"name": "record-twice-same-basename", "check": "records_cite_their_bytes"},
  {"name": "closed-stdout-keeps-the-exit", "check": "closed_stdout_keeps_the_exit"},
  {"name": "run-cli-has-no-life-seam", "check": "run_cli_has_no_life_seam"},
+ {"name": "live-records-go-to-sidecars", "check": "live_records_go_to_sidecars"},
  {"name": "run-bad-head-refused", "cmd": ["run", "{root}/docs/acceptance/1020.json", "--head", "0123456789abcdef0123456789abcdef01234567", "--out", "{tmp}/bad-head.json"], "exit": 2, "says": "run: the head did not build; no evidence is written (exit 2)"},
  {"name": "run-head-not-hex-refused", "cmd": ["run", "{root}/docs/acceptance/1020.json", "--head", "HEAD", "--out", "{tmp}/not-hex.json"], "exit": 2, "says": "REFUSED --head 'HEAD': not a full 40-hex commit"},
  {"name": "run-fake-clean-records", "run": {"spec": "{fixtures}/spec-base.json", "record": true}, "exit": 0, "says": "record: 2 record(s) written (exit 0)"},

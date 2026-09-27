@@ -427,6 +427,12 @@ MUTANTS = [
              '                out.append(f"track {i} {word}")\n'),
      "new": ('            elif False:\n'
              '                out.append(f"track {i} {word}")\n')},
+    {"id": "reset-record-inline", "file": "runner_live.py",
+     "old": '                "record_sha256": self._kept(record)}\n\n    def ready',
+     "new": '                "record_sha256": self._kept(record), "record": record}\n\n    def ready'},
+    {"id": "settle-samples-inline", "file": "runner_live.py",
+     "old": '"timed_out": record.get("timed_out"), "record_sha256": self._kept(record)}\n',
+     "new": '"timed_out": record.get("timed_out"), "record_sha256": self._kept(record), "record": record}\n'},
     {"id": "switch-per-entry", "file": "runner.py",
      "old": ("            for lproj in order(wanted, life.current_locale()):\n"
              "                switched = life.switch(lproj)\n"),
@@ -1148,6 +1154,41 @@ BATCH_OPTIONS = {"-h", "--help", "--queue", "--out-dir", "--record"}
 SEAM_VARIABLES = {"LPM_VERIFY_REPO", "LPM_VERIFY_ISSUE_BODIES"}
 
 
+def check_live_records_go_to_sidecars(case: dict, where: dict):
+    """The live lifecycle keeps a reset's record (its whole fixture walk) and a settle's samples
+    in sidecars (D5): what it returns names the sidecar by sha256 and holds none of the record,
+    and the sidecar holds all of it. fixture.reset and screen.settle_to_clean are stood in for, in
+    process, by records carrying a marker the evidence must never contain."""
+    import runner_live
+    marker = "a-row-of-the-walk-" * 40
+    records = {"reset": {"read": {"track_flags": {"tracks": [marker]}}, "quit": {"steps": []}},
+               "settle": {"initial": {"observation": marker, "dirt": []}, "actions": [],
+                          "final": {"observation": marker, "dirt": []}, "timed_out": False,
+                          "escapes_sent": 0}}
+    sidecars = os.path.join(where["tmp"], "live-sidecars")
+    lifecycle = runner_live.LiveLifecycle(repo=ROOT, sidecars=sidecars)
+    ctx = {"decl": {"live": "locale_campaign_19"}, "lproj": "ko"}
+    saved = runner_live.fixture.reset, runner_live.screen.settle_to_clean
+    runner_live.fixture.reset = lambda name, lproj: records["reset"]
+    runner_live.screen.settle_to_clean = lambda **kw: records["settle"]
+    try:
+        got = {"reset": lifecycle.reset(ctx), "settle": lifecycle.settle(ctx)}
+    finally:
+        runner_live.fixture.reset, runner_live.screen.settle_to_clean = saved
+    for kind, kept in got.items():
+        if marker in json.dumps(kept, default=repr):
+            return f"{kind}: the evidence would hold the record itself"
+        path = os.path.join(sidecars, f"{kept.get('record_sha256')}.json")
+        if not os.path.isfile(path):
+            return f"{kind}: no sidecar named {kept.get('record_sha256')!r}"
+        with open(path, encoding="utf-8") as handle:
+            if json.load(handle) != records[kind]:
+                return f"{kind}: the sidecar does not hold the whole record"
+    if got["settle"].get("dirt") != {"initial": [], "final": []} or got["settle"].get("timed_out") is not False:
+        return f"settle keeps {got['settle']}, not its dirt and timed_out"
+    return None
+
+
 def check_run_cli_has_no_life_seam(case: dict, where: dict):
     """`verify.py run` and `batch` reach the live lifecycle and nothing else. Their options are
     exactly the documented ones, so no flag can select another world; verify.py, runner.py and engine.py name
@@ -1408,6 +1449,7 @@ def check_live_fixtures(case: dict, where: dict):
 
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
           "run_cli_has_no_life_seam": check_run_cli_has_no_life_seam,
+          "live_records_go_to_sidecars": check_live_records_go_to_sidecars,
           "nan_not_written": check_nan_not_written,
           "closed_stdout_keeps_the_exit": check_closed_stdout_keeps_the_exit,
           "attestation_built_only_in_process": check_attestation_built_only_in_process,
