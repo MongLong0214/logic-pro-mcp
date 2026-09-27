@@ -1,0 +1,343 @@
+{
+ "format": "lpm-evidence/1",
+ "spec_path": "Scripts/verify/fixtures/spec-base.json",
+ "spec": {
+  "format": "lpm-acceptance/1",
+  "issue": 1020,
+  "surface": "arrange.track_headers",
+  "sources": [
+   {
+    "doc": "docs/adr/ADR-019-observation-ledger.md",
+    "sha": "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea",
+    "quote": "The observation system exists so that when Logic moves"
+   },
+   {
+    "doc": "issue:1020",
+    "sha": null,
+    "quote": "A toggle must not be presented as a set."
+   }
+  ],
+  "fixture": {
+   "id": "selftest-two-tracks",
+   "note": "A self-test fixture. Nothing runs it; its evidence documents are written by hand."
+  },
+  "locales": {
+   "subset": [
+    "ko",
+    "en"
+   ],
+   "reason": "self-test: two locales exercise the per-locale rules without ten copies of each case"
+  },
+  "rows": [
+   {
+    "id": "arm-sets",
+    "criterion": 1,
+    "steps": [
+     {
+      "as": "pre",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     },
+     {
+      "as": "reply",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 0,
+        "enabled": true
+       }
+      }
+     },
+     {
+      "as": "post",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     }
+    ],
+    "expect": [
+     {
+      "path": "reply.state",
+      "op": "eq",
+      "value": "A"
+     },
+     {
+      "path": "reply.write_attempted",
+      "op": "eq",
+      "value": true
+     },
+     {
+      "path": "post.armed",
+      "op": "eq",
+      "value": true
+     }
+    ],
+    "counterexample": [
+     {
+      "observation": "pre",
+      "replaces": "post",
+      "must_fail": [
+       2
+      ]
+     }
+    ],
+    "restore": [
+     {
+      "as": "undo",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 0,
+        "enabled": false
+       }
+      }
+     },
+     {
+      "as": "restored",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     }
+    ],
+    "restore_expect": [
+     {
+      "path": "restored.armed",
+      "op": "eq",
+      "value": false
+     }
+    ],
+    "independence": [
+     "pre",
+     "post"
+    ]
+   }
+  ]
+ },
+ "spec_sha256": "8b2f32a5eaf3c7afab669a8b616027d0f03f766fc793432bc594638c54a9609e",
+ "binary": {
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000001",
+  "head": "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea",
+  "binding": "built-by-verifier",
+  "note": "self-test fixture: no binary exists; the digest is a placeholder the engine only checks for shape"
+ },
+ "runs": {
+  "ko": {
+   "date": "2026-09-27",
+   "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+   },
+   "rows": {
+    "arm-sets": {
+     "observations": {
+      "pre": {
+       "step": {
+        "as": "pre",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": false, \"track\": 0}",
+       "raw_bytes": 28
+      },
+      "reply": {
+       "step": {
+        "as": "reply",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": true
+         }
+        }
+       },
+       "raw": "{\"observed\": true, \"state\": \"A\", \"success\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 97
+      },
+      "post": {
+       "step": {
+        "as": "post",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": true, \"track\": 0}",
+       "raw_bytes": 27
+      },
+      "undo": {
+       "step": {
+        "as": "undo",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": false
+         }
+        }
+       },
+       "raw": "{\"observed\": false, \"state\": \"A\", \"success\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 98
+      },
+      "restored": {
+       "step": {
+        "as": "restored",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": false, \"track\": 0}",
+       "raw_bytes": 28
+      }
+     }
+    }
+   }
+  },
+  "en": {
+   "date": "2026-09-27",
+   "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)"
+   },
+   "rows": {
+    "arm-sets": {
+     "observations": {
+      "pre": {
+       "step": {
+        "as": "pre",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": false, \"track\": 0}",
+       "raw_bytes": 28
+      },
+      "reply": {
+       "step": {
+        "as": "reply",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": true
+         }
+        }
+       },
+       "raw": "{\"observed\": true, \"state\": \"A\", \"success\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 97
+      },
+      "post": {
+       "step": {
+        "as": "post",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": true, \"track\": 0}",
+       "raw_bytes": 27
+      },
+      "undo": {
+       "step": {
+        "as": "undo",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": false
+         }
+        }
+       },
+       "raw": "{\"observed\": false, \"state\": \"A\", \"success\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 98
+      },
+      "restored": {
+       "step": {
+        "as": "restored",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": false, \"track\": 0}",
+       "raw_bytes": 28
+      }
+     }
+    }
+   }
+  }
+ },
+ "verdicts": {
+  "ko": {
+   "arm-sets": {
+    "verdict": "PASS",
+    "expect": [
+     "PASS",
+     "PASS",
+     "PASS"
+    ],
+    "counterexample": [
+     "FAIL"
+    ],
+    "restore": [
+     "PASS"
+    ],
+    "reasons": []
+   }
+  },
+  "en": {
+   "arm-sets": {
+    "verdict": "PASS",
+    "expect": [
+     "PASS",
+     "PASS",
+     "PASS"
+    ],
+    "counterexample": [
+     "FAIL"
+    ],
+    "restore": [
+     "PASS"
+    ],
+    "reasons": []
+   }
+  }
+ }
+}

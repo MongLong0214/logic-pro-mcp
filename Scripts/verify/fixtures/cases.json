@@ -1,0 +1,81 @@
+[
+ {"name": "spec-ok", "cmd": ["check-spec", "{fixtures}/spec-base.json"], "exit": 0, "says": "admissible -- 1 row(s), 2 source quote(s) verbatim, 2 locale(s)"},
+ {"name": "spec-canon-ok", "cmd": ["check-spec", "{fixtures}/spec-canon.json"], "exit": 0, "says": "admissible"},
+ {"name": "quote-not-in-source", "patch": {"file": "{fixtures}/spec-base.json", "ops": [
+   {"set": ["sources", 0, "quote"], "value": "The observation system exists so that when Logic stops"}]},
+  "cmd": ["check-spec", "{patched}"], "exit": 2, "says": "sources[0]: the quote is not verbatim in docs/adr/ADR-019-observation-ledger.md at d81c7e5b0d4b"},
+ {"name": "issue-quote-not-in-source", "patch": {"file": "{fixtures}/spec-base.json", "ops": [
+   {"set": ["sources", 1, "quote"], "value": "A toggle may be presented as a set."}]},
+  "cmd": ["check-spec", "{patched}"], "exit": 2, "says": "sources[1]: the quote is not verbatim in the issue body"},
+ {"name": "product-source", "patch": {"file": "{fixtures}/spec-base.json", "ops": [
+   {"set": ["fixture", "note"], "value": "Expected labels are read from Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"}]},
+  "cmd": ["check-spec", "{patched}"], "exit": 2, "says": "refers into product source"},
+ {"name": "subset-without-reason", "patch": {"file": "{fixtures}/spec-base.json", "ops": [
+   {"set": ["locales", "reason"], "value": "   "}]},
+  "cmd": ["check-spec", "{patched}"], "exit": 2, "says": "a subset of the ten needs a reason"},
+ {"name": "no-independence", "patch": {"file": "{fixtures}/spec-base.json", "ops": [
+   {"set": ["rows", 0, "independence"], "value": ["pre"]}]},
+  "cmd": ["check-spec", "{patched}"], "exit": 2, "says": "is self-report"},
+ {"name": "independent-is-call", "patch": {"file": "{fixtures}/spec-base.json", "ops": [
+   {"set": ["rows", 0, "independence"], "value": ["pre", "reply", "post"]}]},
+  "cmd": ["check-spec", "{patched}"], "exit": 2, "says": "independence names 'reply', which is an operation's own reply"},
+ {"name": "ev-pass", "cmd": ["recheck", "{fixtures}/ev-base.json"], "exit": 0, "says": "ev-base.json: clean (exit 0)"},
+ {"name": "ev-fail", "patch": {"file": "{fixtures}/ev-base.json", "restamp": true, "ops": [
+   {"obs": ["ko", "arm-sets", "post"], "raw": {"armed": false, "track": 0}}]},
+  "cmd": ["recheck", "{patched}"], "exit": 1, "says": "expect[2] FAIL: post.armed -- false eq true"},
+ {"name": "ev-unreadable", "patch": {"file": "{fixtures}/ev-base.json", "restamp": true, "ops": [
+   {"obs": ["ko", "arm-sets", "post"], "raw": {"track": 0}}]},
+  "cmd": ["recheck", "{patched}"], "exit": 3, "says": "expect[2] UNREADABLE: post.armed -- post.armed: no such key"},
+ {"name": "cx-accepted", "patch": {"file": "{fixtures}/ev-base.json", "restamp": true, "ops": [
+   {"obs": ["ko", "arm-sets", "pre"], "raw": {"armed": true, "track": 0}}]},
+  "cmd": ["recheck", "{patched}"], "exit": 1, "says": "counterexample_accepted: expect[2] PASSED with 'pre' in place of 'post'"},
+ {"name": "restore-failed", "patch": {"file": "{fixtures}/ev-base.json", "restamp": true, "ops": [
+   {"obs": ["en", "arm-sets", "restored"], "raw": {"armed": true, "track": 0}}]},
+  "cmd": ["recheck", "{patched}"], "exit": 1, "says": "restore_failed: restore_expect[0] restored.armed"},
+ {"name": "missing-locale", "patch": {"file": "{fixtures}/ev-base.json", "ops": [
+   {"delete": ["runs", "en"]}, {"delete": ["verdicts", "en"]}]},
+  "cmd": ["recheck", "{patched}"], "exit": 3, "says": "INCOMPLETE en: required by the spec and not run"},
+ {"name": "unbound", "patch": {"file": "{fixtures}/ev-base.json", "ops": [
+   {"set": ["binary", "binding"], "value": "unbound"}]},
+  "cmd": ["recheck", "{patched}"], "exit": 3, "says": "binding is 'unbound'"},
+ {"name": "truncated", "patch": {"file": "{fixtures}/ev-base.json", "restamp": true, "ops": [
+   {"obs": ["ko", "arm-sets", "post"], "raw": {"armed": true}, "keep_bytes": true}]},
+  "cmd": ["recheck", "{patched}"], "exit": 3, "says": "truncated or altered: 15 bytes stored of the 27 received"},
+ {"name": "wrong-step", "patch": {"file": "{fixtures}/ev-base.json", "restamp": true, "ops": [
+   {"set": ["runs", "ko", "rows", "arm-sets", "observations", "post", "step", "probe", "args", "index"], "value": 1}]},
+  "cmd": ["recheck", "{patched}"], "exit": 3, "says": "taken for a different step than the spec declares"},
+ {"name": "verdict-mismatch", "patch": {"file": "{fixtures}/ev-base.json", "ops": [
+   {"set": ["verdicts", "ko", "arm-sets", "verdict"], "value": "FAIL"}]},
+  "cmd": ["recheck", "{patched}"], "exit": 1, "says": "MISMATCH ko/arm-sets: stored verdict FAIL"},
+ {"name": "spec-tampered", "patch": {"file": "{fixtures}/ev-base.json", "ops": [
+   {"set": ["spec", "rows", 0, "expect", 2, "value"], "value": false}]},
+  "cmd": ["recheck", "{patched}"], "exit": 2, "says": "spec_sha256 is not the digest of the embedded spec"},
+ {"name": "spec-not-the-given-one", "cmd": ["recheck", "{fixtures}/ev-base.json", "--spec", "{fixtures}/spec-canon.json"],
+  "exit": 2, "says": "the embedded spec is not the acceptance document given with --spec"},
+ {"name": "canon-quote-wrong", "patch": {"file": "{fixtures}/spec-canon.json", "ops": [
+   {"set": ["rows", 0, "expect", 1, "ref", "quote"], "value": "Smart Control"}]},
+  "cmd": ["check-spec", "{patched}"], "exit": 2, "says": "canon quote 'Smart Control' is not the value"},
+ {"name": "canon-pass", "cmd": ["recheck", "{fixtures}/ev-canon.json"], "exit": 0, "says": "ev-canon.json: clean (exit 0)"},
+ {"name": "canon-fail", "patch": {"file": "{fixtures}/ev-canon.json", "restamp": true, "ops": [
+   {"obs": ["en", "label-is-apples", "after"], "raw": {"title": "Smart Control"}}]},
+  "cmd": ["recheck", "{patched}"], "exit": 1, "says": "expect[1] FAIL: after.title"},
+ {"name": "pilot-spec", "cmd": ["check-spec", "{root}/docs/acceptance/1020.json"], "exit": 0,
+  "says": "admissible -- 5 row(s), 4 source quote(s) verbatim, 10 locale(s)"},
+ {"name": "pilot-recheck", "cmd": ["recheck", "{root}/docs/acceptance/evidence/1020-ko-4b036d93.json", "--spec", "{root}/docs/acceptance/1020.json"],
+  "exit": 3, "says": "INCOMPLETE binary: binding is 'unbound'"},
+ {"name": "pilot-flipped", "patch": {"file": "{root}/docs/acceptance/evidence/1020-ko-4b036d93.json", "ops": [
+   {"obs": ["ko", "arm-unarmed-sets", "post"], "raw": {"armed": false, "track": 0}}]},
+  "cmd": ["recheck", "{patched}"], "exit": 1, "says": "MISMATCH ko/arm-unarmed-sets: stored verdict PASS"},
+ {"name": "pilot-flipped-restamped", "patch": {"file": "{root}/docs/acceptance/evidence/1020-ko-4b036d93.json", "restamp": true, "ops": [
+   {"obs": ["ko", "arm-unarmed-sets", "post"], "raw": {"armed": false, "track": 0}}]},
+  "cmd": ["recheck", "{patched}"], "exit": 1, "says": "expect[3] FAIL: post.armed -- false eq true"},
+ {"name": "record-then-guard", "cmd": ["record", "{fixtures}/ev-base.json", "--out", "{tmp}/observations"],
+  "exit": 0, "says": "record: 2 record(s) written (exit 0)",
+  "then": {"script": "check-observation-records.py", "env": {"LPM_OBSERVATIONS_DIR": "{tmp}/observations"},
+           "exit": 0, "says": "2 observation record(s) obey the schema"}},
+ {"name": "record-refuses-unbound", "cmd": ["record", "{root}/docs/acceptance/evidence/1020-ko-4b036d93.json", "--out", "{tmp}/unbound"],
+  "exit": 3, "says": "refused to write -- binding is 'unbound'"},
+ {"name": "run-is-p0b", "cmd": ["run", "{fixtures}/spec-base.json", "--head", "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea", "--out", "{tmp}/run.json"],
+  "exit": 2, "says": "P0b"},
+ {"name": "batch-is-p0b", "cmd": ["batch", "--out-dir", "{tmp}/batch"], "exit": 2, "says": "P0b"}
+]
