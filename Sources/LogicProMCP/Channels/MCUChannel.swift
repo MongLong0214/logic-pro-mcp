@@ -218,7 +218,8 @@ actor MCUChannel: Channel {
     private var bankingQueue: [CheckedContinuation<Void, Never>] = []
     private var isBanking: Bool = false
     /// Set when a bank step moved the window but may have moved it fewer than eight strips — Logic
-    /// stops the last bank at the last strip (#1020) — and nothing has put it back on a multiple of
+    /// stops the last bank at the last strip (#1020) — no probe proved it full
+    /// (`probeAmbiguousRightStep`), and nothing has put it back on a multiple of
     /// eight since. While it is set and `currentBank` is not 0, no strip index can be trusted and
     /// `withBanking` refuses before sending anything. Cleared only by a `mixer.bank` left walk that
     /// ends on an unchanged redraw (Logic at its left end) with `currentBank` at 0.
@@ -1235,6 +1236,9 @@ actor MCUChannel: Channel {
             // nil while every step so far moved; otherwise how the stopping step ended.
             var stoppedQuiescent: Bool?
             var stoppedUnchanged = false
+            var stepsDisambiguated = 0
+            var probeUnresolved = false
+            var probeWindowMoves = 0
             for step in 0..<count {
                 var stepBefore = before
                 if step > 0 { stepBefore = await cache.mcuUpperRowSnapshot() }
@@ -1254,21 +1258,49 @@ actor MCUChannel: Channel {
                     break
                 }
                 banksMoved += 1
-                // The reply is unchanged either way; the flag is what a later strip write reads.
-                if !reading.fullShift { windowOffsetUnaligned = true }
+                guard !reading.fullShift else { continue }
+                // The flag is what a later strip write reads. A bank-left step is never probed.
+                guard button == .bankRight else {
+                    windowOffsetUnaligned = true
+                    continue
+                }
+                let probe = await probeAmbiguousRightStep(after: reading.window)
+                pressesSent += probe.windows.count
+                writesObserved += probe.writes
+                stepWindows += probe.windows
+                lastWindow = probe.windows.last ?? lastWindow
+                if probe.verdict == .fullShift {
+                    stepsDisambiguated += 1
+                    continue
+                }
+                windowOffsetUnaligned = true
+                if probe.verdict == .unresolved {
+                    probeUnresolved = true
+                    probeWindowMoves = probe.extraWindowMoves
+                    break
+                }
+                // The probe was the next step's press, and it redrew the same row: Logic's last
+                // bank. A further press would only say so again.
+                if step + 1 < count {
+                    stoppedQuiescent = true
+                    stoppedUnchanged = true
+                    break
+                }
             }
 
             extras["bank_presses_sent"] = pressesSent
             extras["banks_moved"] = banksMoved
+            extras["bank_steps_disambiguated"] = stepsDisambiguated
+            extras["bank_probe_unresolved"] = probeUnresolved
             extras["banks_requested"] = count
             extras["step_windows"] = stepWindows
             extras["upper_row_writes_observed"] = writesObserved
             extras["window_after"] = lastWindow
             for (k, v) in await mcuConnectionExtras() { extras[k] = v }
 
-            if banksMoved > 0 {
+            if banksMoved + probeWindowMoves > 0 {
                 currentBank = min(
-                    max(currentBank + sign * banksMoved, Self.bankIndexRange.lowerBound),
+                    max(currentBank + sign * (banksMoved + probeWindowMoves), Self.bankIndexRange.lowerBound),
                     Self.bankIndexRange.upperBound
                 )
             }
@@ -1277,6 +1309,18 @@ actor MCUChannel: Channel {
             // Logic at its left end, and the bookkeeping agrees it is bank 0.
             if stoppedUnchanged, sign < 0, currentBank == Self.bankIndexRange.lowerBound {
                 windowOffsetUnaligned = false
+            }
+
+            if probeUnresolved {
+                extras["readback_source"] = Self.bankWindowVerifySource
+                extras["surface_limitation"] = "bank step \(banksMoved) redrew the LCD upper row to one that may "
+                    + "be the old row slid by fewer than eight strips, and the probe that settles it (one more "
+                    + "Bank Right, then a Bank Left back to the same row) did not read back as either answer; "
+                    + "the walk stopped there and strip-relative writes refuse until the bank is walked left "
+                    + "to its end"
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackMismatch, extras: extras
+                ))
             }
 
             guard let quiescent = stoppedQuiescent else {
@@ -1466,14 +1510,70 @@ actor MCUChannel: Channel {
         var banksMoved = 0
         var shortStepMoved = false
         var stepWindows: [String] = []
+        /// Ambiguous bank-right steps a probe proved moved a full eight (`probeAmbiguousRightStep`).
+        var stepsDisambiguated = 0
+        /// The probe after the stopping step settled nothing; the window may be where it left it.
+        var probeUnresolved = false
+        /// Probe presses that changed the row and were not undone (0 or 1).
+        var probeWindowMoves = 0
 
-        /// Steps the walk home owes: every step that moved the window, full or not.
-        var windowMoves: Int { banksMoved + (shortStepMoved ? 1 : 0) }
+        /// Steps the walk home owes: every step that moved the window, full or not, and a probe
+        /// press that moved it and was not walked back.
+        var windowMoves: Int { banksMoved + (shortStepMoved ? 1 : 0) + probeWindowMoves }
+    }
+
+    /// What one probe settled about an ambiguous bank-right step.
+    private struct BankProbe {
+        enum Verdict { case lastBank, fullShift, unresolved }
+        let verdict: Verdict
+        /// The row after each probe press, in order (one or two).
+        let windows: [String]
+        let writes: Int
+        /// Probe presses that changed the row and were not undone (0 or 1).
+        let extraWindowMoves: Int
+    }
+
+    /// Settle a bank-right step whose new row may be the old one slid by fewer than eight strips
+    /// (#1020). Logic clamps only the LAST right step (offset becomes min(offset + 8, N - 8)), so
+    /// one more Bank Right answers the question:
+    /// - it redraws the same row: the window is at Logic's last bank and the step may have been
+    ///   clamped (`lastBank`, one press sent);
+    /// - it moves: the step was not the last one, so it moved a full eight. One Bank Left then has
+    ///   to redraw the ambiguous step's row byte for byte — measured live, left from the clamped
+    ///   offset 13 lands on 8, the previous multiple of eight — before the walk continues
+    ///   (`fullShift`, two presses sent);
+    /// - anything else settles nothing (`unresolved`).
+    /// The caller holds `withBankExclusion`.
+    private func probeAmbiguousRightStep(after row: String) async -> BankProbe {
+        let probeBefore = await cache.mcuUpperRowSnapshot()
+        let probe = await bankStep(.bankRight, from: probeBefore)
+        if probe.redrew, probe.window == row {
+            return BankProbe(verdict: .lastBank, windows: [probe.window], writes: probe.writes, extraWindowMoves: 0)
+        }
+        guard probe.moved else {
+            let changed = probe.writes > 0 && probe.window != row
+            return BankProbe(
+                verdict: .unresolved, windows: [probe.window], writes: probe.writes,
+                extraWindowMoves: changed ? 1 : 0
+            )
+        }
+        let returnBefore = await cache.mcuUpperRowSnapshot()
+        let back = await bankStep(.bankLeft, from: returnBefore)
+        let windows = [probe.window, back.window]
+        if back.redrew, back.window == row {
+            return BankProbe(verdict: .fullShift, windows: windows, writes: probe.writes + back.writes, extraWindowMoves: 0)
+        }
+        let returned = back.writes > 0 && back.window != probe.window
+        return BankProbe(
+            verdict: .unresolved, windows: windows, writes: probe.writes + back.writes,
+            extraWindowMoves: returned ? 0 : 1
+        )
     }
 
     /// Walk the bank up to `steps` presses in one direction, one `bankStep` at a time, stopping
     /// at the first press that did not move — and, with `requireFullShift`, at the first press
-    /// that moved but may have moved fewer than eight strips. The caller holds
+    /// that moved but may have moved fewer than eight strips and that a probe could not prove
+    /// full (`probeAmbiguousRightStep`; a bank-left step is never probed). The caller holds
     /// `withBankExclusion` and settles `currentBank` from the legs (`settleBankBookkeeping`).
     private func walkBank(
         _ button: MCUProtocol.ButtonFunction, steps: Int, requireFullShift: Bool
@@ -1486,7 +1586,21 @@ actor MCUChannel: Channel {
             leg.stepWindows.append(reading.window)
             guard reading.moved else { break }
             if requireFullShift, !reading.fullShift {
+                guard button == .bankRight else {
+                    leg.shortStepMoved = true
+                    break
+                }
+                let probe = await probeAmbiguousRightStep(after: reading.window)
+                leg.pressesSent += probe.windows.count
+                leg.stepWindows += probe.windows
+                if probe.verdict == .fullShift {
+                    leg.banksMoved += 1
+                    leg.stepsDisambiguated += 1
+                    continue
+                }
                 leg.shortStepMoved = true
+                leg.probeUnresolved = probe.verdict == .unresolved
+                leg.probeWindowMoves = probe.extraWindowMoves
                 break
             }
             leg.banksMoved += 1
@@ -1516,6 +1630,8 @@ actor MCUChannel: Channel {
             "banks_requested": requested,
             "bank_restored": back.banksMoved == out.windowMoves,
             "bank_step_short_of_eight": out.shortStepMoved,
+            "bank_steps_disambiguated": out.stepsDisambiguated,
+            "bank_probe_unresolved": out.probeUnresolved,
             "bank_window_unaligned": windowOffsetUnaligned,
             "step_windows": out.stepWindows + back.stepWindows,
             "bank_bookkeeping_after": currentBank,
@@ -1538,8 +1654,10 @@ actor MCUChannel: Channel {
     /// bookkeeping alone: nothing is pressed, and nothing in the MCU protocol reads the bank offset
     /// back (#862). Otherwise:
     /// - an upper row never received refuses with nothing sent;
-    /// - a step that did not move, or moved but may have moved fewer than eight strips, stops the
-    ///   walk, the strip is NOT pressed, every step that moved the window is walked back, and the
+    /// - a bank-right step that may have moved fewer than eight strips is probed
+    ///   (`probeAmbiguousRightStep`) and the walk continues only when the probe proves it full;
+    /// - a step that did not move, or moved but may have moved fewer than eight strips and was not
+    ///   proved full, stops the walk, the strip is NOT pressed, every step that moved the window is walked back, and the
     ///   answer is State C `bank_walk_unverified`, which is not terminal, so the router moves on;
     /// - after the write, a walk-home step that did not move stops the walk home; the write's own
     ///   reply stands and carries `bank_restored: false`.
@@ -1594,14 +1712,21 @@ actor MCUChannel: Channel {
             guard out.banksMoved == requested else {
                 let back = await walkBank(homeward, steps: out.windowMoves, requireFullShift: false)
                 settleBankBookkeeping(origin: origin, sign: sign, out: out, back: back)
-                let stopped = "bank step \(out.pressesSent) of \(requested) toward track \(targetTrack)'s bank "
-                let reason = out.shortStepMoved
-                    ? stopped + "redrew the MCU LCD upper row, but the new row may be the old one slid by "
-                        + "fewer than eight strips: Logic stops the last bank at the last strip, so strip "
-                        + "\(strip) could name an earlier track"
-                    : stopped + "produced no quiescent redraw of the MCU LCD upper row to a different row, "
+                let stopped = "bank step \(out.banksMoved + 1) of \(requested) toward track \(targetTrack)'s bank "
+                let short = stopped + "redrew the MCU LCD upper row, but the new row may be the old one slid by "
+                    + "fewer than eight strips: Logic stops the last bank at the last strip, so strip "
+                    + "\(strip) could name an earlier track"
+                let reason: String
+                if out.probeUnresolved {
+                    reason = short + "; the probe that settles it (one more Bank Right, then a Bank Left back "
+                        + "to the same row) did not read back as either answer"
+                } else if out.shortStepMoved {
+                    reason = short + "; one more Bank Right redrew the same row, so this is Logic's last bank"
+                } else {
+                    reason = stopped + "produced no quiescent redraw of the MCU LCD upper row to a different row, "
                         + "so Logic cannot be shown to be on the bank the strip index would name (two "
                         + "presses sent back to back were measured moving Logic 12.3 one bank)"
+                }
                 return await bankWalkRefusal(
                     operation: operation, track: targetTrack, strip: strip, requested: requested,
                     out: out, back: back, reason: reason

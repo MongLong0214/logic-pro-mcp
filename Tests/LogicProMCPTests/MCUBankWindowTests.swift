@@ -57,6 +57,13 @@ actor LCDBankSurface: MCUTransportProtocol {
     private(set) var stripOffset = 0
     /// Every non-bank button press (the release is not a press), with the track it landed on.
     private(set) var buttonPresses: [ButtonPress] = []
+    /// For `.strips`: the next bank-left press moves the window as usual but redraws this row
+    /// instead of the names it lands on — a row that is not the one the window came from.
+    private var nextLeftRowOverride: String?
+
+    func redrawNextBankLeft(as row: String) {
+        nextLeftRowOverride = row
+    }
 
     init(response: Response, currentRow: String = String(repeating: " ", count: 56)) {
         self.response = response
@@ -111,6 +118,10 @@ actor LCDBankSurface: MCUTransportProtocol {
                 stripOffset = stripOffset % 8 == 0 ? max(0, stripOffset - 8) : stripOffset - stripOffset % 8
             }
             currentRow = Self.stripsRow(names, from: stripOffset)
+            if button.function == .bankLeft, let drift = nextLeftRowOverride {
+                nextLeftRowOverride = nil
+                currentRow = drift
+            }
             await deliverUpperRow(currentRow)
         }
     }
@@ -609,8 +620,9 @@ struct MCUBankWindowTests {
     }
 
     // (c) A single press answers with exactly the fields it answered before the per-step walk,
-    // plus banks_moved / banks_requested / step_windows. The legacy key sets are written out here,
-    // captured from a48a5cb5, so a field the walk dropped or renamed shows up as a difference.
+    // plus banks_moved / banks_requested / step_windows and the probe's two fields (#1020). The
+    // legacy key sets are written out here, captured from a48a5cb5, so a field the walk dropped or
+    // renamed shows up as a difference.
     @Test func singlePressKeepsItsWireFields() async throws {
         let connection: Set<String> = ["mcu_connected", "mcu_last_feedback_age_ms", "mcu_registered"]
         let common: Set<String> = [
@@ -618,7 +630,9 @@ struct MCUBankWindowTests {
             "bank_bookkeeping_before", "bank_bookkeeping_after", "bank_presses_sent",
             "upper_row_writes_observed", "window_before", "window_after",
         ]
-        let added: Set<String> = ["banks_moved", "banks_requested", "step_windows"]
+        let added: Set<String> = [
+            "banks_moved", "banks_requested", "step_windows", "bank_steps_disambiguated", "bank_probe_unresolved",
+        ]
         let cases: [(LCDBankSurface.Response, Set<String>, String, Int)] = [
             (.redraw(row: bank1Row), ["verify_source", "strips"], "A", 1),
             (.ignore, ["reason", "readback_source", "row_quiescent"], "B", 0),

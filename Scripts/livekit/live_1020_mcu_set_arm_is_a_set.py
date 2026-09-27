@@ -41,13 +41,17 @@ min(offset + 8, N - 8), so on the 19-track fixture (21 MCU strips with Stereo Ou
 second press shows strips 13-20, and strip 0 is TRACK 13, not track 16. Measured 2026-09-27 (ko) at
 78581bbf: an arm meant for track 16 walked two steps that each redrew the row, pressed strip 0, and
 armed track 13 (State B readback_mismatch). The repair counts a step as moved only when the row
-provably shifted by all eight cells; a row that reads as the old one slid by fewer is refused.
+provably shifted by all eight cells. A bank-right step whose row reads as the old one slid by fewer
+is settled by ONE probe: Logic clamps only the last right step, so if one more Bank Right still
+moves the row the step was a full eight, and a Bank Left must then redraw that step's row byte for
+byte before the walk goes on. A probe that redraws the same row means Logic's last bank: refused.
 
 Bank-1 phase, track 15 (strip 7 of the full bank 8-15): arm -> hold reads -> disarm through the MCU,
 with the census armed set read before, after the arm and after the disarm, and track 7's arm (strip 7
-of bank 0, where an unmoved walk would land) read throughout. A row whose names repeat (bank 0 and
-bank 1 of the ko fixture share `DelCls`) cannot prove a full shift, so on such a fixture this phase
-reads a refusal and FAILS; that is the product refusing honestly on an unprovable step, not a pass.
+of bank 0, where an unmoved walk would land) read throughout. Bank 0 and bank 1 of the ko fixture
+share `DelCls`, so that step reads as a slide and is settled by the probe; the reply's
+`bank_steps_disambiguated` is recorded raw. The fixture is not renamed: the repeated names are the
+case the probe exists for.
 
 Final-bank phase, track 16: one arm through the MCU. Expected: refused (State C), nothing armed, the
 census armed set unchanged, track 13 unchanged, and the MCU upper row read from logic://mcu/state the
@@ -144,7 +148,8 @@ def summary(body):
 
 
 BANK_FIELDS = ("bank_presses_sent", "banks_moved", "banks_requested", "bank_restored", "step_windows",
-               "bank_bookkeeping_after", "bank_step_short_of_eight", "bank_window_unaligned")
+               "bank_bookkeeping_after", "bank_step_short_of_eight", "bank_window_unaligned",
+               "bank_steps_disambiguated", "bank_probe_unresolved")
 
 
 def bank_fields(body):
@@ -302,8 +307,8 @@ if later_ready:
     set_after_off = armed_set(d)
 ev.note("1020/bank-1-bank-fields", {"arm": bank_fields(b1_on), "disarm": bank_fields(b1_off)})
 
-# What the repair answers on a fixture whose bank-0 and bank-1 names repeat: the one step cannot be
-# proved a full shift, so the MCU rung refuses and the router walks past it.
+# What b1f16569 answered on the ko fixture, before the probe: bank 0 and bank 1 share `DelCls`, the
+# one step could not be proved a full shift, and the MCU rung refused.
 UNPROVABLE_STEP = {"state": "C", "write_source": None, "write_attempted": None, "observed": None,
                    "bank_presses_sent": 2, "banks_moved": 0, "banks_requested": 1, "bank_restored": True,
                    "bank_step_short_of_eight": True}
@@ -320,9 +325,9 @@ ev.falsifiable(
     {**b1_arm_reading, **UNPROVABLE_STEP, "armed_in_track_list_after": False},
     f"arming disarmed track {BANK_1_TRACK} through the MCU rung walks one step that provably shifted the "
     "row by eight strips, answers State A with write_attempted true and observed true, walks back, and the "
-    "refreshed track list shows it armed. THE COUNTEREXAMPLE is the refusal on a fixture whose bank-0 and "
-    "bank-1 names repeat: the step cannot be proved a full shift and nothing is pressed",
-    mutation="treat every redrawn step as a full shift in MCUChannel.walkBank",
+    "refreshed track list shows it armed. THE COUNTEREXAMPLE is b1f16569's refusal on the ko fixture, "
+    "whose bank-0 and bank-1 names repeat: the step could not be proved a full shift and nothing was pressed",
+    mutation="drop the probe in MCUChannel.walkBank and refuse every ambiguous step, as at b1f16569",
 )
 
 ev.falsifiable(
