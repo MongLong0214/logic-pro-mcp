@@ -1,0 +1,88 @@
+{
+  "schema": 3,
+  "id": "2026-09-27-zh-CN-mcu-set-arm-sets-instead-of-toggling",
+  "date": "2026-09-27",
+  "subject": "track.set_arm on the MCU rung: whether a request for a state sets it, against a Rec button that toggles on every press",
+  "question": "When track.set_arm falls back to the MCU, does arming and then disarming a track leave it in the requested state each time, confirmed by a read of the track?",
+  "verdict": "works",
+  "surface": "system.midi",
+  "issues": [
+    1020
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "zh-CN",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_1020_mcu_set_arm_is_a_set.py <worktree> <full-40-char-head> [binary]",
+    "expected": "the arm reaches the MCU rung (write_source mcu); arming answers State A with observed true and the refreshed track list reads the track armed; 30 reads of the track list 100 ms apart with no refresh all read it armed; disarming answers State A with observed false and the track list reads it disarmed; the track ends disarmed",
+    "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository, a running Logic with a project open and the Mackie Control surface bound; starts two servers; arms and disarms one track and leaves it disarmed"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/MCUChannel.swift:MCUChannel",
+    "Sources/LogicProMCP/Server/LogicProServer.swift:LogicProServer",
+    "Sources/LogicProMCP/MIDI/MCUFeedbackParser.swift:MCUFeedbackParser",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Tracks.swift:trackArmControl",
+    "Scripts/livekit/live_1020_mcu_set_arm_is_a_set.py:armed_of",
+    "Scripts/livekit/live_1020_mcu_set_arm_is_a_set.py:armed_unrefreshed"
+  ],
+  "evidence": [
+    "evidence/2026-09-27-zh-CN-mcu-set-arm-1020.json"
+  ],
+  "method": "The release binary at 2d66c40de21a13e7caf06704fd0b0e3193b52e6f was started against the open project with LOGIC_PRO_MCP_ARM_KEYCODE set to a value that does not parse and nothing else talking to Logic. The harness armed the first disarmed track through logic_tracks arm, checked that the reply came from the MCU rung, refreshed the cache and read the track's isArmed from logic://tracks, read it 30 more times 100 ms apart without a refresh while Logic's Rec LED blinked, then disarmed it the same way. A second server started without the variable put the track back. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
+  "observations": [
+    {
+      "binary": "2d66c40de21a13e7caf06704fd0b0e3193b52e6f",
+      "mcu_connected": true,
+      "track": 0,
+      "arm_reply": {
+        "state": "A",
+        "reason": null,
+        "write_source": "mcu",
+        "verification_source": "ax_value",
+        "write_attempted": true,
+        "observed": true,
+        "fallback_from_error": "arm_key_config_invalid"
+      },
+      "armed_in_track_list_after_arm": true,
+      "unrefreshed_reads_while_armed": 30,
+      "unrefreshed_reads_armed": 30,
+      "disarm_reply": {
+        "state": "A",
+        "reason": null,
+        "write_source": "mcu",
+        "verification_source": "ax_value",
+        "write_attempted": true,
+        "observed": false,
+        "fallback_from_error": "arm_key_config_invalid"
+      },
+      "armed_in_track_list_after_disarm": false,
+      "reached_the_mcu_rung": true,
+      "checks_passed": [
+        "1020/arm-through-the-mcu-sets-and-confirms",
+        "1020/the-cached-arm-holds-through-the-rec-led-blink",
+        "1020/disarm-through-the-mcu-clears-the-arm"
+      ],
+      "checks_passed_count": 3,
+      "checks_run": 3,
+      "track_disarmed_again": true
+    }
+  ],
+  "conclusion": "On track 0 the arm reached the MCU rung after the Accessibility rung refused arm_key_config_invalid. It answered State A with observed True, and the track list read isArmed True; read 30 more times without a refresh, it read the track armed 30 times. The disarm answered State A with observed False, and the track list read isArmed False. All three checks passed.",
+  "limits": [
+    "Only record-arm reaches the MCU rung this way. The run sets LOGIC_PRO_MCP_ARM_KEYCODE to a value that does not parse, so the Accessibility key rung refuses arm_key_config_invalid, which is not terminal. Mute and solo have no such setting; their MCU rung is covered by the unit tests only.",
+    "Only a state that differs from the request reaches the MCU. When the track already holds the requested state, the Accessibility rung answers a verified no-op first, so the MCU's own 'already set' branch is not driven live.",
+    "The track-list reading is isArmed from logic://tracks. Since this change the poller finds the record-enable checkbox with the same locator the handler's readback uses (AXLogicProElements.trackArmControl), so it is a second read at a later time, not a second way of finding the control.",
+    "The parser still writes isMuted and isSoloed from the Mute and Solo LED frames. Whether Logic blinks those LEDs as it blinks Rec was not measured.",
+    "One track of one fixture, one arm and one disarm per language, one host.",
+    "The binary without this change was run only in Korean; in this language there is only the reading of the fixed binary."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states a fact about the server's BEHAVIOUR -- which reply an arm or disarm request gets on the MCU rung against the track state read afterwards -- not about a string Logic ships. The only values it quotes are reply fields, a track index and booleans."
+  }
+}
