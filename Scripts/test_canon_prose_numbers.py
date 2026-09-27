@@ -217,6 +217,19 @@ class CountsOfCorpora(unittest.TestCase):
     def test_a_sentence_that_names_no_count_is_left_alone(self):
         self.assertEqual(guard.problems(self._root("The corpora are pinned by the manifest.\n")), [])
 
+    def test_a_source_whose_name_has_an_underscore_is_a_corpus(self):
+        """`plugin_names` (#1028). The citation grammar allows `[a-z0-9_-]` in a source name, and a
+        reader that took only `[a-z]` counted 45 corpora while the manifest pinned 46."""
+        root = self._root("It is absent from all 4 corpora.\n")
+        path = os.path.join(root, "docs", "canon", "MANIFEST.json")
+        with open(path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        manifest["sources"]["plugin_names"] = {"entries": 242}
+        manifest["artifacts"]["absence/plugin_names.-.u32"] = "0" * 8
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle)
+        self.assertEqual(guard.problems(root), [])
+
     def test_counting_corpora_against_a_manifest_that_names_none_is_refused(self):
         """Abstaining here would report clean on a broken reader."""
         root = self._root("It is absent from all 3 corpora.\n")

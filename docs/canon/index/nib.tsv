@@ -4,4 +4,7 @@
 # data that nothing measured.
 qhid	-	ART_03_NameField	nibs	544f0206c819
 qhid	-	ART_03_NameField	nibs#ci	c3600395619e
+qhid	-	ART_03_NameField	nibs#cit	c3600395619e
 qhid	-	PFS_AudioBounce_01	nibs	dbde56905b49
+qhid	-	PFS_AudioBounce_01	nibs#ci	abf841e50d1c
+qhid	-	PFS_AudioBounce_01	nibs#cit	abf841e50d1c
