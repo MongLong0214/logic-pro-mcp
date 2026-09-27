@@ -75,12 +75,7 @@
      }
     ],
     "restore": [],
-    "restore_expect": [
-     {
-      "path": "after.title",
-      "op": "not_null"
-     }
-    ],
+    "restore_expect": [],
     "independence": [
      "before",
      "after"
@@ -88,7 +83,7 @@
    }
   ]
  },
- "spec_sha256": "65c0cc272561d953b3f780f0f6562d39098e67073258b6c6dd9263e2d4ad6ee3",
+ "spec_sha256": "94c32c68e44d8cde76d8814824893fc65d11bc05f03b18699b8e843a62158738",
  "binary": {
   "binary_path": null,
   "binary_sha256": null,
@@ -177,9 +172,7 @@
     "counterexample": [
      "FAIL"
     ],
-    "restore": [
-     "PASS"
-    ],
+    "restore": [],
     "reasons": []
    }
   }

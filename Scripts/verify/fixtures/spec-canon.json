@@ -40,9 +40,7 @@
     {"observation": "before", "replaces": "after", "must_fail": [1]}
    ],
    "restore": [],
-   "restore_expect": [
-    {"path": "after.title", "op": "not_null"}
-   ],
+   "restore_expect": [],
    "independence": ["before", "after"]
   }
  ]

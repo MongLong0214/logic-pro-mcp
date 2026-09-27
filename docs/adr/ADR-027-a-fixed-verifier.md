@@ -99,6 +99,7 @@ Four product defects were found by these oracles on the same day. They are filed
 - A preservation claim ("the upper row is unchanged") is an effect too. Its counterexample is a reading taken before the operation that differs from the preserved one. If the fixture has none, the row adds a probe step that takes one.
 - A claim is measured against the state just before the operation, after every call that precedes it, so a setup call cannot be credited to the operation.
 - A counterexample is the same kind of reading as the one it replaces, and each check it lists reads the replaced step.
+- A restore check reads only what a restore produced: steps bound after the first call in `restore`, the restoring action, by the same test for a call that the rules above use. A probe before that call, the call's own reply, and every step from the operation on are refused: a reading taken after the operation and before a restore is a claim about the operation, so it belongs in `expect`, with a counterexample. Its `ref.obs` may name a step before the operation, the as-found state it is compared with. A `restore` with no call restored nothing, so its `restore_expect` is empty. A restore check needs no counterexample, so nothing yet shows it can fail.
 - `Scripts/verify/engine.py` `validate_spec` is where these rules run; `docs/acceptance/SCHEMA.md` explains them.
 
 ### D5 — Ten locales by the mechanism, batched

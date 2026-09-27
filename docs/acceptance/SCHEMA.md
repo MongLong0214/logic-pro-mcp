@@ -131,7 +131,7 @@ one of the ten.
 | `expect` | expectations over the bound readings; the row PASSES only if every one PASSES. Each is an effect, or an invariant with `"invariant": true` (below) |
 | `counterexample` | substitutions that must make named expectations FAIL (below) |
 | `restore` | steps that return the fixture to its as-found state (may be empty) |
-| `restore_expect` | expectations that prove it was returned; they may read `steps` and `restore` names |
+| `restore_expect` | expectations that prove it was returned; they read only steps after the first call in `restore`, and are empty when `restore` has no call (below) |
 | `independence` | the names whose readings do not come from the operation's own reply |
 
 ### Steps
@@ -251,8 +251,20 @@ what it credits to the operation was read after the operation ran.
 
 ### Restore
 
-A `restore_expect` reads the state the row leaves behind: its path names a step bound after the
-operation, or a restore step. `restore_expect` is judged like `expect`. If one FAILS, the row FAILS with `restore_failed`: the
+A restore check (`restore_expect`) reads only what a restore produced.
+
+- Every step it reads is bound AFTER the first call in `restore`: the restoring action. A call is a
+  step with `call`, the same test the order rules use for the operation and the calls before it.
+- A probe in `restore` before that call, the call's own reply, and every step of `steps` from the
+  operation on are refused. A reading taken after the operation and before a restore is a claim
+  about the operation, so it belongs in `expect`, with a counterexample.
+- Its path may not name a step bound before the operation either. Its `ref.obs` may: that is the
+  as-found state the restore is compared with, the point of a restore check.
+- A `restore` with no call restored nothing, so its `restore_expect` is empty (`[]`).
+- A restore check needs no counterexample. Nothing yet shows one can fail: a restoring call that
+  changes nothing passes these rules.
+
+`restore_expect` is judged like `expect`. If one FAILS, the row FAILS with `restore_failed`: the
 fixture was left changed, and the next row's as-found state is not the one it assumes.
 
 ## Evidence — `lpm-evidence/1`

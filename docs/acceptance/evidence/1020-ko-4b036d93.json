@@ -359,6 +359,12 @@
       "ref": {
        "obs": "pre.armed"
       }
+     },
+     {
+      "path": "as_found.armed",
+      "op": "eq",
+      "value": false,
+      "invariant": true
      }
     ],
     "counterexample": [
@@ -372,15 +378,7 @@
      }
     ],
     "restore": [],
-    "restore_expect": [
-     {
-      "path": "post.armed",
-      "op": "eq",
-      "ref": {
-       "obs": "as_found.armed"
-      }
-     }
-    ],
+    "restore_expect": [],
     "independence": [
      "as_found",
      "pre",
@@ -646,13 +644,7 @@
      }
     ],
     "restore": [],
-    "restore_expect": [
-     {
-      "path": "post.armed",
-      "op": "eq",
-      "value": []
-     }
-    ],
+    "restore_expect": [],
     "independence": [
      "control_post",
      "off_home_row",
@@ -664,7 +656,7 @@
    }
   ]
  },
- "spec_sha256": "c8534a1a679fd2281f6102aca8ac9be1d05b8f40fdccccec6169b0e22714d1bf",
+ "spec_sha256": "938a54549cf05a7e86d9a23f70324165502d17b511034ee3526585f76b4a5dd6",
  "binary": {
   "binary_path": null,
   "binary_sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
@@ -1351,15 +1343,14 @@
      "PASS",
      "PASS",
      "PASS",
+     "PASS",
      "PASS"
     ],
     "counterexample": [
      "FAIL",
      "FAIL"
     ],
-    "restore": [
-     "PASS"
-    ],
+    "restore": [],
     "reasons": []
    },
    "bank-1-only-the-target-changes": {
@@ -1393,9 +1384,7 @@
      "FAIL",
      "UNREADABLE"
     ],
-    "restore": [
-     "PASS"
-    ],
+    "restore": [],
     "reasons": [
      "counterexample UNREADABLE: expect[4] on 'off_home_row' -- post_row: the runner could not read it: live_1020_mcu_set_arm_is_a_set never banked the MCU window away from home, so it read no upper row that differs from the one before the arm; nothing it stored can witness the unchanged-row claim failing"
     ]

@@ -177,12 +177,7 @@
      }
     ],
     "restore": [],
-    "restore_expect": [
-     {
-      "path": "after.stable",
-      "op": "not_null"
-     }
-    ],
+    "restore_expect": [],
     "independence": [
      "before",
      "other",
@@ -191,7 +186,7 @@
    }
   ]
  },
- "spec_sha256": "fd6b0e5762b08da634f16e7f3418ddda54e4136afbe863799594de09a6109d82",
+ "spec_sha256": "94600f1b9c143ea647c5bbd514321513e02e4ef72fc57f02b7abea80e781cd29",
  "binary": {
   "binary_path": null,
   "binary_sha256": null,
@@ -317,9 +312,7 @@
      "FAIL",
      "FAIL"
     ],
-    "restore": [
-     "PASS"
-    ],
+    "restore": [],
     "reasons": []
    }
   }

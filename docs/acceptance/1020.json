@@ -100,15 +100,14 @@
     {"path": "reply.write_source", "op": "eq", "value": "mcu"},
     {"path": "reply.write_attempted", "op": "eq", "value": true},
     {"path": "post.armed", "op": "eq", "value": false},
-    {"path": "post.armed", "op": "changed", "ref": {"obs": "pre.armed"}}
+    {"path": "post.armed", "op": "changed", "ref": {"obs": "pre.armed"}},
+    {"path": "as_found.armed", "op": "eq", "value": false, "invariant": true}
    ],
    "counterexample": [
     {"observation": "pre", "replaces": "post", "must_fail": [4, 5]}
    ],
    "restore": [],
-   "restore_expect": [
-    {"path": "post.armed", "op": "eq", "ref": {"obs": "as_found.armed"}}
-   ],
+   "restore_expect": [],
    "independence": ["as_found", "pre", "post"]
   },
   {
@@ -168,9 +167,7 @@
     {"observation": "off_home_row", "replaces": "post_row", "must_fail": [4]}
    ],
    "restore": [],
-   "restore_expect": [
-    {"path": "post.armed", "op": "eq", "value": []}
-   ],
+   "restore_expect": [],
    "independence": ["control_post", "off_home_row", "pre", "pre_row", "post", "post_row"]
   }
  ]

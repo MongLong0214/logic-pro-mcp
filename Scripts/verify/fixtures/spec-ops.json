@@ -54,9 +54,7 @@
     {"observation": "other", "replaces": "after", "must_fail": [4, 9, 10, 11]}
    ],
    "restore": [],
-   "restore_expect": [
-    {"path": "after.stable", "op": "not_null"}
-   ],
+   "restore_expect": [],
    "independence": ["before", "other", "after"]
   }
  ]

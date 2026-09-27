@@ -50,8 +50,16 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
         one counterexample whose witness is bound after that call. A preservation claim compares
         with the reading just before the operation, so its witness may be any differing earlier
         reading.
-      - A `restore_expect` reads the state the row leaves behind: its path names a step bound after
-        the operation or a restore step.
+      - A RESTORE CHECK (`restore_expect`) reads only what a restore produced: every step it reads
+        is bound AFTER the first call in `restore` (the restoring action; a call is a step with
+        `call`, `is_call`, the test every rule here uses). A probe in `restore` before that call,
+        the call's own reply, and every step of `steps` from the operation on are refused: a
+        reading taken after the operation and before a restore is a claim about the operation, so
+        it belongs in `expect`, with a counterexample. Its path may not name a step bound before
+        the operation either; its `ref.obs` may, since that is the as-found state a restore is
+        compared with. A `restore` with no call restored nothing, so its `restore_expect` is
+        empty. A restore check needs no counterexample, so nothing yet shows it can fail: a
+        restoring call that changes nothing passes these rules.
   * THE INDEPENDENCE RULE: a row with no effect over an independent step bound after the
     operation that a `must_fail` lists. An operation's own reply (a `call` step) is never
     independent. A row whose only falsifiable checks read the reply is self-report.
@@ -301,21 +309,21 @@ def row_problems(row: dict, n_sources: int) -> list:
     for name in row["independence"]:
         if name not in steps:
             out.append(f"independence names {name!r}, which is not a step of this row")
-        elif "call" in steps[name]:
+        elif is_call(steps[name]):
             out.append(f"independence names {name!r}, which is an operation's own reply (a call)")
-    independent = {n for n in row["independence"] if n in steps and "call" not in steps[n]}
+    independent = {n for n in row["independence"] if n in steps and not is_call(steps[n])}
 
     operation = row["operation"]
     if operation not in steps:
         out.append(f"operation {operation!r} is not a step of this row")
         return out
-    if "call" not in steps[operation]:
+    if not is_call(steps[operation]):
         out.append(f"operation {operation!r} is not a call step; the operation judged is a call")
         return out
     at = order[operation]
     names = [s["as"] for s in row["steps"]]
     for name in names[at + 1:]:
-        if "call" in steps[name]:
+        if is_call(steps[name]):
             out.append(f"step {name!r} is a call after the operation {operation!r}. A reading taken "
                        f"after a second call cannot be credited to the first; a call that follows "
                        f"the operation belongs in restore")
@@ -353,7 +361,7 @@ def row_problems(row: dict, n_sources: int) -> list:
             else:
                 listed.add(i)
                 witnesses.setdefault(i, []).append(cx["observation"])
-    calls_before = [n for n in names[:at] if "call" in steps[n]]
+    calls_before = [n for n in names[:at] if is_call(steps[n])]
     last_call = order[calls_before[-1]] if calls_before else -1
     credited = set()
     for i, e in enumerate(expect):
@@ -395,16 +403,62 @@ def row_problems(row: dict, n_sources: int) -> list:
                                f"just before it; an earlier call may be what produced the claimed state")
                 if root in independent and order[root] > at:
                     credited.add(i)
-    for j, e in enumerate(row["restore_expect"]):
-        root = _safe_root(e["path"])
-        if root in order and order[root] <= at:
-            out.append(f"restore_expect[{j}] reads {root!r}, which is not bound after the operation "
-                       f"{operation!r}. A restore check reads the state the row leaves behind: a step "
-                       f"after the operation or a restore step")
+    out += restore_problems(row, order, at)
     if not credited:
         out.append("no effect over an independent reading bound after the operation is listed in a "
                    "counterexample's must_fail. A row whose only falsifiable checks read the "
                    "operation's own reply is self-report (ADR-027 D1, D4)")
+    return out
+
+
+def is_call(step: dict) -> bool:
+    """Whether a step acts (a `tools/call`) rather than reads. The one definition every order rule
+    uses: the operation, the calls before it, a call after it, and the call that restores."""
+    return "call" in step
+
+
+#: Why a reading taken between the operation and the restore cannot be a restore check.
+BEFORE_RESTORE = ("A reading taken after the operation and before a restore is a claim about the "
+                  "operation, so it belongs in expect, with a counterexample")
+
+
+def restore_problems(row: dict, order: dict, at: int) -> list:
+    """A restore check reads only what a restore produced: steps bound AFTER the first call in
+    `restore` (the restoring action, `is_call`). A probe before that call, the call's own reply,
+    and every step of `steps` from the operation on are claims about the operation, not about the
+    restore. With no call in `restore` nothing was restored, so `restore_expect` is empty. A
+    check's `ref.obs` may also name a step bound before the operation: the as-found state it
+    compares with. `order` and `at` are the positions in `steps`."""
+    restore = [s["as"] for s in row["restore"]]
+    first = next((k for k, s in enumerate(row["restore"]) if is_call(s)), None)
+    if first is None:
+        n = len(row["restore_expect"])
+        return [f"restore_expect has {n} check(s), but `restore` has no call, so nothing restored "
+                f"the state and there is nothing for a restore check to read. {BEFORE_RESTORE}"] if n else []
+    call, left = restore[first], set(restore[first + 1:])
+    out = []
+    for j, e in enumerate(row["restore_expect"]):
+        ref = e.get("ref") or {}
+        for what, name in (("reads", _safe_root(e["path"])),
+                           ("compares with", _safe_root(ref["obs"]) if "obs" in ref else None)):
+            # `steps` and `restore` never share a name (row_problems refuses one bound twice).
+            if name in order and order[name] >= at:
+                out.append(f"restore_expect[{j}] {what} {name!r}, taken at or after the operation "
+                           f"and before the restoring call {call!r}. {BEFORE_RESTORE}")
+            elif name in order and what == "reads":
+                out.append(f"restore_expect[{j}] reads {name!r}, bound before the operation "
+                           f"{row['operation']!r}. A restore check reads the state the restoring call "
+                           f"{call!r} left behind: a step after it")
+            elif name == call:
+                out.append(f"restore_expect[{j}] {what} {call!r}, the reply of the restoring call "
+                           f"itself. A restore check reads the state the call left behind: a step "
+                           f"after it")
+            elif name in restore and name not in left:
+                out.append(f"restore_expect[{j}] {what} {name!r}, a restore step before the restoring "
+                           f"call {call!r}. {BEFORE_RESTORE}")
+            # What remains: a step after the restoring call, or a ref.obs bound before the operation
+            # (the as-found baseline a restore check compares with). An unbound name is refused by
+            # expectation_problems.
     return out
 
 
