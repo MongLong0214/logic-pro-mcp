@@ -222,8 +222,11 @@ against a constant by mistake.
 `changed` PASSES on any difference, noise included: an indicator that blinks, a second reading a
 character apart. On its own it cannot say that the operation did what the row claims. A `changed`
 check is refused unless another check in the same list (`expect` or `restore_expect`) pins the same
-path, comparing it with a constant (`value`) or a canon row (`matches_canon`). The pin states what
-the reading became. `not_null` and `is_null` take no operand and pin nothing.
+path. The pin states what the reading became, and three checks do: `eq` a constant, `in` a listed
+set of constants (a `value` list), and `matches_canon` a canon row. Nothing weaker pins. `ne`,
+`not_in`, `subset`, `superset`, `count_eq`, `count_ge`, `is_null`, `not_null`, `changed` and
+`unchanged` do not, and neither does an `eq` or `in` against another observation (`ref.obs`).
+`ne "before"` passes on the same noise `changed` does.
 
 `changed`, `ne` and `not_in` PASS on a difference, and null differs from every reading, so a null
 would satisfy them by absence. Under these three a null anywhere in either value, at any depth
