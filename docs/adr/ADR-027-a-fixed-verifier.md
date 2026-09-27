@@ -93,6 +93,14 @@ Four product defects were found by these oracles on the same day. They are filed
 - The predicate library carries mutants that CI runs. A predicate that no mutant can flip is refused.
 - This closes the "cannot fail" and "wrong aim" classes, which are 28 of the 88 instrument fixes.
 
+**Order rules.** A row names its operation, the one call it judges; no call follows it.
+- An invariant is a precondition and nothing else: it reads only steps taken before the operation. A reading after the operation is a claim about the operation, and so is an effect.
+- Every reading after the operation is an effect, and some counterexample must make it FAIL. No flag exempts one.
+- A preservation claim ("the upper row is unchanged") is an effect too. Its counterexample is a reading taken before the operation that differs from the preserved one. If the fixture has none, the row adds a probe step that takes one.
+- A claim is measured against the state just before the operation, after every call that precedes it, so a setup call cannot be credited to the operation.
+- A counterexample is the same kind of reading as the one it replaces, and each check it lists reads the replaced step.
+- `Scripts/verify/engine.py` `validate_spec` is where these rules run; `docs/acceptance/SCHEMA.md` explains them.
+
 ### D5 — Ten locales by the mechanism, batched
 
 - The live lane is one Logic, and the locale switch is its cost.
@@ -110,8 +118,10 @@ Four product defects were found by these oracles on the same day. They are filed
 
 ### D7 — Evidence re-checks offline, and records are generated
 
-- `verify.py --recheck <evidence>` recomputes every verdict from the stored raw observations and predicates.
-- One generator in the repo writes observation records from evidence. Hand-written records stay valid, and new ones are generated.
+- `verify.py --recheck <evidence>` recomputes every verdict from the stored raw observations and predicates. It can FAIL, REFUSE, or report incomplete. Only `run` certifies clean.
+- Every field of an evidence file was written by whoever wrote the file, so a file cannot attest to its own build, locale or observations. Clean needs an attestation held in process by the run that produced the evidence: the binary's digest as built, the head the verifier checked out, each locale's reading, and the digest of the evidence bytes. Nothing builds one from a file. Host checks on a file's binary block are consistency checks; they never make it clean. A worker cannot hand the verifier a verdict.
+- Exit codes: 0 clean (`run` only), 1 a row failed, 2 refused, 3 incomplete (the best a file can reach).
+- One generator in the repo writes observation records from evidence. Hand-written records stay valid, and new ones are generated. It writes only with an attestation, in the process that produced the evidence; recording a file from the command line is refused.
 
 ### D8 — Throughput is the acceptance criterion of this ADR
 

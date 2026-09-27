@@ -12,7 +12,7 @@ This file explains both. Where it and the code disagree, the code is what runs.
 ```
 python3 Scripts/verify/verify.py check-spec docs/acceptance/<issue>.json   # admissible?
 python3 Scripts/verify/verify.py recheck <evidence.json> [--spec <doc>]    # recompute every verdict
-python3 Scripts/verify/verify.py record <evidence.json> --out docs/observations
+python3 Scripts/verify/verify.py record <evidence.json> --out docs/observations   # refused, exit 2
 python3 Scripts/verify/verify.py self-test                                 # fixtures + mutants
 ```
 
@@ -22,12 +22,33 @@ python3 Scripts/verify/verify.py self-test                                 # fix
 
 | exit | word | check-spec | recheck |
 |---|---|---|---|
-| 0 | clean | admissible, and every quote is verbatim in its source | every row PASSES in every required locale, the stored verdicts equal the recomputed ones, every run's locale reading is its run key, and the binary's provenance is verified on this host (below) |
+| 0 | clean | admissible, and every quote is verbatim in its source | never. Evidence read from a file cannot attest to how it was made (below); only `verify.py run` certifies clean |
 | 1 | failed | — | a row FAILS, or a stored verdict differs from the recomputed one |
 | 2 | refused | shape, a refusal rule, or a quote that is not in its source | the evidence is malformed (an observation entry included), its `spec_sha256` is not the digest of its spec, `--spec` names a different document, or a run's locale reading names another locale |
-| 3 | incomplete | a source could not be fetched, so its quote is unchecked | a row is UNREADABLE, a required locale was not run or carries no readable locale reading, the binary is `unbound`, or its provenance could not be verified on this host |
+| 3 | incomplete | a source could not be fetched, so its quote is unchecked | the best a file can reach. Also: a row is UNREADABLE, a required locale was not run or carries no readable locale reading, the binary is `unbound`, or this host disagrees with the binary block |
+
+`record` of a file is refused with exit 2 (below).
 
 A failure outranks incompleteness: evidence with one FAIL and nine missing locales exits 1.
+
+### Only `run` certifies clean
+
+Every field of an evidence document on disk is written by whoever wrote the file: `binary_path`,
+`binary_sha256`, `head`, each `locale_reading` and every observation. Checking that they agree with
+each other, or with the host, does not show that the verifier produced them. So:
+
+- `recheck` recomputes every verdict. It can FAIL, REFUSE, or report incomplete. It never reports
+  clean: its provenance is `unattested`, with the reason "evidence read from a file cannot attest
+  to its own build, locale or observations; only `verify.py run` attests, in the process that
+  produced it (P0b-2)".
+- Clean needs an in-process attestation (`engine.Attestation`). It holds the binary's sha256 as the
+  builder measured it, the head the verifier checked out itself, the locale reading the runner took
+  for each locale, and the sha256 of the evidence's canonical bytes when the runner produced them.
+  The engine grants clean only when every one of these equals the document it judges.
+- Nothing builds an attestation from JSON or from a file. `verify.py run` (P0b-2) builds one in the
+  process that ran the rows; in P0a only the self-test does. The self-test check
+  `attestation-built-only-in-process` parses `Scripts/verify/*.py` to hold that.
+- A worker cannot hand the verifier a verdict. This is the design, not a gap in it.
 
 ## The document
 
@@ -187,18 +208,41 @@ what it credits to the operation was read after the operation ran.
   reporting on itself, so naming one is refused.
 - `operation` names a `call` step. Steps run in the order written, so "before" and "after" are
   positions in `steps` relative to it.
-- An expectation is an **effect** unless it says `"invariant": true`.
-  - An effect that reads an independent step must read a step bound AFTER the operation. One that
-    reads a step bound before it is refused: it is a precondition, and a precondition is written
-    as an invariant.
-  - An effect that reads an independent step must be listed in some counterexample's `must_fail`.
-  - An **invariant** ("the other tracks are unchanged", "nothing was written") must PASS, but it
-    is never credited as proof and is never listed in `must_fail`; listing one is refused.
+- No call follows the operation in `steps`. A reading taken after a second call cannot be credited
+  to the first; calls that put the fixture back belong in `restore`.
+- An expectation READS the step its `path` names and, when it has one, the step its `ref.obs`
+  names. A `ref.obs` that reads the same step as the path is refused: it compares a reading with
+  itself, and a substitution replaces both sides.
+- An **invariant** (`"invariant": true`) is a precondition and nothing else ("nothing is armed
+  before the operation"). Every step it reads is bound BEFORE the operation. An invariant that
+  reads the operation's step or any later step is refused: a reading after the operation is a
+  claim about the operation, and so is an effect. An invariant must PASS, is never credited as
+  proof, and may not be listed in `must_fail`.
+- Every other expectation is an **effect**.
+  - Its path may not name a step bound before the operation.
+  - An effect that reads any step bound after the operation is listed in some counterexample's
+    `must_fail`. No flag exempts one.
+  - That includes preservation claims ("the other tracks are unchanged", "the upper row is
+    unchanged"). Their witness is a reading taken before the operation that differs from the
+    preserved one, so the claim FAILS under substitution. If the fixture has no such reading, the
+    spec adds a probe step that takes one.
+- A claim about the operation is measured against the state JUST BEFORE it, after every call that
+  precedes it; a setup call may be what produced the claimed state.
+  - An effect compared with a pre-operation reading (`ref.obs`) names one bound after the last
+    call before the operation.
+  - An effect compared with a fixed value, or with another post-operation reading, is listed by at
+    least one counterexample whose witness is bound after that call.
+  - A preservation claim already compares with the reading just before the operation, so its
+    witness may be any earlier reading that differs.
 - Each `counterexample` names an `observation` bound BEFORE the operation and a step it
-  `replaces`, and lists `must_fail` indices into `expect`. The engine judges those expectations
-  again with the replaced reading swapped for the other one. Each must then FAIL. If one PASSES,
-  the row FAILS with `counterexample_accepted`: the check cannot tell the two states apart. If one
-  is UNREADABLE, the row is UNREADABLE.
+  `replaces`, and lists `must_fail` indices into `expect`.
+  - The observation is the same kind of reading as the step it replaces: the same probe and args,
+    the same resource, or the same tool and command. A witness of another kind fails a check only
+    because it is another kind of value.
+  - Each listed expectation reads the replaced step; otherwise substituting could not change it.
+  - The engine judges those expectations again with the replaced reading swapped for the other
+    one. Each must then FAIL. If one PASSES, the row FAILS with `counterexample_accepted`: the
+    check cannot tell the two states apart. If one is UNREADABLE, the row is UNREADABLE.
 - A row needs at least one effect over an independent step bound after the operation, listed in
   `must_fail`. Otherwise the only falsifiable checks read the operation's own reply or a state
   read before it acted, and the row is refused as self-report.
@@ -207,7 +251,8 @@ what it credits to the operation was read after the operation ran.
 
 ### Restore
 
-`restore_expect` is judged like `expect`. If one FAILS, the row FAILS with `restore_failed`: the
+A `restore_expect` reads the state the row leaves behind: its path names a step bound after the
+operation, or a restore step. `restore_expect` is judged like `expect`. If one FAILS, the row FAILS with `restore_failed`: the
 fixture was left changed, and the next row's as-found state is not the one it assumes.
 
 ## Evidence — `lpm-evidence/1`
@@ -220,19 +265,20 @@ fixture was left changed, and the next row's as-found state is not the one it as
   - `binding` is `built-by-verifier` only when the verifier built the binary from a clean detached
     checkout of `head` and measured its digest (P0b).
   - Anything else is `unbound`, and unbound evidence is never clean: its best exit is 3.
-  - A `built-by-verifier` label is not taken on trust. `recheck` verifies, on the host running it,
-    that `binary_path` is a file, that it re-hashes to `binary_sha256`, and that `head` is a commit
-    of this repository (`git cat-file -e <head>^{commit}`). If any of these fails, provenance is
-    `unverified`, with the reason, and the best exit is 3. This proves the file named is the file
-    hashed; it does not prove the file was built from `head`. Someone with write access who builds
-    a matching file by hand is out of scope.
+  - The host checks are consistency checks only. The engine checks, on the host judging, that
+    `binary_path` is a file, that it re-hashes to `binary_sha256`, and that `head` is a commit of
+    this repository (`git cat-file -e <head>^{commit}`). A disagreement makes provenance
+    `unverified`, with the reason, and counts against the evidence. Agreement never grants
+    `measured`: any file on the host has a real digest, and any commit is a commit. Only the
+    in-process attestation grants it (above).
 - `runs.<locale>`: `{date, host, locale_reading, rows.<id>.observations.<name>}`.
   - `locale_reading` is what `Scripts/verify/live/locale.py` `reading()` measured when the run
     started: `{lproj, code, expected_title, language_setting, window_names}`. It must name the run
     key: `lproj` equals the key, `code` is that locale's code, the language setting's first entry
     is the code, and the expected title is among the window names. A reading that names another
     locale is refused and the run does not count; a missing or unreadable one leaves the locale
-    unverified (exit 3 at best).
+    unverified (exit 3 at best). A reading in a file is a claim: only the attestation's reading
+    for that locale counts toward clean.
   - Each observation is `{step, raw, raw_bytes}`, where `raw` is the whole reply text, never
     truncated.
   - An observation the runner could not take is `{step, unreadable: reason}`.
@@ -246,11 +292,17 @@ refused (exit 2), never a crash.
 
 Writes are atomic: a temporary file in the destination directory, `fsync`, then `os.replace`.
 
-`record` reads the evidence bytes once and judges those bytes. It then publishes them as
-`docs/observations/evidence/<sha256>.json`, named by their own digest, before it writes any record.
-Every record cites that file, and its reverify command is `verify.py recheck` on it, so a later run
-can never overwrite what an earlier record points at. It writes nothing unless provenance is
-verified, and it skips a locale that is not measured or that stored no host block or date.
+`verify.py record <file>` is refused with exit 2, not 3. Exit 3 says the evidence could still
+become clean with more observations; no content of a file can make `record` write, so the command
+itself is refused, as `run` and `batch` are in P0a.
+
+The recording logic is `verify.record_attested(bytes, attestation, out)`, called in process by the
+process that produced the bytes (`run`, P0b-2; in P0a, the self-test). It judges the bytes with
+that attestation and writes nothing unless provenance is `measured`. It then publishes the bytes
+as `docs/observations/evidence/<sha256>.json`, named by their own digest, before it writes any
+record. Every record cites that file, and its reverify command is `verify.py recheck` on it, so a
+later run can never overwrite what an earlier record points at. That recheck exits 3 at best: it
+reads a file. It skips a locale that is not measured or that stored no host block or date.
 
 ## The pilot
 
