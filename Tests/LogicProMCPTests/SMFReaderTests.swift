@@ -60,6 +60,32 @@ import Foundation
     #expect(notes[1].durationBeats == 1.0)
 }
 
+@Test func testSMFReaderKeepsZeroLengthNoteBetweenOtherNotes() throws {
+    // #1031: a Note Off landing on its Note On's tick (zero-length note --
+    // e.g. a drum trigger) must not reject the whole file. Names the
+    // pre-#1031 guard (`tick > start.tick`) it kills: reverting SMFReader.swift's
+    // note-off guard to that strict form throws malformedEvent on the middle
+    // note and fails this test.
+    let data = smfData(tracks: [
+        trackData([
+            0x00, 0x90, 0x3C, 0x64,
+            0x83, 0x60, 0x80, 0x3C, 0x00,
+            0x00, 0x90, 0x3E, 0x50,
+            0x00, 0x80, 0x3E, 0x00,
+            0x81, 0x70, 0x90, 0x40, 0x5A,
+            0x81, 0x70, 0x80, 0x40, 0x00,
+            0x00, 0xFF, 0x2F, 0x00,
+        ]),
+    ])
+
+    let notes = try SMFReader.parse(data)
+
+    #expect(notes.count == 3)
+    #expect(notes[0] == SMFReader.Note(pitch: 60, velocity: 100, startBar: 1, startBeat: 1.0, durationBeats: 1.0, channel: 1))
+    #expect(notes[1] == SMFReader.Note(pitch: 62, velocity: 80, startBar: 1, startBeat: 2.0, durationBeats: 0.0, channel: 1))
+    #expect(notes[2] == SMFReader.Note(pitch: 64, velocity: 90, startBar: 1, startBeat: 2.5, durationBeats: 0.5, channel: 1))
+}
+
 @Test func testSMFReaderRejectsSMPTEDivision() {
     let data = smfData(division: 0xE250, tracks: [
         trackData([0x00, 0xFF, 0x2F, 0x00]),
