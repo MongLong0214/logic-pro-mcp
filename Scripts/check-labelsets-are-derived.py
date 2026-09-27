@@ -12,6 +12,10 @@ Two directions, and both matter:
 - a `derivedFrom` whose row nobody pinned is a claim nothing checked. `logic_canon.py build` pins a
   cited row in every locale, so an unpinned one means the reference was typed and never resolved.
 
+A set may name more rows in `alsoDerivedFrom`, and each is held to the same rule (#291). One Mute is
+two rows in German: the track header draws `Stumm` (`Mute`) and the Mixer strip `Ton aus`
+(`Mute#acc`), and a set checked against only the second passed while the header lookup failed.
+
 What it deliberately does NOT do is require the members to be ONLY the row's values. `variants`
 carries tolerance Apple's data does not contain on purpose -- `Auto Punch` beside `Autopunch` --
 and a check that forbade the extra would refuse the thing the field exists for.
@@ -32,6 +36,11 @@ _OPENING = re.compile(r'static let (?P<name>[A-Za-z0-9_]+) = LabelSet\(')
 _CANONICAL = re.compile(r'canonical: "(?P<canonical>(?:[^"\\]|\\.)*)"')
 _VARIANTS = re.compile(r'variants: \[(?P<variants>.*?)\]', re.S)
 _DERIVED = re.compile(r'derivedFrom: "(?P<ref>[^"]*)"')
+#: #291 -- a second row the same strings are ALSO the values of. The header and the Mixer strip name
+#: one Mute with two rows that part in German (`Stumm` / `Ton aus`), so one `derivedFrom` could
+#: prove only one of the two lookups the set serves.
+_ALSO = re.compile(r'alsoDerivedFrom: \[(?P<refs>[^\]]*)\]', re.S)
+_ALSO_OPENING = re.compile(r'alsoDerivedFrom:')
 
 
 class UnreadableDeclaration(Exception):
@@ -125,6 +134,17 @@ def declarations(source: str):
 
     Raises `UnreadableDeclaration` rather than skipping one it cannot parse.
     """
+    for name, members, derived, _also in _parsed(source):
+        yield name, members, derived
+
+
+def derivations(source: str):
+    """(name, members, every row it names) -- `derivedFrom` first, then each `alsoDerivedFrom`."""
+    for name, members, derived, also in _parsed(source):
+        yield name, members, ([derived] if derived else []) + also, derived is None and bool(also)
+
+
+def _parsed(source: str):
     for opening in _OPENING.finditer(source):
         name = opening.group("name")
         try:
@@ -141,7 +161,18 @@ def declarations(source: str):
                  for part in re.findall(r'"((?:[^"\\]|\\.)*)"', variants.group("variants"))]
         members = [_unescape(canonical.group("canonical"))] + found
         derived = _DERIVED.search(block)
-        yield name, [member for member in members if member], derived.group("ref") if derived else None
+        also = []
+        if _ALSO_OPENING.search(block):
+            listed = _ALSO.search(block)
+            if listed is None:
+                raise UnreadableDeclaration(
+                    f"{name}: an `alsoDerivedFrom:` this reader cannot read. A row it cannot see is "
+                    f"a row it does not check.")
+            also = re.findall(r'"([^"]*)"', listed.group("refs"))
+            if not also:
+                raise UnreadableDeclaration(f"{name}: `alsoDerivedFrom:` names no row")
+        yield (name, [member for member in members if member],
+               derived.group("ref") if derived else None, also)
 
 
 def check(source: str, canon) -> tuple:
@@ -157,75 +188,87 @@ def check(source: str, canon) -> tuple:
     namespace_of = {name: canon.TRANSLATION_NAMESPACE.get(name, name)
                     for name in (manifest.get("sources") or {})}
     indexes = {name: canon.load_index(name) for name in namespace_of}
-    for name, members, ref_text in declarations(source):
-        if not ref_text:
+    for name, members, refs, orphaned in derivations(source):
+        if orphaned:
+            failures.append(
+                f"{name}: `alsoDerivedFrom` with no `derivedFrom`. The first row is the one every "
+                f"other reader of this file takes as the set's row; name it there.")
+        if not refs:
             continue
         checked += 1
-        try:
-            ref = canon.CanonRef.parse(ref_text)
-        except canon.CanonError as exc:
-            failures.append(f"{name}: {exc}")
-            continue
-        if ref.is_value_citation or not ref.key:
-            failures.append(
-                f"{name}: `derivedFrom` must name a ROW -- a unit, a locale and a key. "
-                f"{ref_text!r} names no key, so there is nothing to read ten locales from.")
-            continue
-        peers = [name for name, space in namespace_of.items()
-                 if space == namespace_of.get(ref.source, ref.source)]
-        locales = sorted({locale
-                          for name in peers
-                          for locale in (manifest["sources"][name].get("locales") or [])
-                          if locale != "-"})
-        if not locales:
-            failures.append(f"{name}: source {ref.source!r} pins no locales")
-            continue
-        # Case-FOLDED, because that is the question the product asks. Every `LabelSet.matches`
-        # mode is case-insensitive, so the lowercase `mixer` this product carries for containment
-        # DOES match Apple's `Mixer`; comparing exact digests called that a language the product
-        # cannot work in. `build` pins `#ci` (and `#cit`, the trimmed row) beside each cited row
-        # for exactly this, and `label_row_credit` is the one comparison (#1028): until v3 the
-        # digest also folded a no-break space, so five German cells passed here that `.exact`
-        # cannot match at runtime.
-        strict = name in _EXACT_STRICT
-        uncovered, unpinned = [], []
-        for locale in sorted(locales):
-            row = (ref.unit, locale, ref.key, ref.field)
-
-            def pinned(suffix, row=row):
-                key = row[:3] + (row[3] + suffix,)
-                return next((indexes[peer].get(key) for peer in peers
-                             if indexes[peer].get(key)), None)
-
-            state, _member = canon.label_row_credit(pinned, members, strict=strict)
-            if state == canon.UNPINNED:
-                unpinned.append(locale)
-            elif state == canon.UNCOVERED:
-                uncovered.append(locale)
-            elif state == canon.NOT_LOCALIZED:
-                # Neither a failure nor coverage: Apple ships the English file there, so there
-                # is no row to derive from and nothing to hold the LabelSet to. Counted, and the
-                # coverage table says `not_localized` rather than `derived`.
-                not_localized.append(f"{name}/{locale}")
-            if state == canon.UNCOVERED and (name, locale) in KNOWN_UNCOVERED:
-                uncovered.remove(locale)
-                known_hit.add((name, locale))
-        if unpinned:
-            failures.append(
-                f"{name}: {ref.unit.split('/')[-1]} {ref.key} is not pinned for {unpinned}. "
-                f"`Scripts/logic_canon.py build` pins a cited row in every locale, so an unpinned "
-                f"one means this reference was typed and never resolved against Logic.")
-        if uncovered:
-            failures.append(
-                f"{name}: no member of this LabelSet is what Apple ships in {uncovered}. The row "
-                f"says one thing there and this label cannot match it, which is a language the "
-                f"product does not work in at this site.")
+        for ref_text in refs:
+            _check_row(name, members, ref_text, canon, manifest, namespace_of, indexes, failures,
+                       not_localized, known_hit)
     for name, locale in sorted(set(KNOWN_UNCOVERED) - known_hit):
         failures.append(
             f"KNOWN_UNCOVERED lists {name}/{locale}, and that cell is no longer uncovered. Delete "
             f"the entry: this list only shrinks.")
     check.not_localized = not_localized
     return failures, checked
+
+
+def _check_row(name, members, ref_text, canon, manifest, namespace_of, indexes, failures,
+               not_localized, known_hit):
+    """One row a LabelSet names: it parses, it is pinned in every locale, and a member covers each."""
+    try:
+        ref = canon.CanonRef.parse(ref_text)
+    except canon.CanonError as exc:
+        failures.append(f"{name}: {exc}")
+        return
+    if ref.is_value_citation or not ref.key:
+        failures.append(
+            f"{name}: `derivedFrom` must name a ROW -- a unit, a locale and a key. "
+            f"{ref_text!r} names no key, so there is nothing to read ten locales from.")
+        return
+    peers = [source for source, space in namespace_of.items()
+             if space == namespace_of.get(ref.source, ref.source)]
+    locales = sorted({locale
+                      for source in peers
+                      for locale in (manifest["sources"][source].get("locales") or [])
+                      if locale != "-"})
+    if not locales:
+        failures.append(f"{name}: source {ref.source!r} pins no locales")
+        return
+    # Case-FOLDED, because that is the question the product asks. Every `LabelSet.matches`
+    # mode is case-insensitive, so the lowercase `mixer` this product carries for containment
+    # DOES match Apple's `Mixer`; comparing exact digests called that a language the product
+    # cannot work in. `build` pins `#ci` (and `#cit`, the trimmed row) beside each cited row
+    # for exactly this, and `label_row_credit` is the one comparison (#1028): until v3 the
+    # digest also folded a no-break space, so five German cells passed here that `.exact`
+    # cannot match at runtime.
+    strict = name in _EXACT_STRICT
+    uncovered, unpinned = [], []
+    for locale in sorted(locales):
+        row = (ref.unit, locale, ref.key, ref.field)
+
+        def pinned(suffix, row=row):
+            key = row[:3] + (row[3] + suffix,)
+            return next((indexes[peer].get(key) for peer in peers
+                         if indexes[peer].get(key)), None)
+
+        state, _member = canon.label_row_credit(pinned, members, strict=strict)
+        if state == canon.UNPINNED:
+            unpinned.append(locale)
+        elif state == canon.UNCOVERED:
+            uncovered.append(locale)
+        elif state == canon.NOT_LOCALIZED:
+            # Neither a failure nor coverage: Apple ships the English file there, so there
+            # is no row to derive from and nothing to hold the LabelSet to. Counted, and the
+            # coverage table says `not_localized` rather than `derived`.
+            not_localized.append(f"{name}/{locale}")
+        if state == canon.UNCOVERED and (name, locale) in KNOWN_UNCOVERED:
+            uncovered.remove(locale)
+            known_hit.add((name, locale))
+    if unpinned:
+        failures.append(
+            f"{name}: {ref.unit.split('/')[-1]} {ref.key} is not pinned for {unpinned}. "
+            f"`Scripts/logic_canon.py build` pins a cited row in every locale, so an unpinned "
+            f"one means this reference was typed and never resolved against Logic.")
+    if uncovered:
+        failures.append(
+            f"{name}: no member of this LabelSet is what Apple ships in {uncovered} at "
+            f"{ref.unit.split('/')[-1]} {ref.key}. The row says one thing there and this label "
+            f"cannot match it, which is a language the product does not work in at this site.")
 
 
 def main() -> int:

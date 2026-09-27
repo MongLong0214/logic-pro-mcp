@@ -114,7 +114,7 @@ def pointed_at(tmp, locales=("de", "en", "it"), aliases=None):
         "SOURCE_LOCALES": {"quickhelp": ("ten", False), "strings": ("ten", True),
                            "stringsdict": ((), False), "niblabels": ((), True),
                            "nibstrings": ((), False), "madsp": ((), True), "nib": ((), True),
-                           "plugin_names": ((), True)},
+                           "plugin_names": ((), True), "pluginsettings": ((), True)},
     }
     before = {name: getattr(canon, name) for name in patch if hasattr(canon, name)}
     for name, value in patch.items():

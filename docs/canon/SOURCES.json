@@ -121,6 +121,24 @@
         "Presence is not use, the same as for `strings`: `Loop` is a segment label in MAContentTaggingUI's STORMMainWindow.nib in zh_CN, which makes `docs/locale/ui-labels.json` read two labels' zh-CN coverage as `derived` although nothing has shown that window is reachable."
       ]
     },
+    "pluginsettings": {
+      "path": "Contents/Resources/Plug-In Settings/<folder> and Contents/Resources/Plug-In Settings Internal/<folder>",
+      "answers": "which factory plug-in settings folders the Logic bundle ships: the folder NAME, one per plug-in whose factory settings Apple ships, which is the key StockPluginCatalog reads a plug-in's factory presets by",
+      "fields": [
+        "folder"
+      ],
+      "files": 3713,
+      "entries": 147,
+      "locale_names": 1,
+      "why": "Issue #1030. The catalog read presets from the bundle root only, one level deep, and only for folders a seed named: Studio Piano's folder ships only under `Plug-In Settings Internal` and no seed named it. `Scripts/check-factory-settings-folders.py` compares the seeds and `factorySettingsFolderExclusions` with this set in CI, where no Logic is installed.",
+      "how": "`extract_pluginsettings` lists the directories directly under both roots; a file beside them (`CSParameterOrder.plist`) is not a folder. The corpus digest covers every file under both roots, so a preset added, removed or moved inside a folder is a different corpus even when no folder name changed, and every folder's path under its root, so a folder with no file in it is a different corpus too (#1036).",
+      "limits": [
+        "Folder names only. The presets inside a folder are not pinned; the digest says that they changed, not which.",
+        "Four names ship under both roots, so the rows outnumber the distinct names the absence set holds.",
+        "The shared `/Library/Application Support/Logic/Plug-In Settings` root is outside the bundle and outside this corpus. Folders that ship only there are checked by `StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()` on a host that has the shared root; CI has none, so there it is skipped.",
+        "Not localised: the bundle holds one directory per folder, not one per `.lproj`, and nothing here says what name a localised Logic shows for the plug-in."
+      ]
+    },
     "stringsdict": {
       "path": "**/<locale>.lproj/*.stringsdict",
       "answers": "the plural FORMS of a counted label, per locale: the format string and one row per plural category the file declares (measured on this build: format 1,060, other 1,190, one 714, zero 20; no two, few or many)",

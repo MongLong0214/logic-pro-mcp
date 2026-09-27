@@ -315,7 +315,15 @@ struct StockPluginCatalogEntry: Codable, Sendable, Equatable {
     let provenance: StockPluginProvenance
     let insertPaths: [StockPluginInsertPath]
     let slotSupport: StockPluginSlotSupport
+    /// At most `StockPluginCatalog.maxFactoryPresetNames` distinct names, sorted. The whole set,
+    /// with each preset's category subfolder, is `factory_presets` on `logic://stock-plugins/{id}`.
     let knownPresets: [String]
+    /// True whenever `knownPresets` is not every preset the catalog holds: the name cap cut it, or
+    /// a folder walk stopped before it finished. A list is never cut without saying so.
+    let knownPresetsTruncated: Bool
+    /// How many distinct preset names the catalog holds. Nil only when a folder walk stopped before
+    /// it finished, because then the total is not known -- it is not zero.
+    let knownPresetsTotal: Int?
     let parameters: [StockPluginParameterMetadata]
     let safeWriteCapabilities: StockPluginSafeWriteCapability
     let limitations: [String]
@@ -330,9 +338,70 @@ struct StockPluginCatalogEntry: Codable, Sendable, Equatable {
         case insertPaths = "insert_paths"
         case slotSupport = "slot_support"
         case knownPresets = "known_presets"
+        case knownPresetsTruncated = "known_presets_truncated"
+        case knownPresetsTotal = "known_presets_total"
         case parameters
         case safeWriteCapabilities = "safe_write_capabilities"
         case limitations
+    }
+
+    /// Written out rather than synthesized for one field: synthesized encoding drops a nil
+    /// `knownPresetsTotal`, and the capabilities resource promises `known_presets_total` is
+    /// present and null when a walk stopped. Every other field encodes as synthesis would.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encode(type, forKey: .type)
+        try container.encode(category, forKey: .category)
+        try container.encode(availabilityState, forKey: .availabilityState)
+        try container.encode(provenance, forKey: .provenance)
+        try container.encode(insertPaths, forKey: .insertPaths)
+        try container.encode(slotSupport, forKey: .slotSupport)
+        try container.encode(knownPresets, forKey: .knownPresets)
+        try container.encode(knownPresetsTruncated, forKey: .knownPresetsTruncated)
+        if let knownPresetsTotal {
+            try container.encode(knownPresetsTotal, forKey: .knownPresetsTotal)
+        } else {
+            try container.encodeNil(forKey: .knownPresetsTotal)
+        }
+        try container.encode(parameters, forKey: .parameters)
+        try container.encode(safeWriteCapabilities, forKey: .safeWriteCapabilities)
+        try container.encode(limitations, forKey: .limitations)
+    }
+
+    /// The memberwise shape callers already use, plus the two truncation fields. A list that is not
+    /// truncated is its own total, so `knownPresetsTotal` is read only when it is.
+    init(
+        id: String,
+        displayName: String,
+        type: StockPluginType,
+        category: String,
+        availabilityState: StockPluginTruthState,
+        provenance: StockPluginProvenance,
+        insertPaths: [StockPluginInsertPath],
+        slotSupport: StockPluginSlotSupport,
+        knownPresets: [String],
+        knownPresetsTruncated: Bool = false,
+        knownPresetsTotal: Int? = nil,
+        parameters: [StockPluginParameterMetadata],
+        safeWriteCapabilities: StockPluginSafeWriteCapability,
+        limitations: [String]
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.type = type
+        self.category = category
+        self.availabilityState = availabilityState
+        self.provenance = provenance
+        self.insertPaths = insertPaths
+        self.slotSupport = slotSupport
+        self.knownPresets = knownPresets
+        self.knownPresetsTruncated = knownPresetsTruncated
+        self.knownPresetsTotal = knownPresetsTruncated ? knownPresetsTotal : knownPresets.count
+        self.parameters = parameters
+        self.safeWriteCapabilities = safeWriteCapabilities
+        self.limitations = limitations
     }
 }
 
@@ -380,8 +449,41 @@ struct StockPluginCatalogSnapshot: Codable, Sendable, Equatable {
 /// evidence of absence — several real plugins ship presets elsewhere — so the
 /// probe only ever upgrades entries and never produces `unavailable`.
 struct StockPluginLocalManifest: Sendable, Equatable {
+    /// The first factory folder found, in `factorySettingsRoots` order. What provenance cites.
     let sourcePath: String
-    let presetNames: [String]
+    /// Every preset under this plug-in's folder in every root, at every depth.
+    let presets: [StockPluginFactoryPreset]
+    /// False when a folder walk stopped before it finished -- the entry cap was reached, a
+    /// subfolder could not be read, or the folder could not be listed. `presets` is then a lower
+    /// bound, and an entry built from it says so.
+    let scanComplete: Bool
+
+    init(sourcePath: String, presets: [StockPluginFactoryPreset], scanComplete: Bool = true) {
+        self.sourcePath = sourcePath
+        self.presets = presets
+        self.scanComplete = scanComplete
+    }
+
+    /// Presets filed at the top level of `sourcePath`, the shape a fixture writes.
+    init(sourcePath: String, presetNames: [String]) {
+        self.init(
+            sourcePath: sourcePath,
+            presets: presetNames.map { StockPluginFactoryPreset(name: $0, category: nil, folder: sourcePath) }
+        )
+    }
+
+    /// Distinct preset names, sorted. Two subfolders may each ship a preset of the same name.
+    var presetNames: [String] { Array(Set(presets.map(\.name))).sorted() }
+}
+
+/// One factory `.pst` file. `category` is the subfolder path between the plug-in's folder and the
+/// file ("01 Synth Leads"), nil at the top level; whether Logic localizes it is not measured.
+/// `folder` is the plug-in folder it was read from, because the same plug-in can have a folder
+/// under more than one root.
+struct StockPluginFactoryPreset: Codable, Sendable, Equatable, Hashable {
+    let name: String
+    let category: String?
+    let folder: String
 }
 
 struct StockPluginCensus: Sendable, Equatable {
@@ -714,12 +816,17 @@ enum StockPluginCatalog {
     /// Process-wide production snapshot. The census probe (app bundle check +
     /// per-plugin factory settings folders) runs once; resources then serve a
     /// stable, cache-friendly payload with a constant `generated_at`.
-    static let productionSnapshot: StockPluginCatalogSnapshot = defaultSnapshot(census: .production())
+    static let productionCensus: StockPluginCensus = .production()
+    static let productionSnapshot: StockPluginCatalogSnapshot = defaultSnapshot(census: productionCensus)
 
     /// Cap on factory preset names surfaced per entry, keeping the list
-    /// resource payload bounded. The full set remains on disk at the entry's
-    /// provenance `source_path`.
+    /// resource payload bounded. An entry the cap cuts says so in
+    /// `known_presets_truncated` and `known_presets_total`, and the detail
+    /// resource carries every preset as `factory_presets`.
     static let maxFactoryPresetNames = 12
+    /// Entries one folder walk visits -- files and category subfolders both. The largest folder
+    /// measured on Logic 12.3 (6674), Pedalboard in the shared root, holds 348 presets in 29
+    /// subfolders.
     static let maxFactoryPresetDirectoryEntries = 4_096
 
     static func defaultSnapshot(census: StockPluginCensus) -> StockPluginCatalogSnapshot {
@@ -771,6 +878,17 @@ enum StockPluginCatalog {
         snapshot.entries.first { $0.id == id }
     }
 
+    /// Every factory preset the catalog holds for `id`, uncapped: `known_presets` is the first
+    /// `maxFactoryPresetNames` of these names. Resolved the way the entry is, so a state that
+    /// carries no presets (`readback_mismatch`, `unavailable`, `inferred`) carries none here.
+    static func factoryPresets(
+        id: String,
+        census: StockPluginCensus = productionCensus
+    ) -> [StockPluginFactoryPreset] {
+        guard seeds.contains(where: { $0.id == id }) else { return [] }
+        return resolve(seedID: id, census: census).presets
+    }
+
     static func search(query: String, snapshot: StockPluginCatalogSnapshot = productionSnapshot) -> [StockPluginCatalogEntry] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty else { return snapshot.entries }
@@ -815,6 +933,7 @@ enum StockPluginCatalog {
             ],
             "preset_name_cap": maxFactoryPresetNames,
             "preset_directory_entry_scan_cap": maxFactoryPresetDirectoryEntries,
+            "preset_truncation": "known_presets_truncated is true whenever known_presets is not every preset: the name cap cut it or a folder walk stopped. known_presets_total counts distinct names and is null only when a walk stopped. logic://stock-plugins/{id} carries every preset as factory_presets, with its category subfolder.",
             "safe_write_capabilities": [
                 StockPluginSafeWriteCapability.none.rawValue,
                 StockPluginSafeWriteCapability.insertOnly.rawValue,
@@ -838,6 +957,8 @@ enum StockPluginCatalog {
                 "insert_paths",
                 "slot_support",
                 "known_presets",
+                "known_presets_truncated",
+                "known_presets_total",
                 "parameters",
                 "safe_write_capabilities",
                 "limitations",
@@ -852,69 +973,140 @@ enum StockPluginCatalog {
 
     // MARK: - Local installation probe
 
-    /// Factory plug-in settings roots. The app bundle root is authoritative
-    /// for the installed Logic version; the shared Application Support root
-    /// covers content installed via additional-content downloads.
-    static func factorySettingsRoots(appPath: String) -> [String] {
+    static let sharedFactorySettingsRoot = "/Library/Application Support/Logic/Plug-In Settings"
+
+    /// Factory plug-in settings roots, in the order provenance prefers them. The two bundle roots
+    /// are authoritative for the installed Logic version -- `Plug-In Settings Internal` holds
+    /// folders the other does not, Studio Piano's among them -- and the shared Application
+    /// Support root holds content installed via additional-content downloads. Every root is read:
+    /// a plug-in whose folder exists under two roots carries the presets of both.
+    static func factorySettingsRoots(appPath: String, sharedRoot: String = sharedFactorySettingsRoot) -> [String] {
         [
             appPath + "/Contents/Resources/Plug-In Settings",
-            "/Library/Application Support/Logic/Plug-In Settings",
+            appPath + "/Contents/Resources/Plug-In Settings Internal",
+            sharedRoot,
         ]
     }
 
-    static func probeLocalManifests(appPath: String) -> [String: StockPluginLocalManifest] {
-        let fm = FileManager.default
-        let roots = factorySettingsRoots(appPath: appPath)
+    static func probeLocalManifests(
+        appPath: String,
+        sharedRoot: String = sharedFactorySettingsRoot,
+        fileManager fm: FileManager = .default,
+        maxDirectoryEntries: Int = maxFactoryPresetDirectoryEntries
+    ) -> [String: StockPluginLocalManifest] {
+        let roots = factorySettingsRoots(appPath: appPath, sharedRoot: sharedRoot)
         var result: [String: StockPluginLocalManifest] = [:]
         for seed in seeds {
             // POSIX paths cannot contain "/" in a single component, so names
             // like "I/O" have no probeable folder; skip rather than letting
             // the separator silently change the probed directory.
             guard !seed.name.contains("/") else { continue }
+            var sourcePath: String?
+            var presets: [StockPluginFactoryPreset] = []
+            var complete = true
             for root in roots {
                 let folder = root + "/" + seed.name
                 var isDirectory: ObjCBool = false
                 guard fm.fileExists(atPath: folder, isDirectory: &isDirectory), isDirectory.boolValue else { continue }
-                result[seed.id] = StockPluginLocalManifest(
-                    sourcePath: folder,
-                    presetNames: boundedFactoryPresetNames(in: folder, fileManager: fm)
-                )
-                break
+                if sourcePath == nil { sourcePath = folder }
+                let walk = factoryPresets(in: folder, fileManager: fm, maxDirectoryEntries: maxDirectoryEntries)
+                presets += walk.presets
+                complete = complete && walk.complete
+            }
+            if let sourcePath {
+                result[seed.id] = StockPluginLocalManifest(sourcePath: sourcePath, presets: presets, scanComplete: complete)
             }
         }
         return result
     }
 
-    static func boundedFactoryPresetNames(
+    /// Every `.pst` under `folder`, at every depth. Apple files most factory presets in category
+    /// subfolders ("01 Synth Leads"); reading the top level alone found 2 of the 257 ES2 ships.
+    /// The walk visits at most `maxDirectoryEntries` entries and says whether it finished, so a
+    /// partial list is reported as partial rather than as the whole.
+    static func factoryPresets(
         in folder: String,
         fileManager: FileManager = .default,
-        maxDirectoryEntries: Int = maxFactoryPresetDirectoryEntries,
-        maxNames: Int = maxFactoryPresetNames
-    ) -> [String] {
-        guard maxDirectoryEntries > 0, maxNames > 0 else { return [] }
-        let folderURL = URL(fileURLWithPath: folder, isDirectory: true)
+        maxDirectoryEntries: Int = maxFactoryPresetDirectoryEntries
+    ) -> (presets: [StockPluginFactoryPreset], complete: Bool) {
+        guard maxDirectoryEntries > 0 else { return ([], false) }
+        let unreadable = UnreadableEntryFlag()
         guard let enumerator = fileManager.enumerator(
-            at: folderURL,
+            at: URL(fileURLWithPath: folder, isDirectory: true),
             includingPropertiesForKeys: nil,
-            options: [.skipsSubdirectoryDescendants]
+            options: [],
+            errorHandler: { _, _ in
+                unreadable.raise()
+                return true
+            }
         ) else {
-            return []
+            return ([], false)
         }
 
         var scanned = 0
-        var names: [String] = []
+        var presets: [StockPluginFactoryPreset] = []
         for case let url as URL in enumerator {
-            guard scanned < maxDirectoryEntries else { break }
+            guard scanned < maxDirectoryEntries else { return (sortedPresets(presets), false) }
             scanned += 1
             let filename = url.lastPathComponent
-            guard filename.hasSuffix(".pst") else { continue }
-            names.append(String(filename.dropLast(4)))
-            names.sort()
-            if names.count > maxNames {
-                names.removeLast()
+            guard filename.hasSuffix(".pst"), !url.hasDirectoryPath else { continue }
+            // `level` counts from 1 at the top of `folder`, so the components between the folder
+            // and the file are the last `level - 1` directories -- read from the enumerator rather
+            // than by stripping a prefix, which a /var -> /private/var resolution would defeat.
+            let directories = url.deletingLastPathComponent().pathComponents.suffix(max(enumerator.level - 1, 0))
+            presets.append(StockPluginFactoryPreset(
+                name: String(filename.dropLast(4)),
+                category: directories.isEmpty ? nil : directories.joined(separator: "/"),
+                folder: folder
+            ))
+        }
+        return (sortedPresets(presets), !unreadable.isRaised)
+    }
+
+    private static func sortedPresets(_ presets: [StockPluginFactoryPreset]) -> [StockPluginFactoryPreset] {
+        presets.sorted {
+            ($0.name, $0.category ?? "", $0.folder) < ($1.name, $1.category ?? "", $1.folder)
+        }
+    }
+
+    /// Set by the enumerator's error handler, which Foundation may call off the walking thread.
+    private final class UnreadableEntryFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var raised = false
+        func raise() { lock.withLock { raised = true } }
+        var isRaised: Bool { lock.withLock { raised } }
+    }
+
+    /// Folder names that are neither a seed's display name nor a key of
+    /// `factorySettingsFolderExclusions`. Empty is the invariant.
+    static func unaccountedFactorySettingsFolders(_ folderNames: some Sequence<String>) -> [String] {
+        let seedNames = Set(seeds.map(\.name))
+        return Set(folderNames)
+            .filter { !seedNames.contains($0) && factorySettingsFolderExclusions[$0] == nil }
+            .sorted()
+    }
+
+    /// The same question asked of the directories under `roots`. A root that does not exist
+    /// contributes nothing; one that exists and cannot be listed throws, because a root nobody
+    /// could read is not a root with nothing unaccounted in it.
+    ///
+    /// Over the three real roots, `factorySettingsRoots(appPath:)` of the installed Logic, this is
+    /// checked by `StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()` on a
+    /// host that has the shared root; CI has none, so there it is skipped.
+    static func unaccountedFactorySettingsFolders(
+        roots: [String],
+        fileManager: FileManager = .default
+    ) throws -> [String] {
+        var names: [String] = []
+        for root in roots where fileManager.fileExists(atPath: root) {
+            for entry in try fileManager.contentsOfDirectory(atPath: root) {
+                var isDirectory: ObjCBool = false
+                if fileManager.fileExists(atPath: root + "/" + entry, isDirectory: &isDirectory), isDirectory.boolValue {
+                    names.append(entry)
+                }
             }
         }
-        return names
+        return unaccountedFactorySettingsFolders(names)
     }
 
     // MARK: - Seed catalog
@@ -1400,6 +1592,8 @@ enum StockPluginCatalog {
         inst("sculpture", "Sculpture", "Synthesizer"),
         inst("studio_bass", "Studio Bass", "Bass", notes: ["introduced in Logic Pro 11"]),
         inst("studio_horns", "Studio Horns", "Orchestral"),
+        // Its factory settings ship only under `Plug-In Settings Internal`.
+        inst("studio_piano", "Studio Piano", "Keyboards"),
         inst("studio_strings", "Studio Strings", "Orchestral"),
         inst("ultrabeat", "Ultrabeat", "Drums", notes: ["legacy drum synth"]),
         inst("vintage_b3", "Vintage B3", "Keyboards"),
@@ -1420,10 +1614,115 @@ enum StockPluginCatalog {
 
     static var seedCount: Int { seeds.count }
 
+    // MARK: - Factory-settings folders no seed owns
+
+    /// Every folder under a factory-settings root is a seed's display name or a key here, and the
+    /// value says why it has no seed. This is the one place that question is answered.
+    /// `Scripts/check-factory-settings-folders.py` holds the catalog to it for the two bundle roots
+    /// in CI, and refuses a value that is not one of the three reason constructors below. All
+    /// three roots, the shared one included, are checked by
+    /// `StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()` on a host that
+    /// has the shared root; CI has none, so there it is skipped. Measured against every folder of
+    /// the three roots on Logic 12.3 (6674); each unit or variant key is read from
+    /// `DefaultPluginMapping.plist` in MAContentTagging.framework.
+    static let factorySettingsFolderExclusions: [String: String] = [
+        "Auto-Funk": stompbox("0007"),
+        "Blue Echo": stompbox("0008"),
+        "Candy Fuzz": stompbox("0015"),
+        "Classic Wah": stompbox("0026"),
+        "Double Dragon": stompbox("0016"),
+        "Dr. Octave": stompbox("0034"),
+        "Flange Factory": stompbox("0031"),
+        "Fuzz Machine": stompbox("0003"),
+        "Graphic EQ": stompbox("0035"),
+        "Grinder": stompbox("0002"),
+        "Grit": stompbox("0037"),
+        "Happy Face Fuzz": stompbox("0013"),
+        "Heavenly Chorus": stompbox("0021"),
+        "Hi-Drive": stompbox("0018"),
+        "Modern Wah": stompbox("0027"),
+        "Monster Fuzz": stompbox("0014"),
+        "OctaFuzz": stompbox("0012"),
+        "Phase Tripper": stompbox("0030"),
+        "Phaze 2": stompbox("0023"),
+        "Rawk! Distortion": stompbox("0017"),
+        "Retro Chorus": stompbox("0004"),
+        "Robo Flanger": stompbox("0005"),
+        "Roswell Ringer": stompbox("0024"),
+        "Roto Phase": stompbox("0020"),
+        "Spin Box": stompbox("0019"),
+        "Spring Box": stompbox("0029"),
+        "Squash Compressor": stompbox("0009"),
+        "The Vibe": stompbox("0006"),
+        "Tie Dye Delay": stompbox("0033"),
+        "Total Tremolo": stompbox("0025"),
+        "Trem-O-Tone": stompbox("0022"),
+        "Tru-Tape Delay": stompbox("0028"),
+        "Tube Burner": stompbox("0032"),
+        "Vintage Drive": stompbox("0001"),
+        "Wham": stompbox("0036"),
+        "Analog Basic": variant(of: "ES2", key: "EMAG|0214|0067"),
+        "Analog Mono": variant(of: "ES2", key: "EMAG|0214|0068"),
+        "Analog Pad": variant(of: "ES2", key: "EMAG|0214|0069"),
+        "Analog Swirl": variant(of: "ES2", key: "EMAG|0214|0070"),
+        "Analog Sync": variant(of: "ES2", key: "EMAG|0214|0071"),
+        "Digital Basic": variant(of: "ES2", key: "EMAG|0214|0072"),
+        "Digital Mono": variant(of: "ES2", key: "EMAG|0214|0073"),
+        "Digital Stepper": variant(of: "ES2", key: "EMAG|0214|0074"),
+        "Piano": variant(of: "Sampler", key: "CLEM|1396788529|0007"),
+        "Strings": variant(of: "Sampler", key: "CLEM|1396788529|0008"),
+        "Voice": variant(of: "Sampler", key: "CLEM|1396788529|0009"),
+        "Tuned Percussion": variant(of: "Sampler", key: "CLEM|1396788529|0010"),
+        "Horns": variant(of: "Sampler", key: "CLEM|1396788529|0011"),
+        "Woodwind": variant(of: "Sampler", key: "CLEM|1396788529|0012"),
+        "Guitar": variant(of: "Sampler", key: "CLEM|1396788529|0013"),
+        "Bass": variant(of: "Sampler", key: "CLEM|1396788529|0014"),
+        "Drum Kits": variant(of: "Sampler", key: "CLEM|1396788529|0015"),
+        "Sound Effects": variant(of: "Sampler", key: "CLEM|1396788529|0016"),
+        "Electric Piano": variant(of: "Vintage Electric Piano", key: "EMAG|0213|0020"),
+        "Tonewheel Organ": variant(of: "Vintage B3", key: "EMAG|0216|0025"),
+        "Electric Clav": variant(of: "Vintage Clav", key: "EMAG|0223|0030"),
+        "AVerb": unmeasuredUnit("EMAG|0192|0000"),
+        "Church Organ": unmeasuredUnit("CLEM|1396788532|0000"),
+        "DeEsser": unmeasuredUnit("EMAG|0160|0000"),
+        "EnVerb": unmeasuredUnit("EMAG|0166|0000"),
+        "Enhance Timing": unmeasuredUnit("EMAG|0247|0000"),
+        "EVOC 20 TrackOscillator": unmeasuredUnit("EMAG|0188|0000"),
+        "Hybrid Basic": unmeasuredUnit("CLEM|1396788530|0000"),
+        "Hybrid Morph": unmeasuredUnit("CLEM|1396788531|0000"),
+        "Klopfgeist": unmeasuredUnit("EMAG|0158|0000"),
+        "Multichannel Gain": unmeasuredUnit("EMAG|0265|0000"),
+        "PlatinumVerb": unmeasuredUnit("EMAG|0151|0000"),
+        "Surround Compressor": unmeasuredUnit("EMAG|0266|0000"),
+        "Surround Panner": unmeasuredUnit("EMAG|0262|0000"),
+        "EXS24": unmeasuredUnit(nil),
+        "Loopback": unmeasuredUnit(nil),
+        "Mastering Assistant": unmeasuredUnit(nil),
+        "Surround Balancer": unmeasuredUnit(nil),
+    ]
+
+    private static func stompbox(_ variant: String) -> String {
+        "a Pedalboard stompbox: DefaultPluginMapping.plist maps it to EMAG|0273|\(variant), a variant of "
+            + "Pedalboard's unit (EMAG|0273|0000), not a plug-in of its own; the pedalboard seed owns the plug-in"
+    }
+
+    private static func variant(of parent: String, key: String) -> String {
+        "a variant of \(parent): DefaultPluginMapping.plist maps it to \(key) under \(parent)'s unit, and on "
+            + "Logic 12.3 (6674) its folder holds no .pst; the \(parent) seed owns the plug-in"
+    }
+
+    private static func unmeasuredUnit(_ key: String?) -> String {
+        let mapping = key.map { "a unit of its own in DefaultPluginMapping.plist (\($0))" }
+            ?? "not in DefaultPluginMapping.plist"
+        return "\(mapping), and where it sits in Logic 12.3's plug-in menus has not been measured; a seed "
+            + "would state a menu path nobody read"
+    }
+
     // MARK: - Census overlay
 
     private static func buildEntry(seed: Seed, census: StockPluginCensus) -> StockPluginCatalogEntry {
         let resolution = resolve(seedID: seed.id, census: census)
+        let names = resolution.presetNames
 
         if resolution.state == .unavailable {
             return StockPluginCatalogEntry(
@@ -1457,7 +1756,9 @@ enum StockPluginCatalog {
                 ),
             ],
             slotSupport: slotSupport(for: seed.type),
-            knownPresets: resolution.presetNames,
+            knownPresets: Array(names.prefix(maxFactoryPresetNames)),
+            knownPresetsTruncated: names.count > maxFactoryPresetNames || !resolution.scanComplete,
+            knownPresetsTotal: resolution.scanComplete ? names.count : nil,
             parameters: seed.parameters,
             safeWriteCapabilities: seed.write,
             limitations: seed.notes
@@ -1478,7 +1779,10 @@ enum StockPluginCatalog {
     private struct StateResolution {
         let state: StockPluginTruthState
         let provenance: StockPluginProvenance
-        let presetNames: [String]
+        var presets: [StockPluginFactoryPreset] = []
+        var scanComplete = true
+
+        var presetNames: [String] { Array(Set(presets.map(\.name))).sorted() }
     }
 
     /// Truth-state precedence: contradiction beats confirmation, live evidence
@@ -1497,12 +1801,12 @@ enum StockPluginCatalog {
                     logicVersion: census.logicVersion,
                     locale: census.locale,
                     evidence: ["plugin_identity_readback_mismatch"]
-                ),
-                presetNames: []
+                )
             )
         }
         if census.verifiedPluginIDs.contains(seedID) {
-            let presets = census.localManifests[seedID]?.presetNames ?? []
+            let manifest = census.localManifests[seedID]
+            let presets = manifest?.presets ?? []
             var evidence = ["plugin_identity_readback"]
             if !presets.isEmpty { evidence.append("factory_preset_filenames") }
             return StateResolution(
@@ -1515,11 +1819,13 @@ enum StockPluginCatalog {
                     locale: census.locale,
                     evidence: evidence
                 ),
-                presetNames: presets
+                presets: presets,
+                scanComplete: manifest?.scanComplete ?? true
             )
         }
         if census.observedPluginIDs.contains(seedID) {
-            let presets = census.localManifests[seedID]?.presetNames ?? []
+            let manifest = census.localManifests[seedID]
+            let presets = manifest?.presets ?? []
             var evidence = ["menu_item_observed"]
             if !presets.isEmpty { evidence.append("factory_preset_filenames") }
             return StateResolution(
@@ -1531,7 +1837,8 @@ enum StockPluginCatalog {
                     locale: census.locale,
                     evidence: evidence
                 ),
-                presetNames: presets
+                presets: presets,
+                scanComplete: manifest?.scanComplete ?? true
             )
         }
         if census.unavailablePluginIDs.contains(seedID) {
@@ -1543,13 +1850,12 @@ enum StockPluginCatalog {
                     logicVersion: census.logicVersion,
                     locale: census.locale,
                     evidence: ["absence_checked"]
-                ),
-                presetNames: []
+                )
             )
         }
         if let manifest = census.localManifests[seedID] {
             var evidence = ["factory_plugin_settings_folder"]
-            if !manifest.presetNames.isEmpty {
+            if !manifest.presets.isEmpty {
                 evidence.append("factory_preset_filenames")
             }
             return StateResolution(
@@ -1562,13 +1868,13 @@ enum StockPluginCatalog {
                     locale: census.locale,
                     evidence: evidence
                 ),
-                presetNames: manifest.presetNames
+                presets: manifest.presets,
+                scanComplete: manifest.scanComplete
             )
         }
         return StateResolution(
             state: .inferred,
-            provenance: .inferred(reason: "documented Logic stock plugin identity; not verified on this machine in this response"),
-            presetNames: []
+            provenance: .inferred(reason: "documented Logic stock plugin identity; not verified on this machine in this response")
         )
     }
 }
