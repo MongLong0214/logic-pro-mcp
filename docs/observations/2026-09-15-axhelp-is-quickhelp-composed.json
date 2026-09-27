@@ -166,10 +166,9 @@
     {
       "ref": "logic-canon://quickhelp/QuickHelp/ko/KCE_024_Record#composed",
       "value": "녹음 버튼. 선택한 트랙 또는 녹음 준비된 여러 트랙에 녹음합니다.",
-      "used_for": "the key the AXHelp parser returns for the transport record button, and the value it anchors on",
+      "used_for": "the composition at the end of the transport record button's live AXHelp in this record's examples (`KCE_024_Record -> '녹음   R, 녹음 버튼. …'`): the key the AXHelp parser returns for that button, and the value it anchors on. Bound to this record, which holds the reading, rather than to Scripts/test_logic_canon.py, which a change that only re-searches this record's absence claim does not open (#1028).",
       "binding": {
-        "kind": "code",
-        "path": "Scripts/test_logic_canon.py"
+        "kind": "record"
       }
     },
     {
