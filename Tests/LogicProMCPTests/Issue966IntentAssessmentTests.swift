@@ -533,7 +533,8 @@ struct Issue966IntentAssessmentTests {
         #expect(finding.expected == Audit.IntentEndpoint(nodeId: nil, displayName: nil, busNumber: 3, output: .bus))
         #expect(finding.coverage.outputEdgeObserved)
         #expect(finding.coverage.destinationBusObserved)
-        #expect(finding.coverage.expectedBusObserved == true)
+        let expectedBusObserved = try #require(finding.coverage.expectedBusObserved)
+        #expect(expectedBusObserved)
         #expect(finding.coverage.graphComplete)
         #expect(finding.reasons.isEmpty)
         #expect(assessment.changeRequired)
@@ -548,7 +549,8 @@ struct Issue966IntentAssessmentTests {
 
         #expect(finding.status == .violation)
         #expect(finding.reasons == [.expectedBusNotObserved])
-        #expect(finding.coverage.expectedBusObserved == false)
+        let expectedBusObserved = try #require(finding.coverage.expectedBusObserved)
+        #expect(!expectedBusObserved)
         #expect(assessment.changeRequired)
     }
 
@@ -571,7 +573,8 @@ struct Issue966IntentAssessmentTests {
         #expect(finding.expected.busNumber == 3)
         #expect(finding.coverage.outputEdgeObserved)
         #expect(finding.coverage.destinationBusObserved)
-        #expect(finding.coverage.expectedBusObserved == true)
+        let expectedBusObserved = try #require(finding.coverage.expectedBusObserved)
+        #expect(expectedBusObserved)
         #expect(finding.reasons.isEmpty)
         #expect(!assessment.changeRequired)
         #expect(assessment.findings.allSatisfy { $0.status != .violation })
