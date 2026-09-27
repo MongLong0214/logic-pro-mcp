@@ -20,6 +20,7 @@ in a `finally`.
 """
 
 import contextlib
+import fcntl
 import json
 import os
 import re
@@ -37,6 +38,8 @@ DEFAULT_LOCK = ("/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/"
 SERVER_EXECUTABLE = re.compile(r"^LogicProMCP(?:$|[-_.])")
 #: A test bundle: the SwiftPM test product, run by xctest or swiftpm-testing-helper.
 TEST_BUNDLE = re.compile(r"\.xctest\b|LogicProMCPPackageTests")
+#: Seconds a stale-lock recovery waits for the recovery flock; recoveries take milliseconds.
+RECOVER_WAIT_S = 10.0
 
 
 def lock_path():
@@ -67,6 +70,7 @@ def read_lock(path=None, alive=pid_alive):
     path = path or lock_path()
     try:
         with open(path, "rb") as handle:
+            stat = os.fstat(handle.fileno())
             raw = handle.read()
     except FileNotFoundError:
         return {"path": path, "exists": False}
@@ -84,7 +88,8 @@ def read_lock(path=None, alive=pid_alive):
     same_host = host == socket.gethostname() if host is not None else None
     living = alive(pid) if isinstance(pid, int) and same_host else None
     return {"path": path, "exists": True, "raw": text, "holder": holder, "pid": pid, "host": host,
-            "same_host": same_host, "pid_alive": living, "stale": living is False}
+            "same_host": same_host, "pid_alive": living, "stale": living is False,
+            "identity": [stat.st_dev, stat.st_ino]}
 
 
 def _write_exclusive(path, body):
@@ -95,12 +100,59 @@ def _write_exclusive(path, body):
         os.close(fd)
 
 
-def acquire(purpose, path=None, break_stale=True, alive=pid_alive):
-    """Take the lock once, or say who has it. Never waits.
+def recover_path(path):
+    """The companion file stale recovery is serialized on. It is never deleted, so every
+    recoverer locks the same inode; the lock itself keeps its existence-based protocol, which
+    shell workers wait on with `[ -e LIVE.lock ]`."""
+    return path + ".recover"
 
-    A stale lock (see `read_lock`) is moved aside to `<path>.stale-<pid>-<ns>` and the exclusive
-    create is tried once more; what was moved is returned. The move is a rename, so if two
-    breakers race only one moves the file, and both then race on O_EXCL, which exactly one wins.
+
+def _recover_stale(path, found, alive):
+    """Move `found` aside only if, under an exclusive flock on recover_path, the file at `path` is
+    still that same stale lock (same device, inode and bytes). Bounded; raw record."""
+    record = {"recover_path": recover_path(path), "was": found}
+    fd = os.open(recover_path(path), os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        def try_flock():
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return True
+            except BlockingIOError:
+                return None
+
+        waited = obs.wait_until(try_flock, RECOVER_WAIT_S, interval_s=0.05)
+        record["flock"] = {k: waited[k] for k in ("timed_out", "elapsed_s", "polls")}
+        if waited["timed_out"]:
+            record["moved_to"], record["cause"] = None, "the recovery flock was not obtained"
+            return record
+        try:
+            again = read_lock(path, alive=alive)
+            record["reread"] = again
+            same = (again.get("exists") and again.get("stale")
+                    and again.get("identity") == found.get("identity")
+                    and again.get("raw") == found.get("raw"))
+            if not same:
+                record["moved_to"], record["cause"] = None, "the lock changed before recovery"
+                return record
+            aside = f"{path}.stale-{found.get('pid')}-{time.time_ns()}"
+            os.rename(path, aside)
+            record["moved_to"] = aside
+            return record
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def acquire(purpose, path=None, break_stale=True, alive=pid_alive):
+    """Take the lock once, or say who has it. Never waits beyond the bounded recovery flock.
+
+    A stale lock (see `read_lock`) is moved aside to `<path>.stale-<pid>-<ns>` by
+    `_recover_stale`, which re-reads it under a flock and moves it only if it is still the same
+    stale file; then the exclusive create is tried once more. A recoverer that read the stale lock
+    before another recovered it and created its own therefore finds a different file and does not
+    move it (PR #1033 review R3), and two that both find the path empty race on O_EXCL, which
+    exactly one wins.
     """
     path = path or lock_path()
     token = f"{os.getpid()}-{time.time_ns()}"
@@ -116,12 +168,7 @@ def acquire(purpose, path=None, break_stale=True, alive=pid_alive):
         except FileExistsError:
             found = read_lock(path, alive=alive)
             if attempt == 0 and break_stale and found.get("stale"):
-                aside = f"{path}.stale-{found.get('pid')}-{time.time_ns()}"
-                try:
-                    os.rename(path, aside)
-                    broken = {"moved_to": aside, "was": found}
-                except FileNotFoundError:
-                    broken = {"moved_to": None, "was": found, "cause": "vanished before the move"}
+                broken = _recover_stale(path, found, alive)
                 continue
             return {"acquired": False, "path": path, "found": found, "broke_stale": broken,
                     "attempts": attempt + 1}

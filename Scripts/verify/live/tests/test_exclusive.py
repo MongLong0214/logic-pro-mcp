@@ -58,6 +58,54 @@ class Lock(unittest.TestCase):
         self.assertEqual(taken["broke_stale"]["was"]["pid"], 999999)
         self.assertTrue(os.path.exists(taken["broke_stale"]["moved_to"]))
 
+    def test_two_recoverers_interleaved_leave_exactly_one_holder(self):
+        # Kills: renaming whatever file is at the path after reading it stale (PR #1033 review R3),
+        # i.e. the lock not re-read under the recovery flock. The interleaving is the
+        # reviewer's: B's whole recovery runs between A's read of the stale lock and A's move. It
+        # is injected through `alive`, which A's read calls, so no sleep orders the two.
+        dead = 999999
+        with open(self.path, "w") as handle:
+            json.dump({"pid": dead, "host": socket.gethostname(), "purpose": "gone"}, handle)
+        results = {}
+
+        def b_alive(pid):
+            return pid != dead
+
+        def a_alive(pid):
+            if "b" not in results:
+                results["b"] = exclusive.acquire("B", alive=b_alive)
+            return pid != dead
+
+        results["a"] = exclusive.acquire("A", alive=a_alive)
+        holders = [name for name in ("a", "b") if results[name]["acquired"]]
+        self.assertEqual(holders, ["b"])
+        with open(self.path) as handle:
+            self.assertEqual(json.load(handle)["purpose"], "B")
+        self.assertEqual(results["a"]["broke_stale"]["cause"], "the lock changed before recovery")
+        self.assertTrue(os.path.exists(exclusive.recover_path(self.path)))
+
+    def test_a_different_stale_lock_found_under_the_flock_is_not_moved(self):
+        # Kills: the same-device/inode/bytes comparison dropped from the re-read (moving a stale
+        # lock other than the one read). B recovers and takes the lane, then A judges B's pid dead:
+        # the file A re-reads is stale, but it is not the file A read, so A leaves it.
+        dead = 999999
+        with open(self.path, "w") as handle:
+            json.dump({"pid": dead, "host": socket.gethostname(), "purpose": "gone"}, handle)
+        results = {}
+
+        def a_alive(pid):
+            if "b" not in results:
+                results["b"] = exclusive.acquire("B", alive=lambda p: p != dead)
+            return pid not in (dead, os.getpid())
+
+        results["a"] = exclusive.acquire("A", alive=a_alive)
+        self.assertTrue(results["b"]["acquired"])
+        self.assertFalse(results["a"]["acquired"])
+        self.assertTrue(results["a"]["broke_stale"]["reread"]["stale"])
+        self.assertEqual(results["a"]["broke_stale"]["cause"], "the lock changed before recovery")
+        with open(self.path) as handle:
+            self.assertEqual(json.load(handle)["purpose"], "B")
+
     def test_the_real_pid_check_sees_a_dead_pid(self):
         # Kills: pid_alive() returning True unconditionally.
         child = os.fork()
