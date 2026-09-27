@@ -732,6 +732,13 @@ extension ProjectSessionAudit {
         let reason: IntentReason
     }
 
+    /// The track references the capture issued, or the token for why no target can be checked
+    /// against them. A direct target and a role's candidates both read `trackReferences(of:)`.
+    private enum TrackReferenceReading {
+        case issued(IssuedTrackReferences)
+        case unreadable(IntentReason)
+    }
+
     /// What the graph shows for one source, before intent is compared with it: where its main
     /// output goes, or why the graph does not say.
     private enum MainOutputObservation {
@@ -836,6 +843,13 @@ extension ProjectSessionAudit {
                 findings.append(roleFinding(gate.status, reasons: [gate.reason]))
                 continue
             }
+            // The candidates carry the policy's references. While the capture's own are off or
+            // stale a question could name a track this capture does not have, so the role reads the
+            // check a direct target reads, and nothing is asked.
+            if case .unreadable(let reason) = trackReferences(of: capture) {
+                findings.append(roleFinding(.unverified, reasons: [reason]))
+                continue
+            }
             findings.append(roleFinding(.needsInput, reasons: [.roleHasNoAcceptedMember]))
             let candidates = role.members
                 .filter { !$0.accepted }
@@ -910,6 +924,14 @@ extension ProjectSessionAudit {
         return nil
     }
 
+    /// References off are `references_unavailable`; references on with none issued, which the
+    /// capture reports when the registry moved on during issuance, are `target_snapshot_stale`.
+    private static func trackReferences(of capture: SessionPopulationObservation.Capture) -> TrackReferenceReading {
+        guard capture.referencesEnabled else { return .unreadable(.referencesUnavailable) }
+        guard let issued = capture.issued else { return .unreadable(.targetSnapshotStale) }
+        return .issued(issued)
+    }
+
     /// The one P1 rule, in a fixed order. `compliant` and `violation` need a capture and graph that
     /// pass every gate, a target the capture issued, both the `main_output` and the
     /// `strip_track_association` domains complete, and a source whose output the graph classifies
@@ -957,11 +979,12 @@ extension ProjectSessionAudit {
         if let gate {
             return finding(gate.status, nil, trackIndex: nil, reasons: [gate.reason])
         }
-        guard capture.referencesEnabled else {
-            return finding(.unverified, nil, trackIndex: nil, reasons: [.referencesUnavailable])
-        }
-        guard let issued = capture.issued else {
-            return finding(.unverified, nil, trackIndex: nil, reasons: [.targetSnapshotStale])
+        let issued: IssuedTrackReferences
+        switch trackReferences(of: capture) {
+        case .unreadable(let reason):
+            return finding(.unverified, nil, trackIndex: nil, reasons: [reason])
+        case .issued(let references):
+            issued = references
         }
         let trackIndices = issued.byTrackIndex.filter { $0.value == trackRef }.keys.sorted()
         guard let trackIndex = trackIndices.first else {

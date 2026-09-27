@@ -916,6 +916,48 @@ struct Issue966IntentAssessmentTests {
         ])
     }
 
+    // A role's candidates carry the policy's references. While the capture's own references are off
+    // or stale, a question could name a track this capture does not have, so the role reads the
+    // per-target check a direct target reads: `unverified` with that check's token, and nothing
+    // asked. Mutation: skip that check in the role branch.
+    @Test func anUnresolvedRoleIsUnverifiedWhileTrackReferencesAreOffOrStale() throws {
+        // With references off `publish` binds no project, so the graph carries none either.
+        let unbound = graph(projectReference: nil, nodes: correctGraph.nodes, edges: correctGraph.edges)
+        let cases: [(token: String, capture: Observation.Capture, graph: RoutingGraph)] = [
+            ("references_unavailable", makeCapture(tracks: threeTracks, issued: nil), unbound),
+            ("target_snapshot_stale", makeCapture(tracks: threeTracks, issued: nil, referencesEnabled: true), correctGraph),
+        ]
+        for (token, capture, routing) in cases {
+            let assessment = Audit.assessIntent(policy: try unresolvedRolePolicy(), capture: capture, graph: routing)
+            let finding = try onlyFinding(assessment)
+
+            #expect(finding.id == "main_output.role.kick", "\(token)")
+            #expect(finding.status == .unverified, "\(token)")
+            #expect(finding.reasons.map(\.rawValue) == [token])
+            #expect(finding.target == Audit.IntentTargetEvidence(handle: nil, role: "kick", trackRef: nil, trackIndex: nil), "\(token)")
+            #expect(finding.observed == nil, "\(token)")
+            #expect(assessment.questions.isEmpty, "\(token)")
+            #expect(!assessment.changeRequired, "\(token)")
+
+            // The same capture and graph give a direct target the same status and token.
+            let direct = try onlyFinding(Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: capture, graph: routing))
+            #expect(direct.status == .unverified, "\(token)")
+            #expect(direct.reasons.map(\.rawValue) == [token])
+        }
+
+        // Positive control: with references on and current the same policy asks, and the candidates
+        // are exactly the proposed members.
+        let open = Audit.assessIntent(policy: try unresolvedRolePolicy(), capture: threeTrackCapture, graph: correctGraph)
+        let finding = try onlyFinding(open)
+        #expect(finding.status == .needsInput)
+        #expect(finding.reasons == [.roleHasNoAcceptedMember])
+        #expect(open.questions.map(\.id) == ["role.kick"])
+        #expect(open.questions.first?.candidates == [
+            Audit.IntentCandidate(handle: "b", trackRef: "trk_1"),
+            Audit.IntentCandidate(handle: "c", trackRef: "trk_2"),
+        ])
+    }
+
     // Mutation: collapse the references-unavailable and target-not-in-snapshot branches into one.
     @Test func targetOutsideTheSnapshotIsOutsideScope() throws {
         let policy = try #require(accepted(Audit.parseIntentPolicy(policyObject(

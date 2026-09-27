@@ -74,13 +74,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   unissued project reference is `unverified` with its own token; a policy for another project or a
   target outside the snapshot is `outside_scope`. A role with no accepted member is a
   `needs_input` question only when the capture, the graph and the policy's project pass those
-  checks (the stale reference snapshot aside, which is checked per target); otherwise its finding
-  carries the failing check's status and token and nothing is asked. The source is found by
-  reference, never by name; a node id, destination bus number or captured reference that
-  more than one node or row carries is `unverified` rather than decided by order; and send and
-  input edges, levels, enabled flags and automation are never read. Limits: `publish` leaves both
-  domains `partial` on every read today, so every real assessment is `unverified`; no command,
-  resource or documented surface exposes this yet.
+  checks and the capture's track references are on and current, the check a direct target reads;
+  otherwise its finding carries the failing check's status and token and nothing is asked. The
+  source is found by reference, never by name; a node id, destination bus number or captured
+  reference that more than one node or row carries is `unverified` rather than decided by order;
+  and send and input edges, levels, enabled flags and automation are never read. Limits:
+  `publish` leaves both domains `partial` on every read today, so every real assessment is
+  `unverified`; no command, resource or documented surface exposes this yet.
 
 ### Fixed
 - MCU button presses now send the button release: bank left/right (`mixer.bank` and the bank walk behind every strip-relative MCU operation), track select, automation mode, the mute / solo / arm / select strip buttons, and the MCU transport buttons (play, stop, record, rewind, fast forward, cycle). Before, each press was a Note On with no release, so Logic saw every button as held, and it auto-repeats held bank buttons: after one bank walk left and one press right, the LCD kept redrawing between two bank windows for seconds. The `enabled: false` branch of `track.set_mute` / `set_solo` / `set_arm`, which sent a single release with no press, is replaced under #1020 below. (#862)
