@@ -81,10 +81,10 @@
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
     "index/quickhelp.tsv": "956a2913b531a713647f25af6a94365ad23f1fe880297562f1e213e617cbbc3e",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/strings.tsv": "efc92a1292425edbf63b316817f448b7d74a98cea289efb4f3476264ae4f3455",
+    "index/strings.tsv": "e6a75ddd074bb983445044502827b780ed31f1fc9188126ee3b8743a9f5b9369",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
-    "ledger/casefold.tsv": "4540db4c275d4cd1ece2ce4d5e36e02e050732d66b16f7d81a4458df3e1089eb",
-    "ledger/presence.tsv": "eaa6eecfebe39ef45330042634414ebaa0c7f55b4fb5096c1ad2593f3f579fa8"
+    "ledger/casefold.tsv": "408b8d55c8c909d43f148036da80e41c11a8c9f79fbe900ffd31fc7016c01249",
+    "ledger/presence.tsv": "5213aace9f87be1259b04dcd3152aa97ad108d4f423032cf5ef7f62e69b524f6"
   },
   "extractor_version": 2,
   "ledger_casefold_entries": {
@@ -121,7 +121,7 @@
     },
     "strings": {
       "-": 2,
-      "de": 157,
+      "de": 158,
       "en": 179,
       "es": 162,
       "fr": 152,
@@ -139,7 +139,7 @@
     },
     "niblabels": {
       "-": 27,
-      "de": 22,
+      "de": 23,
       "en": 28,
       "es": 26,
       "fr": 28,
@@ -167,7 +167,7 @@
     },
     "strings": {
       "-": 3,
-      "de": 142,
+      "de": 143,
       "en": 160,
       "es": 153,
       "fr": 142,
@@ -544,7 +544,7 @@
         "zh_CN": 1.1548866e-05,
         "zh_TW": 1.087226e-05
       },
-      "cited_rows": 3226,
+      "cited_rows": 3246,
       "cited_values": 2,
       "corpus_digest": "830a5131378ede72bb0a20211985166f367b7a35a30a85d875c9c25ff0b89e1a",
       "entries": 605190,

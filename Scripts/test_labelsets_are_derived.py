@@ -102,6 +102,39 @@ class TheGuardCatchesWhatItNames(unittest.TestCase):
         failures = self._mutated("/en/File%23mti#value", "/en#value")
         self.assertTrue(failures)
 
+    def test_a_second_row_is_checked_as_the_first_is(self):
+        """#291: the German track header's Mute is `Stumm` (plain `Mute`) while the Mixer's is
+        `Ton aus` (`Mute#acc`). Without `Stumm` the set still covers its FIRST row in all ten
+        locales, so a guard that read only `derivedFrom` stays green over a header lookup that
+        finds nothing in German. It must refuse, naming the second row and the language."""
+        failures = self._mutated('"Ton aus", "Stumm",', '"Ton aus",')
+        named = [f for f in failures if f.startswith("trackMuteButton:")]
+        self.assertEqual(len(named), 1, failures)
+        self.assertIn("['de']", named[0])
+        self.assertIn("Localizable.strings Mute.", named[0])
+
+    def test_the_first_row_is_still_checked_beside_a_second(self):
+        """The control for the case above: dropping the Mixer's `Ton aus` fails at `Mute#acc`."""
+        failures = self._mutated('"Ton aus", "Stumm",', '"Stumm",')
+        named = [f for f in failures if f.startswith("trackMuteButton:")]
+        self.assertEqual(len(named), 1, failures)
+        self.assertIn("['de']", named[0])
+        self.assertIn("Localizable.strings Mute#acc.", named[0])
+
+    def test_a_second_row_with_no_first_row_is_refused(self):
+        source = _source()
+        first = re.search(r'\n\s*derivedFrom: "[^"]*Mute%23acc#value",', source)
+        self.assertIsNotNone(first, "the mutation did not apply, so this case proves nothing")
+        failures = guard.check(source.replace(first.group(0), "", 1), canon)[0]
+        self.assertTrue(any(f.startswith("trackMuteButton:") and "no `derivedFrom`" in f
+                            for f in failures), failures)
+
+    def test_a_second_row_it_cannot_read_raises_instead_of_being_skipped(self):
+        broken = ('static let x = LabelSet(\n    canonical: "a",\n    variants: [],\n'
+                  '    rationale: "r",\n    alsoDerivedFrom: nil\n)')
+        with self.assertRaises(guard.UnreadableDeclaration):
+            list(guard.declarations(broken))
+
     def test_a_labelset_with_no_reference_is_not_checked_and_not_counted(self):
         source = _source()
         _, checked = guard.check(source, canon)

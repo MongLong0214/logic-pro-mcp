@@ -44,12 +44,24 @@ enum AXLocalePolicy {
         /// by containment, which were never whole labels and so are not values of anything.
         let derivedFrom: String?
 
+        /// Further rows these strings are ALSO the values of, checked exactly as `derivedFrom` is.
+        ///
+        /// One control can be named by two rows that agree in most languages and part in a few.
+        /// #291: a German Logic 12.3 describes the track header's Mute `Stumm` (read 2026-09-27),
+        /// the value of `Localizable.strings` key `Mute`, and the Mixer strip's Mute `Ton aus`
+        /// (the de-DE census of 2026-09-12), the value of `Mute#acc`. One `derivedFrom` could
+        /// prove only one of them, and a set checked against only the Mixer's row passed while the
+        /// header lookup found nothing in German. Each row
+        /// named here must be covered in every locale, by the same guard, by digest, offline.
+        let alsoDerivedFrom: [String]
+
         init(canonical: String, variants: [String], rationale: String,
-             derivedFrom: String? = nil) {
+             derivedFrom: String? = nil, alsoDerivedFrom: [String] = []) {
             self.canonical = canonical
             self.variants = variants
             self.rationale = rationale
             self.derivedFrom = derivedFrom
+            self.alsoDerivedFrom = alsoDerivedFrom
         }
 
         var labels: [String] {
@@ -1795,10 +1807,12 @@ enum AXLocalePolicy {
 
     static let trackMuteButton = LabelSet(
         canonical: "Mute",
-        variants: ["음소거", "ミュート", "Ton aus", "Silenciar", "Muet", "Muto", "静音", "靜音"],
+        variants: ["음소거", "ミュート", "Ton aus", "Stumm", "Silenciar", "Muet", "Muto", "静音", "靜音"],
         rationale: "Identifies the track Mute button by description substring; read-only state extraction. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's mute button. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#acc` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Mute%23acc#value"
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#acc` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py."
+            + " Derived on 2026-09-27 from a SECOND row as well (#291): the track header and the Mixer strip use different rows in German. On a German Logic 12.3 read that day the header's Mute checkbox is described `Stumm` on all 19 tracks, which is the German value of the plain `Mute` key of the same Localizable.strings, while `Mute#acc` says `Ton aus`, which is how the de-DE census of 2026-09-12 read the Mixer strip's Mute. With only `Mute#acc` the header-mute lookup found no button in German. `Ton aus` stays for the Mixer. The plain row was chosen over the other rows whose German is also `Stumm` because a Portuguese Logic read the same day describes the header Mute `Silenciar`, the plain row's Portuguese value, where `Mute#acc` and the TrackHeaderConfig rows say `Mute`; the two rows part only in German and Portuguese. Three rows the Portuguese reading leaves standing (SongSettingsMovie, MAPlaySurface and MAStepSequencer) carry the same ten values as this one, so no reading can choose between them; this one is in the table the Mixer's row already comes from.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Mute%23acc#value",
+        alsoDerivedFrom: ["logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Mute#value"]
     )
 
     static let trackSoloButton = LabelSet(
