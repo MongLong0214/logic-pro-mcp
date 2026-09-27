@@ -68,11 +68,10 @@
     {"path": "pre.armed", "op": "eq", "value": true, "invariant": true},
     {"path": "reply.state", "op": "eq", "value": "A"},
     {"path": "reply.write_attempted", "op": "eq", "value": false},
-    {"path": "post.armed", "op": "eq", "value": true},
     {"path": "post.armed", "op": "unchanged", "ref": {"obs": "pre.armed"}}
    ],
    "counterexample": [
-    {"observation": "as_found", "replaces": "post", "must_fail": [3, 4]},
+    {"observation": "as_found", "replaces": "post", "must_fail": [3]},
     {"observation": "setup", "replaces": "reply", "must_fail": [2]}
    ],
    "restore": [
@@ -146,6 +145,9 @@
     {"as": "control", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 15, "enabled": true}}},
     {"as": "control_post", "probe": {"name": "armed_set", "args": {}}},
     {"as": "control_undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 15, "enabled": false}}},
+    {"as": "off_home", "call": {"tool": "logic_mixer", "command": "bank", "params": {"direction": "right", "count": 2}}},
+    {"as": "off_home_row", "probe": {"name": "mcu_upper_row", "args": {}}},
+    {"as": "home", "call": {"tool": "logic_mixer", "command": "bank", "params": {"direction": "left", "count": 2}}},
     {"as": "pre", "probe": {"name": "armed_set", "args": {}}},
     {"as": "pre_row", "probe": {"name": "mcu_upper_row", "args": {}}},
     {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 16, "enabled": true}}},
@@ -158,17 +160,18 @@
     {"path": "reply.success", "op": "eq", "value": false},
     {"path": "pre.armed", "op": "eq", "value": [], "invariant": true},
     {"path": "post.armed", "op": "unchanged", "ref": {"obs": "pre.armed"}},
-    {"path": "post_row.upper_row", "op": "unchanged", "ref": {"obs": "pre_row.upper_row"}, "invariant": true}
+    {"path": "post_row.upper_row", "op": "unchanged", "ref": {"obs": "pre_row.upper_row"}}
    ],
    "counterexample": [
     {"observation": "control_post", "replaces": "post", "must_fail": [3]},
-    {"observation": "control", "replaces": "reply", "must_fail": [0, 1]}
+    {"observation": "control", "replaces": "reply", "must_fail": [0, 1]},
+    {"observation": "off_home_row", "replaces": "post_row", "must_fail": [4]}
    ],
    "restore": [],
    "restore_expect": [
     {"path": "post.armed", "op": "eq", "value": []}
    ],
-   "independence": ["control_post", "pre", "pre_row", "post", "post_row"]
+   "independence": ["control_post", "off_home_row", "pre", "pre_row", "post", "post_row"]
   }
  ]
 }

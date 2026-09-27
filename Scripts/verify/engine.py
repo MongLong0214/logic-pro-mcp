@@ -20,17 +20,41 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
   * a canon VALUE citation (`logic-canon://<source>/<locale>#value`): coincidental presence
     anywhere in a locale is not the row the UI uses (ADR-027 D6);
   * a probe the registry does not declare, or args that do not match its declaration;
+  * an expectation whose `ref.obs` reads the step its own path reads: it compares a reading with
+    itself, and a substitution replaces both sides;
   * a counterexample whose `must_fail` expectation does not read the observation it replaces
-    (substituting it could not change the outcome, so it proves nothing);
-  * THE ORDER RULES. A row names its `operation`, the call step it judges; steps run in order.
-    An expectation is an EFFECT unless it says `"invariant": true`. An effect may not read a step
-    bound before the operation (a precondition is an invariant). An effect over an independent
-    step must be listed in some counterexample's `must_fail`, and a counterexample's observation
-    must be bound before the operation: the proof that a check can fail is the pre-state failing
-    it. An invariant must pass but is never credited, so it may not be listed in `must_fail`.
+    (substituting it could not change the outcome, so it proves nothing), or whose observation
+    is not the same reading as the one it replaces (the same probe and args, the same resource,
+    or the same tool and command): a witness of another kind fails a check only because it is
+    another kind of value, which says nothing about the check;
+  * THE ORDER RULES. A row names its `operation`, the call step it judges; steps run in order,
+    and no call follows the operation in `steps` (a reading taken after a second call cannot be
+    credited to the first; later calls belong in `restore`). An expectation READS the step its
+    path names and, when it has one, the step its `ref.obs` names.
+      - An INVARIANT (`"invariant": true`) is a precondition and nothing else: every step it reads
+        is bound BEFORE the operation. An invariant that reads the operation's step or any later
+        step is refused: a reading after the operation is a claim about the operation, and so is
+        an effect.
+      - Every other expectation is an EFFECT. Its path may not name a step bound before the
+        operation. An effect that reads any step bound after the operation must be listed in some
+        counterexample's `must_fail`; no flag exempts one. That covers preservation claims ("the
+        upper row is unchanged"): their witness is a before-operation reading that differs from
+        the preserved one, so the claim FAILS under substitution.
+      - A counterexample's observation is bound before the operation: the proof that a check can
+        fail is a pre-state failing it. An invariant is never credited, so it may not be listed in
+        `must_fail`.
+      - A claim about the operation is measured against the state JUST BEFORE it, after every call
+        that precedes it (a setup call may be what produced the claimed state). An effect compared
+        with another reading (`ref.obs`) before the operation names one bound after the last such
+        call; an effect compared with a fixed value, or with a later reading, is listed by at least
+        one counterexample whose witness is bound after that call. A preservation claim compares
+        with the reading just before the operation, so its witness may be any differing earlier
+        reading.
+      - A `restore_expect` reads the state the row leaves behind: its path names a step bound after
+        the operation or a restore step.
   * THE INDEPENDENCE RULE: a row with no effect over an independent step bound after the
-    operation. An operation's own reply (a `call` step) is never independent. A row whose only
-    falsifiable checks read the reply is self-report.
+    operation that a `must_fail` lists. An operation's own reply (a `call` step) is never
+    independent. A row whose only falsifiable checks read the reply is self-report.
 
 HOW A ROW IS JUDGED -- `evaluate_row`
 -------------------------------------
@@ -44,24 +68,46 @@ else PASS.
 HOW EVIDENCE IS JUDGED -- `judge`
 ---------------------------------
     2  refused     the evidence or its embedded spec is malformed or breaks a rule above, or a
-                   run's measured locale reading is not the locale it is filed under
+                   run's stored locale reading is not the locale it is filed under
     1  failed      a row FAILED in some locale, or a stored verdict differs from the recomputed one
     3  incomplete  nothing failed, but a row was UNREADABLE, a required locale was not run or has
-                   no locale reading, the binary is "unbound", or its provenance does not verify
-                   on this host (the file at binary_path is missing or does not hash to
-                   binary_sha256, or head is not a commit of this repository)
+                   no locale reading, the binary is "unbound", there is no in-process attestation
+                   or it disagrees with the document, or this host disagrees with the binary block
+                   (the file at binary_path is missing or does not hash to binary_sha256, or head
+                   is not a commit of this repository)
     0  clean       every row PASSES in every required locale, the stored verdicts equal the
-                   recomputed ones, and the binary is built-by-verifier with verified provenance
+                   recomputed ones, the binary is built-by-verifier, this host agrees with the
+                   binary block, and an in-process `Attestation` equals the document
 
 A definite failure outranks an incomplete run: a FAIL in the one locale that ran is already an
 answer, and reporting it as "incomplete" would hide it behind the locales that did not.
+
+WHO CAN CERTIFY CLEAN -- `Attestation`
+--------------------------------------
+Every field of an evidence document on disk is written by whoever wrote the file: `binary_path`,
+`binary_sha256`, `head`, each `locale_reading` and every observation. Checking that they agree
+with each other, or with this host, does not show that the verifier produced them. So a document
+read from disk is never clean. `judge` takes an in-process `Attestation`: what the process that
+produced the document measured while producing it. It is `None` on every command-line path that
+reads a file (`recheck`, `record`), and the result is then at best exit 3. Only `verify.py run`
+(P0b-2) builds one, in the process that ran the rows; in P0a only the self-test does. Nothing
+builds one from JSON or from a file, and the self-test's `attestation-built-only-in-process` check
+parses Scripts/verify to hold that. `recheck` recomputes, and can FAIL, REFUSE or report
+incomplete; only `run` certifies clean. A worker cannot hand the verifier a verdict.
+
+The host checks (`host_provenance`) stay as consistency checks: a disagreement counts against the
+evidence, and agreement never grants `measured` on its own.
 """
 from __future__ import annotations
 
+import collections.abc
+import copy
+import dataclasses
 import json
 import os
 import re
 import sys
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
@@ -267,13 +313,14 @@ def row_problems(row: dict, n_sources: int) -> list:
         out.append(f"operation {operation!r} is not a call step; the operation judged is a call")
         return out
     at = order[operation]
+    names = [s["as"] for s in row["steps"]]
+    for name in names[at + 1:]:
+        if "call" in steps[name]:
+            out.append(f"step {name!r} is a call after the operation {operation!r}. A reading taken "
+                       f"after a second call cannot be credited to the first; a call that follows "
+                       f"the operation belongs in restore")
 
-    def when(i):
-        """The step index expectation i reads, or None when its path does not parse or bind."""
-        root = _safe_root(expect[i]["path"]) if i < len(expect) else None
-        return order.get(root)
-
-    listed = set()
+    listed, witnesses = set(), {}
     for k, cx in enumerate(row["counterexample"]):
         for key in ("observation", "replaces"):
             if cx[key] not in steps:
@@ -284,6 +331,13 @@ def row_problems(row: dict, n_sources: int) -> list:
             out.append(f"counterexample[{k}].observation {cx['observation']!r} is not bound before "
                        f"the operation {operation!r}. The counterexample is the pre-state: what the "
                        f"reading would be had the operation done nothing")
+        if cx["observation"] in steps and cx["replaces"] in steps:
+            witness, replaced = reading_of(steps[cx["observation"]]), reading_of(steps[cx["replaces"]])
+            if witness != replaced:
+                out.append(f"counterexample[{k}] puts {cx['observation']!r} ({_shown(witness)}) in place "
+                           f"of {cx['replaces']!r} ({_shown(replaced)}). A witness takes the same reading "
+                           f"as the step it replaces; one of another kind fails a check only because "
+                           f"it is another kind of value")
         if len(set(cx["must_fail"])) != len(cx["must_fail"]):
             out.append(f"counterexample[{k}].must_fail names an expectation twice")
         for i in cx["must_fail"]:
@@ -298,26 +352,86 @@ def row_problems(row: dict, n_sources: int) -> list:
                            f"substitution cannot change its outcome")
             else:
                 listed.add(i)
+                witnesses.setdefault(i, []).append(cx["observation"])
+    calls_before = [n for n in names[:at] if "call" in steps[n]]
+    last_call = order[calls_before[-1]] if calls_before else -1
     credited = set()
     for i, e in enumerate(expect):
-        if e.get("invariant") or when(i) is None:
-            continue
         root = _safe_root(e["path"])
-        if when(i) < at:
+        read = [order[n] for n in read_by(e) if n in order]
+        if root not in order or not read:
+            continue  # the path does not parse or bind; expectation_problems says so
+        latest = names[max(read)]
+        if e.get("invariant"):
+            if max(read) >= at:
+                where = "is the operation" if max(read) == at else "is bound after the operation"
+                out.append(f"expect[{i}] is marked invariant but reads {latest!r}, which {where} "
+                           f"{operation!r}. An invariant is a precondition, read before the "
+                           f"operation. A reading after the operation is a claim about the "
+                           f"operation, and so is an effect: list it in a counterexample's must_fail")
+            continue
+        if order[root] < at:
             out.append(f"expect[{i}] reads {root!r}, bound before the operation {operation!r}, as an "
                        f"effect. An effect is read after the operation it is credited to; a "
                        f"precondition says \"invariant\": true")
-        elif root in independent and when(i) > at:
-            if i in listed:
-                credited.add(i)
+        elif max(read) > at:
+            if i not in listed:
+                out.append(f"expect[{i}] reads {latest!r}, bound after the operation {operation!r}, "
+                           f"and no counterexample's must_fail lists it, so nothing shows it can "
+                           f"fail. Every reading after the operation is a claim about it")
             else:
-                out.append(f"expect[{i}] is an effect over the independent reading {root!r} and no "
-                           f"counterexample's must_fail lists it, so nothing shows it can fail")
+                baseline = _safe_root(e["ref"]["obs"]) if "obs" in (e.get("ref") or {}) else None
+                if baseline in order and order[baseline] < at:
+                    if order[baseline] < last_call:
+                        out.append(f"expect[{i}] compares {latest!r} with {baseline!r}, read before the "
+                                   f"call {calls_before[-1]!r} that precedes the operation {operation!r}. "
+                                   f"A claim about the operation is measured against the state just "
+                                   f"before it; an earlier call may be what changed it")
+                elif calls_before and not any(order.get(w, -1) > last_call for w in witnesses.get(i, [])):
+                    out.append(f"expect[{i}] compares {latest!r} with a fixed value, and every "
+                               f"counterexample that lists it reads a state before the call "
+                               f"{calls_before[-1]!r} that precedes the operation {operation!r}. The "
+                               f"pre-state that shows a claim about the operation failing is the one "
+                               f"just before it; an earlier call may be what produced the claimed state")
+                if root in independent and order[root] > at:
+                    credited.add(i)
+    for j, e in enumerate(row["restore_expect"]):
+        root = _safe_root(e["path"])
+        if root in order and order[root] <= at:
+            out.append(f"restore_expect[{j}] reads {root!r}, which is not bound after the operation "
+                       f"{operation!r}. A restore check reads the state the row leaves behind: a step "
+                       f"after the operation or a restore step")
     if not credited:
         out.append("no effect over an independent reading bound after the operation is listed in a "
                    "counterexample's must_fail. A row whose only falsifiable checks read the "
                    "operation's own reply is self-report (ADR-027 D1, D4)")
     return out
+
+
+def read_by(e: dict) -> list:
+    """The step names an expectation reads: its path's root and, when it has one, its ref.obs root.
+    Unparseable paths are left out; expectation_problems reports them."""
+    names = [_safe_root(e["path"])]
+    ref = e.get("ref") or {}
+    if "obs" in ref:
+        names.append(_safe_root(ref["obs"]))
+    return [n for n in names if n is not None]
+
+
+def reading_of(step: dict) -> tuple:
+    """What a step reads, without the name it is bound to. A wait stores its probe's last reading,
+    so it is the same reading as that probe. A call is its tool and command: a control call on
+    another target returns the same kind of reply."""
+    if "probe" in step or "wait" in step:
+        probe = step["probe"] if "probe" in step else step["wait"]["probe"]
+        return ("probe", probe["name"], json.dumps(probe["args"], sort_keys=True))
+    if "read" in step:
+        return ("read", step["read"]["uri"])
+    return ("call", step["call"]["tool"], step["call"]["command"])
+
+
+def _shown(reading: tuple) -> str:
+    return " ".join(str(part) for part in reading)
 
 
 def _safe_root(path: str):
@@ -384,6 +498,10 @@ def expectation_problems(e: dict, bound: set) -> list:
             ref_root = root_of(ref["obs"])
             if ref_root not in bound:
                 out.append(f"ref {ref['obs']!r} reads {ref_root!r}, which no step before it binds")
+            elif ref_root == _safe_root(e["path"]):
+                out.append(f"ref {ref['obs']!r} reads {ref_root!r}, the step its own path reads: it "
+                           f"compares a reading with itself, and a counterexample that replaces that "
+                           f"step replaces both sides, so nothing can show it failing")
         except ValueError as exc:
             out.append(f"ref: {exc}")
     if ref and "canon" in ref:
@@ -641,11 +759,12 @@ def repo_root() -> str:
 
 
 def host_provenance(binary: dict, repo: str = None):
-    """(True, "") when this host can measure what the binary block claims, else (False, why).
+    """(True, "") when this host agrees with the binary block, else (False, why).
 
-    Measured here, at judgement: the file at binary_path exists and re-hashes to binary_sha256, and
-    head names a commit of the repository. That the binary was BUILT from head is the runner's
-    construction (P0b), not something a file on disk can show.
+    A CONSISTENCY check, measured here at judgement: the file at binary_path exists and re-hashes
+    to binary_sha256, and head names a commit of the repository. A disagreement counts against the
+    evidence. Agreement grants nothing: whoever wrote the file chose all three fields, and pointing
+    them at any real file and any real commit makes them agree. Only an `Attestation` binds them.
     """
     path, sha, head = binary.get(E.BINARY_PATH), binary.get(E.BINARY_SHA256), binary.get(E.HEAD)
     if not (isinstance(path, str) and os.path.isfile(path)):
@@ -666,12 +785,86 @@ def host_provenance(binary: dict, repo: str = None):
 
 
 MISMATCHED, UNVERIFIED, MEASURED = "mismatched", "unverified", "measured"
+UNATTESTED = "unattested"
+
+UNATTESTED_WHY = ("evidence read from a file cannot attest to its own build, locale or observations; "
+                  "only `verify.py run` attests, in the process that produced it (P0b-2)")
+
+
+@dataclasses.dataclass(frozen=True)
+class Attestation:
+    """What the process that produced an evidence document measured while producing it.
+
+    An in-process value, never a file format. P0b-2's `verify.py run` builds one in the process that
+    built the binary and ran the rows, and passes it to `judge` with the document it produced. In P0a
+    only the self-test builds one. Nothing builds one from JSON or from a file: the self-test's
+    `attestation-built-only-in-process` check parses Scripts/verify and fails if anything but the
+    allowlisted in-process site constructs, aliases, subclasses or unpickles one.
+
+        binary_sha256    the binary's sha256, measured by the builder right after it built it
+        head             the 40-hex commit the verifier checked out itself
+        locale_readings  per locale, the locale reading the runner took (live/locale.py reading());
+                         None when the runner took none for that locale
+        evidence_sha256  sha256 of evidence_doc.canonical_bytes(document) at the moment the runner
+                         produced it
+
+    `judge` grants clean only when every one of these equals the document under judgement.
+    """
+    binary_sha256: str
+    head: str
+    locale_readings: dict
+    evidence_sha256: str
+
+    def __post_init__(self):
+        for name, pattern in (("binary_sha256", HEX64), ("head", HEX40), ("evidence_sha256", HEX64)):
+            value = getattr(self, name)
+            if not (isinstance(value, str) and pattern.match(value)):
+                raise ValueError(f"Attestation.{name} {value!r} is not a digest the runner measured")
+        if not isinstance(self.locale_readings, collections.abc.Mapping):
+            raise ValueError("Attestation.locale_readings maps each locale run to the reading taken")
+        # A snapshot: the runner's dicts may change after the attestation is taken; this may not.
+        object.__setattr__(self, "locale_readings",
+                           types.MappingProxyType(copy.deepcopy(dict(self.locale_readings))))
+
+
+def attestation_problems(attestation, doc: dict) -> list:
+    """Why `doc` is not the document this attestation was taken over. Empty only when every field
+    the attestation holds equals the document, including the digest of its canonical bytes."""
+    if attestation is None:
+        return [f"attestation: {UNATTESTED_WHY}"]
+    if not isinstance(attestation, Attestation):
+        return [f"attestation: a {type(attestation).__name__} is not an in-process Attestation; "
+                f"{UNATTESTED_WHY}"]
+    out = []
+    binary = doc["binary"]
+    if attestation.binary_sha256 != binary.get(E.BINARY_SHA256):
+        out.append(f"attestation: the evidence's binary_sha256 {str(binary.get(E.BINARY_SHA256))[:12]} "
+                   f"is not the {attestation.binary_sha256[:12]} the builder measured")
+    if attestation.head != binary.get(E.HEAD):
+        out.append(f"attestation: the evidence's head {str(binary.get(E.HEAD))[:12]} is not the "
+                   f"{attestation.head[:12]} the verifier checked out")
+    runs = doc["runs"]
+    for locale in sorted(set(runs) | set(attestation.locale_readings)):
+        if locale not in attestation.locale_readings:
+            out.append(f"attestation: {locale}: the runner took no locale reading for this run")
+        elif locale not in runs:
+            out.append(f"attestation: {locale}: the runner ran this locale and the evidence has no run")
+        elif not P.same(attestation.locale_readings[locale], runs[locale].get(E.LOCALE_READING)):
+            out.append(f"attestation: {locale}: the stored locale reading is not the one the runner took")
+    digest = E.sha256_of(doc)
+    if attestation.evidence_sha256 != digest:
+        out.append(f"attestation: the evidence's canonical bytes hash to {digest[:12]}, not the "
+                   f"{attestation.evidence_sha256[:12]} the runner produced; it changed after the "
+                   f"attestation was taken")
+    return out
 
 
 def run_locale_status(locale: str, run: dict):
-    """(MEASURED|UNVERIFIED|MISMATCHED, why) -- whether the run's own locale reading says it ran in
-    the locale it is filed under. A reading that says another language is MISMATCHED (refused); a
-    reading that is absent or could not read the setting or the title is UNVERIFIED (incomplete)."""
+    """(MEASURED|UNVERIFIED|MISMATCHED, why) -- whether the run's stored locale reading says it ran
+    in the locale it is filed under. A reading that says another language is MISMATCHED (refused); a
+    reading that is absent or could not read the setting or the title is UNVERIFIED (incomplete).
+    The stored reading is a claim of whoever wrote the file: it counts toward clean only when it is
+    the reading the runner took, which `attestation_problems` checks."""
     reading = run.get(E.LOCALE_READING)
     if reading is None:
         return UNVERIFIED, "the run carries no locale reading"
@@ -709,9 +902,11 @@ def compare_verdicts(stored: dict, recomputed: dict) -> list:
 
 
 def judge(doc, schema: dict = None, resolve_canon=resolve_canon_offline, expected_spec=None,
-          provenance=host_provenance) -> dict:
+          attestation=None, provenance=host_provenance) -> dict:
     """The verdict on one evidence document. `exit` is the process exit code; everything else
-    says why. `provenance` is (verified: bool, why) for the binary block, measured on this host."""
+    says why. `attestation` is the in-process `Attestation` of the run that produced `doc`, or None:
+    every command-line path that reads a file passes None, and then the best exit is 3.
+    `provenance` is this host's consistency check of the binary block, (agrees: bool, why)."""
     result = {"exit": EXIT_REFUSED, "refusals": [], "failures": [], "incomplete": [],
               "mismatches": [], "verdicts": {}, "provenance": None}
     refusals = evidence_problems(doc)
@@ -744,16 +939,18 @@ def judge(doc, schema: dict = None, resolve_canon=resolve_canon_offline, expecte
     result["verdicts"] = recomputed
     counted = {k: v for k, v in doc["verdicts"].items() if k in recomputed or k not in doc["runs"]}
     result["mismatches"] = compare_verdicts(counted, recomputed)
+    unattested = attestation_problems(attestation, doc)
+    result["incomplete"] += unattested
     binary = doc["binary"]
     if binary.get(E.BINDING) != E.BOUND:
         result["provenance"] = E.UNBOUND
         result["incomplete"].append(f"binary: binding is {binary.get(E.BINDING)!r}; only a binary "
                                     f"the verifier built from the head can be clean")
     else:
-        verified, why = provenance(binary)
-        result["provenance"] = MEASURED if verified else UNVERIFIED
-        if not verified:
+        consistent, why = provenance(binary)
+        if not consistent:
             result["incomplete"].append(f"binary: provenance unverified -- {why}")
+        result["provenance"] = UNATTESTED if unattested else MEASURED if consistent else UNVERIFIED
     if result["refusals"]:
         result["exit"] = EXIT_REFUSED
     elif result["failures"] or result["mismatches"]:

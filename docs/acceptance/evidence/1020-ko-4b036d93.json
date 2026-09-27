@@ -212,11 +212,6 @@
      },
      {
       "path": "post.armed",
-      "op": "eq",
-      "value": true
-     },
-     {
-      "path": "post.armed",
       "op": "unchanged",
       "ref": {
        "obs": "pre.armed"
@@ -228,8 +223,7 @@
       "observation": "as_found",
       "replaces": "post",
       "must_fail": [
-       3,
-       4
+       3
       ]
      },
      {
@@ -526,6 +520,35 @@
       }
      },
      {
+      "as": "off_home",
+      "call": {
+       "tool": "logic_mixer",
+       "command": "bank",
+       "params": {
+        "direction": "right",
+        "count": 2
+       }
+      }
+     },
+     {
+      "as": "off_home_row",
+      "probe": {
+       "name": "mcu_upper_row",
+       "args": {}
+      }
+     },
+     {
+      "as": "home",
+      "call": {
+       "tool": "logic_mixer",
+       "command": "bank",
+       "params": {
+        "direction": "left",
+        "count": 2
+       }
+      }
+     },
+     {
       "as": "pre",
       "probe": {
        "name": "armed_set",
@@ -595,8 +618,7 @@
       "op": "unchanged",
       "ref": {
        "obs": "pre_row.upper_row"
-      },
-      "invariant": true
+      }
      }
     ],
     "counterexample": [
@@ -614,6 +636,13 @@
        0,
        1
       ]
+     },
+     {
+      "observation": "off_home_row",
+      "replaces": "post_row",
+      "must_fail": [
+       4
+      ]
      }
     ],
     "restore": [],
@@ -626,6 +655,7 @@
     ],
     "independence": [
      "control_post",
+     "off_home_row",
      "pre",
      "pre_row",
      "post",
@@ -634,7 +664,7 @@
    }
   ]
  },
- "spec_sha256": "9a81d879bb845947f6e2954be7a50f2e149282be7585d1393d6adab6e3e95390",
+ "spec_sha256": "c8534a1a679fd2281f6102aca8ac9be1d05b8f40fdccccec6169b0e22714d1bf",
  "binary": {
   "binary_path": null,
   "binary_sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
@@ -1127,6 +1157,53 @@
         "transform": "stored whole"
        }
       },
+      "off_home": {
+       "step": {
+        "as": "off_home",
+        "call": {
+         "tool": "logic_mixer",
+         "command": "bank",
+         "params": {
+          "direction": "right",
+          "count": 2
+         }
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set never banked the MCU window away from home, so it read no upper row that differs from the one before the arm; nothing it stored can witness the unchanged-row claim failing",
+       "converted_from": {
+        "record": null
+       }
+      },
+      "off_home_row": {
+       "step": {
+        "as": "off_home_row",
+        "probe": {
+         "name": "mcu_upper_row",
+         "args": {}
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set never banked the MCU window away from home, so it read no upper row that differs from the one before the arm; nothing it stored can witness the unchanged-row claim failing",
+       "converted_from": {
+        "record": null
+       }
+      },
+      "home": {
+       "step": {
+        "as": "home",
+        "call": {
+         "tool": "logic_mixer",
+         "command": "bank",
+         "params": {
+          "direction": "left",
+          "count": 2
+         }
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set never banked the MCU window away from home, so it read no upper row that differs from the one before the arm; nothing it stored can witness the unchanged-row claim failing",
+       "converted_from": {
+        "record": null
+       }
+      },
       "pre": {
        "step": {
         "as": "pre",
@@ -1247,11 +1324,9 @@
      "UNREADABLE",
      "UNREADABLE",
      "UNREADABLE",
-     "UNREADABLE",
      "UNREADABLE"
     ],
     "counterexample": [
-     "UNREADABLE",
      "UNREADABLE",
      "UNREADABLE"
     ],
@@ -1263,9 +1338,7 @@
      "expect[1] UNREADABLE: reply.state -- reply: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
      "expect[2] UNREADABLE: reply.write_attempted -- reply: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
      "expect[3] UNREADABLE: post.armed -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
-     "expect[4] UNREADABLE: post.armed -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
      "counterexample UNREADABLE: expect[3] on 'as_found' -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
-     "counterexample UNREADABLE: expect[4] on 'as_found' -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
      "counterexample UNREADABLE: expect[2] on 'setup' -- reply: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
      "restore UNREADABLE: restore_expect[0] -- restored: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung"
     ]
@@ -1306,7 +1379,7 @@
     "reasons": []
    },
    "clamped-last-bank-refused-unchanged": {
-    "verdict": "PASS",
+    "verdict": "UNREADABLE",
     "expect": [
      "PASS",
      "PASS",
@@ -1317,12 +1390,15 @@
     "counterexample": [
      "FAIL",
      "FAIL",
-     "FAIL"
+     "FAIL",
+     "UNREADABLE"
     ],
     "restore": [
      "PASS"
     ],
-    "reasons": []
+    "reasons": [
+     "counterexample UNREADABLE: expect[4] on 'off_home_row' -- post_row: the runner could not read it: live_1020_mcu_set_arm_is_a_set never banked the MCU window away from home, so it read no upper row that differs from the one before the arm; nothing it stored can witness the unchanged-row claim failing"
+    ]
    }
   }
  },

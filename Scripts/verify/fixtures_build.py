@@ -55,6 +55,7 @@ READINGS = {
         "after": {"title": "Smart Controls"}}},
     "spec-ops.json": {"every-operator": {
         "before": {"armed": [], "mode": "idle", "gone": None, "stable": 7, "title": "Tracks"},
+        "other": {"armed": [3], "mode": "idle", "gone": "left", "stable": 9, "title": None},
         "op": {"state": "A", "success": True},
         "after": {"armed": [15], "mode": "armed", "gone": None, "stable": 7, "title": "Smart Controls"}}},
 }

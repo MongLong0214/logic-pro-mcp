@@ -34,6 +34,12 @@
       }
      },
      {
+      "as": "other",
+      "read": {
+       "uri": "logic://tracks"
+      }
+     },
+     {
       "as": "op",
       "call": {
        "tool": "logic_tracks",
@@ -87,8 +93,7 @@
       "value": [
        15,
        16
-      ],
-      "invariant": true
+      ]
      },
      {
       "path": "after.armed",
@@ -119,18 +124,15 @@
       "op": "unchanged",
       "ref": {
        "obs": "before.stable"
-      },
-      "invariant": true
+      }
      },
      {
       "path": "after.gone",
-      "op": "is_null",
-      "invariant": true
+      "op": "is_null"
      },
      {
       "path": "after.title",
-      "op": "not_null",
-      "invariant": true
+      "op": "not_null"
      },
      {
       "path": "after.title",
@@ -162,6 +164,16 @@
        8,
        12
       ]
+     },
+     {
+      "observation": "other",
+      "replaces": "after",
+      "must_fail": [
+       4,
+       9,
+       10,
+       11
+      ]
      }
     ],
     "restore": [],
@@ -173,12 +185,13 @@
     ],
     "independence": [
      "before",
+     "other",
      "after"
     ]
    }
   ]
  },
- "spec_sha256": "02dc82077f18aee806c94793cc11e37e98ab4be3e6b1a22112e08be953e62f47",
+ "spec_sha256": "fd6b0e5762b08da634f16e7f3418ddda54e4136afbe863799594de09a6109d82",
  "binary": {
   "binary_path": null,
   "binary_sha256": null,
@@ -228,6 +241,16 @@
        },
        "raw": "{\"armed\": [], \"gone\": null, \"mode\": \"idle\", \"stable\": 7, \"title\": \"Tracks\"}",
        "raw_bytes": 75
+      },
+      "other": {
+       "step": {
+        "as": "other",
+        "read": {
+         "uri": "logic://tracks"
+        }
+       },
+       "raw": "{\"armed\": [3], \"gone\": \"left\", \"mode\": \"idle\", \"stable\": 9, \"title\": null}",
+       "raw_bytes": 74
       },
       "op": {
        "step": {
@@ -280,6 +303,10 @@
      "PASS"
     ],
     "counterexample": [
+     "FAIL",
+     "FAIL",
+     "FAIL",
+     "FAIL",
      "FAIL",
      "FAIL",
      "FAIL",

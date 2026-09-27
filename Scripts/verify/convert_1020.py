@@ -26,6 +26,11 @@ WHAT IT CANNOT
   * ROWS THE HARNESS NEVER DROVE. `arm-armed-writes-nothing` has no observation: the harness did
     not arm an armed track (its own record's limits say the Accessibility rung answers that no-op
     first). Its steps are stored as unreadable, and the row is UNREADABLE, not PASS.
+  * A WITNESS THE HARNESS NEVER TOOK. The last row's unchanged-upper-row claim is an effect, so
+    its counterexample needs an upper row that differs from the one before the arm (`off_home_row`,
+    read with the MCU window banked away from home). The harness only read the row at home, before
+    and after the arm. `off_home`, `off_home_row` and `home` are stored as unreadable, and that row
+    is UNREADABLE, not PASS: nothing in the file shows the claim could have failed.
   * TRUNCATED FIELDS. A check's `observed.observation` / `counterexample` was `repr(...)[:400]`. A
     string that no longer parses is stored as unreadable with that reason; none of the fields this
     mapping reads was cut in the 4b036d93 run, and the code path exists for the ones that would be.
@@ -51,6 +56,9 @@ SPEC_PATH = "docs/acceptance/1020.json"
 TRUNCATION = "cut by Scripts/livekit/evidence.py's repr(...)[:400] and no longer parses"
 NOT_DRIVEN = ("live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed "
               "track, because the Accessibility rung answers that no-op before the MCU rung")
+NO_WITNESS = ("live_1020_mcu_set_arm_is_a_set never banked the MCU window away from home, so it read no "
+              "upper row that differs from the one before the arm; nothing it stored can witness the "
+              "unchanged-row claim failing")
 
 
 class Source:
@@ -155,6 +163,9 @@ def mapping(src: Source) -> dict:
             "reply": (arm16, p_arm16, None),
             "post": ({"armed": set_after}, p_sa, w_sa),
             "post_row": ({"upper_row": row_after}, p_ra, w_ra),
+            "off_home": (None, {"record": None}, NO_WITNESS),
+            "off_home_row": (None, {"record": None}, NO_WITNESS),
+            "home": (None, {"record": None}, NO_WITNESS),
         },
     }
 

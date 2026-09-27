@@ -6,11 +6,15 @@ Everything here raises NotImplementedError. The signatures are the contract P0b 
   * The binary is BUILT BY THE VERIFIER from a clean detached checkout of the exact head, and its
     sha256 is measured from the file it built. Only then is `binding` "built-by-verifier"; the
     engine treats anything else as never clean.
+  * The run builds the `engine.Attestation` in process, from what it measured itself: the built
+    binary's sha256, the head it checked out, each locale's reading, and the sha256 of the
+    evidence bytes it produced. Nothing reads one back from a file; without it nothing is clean.
   * Observations are stored whole through `evidence_doc.make_observation(step, raw_text)`, or as
     `evidence_doc.unreadable_observation(step, reason)` when a read fails. A runner never stores a
     default in place of a reading and never stores a pass flag: it has none to store.
   * Verdicts come from `engine.evaluate_run(spec, run, locale)`, which is what `verdicts[locale]`
-    holds, and the process exit is `engine.judge(doc)["exit"]`.
+    holds, and the process exit is `engine.judge(doc, attestation=<that attestation>)["exit"]`.
+    Records are written by `verify.record_attested` with the same attestation.
   * The lifecycle is sampled per step, not per run: screen lock, a modal or open menu (layer > 0),
     and server exclusivity (no second server holding the MCU ports). A step taken while one of
     those is dirty is stored as unreadable with that reason.
@@ -78,7 +82,8 @@ def execute_step(session: Session, step: dict) -> dict:
 def run_spec(spec: dict, spec_path: str, head: str, locales: list, out_path: str) -> int:
     """Build, then for each locale: switch, open the fixture, run every row's steps and restore
     steps, store the observations, compute verdicts with the engine, write the evidence document
-    atomically, and return engine.judge(doc)["exit"]."""
+    atomically, and return engine.judge(doc, attestation=...)["exit"] with the attestation built
+    from what this process measured."""
     raise NotImplementedError("P0b")
 
 

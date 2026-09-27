@@ -3,18 +3,31 @@
 
     verify.py check-spec <spec>                  is this acceptance document admissible?
     verify.py recheck <evidence> [--spec <spec>] recompute every verdict from stored observations
-    verify.py record <evidence> --out <dir>      generate observation records from evidence
+    verify.py record <evidence> --out <dir>      refused (exit 2): a file cannot attest; see below
     verify.py run ... / verify.py batch ...      P0b: the live lifecycle (stubs; exit 2)
     verify.py self-test                          fixtures and engine mutants, offline
 
 EXIT CODES
 ----------
-    0  clean       check-spec: admissible. recheck: every row PASSES in every required locale,
-                   the stored verdicts equal the recomputed ones, and the binary is bound.
+    0  clean       check-spec: admissible. recheck: never -- see below.
     1  failed      a row FAILED, a stored verdict disagrees with the engine, or self-test failed
-    2  refused     usage error, malformed input, or a refusal rule (engine.validate_spec)
+    2  refused     usage error, malformed input, a refusal rule (engine.validate_spec), or
+                   `record` of a file
     3  incomplete  unreadable or incomplete: a row UNREADABLE, a locale not run, an unbound binary,
-                   or a source whose text could not be fetched
+                   a source whose text could not be fetched -- and every `recheck` that nothing
+                   failed or refused, because evidence read from a file has no attestation
+
+ONLY `run` CERTIFIES CLEAN
+--------------------------
+`recheck` reads a file, and every field of a file was written by whoever wrote it. It recomputes
+every verdict and can FAIL, REFUSE or report incomplete; it never reports clean. Clean needs an
+in-process `engine.Attestation`, which only the process that built the binary and ran the rows
+holds: `verify.py run` (P0b-2). A worker cannot hand the verifier a verdict.
+
+`record` of a file is refused with exit 2, not 3. Exit 3 says the evidence could still become
+clean with more observations; no content of a file can make `record` write, so the command itself
+is refused, as `run` and `batch` are in P0a. The recording logic is `record_attested`, which takes
+an attestation in process; `run` will call it, and the self-test exercises it that way.
 
 This file does I/O and printing only. Every verdict comes from `engine.py`.
 
@@ -139,20 +152,25 @@ def cmd_recheck(args) -> int:
         if expected is None:
             print(why)
             return engine.EXIT_REFUSED
-    result = engine.judge(doc, expected_spec=expected)
+    result = engine.judge(doc, expected_spec=expected, attestation=None)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=1))
         return result["exit"]
+    return report(result, f"recheck: {args.evidence}")
+
+
+def report(result: dict, label: str) -> int:
+    """Print the engine's result and return its exit code."""
     for locale in sorted(result["verdicts"]):
         for rid, verdict in result["verdicts"][locale].items():
             print(f"{verdict['verdict']:<10} {locale}/{rid}")
             for reason in verdict["reasons"]:
                 print(f"           {reason}")
-    for key, label in (("refusals", "REFUSED"), ("mismatches", "MISMATCH"),
-                       ("failures", "FAILED"), ("incomplete", "INCOMPLETE")):
+    for key, tag in (("refusals", "REFUSED"), ("mismatches", "MISMATCH"),
+                     ("failures", "FAILED"), ("incomplete", "INCOMPLETE")):
         for line in result[key]:
-            print(f"{label} {line}")
-    print(f"recheck: {args.evidence}: {WORDS[result['exit']]} (exit {result['exit']})")
+            print(f"{tag} {line}")
+    print(f"{label}: {WORDS[result['exit']]} (exit {result['exit']})")
     return result["exit"]
 
 
@@ -212,8 +230,9 @@ def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> d
         "reverify": {
             "kind": "script",
             "command": f"python3 Scripts/verify/verify.py recheck docs/observations/{evidence_rel}",
-            "expected": "the verdicts listed in observations; exit 0 only when every row passes in "
-                        "every locale the spec requires and the binary is bound",
+            "expected": "the verdicts listed in observations. recheck reads a file, so it exits 3 "
+                        "at best: only `verify.py run` certifies clean. It exits 1 if a verdict "
+                        "listed here is not the one the engine recomputes",
             "cost": "offline: reads the stored observations and docs/canon/index",
         },
         "depends": [],
@@ -221,7 +240,9 @@ def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> d
                   f"published under their own sha256 as {evidence_rel}. The runner stored each "
                   f"step's raw text untruncated; Scripts/verify/engine.py parsed it and computed "
                   f"every verdict. Binary sha256 {binary[E.BINARY_SHA256]}, head {binary[E.HEAD]}, "
-                  f"binding {binary[E.BINDING]}, provenance re-measured on the recording host.",
+                  f"binding {binary[E.BINDING]}. The run that produced the evidence attested the "
+                  f"binary, head, locale readings and evidence digest in process, and the "
+                  f"recording host's file checks agreed.",
         "observations": observations,
         "conclusion": f"Row verdicts in {locale}. {listing}.",
         "limits": [
@@ -243,22 +264,30 @@ def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> d
 
 
 def cmd_record(args) -> int:
-    """Judge the evidence BYTES once, publish exactly those bytes under their sha256, then write
-    records that cite that name. A later run can never take an earlier record's evidence."""
+    """Refused: a file cannot attest to how it was made. See the module docstring for why exit 2."""
+    print(f"REFUSED record {args.evidence}: {engine.UNATTESTED_WHY}. `run` records the evidence it "
+          f"produced; `recheck` shows a file's verdicts.")
+    print("record: 0 record(s) written (exit 2)")
+    return engine.EXIT_REFUSED
+
+
+def record_attested(data: bytes, attestation, out: str) -> int:
+    """Judge the evidence BYTES once, with the attestation of the run that produced them, publish
+    exactly those bytes under their sha256, then write records that cite that name. A later run
+    can never take an earlier record's evidence. In-process only: `run` (P0b-2) calls it with its
+    own attestation; no command-line path reaches it."""
     try:
-        with open(args.evidence, "rb") as handle:
-            data = handle.read()
         doc = json.loads(data.decode("utf-8"))
-    except (OSError, ValueError) as exc:
-        print(f"REFUSED {args.evidence}: {exc}")
+    except ValueError as exc:
+        print(f"REFUSED evidence: {exc}")
         return engine.EXIT_REFUSED
-    result = engine.judge(doc)
+    result = engine.judge(doc, attestation=attestation)
     if result["exit"] == engine.EXIT_REFUSED:
         for line in result["refusals"]:
             print(f"REFUSED {line}")
         return engine.EXIT_REFUSED
     if result["provenance"] != engine.MEASURED:
-        why = [line for line in result["incomplete"] if line.startswith("binary:")]
+        why = [line for line in result["incomplete"] if line.startswith(("binary:", "attestation:"))]
         print(f"record: refused to write -- provenance is {result['provenance']!r} "
               f"({'; '.join(why)}), so a record would claim a binary the evidence cannot prove (exit 3)")
         return engine.EXIT_INCOMPLETE
@@ -274,12 +303,12 @@ def cmd_record(args) -> int:
             ready.append(locale)
     written = []
     if ready:
-        name = E.publish_content_addressed(os.path.join(args.out, "evidence"), data)
+        name = E.publish_content_addressed(os.path.join(out, "evidence"), data)
         evidence_rel = f"evidence/{name}"
-        print(f"wrote {os.path.join(args.out, evidence_rel)}")
+        print(f"wrote {os.path.join(out, evidence_rel)}")
         for locale in ready:
             record = build_record(doc, locale, result["verdicts"][locale], evidence_rel)
-            path = os.path.join(args.out, f"{record['id']}.json")
+            path = os.path.join(out, f"{record['id']}.json")
             E.write_atomic(path, record)
             written.append(path)
     for path in written:
@@ -318,7 +347,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--spec", help="also require the embedded spec to equal this document")
     p.add_argument("--json", action="store_true", help="print the engine's result as JSON")
     p.set_defaults(func=cmd_recheck)
-    p = sub.add_parser("record", help="generate observation records from evidence")
+    p = sub.add_parser("record", help="refused: a file cannot attest; `run` records what it produced")
     p.add_argument("evidence")
     p.add_argument("--out", required=True, help="the records directory, e.g. docs/observations")
     p.set_defaults(func=cmd_record)

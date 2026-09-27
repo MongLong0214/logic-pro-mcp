@@ -49,14 +49,17 @@ UNREADABLE. Audit A found observations cut at 400 characters (`repr(...)[:400]`)
 as six envelope keys; nothing in this module shortens a value, and the engine can tell when
 something else did.
 
-PROVENANCE IS MEASURED WHERE IT IS JUDGED
------------------------------------------
-`binding` can only lower a verdict. "built-by-verifier" is what P0b writes after building the
-binary itself from a clean detached checkout of `head`; anything else can never be clean. And the
-label alone is not enough: for a clean result the engine re-hashes `binary_path` on the host doing
-the judging and requires `binary_sha256`, and requires `head` to name a commit of the repository.
-A run's key is likewise checked against its `locale_reading`: a run filed under `en` whose reading
-says Logic was in Korean is refused, and a run with no reading is at best incomplete.
+A FILE CANNOT ATTEST TO HOW IT WAS MADE
+---------------------------------------
+Every field below is written by whoever writes the file, so none of them can make a document
+clean. `binding` can only lower a verdict: "built-by-verifier" is what P0b writes after building
+the binary itself from a clean detached checkout of `head`, and anything else can never be clean.
+The engine's host checks (re-hash `binary_path` against `binary_sha256`; `head` names a commit of
+the repository) are consistency checks: a disagreement counts against the document, and agreement
+grants nothing. A run's key is checked against its `locale_reading`: a run filed under `en` whose
+reading says Logic was in Korean is refused, and a run with no reading is at best incomplete. But
+a stored reading is a claim. Clean needs `engine.Attestation`, held in process by the run that
+produced the document (engine.py, "WHO CAN CERTIFY CLEAN").
 
 Writes are atomic: a temporary file in the destination directory, fsync, then `os.replace`.
 """
