@@ -1,0 +1,1329 @@
+{
+ "format": "lpm-evidence/1",
+ "spec_path": "docs/acceptance/1020.json",
+ "spec": {
+  "format": "lpm-acceptance/1",
+  "issue": 1020,
+  "surface": "system.midi",
+  "sources": [
+   {
+    "doc": "issue:1020",
+    "sha": null,
+    "quote": "reads the current state first, and presses only when it differs, then confirms the change by readback"
+   },
+   {
+    "doc": "issue:1020",
+    "sha": null,
+    "quote": "refuses, so the router moves on to the next channel."
+   },
+   {
+    "doc": "issue:1020",
+    "sha": null,
+    "quote": "A toggle must not be presented as a set."
+   },
+   {
+    "doc": "docs/observations/2026-09-27-ko-KR-mcu-set-arm-sets-instead-of-toggling.json",
+    "sha": "d7fb006de0ead0e94cf3a6f73eed709a983386dc",
+    "quote": "does the same hold for a track in bank 1, and is a track in the short last bank refused with nothing armed?"
+   }
+  ],
+  "fixture": {
+   "id": "lpm-locale-campaign-19",
+   "note": "The 19-track lpm-locale-campaign project with nothing armed, the Mackie Control surface bound, and the server started with LOGIC_PRO_MCP_ARM_KEYCODE set to a value that does not parse, so the Accessibility arm rung refuses arm_key_config_invalid (not terminal) and the router walks on to the MCU rung. Track 15 is strip 7 of bank 1; track 16 sits in the last bank, which Logic stops short at the last strip."
+  },
+  "locales": "all",
+  "rows": [
+   {
+    "id": "arm-unarmed-sets",
+    "criterion": 0,
+    "steps": [
+     {
+      "as": "pre",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     },
+     {
+      "as": "reply",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 0,
+        "enabled": true
+       }
+      }
+     },
+     {
+      "as": "post",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     }
+    ],
+    "expect": [
+     {
+      "path": "reply.state",
+      "op": "eq",
+      "value": "A"
+     },
+     {
+      "path": "reply.write_source",
+      "op": "eq",
+      "value": "mcu"
+     },
+     {
+      "path": "reply.write_attempted",
+      "op": "eq",
+      "value": true
+     },
+     {
+      "path": "post.armed",
+      "op": "eq",
+      "value": true
+     },
+     {
+      "path": "post.armed",
+      "op": "changed",
+      "ref": {
+       "obs": "pre.armed"
+      }
+     }
+    ],
+    "counterexample": [
+     {
+      "observation": "pre",
+      "replaces": "post",
+      "must_fail": [
+       3,
+       4
+      ]
+     }
+    ],
+    "restore": [
+     {
+      "as": "undo",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 0,
+        "enabled": false
+       }
+      }
+     },
+     {
+      "as": "restored",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     }
+    ],
+    "restore_expect": [
+     {
+      "path": "restored.armed",
+      "op": "eq",
+      "ref": {
+       "obs": "pre.armed"
+      }
+     }
+    ],
+    "independence": [
+     "pre",
+     "post"
+    ]
+   },
+   {
+    "id": "arm-armed-writes-nothing",
+    "criterion": 0,
+    "steps": [
+     {
+      "as": "as_found",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     },
+     {
+      "as": "setup",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 0,
+        "enabled": true
+       }
+      }
+     },
+     {
+      "as": "pre",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     },
+     {
+      "as": "reply",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 0,
+        "enabled": true
+       }
+      }
+     },
+     {
+      "as": "post",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     }
+    ],
+    "expect": [
+     {
+      "path": "pre.armed",
+      "op": "eq",
+      "value": true
+     },
+     {
+      "path": "reply.state",
+      "op": "eq",
+      "value": "A"
+     },
+     {
+      "path": "reply.write_attempted",
+      "op": "eq",
+      "value": false
+     },
+     {
+      "path": "post.armed",
+      "op": "eq",
+      "value": true
+     },
+     {
+      "path": "post.armed",
+      "op": "unchanged",
+      "ref": {
+       "obs": "pre.armed"
+      }
+     }
+    ],
+    "counterexample": [
+     {
+      "observation": "as_found",
+      "replaces": "post",
+      "must_fail": [
+       3,
+       4
+      ]
+     },
+     {
+      "observation": "setup",
+      "replaces": "reply",
+      "must_fail": [
+       2
+      ]
+     }
+    ],
+    "restore": [
+     {
+      "as": "undo",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 0,
+        "enabled": false
+       }
+      }
+     },
+     {
+      "as": "restored",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     }
+    ],
+    "restore_expect": [
+     {
+      "path": "restored.armed",
+      "op": "eq",
+      "ref": {
+       "obs": "as_found.armed"
+      }
+     }
+    ],
+    "independence": [
+     "as_found",
+     "pre",
+     "post"
+    ]
+   },
+   {
+    "id": "disarm-clears",
+    "criterion": 0,
+    "steps": [
+     {
+      "as": "as_found",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     },
+     {
+      "as": "setup",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 0,
+        "enabled": true
+       }
+      }
+     },
+     {
+      "as": "pre",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     },
+     {
+      "as": "reply",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 0,
+        "enabled": false
+       }
+      }
+     },
+     {
+      "as": "post",
+      "probe": {
+       "name": "track_armed",
+       "args": {
+        "index": 0
+       }
+      }
+     }
+    ],
+    "expect": [
+     {
+      "path": "pre.armed",
+      "op": "eq",
+      "value": true
+     },
+     {
+      "path": "reply.state",
+      "op": "eq",
+      "value": "A"
+     },
+     {
+      "path": "reply.write_source",
+      "op": "eq",
+      "value": "mcu"
+     },
+     {
+      "path": "reply.write_attempted",
+      "op": "eq",
+      "value": true
+     },
+     {
+      "path": "post.armed",
+      "op": "eq",
+      "value": false
+     },
+     {
+      "path": "post.armed",
+      "op": "changed",
+      "ref": {
+       "obs": "pre.armed"
+      }
+     }
+    ],
+    "counterexample": [
+     {
+      "observation": "pre",
+      "replaces": "post",
+      "must_fail": [
+       4,
+       5
+      ]
+     }
+    ],
+    "restore": [],
+    "restore_expect": [
+     {
+      "path": "post.armed",
+      "op": "eq",
+      "ref": {
+       "obs": "as_found.armed"
+      }
+     }
+    ],
+    "independence": [
+     "as_found",
+     "pre",
+     "post"
+    ]
+   },
+   {
+    "id": "bank-1-only-the-target-changes",
+    "criterion": 3,
+    "steps": [
+     {
+      "as": "pre",
+      "probe": {
+       "name": "armed_set",
+       "args": {}
+      }
+     },
+     {
+      "as": "reply",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 15,
+        "enabled": true
+       }
+      }
+     },
+     {
+      "as": "post",
+      "probe": {
+       "name": "armed_set",
+       "args": {}
+      }
+     }
+    ],
+    "expect": [
+     {
+      "path": "pre.armed",
+      "op": "eq",
+      "value": []
+     },
+     {
+      "path": "reply.state",
+      "op": "eq",
+      "value": "A"
+     },
+     {
+      "path": "reply.write_source",
+      "op": "eq",
+      "value": "mcu"
+     },
+     {
+      "path": "post.armed",
+      "op": "eq",
+      "value": [
+       15
+      ]
+     }
+    ],
+    "counterexample": [
+     {
+      "observation": "pre",
+      "replaces": "post",
+      "must_fail": [
+       3
+      ]
+     }
+    ],
+    "restore": [
+     {
+      "as": "undo",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 15,
+        "enabled": false
+       }
+      }
+     },
+     {
+      "as": "restored",
+      "probe": {
+       "name": "armed_set",
+       "args": {}
+      }
+     }
+    ],
+    "restore_expect": [
+     {
+      "path": "restored.armed",
+      "op": "eq",
+      "ref": {
+       "obs": "pre.armed"
+      }
+     }
+    ],
+    "independence": [
+     "pre",
+     "post"
+    ]
+   },
+   {
+    "id": "clamped-last-bank-refused-unchanged",
+    "criterion": 1,
+    "steps": [
+     {
+      "as": "control",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 15,
+        "enabled": true
+       }
+      }
+     },
+     {
+      "as": "control_post",
+      "probe": {
+       "name": "armed_set",
+       "args": {}
+      }
+     },
+     {
+      "as": "control_undo",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 15,
+        "enabled": false
+       }
+      }
+     },
+     {
+      "as": "pre",
+      "probe": {
+       "name": "armed_set",
+       "args": {}
+      }
+     },
+     {
+      "as": "pre_row",
+      "probe": {
+       "name": "mcu_upper_row",
+       "args": {}
+      }
+     },
+     {
+      "as": "reply",
+      "call": {
+       "tool": "logic_tracks",
+       "command": "arm",
+       "params": {
+        "index": 16,
+        "enabled": true
+       }
+      }
+     },
+     {
+      "as": "post",
+      "probe": {
+       "name": "armed_set",
+       "args": {}
+      }
+     },
+     {
+      "as": "post_row",
+      "probe": {
+       "name": "mcu_upper_row",
+       "args": {}
+      }
+     }
+    ],
+    "expect": [
+     {
+      "path": "reply.state",
+      "op": "eq",
+      "value": "C"
+     },
+     {
+      "path": "reply.success",
+      "op": "eq",
+      "value": false
+     },
+     {
+      "path": "pre.armed",
+      "op": "eq",
+      "value": []
+     },
+     {
+      "path": "post.armed",
+      "op": "unchanged",
+      "ref": {
+       "obs": "pre.armed"
+      }
+     },
+     {
+      "path": "post_row.upper_row",
+      "op": "unchanged",
+      "ref": {
+       "obs": "pre_row.upper_row"
+      }
+     }
+    ],
+    "counterexample": [
+     {
+      "observation": "control_post",
+      "replaces": "post",
+      "must_fail": [
+       3
+      ]
+     },
+     {
+      "observation": "control",
+      "replaces": "reply",
+      "must_fail": [
+       0,
+       1
+      ]
+     }
+    ],
+    "restore": [],
+    "restore_expect": [
+     {
+      "path": "post.armed",
+      "op": "eq",
+      "value": []
+     }
+    ],
+    "independence": [
+     "control_post",
+     "pre",
+     "pre_row",
+     "post",
+     "post_row"
+    ]
+   }
+  ]
+ },
+ "spec_sha256": "0e5cdb377eeb21e1aabd540cc3ef128dcc996283155bbc351d4bccd7b950cf0b",
+ "binary": {
+  "sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
+  "head": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+  "binding": "unbound",
+  "note": "converted from a livekit evidence file whose artifact.built_from_is_measured is False: the head was inferred from file times, not measured from a build the verifier ran"
+ },
+ "runs": {
+  "ko": {
+   "date": null,
+   "host": null,
+   "rows": {
+    "arm-unarmed-sets": {
+     "observations": {
+      "pre": {
+       "step": {
+        "as": "pre",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": false, \"track\": 0}",
+       "raw_bytes": 28,
+       "converted_from": {
+        "record": 5,
+        "tag": "1020/track-census",
+        "field": "payload.rows[id=0].isArmed",
+        "transform": "one row's isArmed"
+       }
+      },
+      "reply": {
+       "step": {
+        "as": "reply",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": true
+         }
+        }
+       },
+       "raw": "{\"enabled\": true, \"fallback_from_channel\": \"Accessibility\", \"fallback_from_error\": \"arm_key_config_invalid\", \"fallback_from_hint\": \"record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\\\"not-a-keycode\\\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.\", \"function\": \"recArm\", \"observed\": true, \"state\": \"A\", \"success\": true, \"trace_id\": \"lpmcp_12DFA1DF-213F-42C4-8091-3CB84960E15B\", \"track\": 0, \"verification_source\": \"ax_value\", \"verified\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 638,
+       "converted_from": {
+        "record": 7,
+        "tag": "1020/arm-track-0",
+        "field": "payload",
+        "transform": "stored whole"
+       }
+      },
+      "post": {
+       "step": {
+        "as": "post",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": true, \"track\": 0}",
+       "raw_bytes": 27,
+       "converted_from": {
+        "record": 45,
+        "tag": "1020/arm-through-the-mcu-sets-and-confirms",
+        "field": "observed.observation['armed_in_track_list_after']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      },
+      "undo": {
+       "step": {
+        "as": "undo",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": false
+         }
+        }
+       },
+       "raw": "{\"enabled\": false, \"fallback_from_channel\": \"Accessibility\", \"fallback_from_error\": \"arm_key_config_invalid\", \"fallback_from_hint\": \"record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\\\"not-a-keycode\\\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.\", \"function\": \"recArm\", \"observed\": false, \"state\": \"A\", \"success\": true, \"trace_id\": \"lpmcp_D6CEC9F7-41A5-4EB5-989D-8A0338BB0DDC\", \"track\": 0, \"verification_source\": \"ax_value\", \"verified\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 640,
+       "converted_from": {
+        "record": 42,
+        "tag": "1020/disarm-track-0",
+        "field": "payload",
+        "transform": "stored whole"
+       }
+      },
+      "restored": {
+       "step": {
+        "as": "restored",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": false, \"track\": 0}",
+       "raw_bytes": 28,
+       "converted_from": {
+        "record": 47,
+        "tag": "1020/disarm-through-the-mcu-clears-the-arm",
+        "field": "observed.observation['armed_in_track_list_after']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      }
+     }
+    },
+    "arm-armed-writes-nothing": {
+     "observations": {
+      "as_found": {
+       "step": {
+        "as": "as_found",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+       "converted_from": {
+        "record": null
+       }
+      },
+      "setup": {
+       "step": {
+        "as": "setup",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": true
+         }
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+       "converted_from": {
+        "record": null
+       }
+      },
+      "pre": {
+       "step": {
+        "as": "pre",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+       "converted_from": {
+        "record": null
+       }
+      },
+      "reply": {
+       "step": {
+        "as": "reply",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": true
+         }
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+       "converted_from": {
+        "record": null
+       }
+      },
+      "post": {
+       "step": {
+        "as": "post",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+       "converted_from": {
+        "record": null
+       }
+      },
+      "undo": {
+       "step": {
+        "as": "undo",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": false
+         }
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+       "converted_from": {
+        "record": null
+       }
+      },
+      "restored": {
+       "step": {
+        "as": "restored",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+       "converted_from": {
+        "record": null
+       }
+      }
+     }
+    },
+    "disarm-clears": {
+     "observations": {
+      "as_found": {
+       "step": {
+        "as": "as_found",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": false, \"track\": 0}",
+       "raw_bytes": 28,
+       "converted_from": {
+        "record": 5,
+        "tag": "1020/track-census",
+        "field": "payload.rows[id=0].isArmed",
+        "transform": "one row's isArmed"
+       }
+      },
+      "setup": {
+       "step": {
+        "as": "setup",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": true
+         }
+        }
+       },
+       "raw": "{\"enabled\": true, \"fallback_from_channel\": \"Accessibility\", \"fallback_from_error\": \"arm_key_config_invalid\", \"fallback_from_hint\": \"record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\\\"not-a-keycode\\\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.\", \"function\": \"recArm\", \"observed\": true, \"state\": \"A\", \"success\": true, \"trace_id\": \"lpmcp_12DFA1DF-213F-42C4-8091-3CB84960E15B\", \"track\": 0, \"verification_source\": \"ax_value\", \"verified\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 638,
+       "converted_from": {
+        "record": 7,
+        "tag": "1020/arm-track-0",
+        "field": "payload",
+        "transform": "stored whole"
+       }
+      },
+      "pre": {
+       "step": {
+        "as": "pre",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": true, \"track\": 0}",
+       "raw_bytes": 27,
+       "converted_from": {
+        "record": 45,
+        "tag": "1020/arm-through-the-mcu-sets-and-confirms",
+        "field": "observed.observation['armed_in_track_list_after']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      },
+      "reply": {
+       "step": {
+        "as": "reply",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 0,
+          "enabled": false
+         }
+        }
+       },
+       "raw": "{\"enabled\": false, \"fallback_from_channel\": \"Accessibility\", \"fallback_from_error\": \"arm_key_config_invalid\", \"fallback_from_hint\": \"record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\\\"not-a-keycode\\\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.\", \"function\": \"recArm\", \"observed\": false, \"state\": \"A\", \"success\": true, \"trace_id\": \"lpmcp_D6CEC9F7-41A5-4EB5-989D-8A0338BB0DDC\", \"track\": 0, \"verification_source\": \"ax_value\", \"verified\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 640,
+       "converted_from": {
+        "record": 42,
+        "tag": "1020/disarm-track-0",
+        "field": "payload",
+        "transform": "stored whole"
+       }
+      },
+      "post": {
+       "step": {
+        "as": "post",
+        "probe": {
+         "name": "track_armed",
+         "args": {
+          "index": 0
+         }
+        }
+       },
+       "raw": "{\"armed\": false, \"track\": 0}",
+       "raw_bytes": 28,
+       "converted_from": {
+        "record": 47,
+        "tag": "1020/disarm-through-the-mcu-clears-the-arm",
+        "field": "observed.observation['armed_in_track_list_after']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      }
+     }
+    },
+    "bank-1-only-the-target-changes": {
+     "observations": {
+      "pre": {
+       "step": {
+        "as": "pre",
+        "probe": {
+         "name": "armed_set",
+         "args": {}
+        }
+       },
+       "raw": "{\"armed\": []}",
+       "raw_bytes": 13,
+       "converted_from": {
+        "record": 109,
+        "tag": "1020/bank-1-census-armed-set-is-15-then-as-found",
+        "field": "observed.observation['as_found']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      },
+      "reply": {
+       "step": {
+        "as": "reply",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 15,
+          "enabled": true
+         }
+        }
+       },
+       "raw": "{\"bank_bookkeeping_after\": 0, \"bank_presses_sent\": 4, \"bank_probe_unresolved\": false, \"bank_restored\": true, \"bank_step_short_of_eight\": false, \"bank_steps_disambiguated\": 1, \"bank_window_unaligned\": false, \"banks_moved\": 1, \"banks_requested\": 1, \"enabled\": true, \"fallback_from_channel\": \"Accessibility\", \"fallback_from_error\": \"arm_key_config_invalid\", \"fallback_from_hint\": \"record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\\\"not-a-keycode\\\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.\", \"function\": \"recArm\", \"observed\": true, \"state\": \"A\", \"step_windows\": [\"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn \", \"StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master \", \"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn \", \"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls \"], \"success\": true, \"trace_id\": \"lpmcp_50A95BB4-8CBF-4439-B629-57964A023F2B\", \"track\": 15, \"verification_source\": \"ax_value\", \"verified\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 1143,
+       "converted_from": {
+        "record": 60,
+        "tag": "1020/arm-track-15",
+        "field": "payload",
+        "transform": "stored whole"
+       }
+      },
+      "post": {
+       "step": {
+        "as": "post",
+        "probe": {
+         "name": "armed_set",
+         "args": {}
+        }
+       },
+       "raw": "{\"armed\": [15]}",
+       "raw_bytes": 15,
+       "converted_from": {
+        "record": 109,
+        "tag": "1020/bank-1-census-armed-set-is-15-then-as-found",
+        "field": "observed.observation['after_arm']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      },
+      "undo": {
+       "step": {
+        "as": "undo",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 15,
+          "enabled": false
+         }
+        }
+       },
+       "raw": "{\"bank_bookkeeping_after\": 0, \"bank_presses_sent\": 4, \"bank_probe_unresolved\": false, \"bank_restored\": true, \"bank_step_short_of_eight\": false, \"bank_steps_disambiguated\": 1, \"bank_window_unaligned\": false, \"banks_moved\": 1, \"banks_requested\": 1, \"enabled\": false, \"fallback_from_channel\": \"Accessibility\", \"fallback_from_error\": \"arm_key_config_invalid\", \"fallback_from_hint\": \"record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\\\"not-a-keycode\\\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.\", \"function\": \"recArm\", \"observed\": false, \"state\": \"A\", \"step_windows\": [\"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn \", \"StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master \", \"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn \", \"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls \"], \"success\": true, \"trace_id\": \"lpmcp_6580D8E0-1EB2-4CB4-BCEA-AD70643FBEB0\", \"track\": 15, \"verification_source\": \"ax_value\", \"verified\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 1145,
+       "converted_from": {
+        "record": 98,
+        "tag": "1020/disarm-track-15",
+        "field": "payload",
+        "transform": "stored whole"
+       }
+      },
+      "restored": {
+       "step": {
+        "as": "restored",
+        "probe": {
+         "name": "armed_set",
+         "args": {}
+        }
+       },
+       "raw": "{\"armed\": []}",
+       "raw_bytes": 13,
+       "converted_from": {
+        "record": 109,
+        "tag": "1020/bank-1-census-armed-set-is-15-then-as-found",
+        "field": "observed.observation['after_disarm']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      }
+     }
+    },
+    "clamped-last-bank-refused-unchanged": {
+     "observations": {
+      "control": {
+       "step": {
+        "as": "control",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 15,
+          "enabled": true
+         }
+        }
+       },
+       "raw": "{\"bank_bookkeeping_after\": 0, \"bank_presses_sent\": 4, \"bank_probe_unresolved\": false, \"bank_restored\": true, \"bank_step_short_of_eight\": false, \"bank_steps_disambiguated\": 1, \"bank_window_unaligned\": false, \"banks_moved\": 1, \"banks_requested\": 1, \"enabled\": true, \"fallback_from_channel\": \"Accessibility\", \"fallback_from_error\": \"arm_key_config_invalid\", \"fallback_from_hint\": \"record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\\\"not-a-keycode\\\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.\", \"function\": \"recArm\", \"observed\": true, \"state\": \"A\", \"step_windows\": [\"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn \", \"StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master \", \"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn \", \"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls \"], \"success\": true, \"trace_id\": \"lpmcp_50A95BB4-8CBF-4439-B629-57964A023F2B\", \"track\": 15, \"verification_source\": \"ax_value\", \"verified\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 1143,
+       "converted_from": {
+        "record": 60,
+        "tag": "1020/arm-track-15",
+        "field": "payload",
+        "transform": "stored whole"
+       }
+      },
+      "control_post": {
+       "step": {
+        "as": "control_post",
+        "probe": {
+         "name": "armed_set",
+         "args": {}
+        }
+       },
+       "raw": "{\"armed\": [15]}",
+       "raw_bytes": 15,
+       "converted_from": {
+        "record": 109,
+        "tag": "1020/bank-1-census-armed-set-is-15-then-as-found",
+        "field": "observed.observation['after_arm']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      },
+      "control_undo": {
+       "step": {
+        "as": "control_undo",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 15,
+          "enabled": false
+         }
+        }
+       },
+       "raw": "{\"bank_bookkeeping_after\": 0, \"bank_presses_sent\": 4, \"bank_probe_unresolved\": false, \"bank_restored\": true, \"bank_step_short_of_eight\": false, \"bank_steps_disambiguated\": 1, \"bank_window_unaligned\": false, \"banks_moved\": 1, \"banks_requested\": 1, \"enabled\": false, \"fallback_from_channel\": \"Accessibility\", \"fallback_from_error\": \"arm_key_config_invalid\", \"fallback_from_hint\": \"record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\\\"not-a-keycode\\\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.\", \"function\": \"recArm\", \"observed\": false, \"state\": \"A\", \"step_windows\": [\"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn \", \"StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master \", \"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn \", \"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls \"], \"success\": true, \"trace_id\": \"lpmcp_6580D8E0-1EB2-4CB4-BCEA-AD70643FBEB0\", \"track\": 15, \"verification_source\": \"ax_value\", \"verified\": true, \"write_attempted\": true, \"write_source\": \"mcu\"}",
+       "raw_bytes": 1145,
+       "converted_from": {
+        "record": 98,
+        "tag": "1020/disarm-track-15",
+        "field": "payload",
+        "transform": "stored whole"
+       }
+      },
+      "pre": {
+       "step": {
+        "as": "pre",
+        "probe": {
+         "name": "armed_set",
+         "args": {}
+        }
+       },
+       "raw": "{\"armed\": []}",
+       "raw_bytes": 13,
+       "converted_from": {
+        "record": 124,
+        "tag": "1020/final-bank-arm-is-refused-with-nothing-armed",
+        "field": "observed.observation['armed_set_before']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      },
+      "pre_row": {
+       "step": {
+        "as": "pre_row",
+        "probe": {
+         "name": "mcu_upper_row",
+         "args": {}
+        }
+       },
+       "raw": "{\"upper_row\": \"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls \"}",
+       "raw_bytes": 73,
+       "converted_from": {
+        "record": 125,
+        "tag": "1020/final-bank-leaves-the-mcu-window-home",
+        "field": "observed.observation['before']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      },
+      "reply": {
+       "step": {
+        "as": "reply",
+        "call": {
+         "tool": "logic_tracks",
+         "command": "arm",
+         "params": {
+          "index": 16,
+          "enabled": true
+         }
+        }
+       },
+       "raw": "{\"error\": \"channels_exhausted\", \"hint\": \"No keyboard shortcut mapped for: track.set_arm\", \"last_error\": \"No keyboard shortcut mapped for: track.set_arm\", \"operation\": \"track.set_arm\", \"state\": \"C\", \"success\": false}",
+       "raw_bytes": 215,
+       "converted_from": {
+        "record": 115,
+        "tag": "1020/arm-track-16",
+        "field": "payload",
+        "transform": "stored whole"
+       }
+      },
+      "post": {
+       "step": {
+        "as": "post",
+        "probe": {
+         "name": "armed_set",
+         "args": {}
+        }
+       },
+       "raw": "{\"armed\": []}",
+       "raw_bytes": 13,
+       "converted_from": {
+        "record": 124,
+        "tag": "1020/final-bank-arm-is-refused-with-nothing-armed",
+        "field": "observed.observation['armed_set_after']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      },
+      "post_row": {
+       "step": {
+        "as": "post_row",
+        "probe": {
+         "name": "mcu_upper_row",
+         "args": {}
+        }
+       },
+       "raw": "{\"upper_row\": \"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls \"}",
+       "raw_bytes": 73,
+       "converted_from": {
+        "record": 125,
+        "tag": "1020/final-bank-leaves-the-mcu-window-home",
+        "field": "observed.observation['after']",
+        "transform": "ast.literal_eval of the repr, then one key"
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "verdicts": {
+  "ko": {
+   "arm-unarmed-sets": {
+    "verdict": "PASS",
+    "expect": [
+     "PASS",
+     "PASS",
+     "PASS",
+     "PASS",
+     "PASS"
+    ],
+    "counterexample": [
+     "FAIL",
+     "FAIL"
+    ],
+    "restore": [
+     "PASS"
+    ],
+    "reasons": []
+   },
+   "arm-armed-writes-nothing": {
+    "verdict": "UNREADABLE",
+    "expect": [
+     "UNREADABLE",
+     "UNREADABLE",
+     "UNREADABLE",
+     "UNREADABLE",
+     "UNREADABLE"
+    ],
+    "counterexample": [
+     "UNREADABLE",
+     "UNREADABLE",
+     "UNREADABLE"
+    ],
+    "restore": [
+     "UNREADABLE"
+    ],
+    "reasons": [
+     "expect[0] UNREADABLE: pre.armed -- pre: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "expect[1] UNREADABLE: reply.state -- reply: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "expect[2] UNREADABLE: reply.write_attempted -- reply: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "expect[3] UNREADABLE: post.armed -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "expect[4] UNREADABLE: post.armed -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "counterexample UNREADABLE: expect[3] on 'as_found' -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "counterexample UNREADABLE: expect[4] on 'as_found' -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "counterexample UNREADABLE: expect[2] on 'setup' -- reply: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "restore UNREADABLE: restore_expect[0] -- restored: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung"
+    ]
+   },
+   "disarm-clears": {
+    "verdict": "PASS",
+    "expect": [
+     "PASS",
+     "PASS",
+     "PASS",
+     "PASS",
+     "PASS",
+     "PASS"
+    ],
+    "counterexample": [
+     "FAIL",
+     "FAIL"
+    ],
+    "restore": [
+     "PASS"
+    ],
+    "reasons": []
+   },
+   "bank-1-only-the-target-changes": {
+    "verdict": "PASS",
+    "expect": [
+     "PASS",
+     "PASS",
+     "PASS",
+     "PASS"
+    ],
+    "counterexample": [
+     "FAIL"
+    ],
+    "restore": [
+     "PASS"
+    ],
+    "reasons": []
+   },
+   "clamped-last-bank-refused-unchanged": {
+    "verdict": "PASS",
+    "expect": [
+     "PASS",
+     "PASS",
+     "PASS",
+     "PASS",
+     "PASS"
+    ],
+    "counterexample": [
+     "FAIL",
+     "FAIL",
+     "FAIL"
+    ],
+    "restore": [
+     "PASS"
+    ],
+    "reasons": []
+   }
+  }
+ },
+ "converted_from": {
+  "path": "/Users/isaac/lpm-evidence/live-1020/ev1020-4b036d93/ko.evidence.json",
+  "sha256": "a3d9d776de00ebe9d5b9fd5db479d16b66209b71fafb7c024f3042acc2dec6c2",
+  "harness": "live_1020_mcu_set_arm_is_a_set",
+  "head": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+  "converter": "Scripts/verify/convert_1020.py"
+ }
+}
