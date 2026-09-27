@@ -67,9 +67,11 @@
       "armed_in_track_list_after_disarm": false,
       "reached_the_mcu_rung": true,
       "checks_passed": [
+        "1020/precondition-the-arm-reached-the-mcu-rung",
         "1020/arm-through-the-mcu-sets-and-confirms",
         "1020/the-cached-arm-holds-through-the-rec-led-blink",
         "1020/disarm-through-the-mcu-clears-the-arm",
+        "1020/precondition-bank-1-and-final-bank-tracks-are-listed-and-disarmed",
         "1020/bank-1-arm-through-the-mcu-sets-and-confirms",
         "1020/bank-1-the-cached-arm-holds-through-the-rec-led-blink",
         "1020/bank-1-disarm-through-the-mcu-clears-the-arm",
@@ -78,8 +80,8 @@
         "1020/final-bank-arm-is-refused-with-nothing-armed",
         "1020/final-bank-leaves-the-mcu-window-home"
       ],
-      "checks_passed_count": 10,
-      "checks_run": 10,
+      "checks_passed_count": 12,
+      "checks_run": 12,
       "track_disarmed_again": true,
       "bank_phases_ready": true,
       "bank_1": {
@@ -179,7 +181,7 @@
       }
     }
   ],
-  "conclusion": "On track 0 the arm reached the MCU rung after the Accessibility rung refused arm_key_config_invalid. It answered State A with observed True, and the track list read isArmed True; read 30 more times without a refresh, it read the track armed 30 times. The disarm answered State A with observed False, and the track list read isArmed False. Track 15 in bank 1 armed with State A after 4 bank presses, 1 bank moved and 1 step proved by the probe; the census armed set went [] -> [15] -> [], and track 7 stayed False. Track 16 in the last bank answered State C (channels_exhausted), the armed set stayed [], track 13 stayed False and the MCU upper row was the same before and after. All 10 checks passed and every track touched ended as found.",
+  "conclusion": "On track 0 the arm reached the MCU rung after the Accessibility rung refused arm_key_config_invalid. It answered State A with observed True, and the track list read isArmed True; read 30 more times without a refresh, it read the track armed 30 times. The disarm answered State A with observed False, and the track list read isArmed False. Track 15 in bank 1 armed with State A after 4 bank presses, 1 bank moved and 1 step proved by the probe; the census armed set went [] -> [15] -> [], and track 7 stayed False. Track 16 in the last bank answered State C (channels_exhausted), the armed set stayed [], track 13 stayed False and the MCU upper row was the same before and after. All 12 checks passed and every track touched ended as found.",
   "limits": [
     "Only record-arm reaches the MCU rung this way. The run sets LOGIC_PRO_MCP_ARM_KEYCODE to a value that does not parse, so the Accessibility key rung refuses arm_key_config_invalid, which is not terminal. Mute and solo have no such setting; their MCU rung is covered by the unit tests only.",
     "Only a state that differs from the request reaches the MCU. When the track already holds the requested state, the Accessibility rung answers a verified no-op first, so the MCU's own 'already set' branch is not driven live.",
