@@ -827,6 +827,64 @@ class ARecordMayDeclareTheAxisInapplicable(unittest.TestCase):
                               "observations": [{"role": "AXGroup", "n": 23}]})
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    # -- #1037: the floor is eight for Latin script and two for a string with a CJK character --
+
+    def _declines_over(self, reading):
+        return self.record({"schema": 3, "id": "probe",
+                            "canon_not_applicable": {"reason": "claims to be about behaviour"},
+                            "observations": [{"read": reading}]})
+
+    def _corpora_holding(self, text):
+        """Where the pinned corpus holds `text` exactly. The control for the two passing cases
+        below: without it a pass could mean the corpus stopped holding the string, not that the
+        floor skipped it."""
+        spec = importlib.util.spec_from_file_location("canon_guard_na", GUARD)
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+        held = []
+        for source, locale in sorted(guard.required_corpora(guard.canon.load_manifest())):
+            try:
+                if guard.canon.presence(source, locale, text) == guard.canon.SHIPS:
+                    held.append((source, locale))
+            except guard.canon.CanonError:
+                continue
+        return held
+
+    def _assert_refused_over(self, reading):
+        result = self._declines_over(reading)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("A citation was available", result.stderr)
+        self.assertIn(repr(reading), result.stderr)
+
+    def test_a_two_character_korean_label_may_not_decline(self):
+        """Killed by `cjk-floor-ignored`. `트랙` is a whole Korean label Logic ships: two
+        characters."""
+        self._assert_refused_over("트랙")
+
+    def test_a_short_japanese_label_may_not_decline(self):
+        """Killed by `cjk-floor-ignored`. `トラック` is a whole Japanese label Logic ships: four
+        characters."""
+        self._assert_refused_over("トラック")
+
+    def test_a_two_character_chinese_label_may_not_decline(self):
+        """Killed by `cjk-floor-ignored`. `音軌` is a whole zh_TW label Logic ships: two
+        characters."""
+        self._assert_refused_over("音軌")
+
+    def test_a_short_latin_label_the_corpus_holds_is_still_not_tested(self):
+        """Killed by `latin-floor-dropped`. `Track` is five characters and Logic ships it, and
+        below the Latin floor that hit proves nothing about the record."""
+        self.assertTrue(self._corpora_holding("Track"))
+        result = self._declines_over("Track")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_single_cjk_character_is_not_tested(self):
+        """Killed by `cjk-floor-one`. `끔` is a whole Korean label Logic ships, and the floor for a
+        CJK string is two characters, not one."""
+        self.assertTrue(self._corpora_holding("끔"))
+        result = self._declines_over("끔")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
 class ABindingIsNotSatisfiedByAComment(unittest.TestCase):
     """The limitation that was written up as needing the strong fix, closed with the cheap one.

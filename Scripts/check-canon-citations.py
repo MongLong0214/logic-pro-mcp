@@ -233,11 +233,11 @@ def _literals_named_in_records() -> set:
         record = _json(os.path.join(root, name), None)
         if not isinstance(record, dict):
             continue
-        # NOT `_observation_strings`: that applies `NOT_APPLICABLE_MIN`, an eight-character floor
-        # written for rule 13, where a short fragment is too weak to REFUSE a declaration on. Here
-        # the question is the opposite one -- has somebody measured this literal -- and `Utility`
-        # is seven characters, `유틸리티` four. A floor built to avoid false refusals became a
-        # floor that caused one.
+        # NOT `_observation_strings`: that applies rule 13's floors -- eight characters, or two for
+        # a string holding a CJK character -- written where a short fragment is too weak to REFUSE
+        # a declaration on. Here the question is the opposite one -- has somebody measured this
+        # literal -- and `Utility` is seven characters. A floor built to avoid false refusals
+        # became a floor that caused one.
         for text in _every_string_in(record):
             named.add(canon.normalize(text))
     return named
@@ -505,9 +505,25 @@ BINDING_RECORD_FIELDS = ("observations", "conclusion", "method", "question", "su
                          "canon_absent", "evidence")
 
 
-#: The shortest observation string worth testing for citability. Below this a value is a role name,
-#: a number or a fragment, and a corpus hit means nothing.
+#: The shortest observation string worth testing for citability. Below this a Latin-script value is
+#: a role name, a number or a fragment, and a corpus hit means nothing.
 NOT_APPLICABLE_MIN = 8
+
+#: The same floor for a string holding a Han, Hangul, Hiragana or Katakana character (#1037). A
+#: whole Logic label in those scripts is often two to four characters -- `트랙`, a Korean one, is
+#: two -- so the Latin floor hid whole words there, not fragments. A single character stays below
+#: this floor; that was chosen, not measured.
+NOT_APPLICABLE_MIN_CJK = 2
+
+#: Han (with extension A, the supplementary planes and the compatibility block), Hangul syllables
+#: and jamo, Hiragana, and Katakana including its phonetic extensions and halfwidth forms.
+_CJK = re.compile("[\u1100-\u11ff\u3040-\u30ff\u3130-\u318f\u31f0-\u31ff\u3400-\u4dbf"
+                  "\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff66-\uff9f\U00020000-\U0003134f]")
+
+
+def _contains_cjk(text: str) -> bool:
+    """Whether `text` holds at least one Han, Hangul, Hiragana or Katakana character."""
+    return _CJK.search(text) is not None
 
 
 #: The fields rule 13's bound reads. `observations` alone was not enough: moving the citable
@@ -542,7 +558,7 @@ def _every_string_in(record: dict) -> list:
 
 
 def _observation_strings(record: dict) -> list:
-    """Every string in the record's substantive fields, flattened."""
+    """Every string in the record's substantive fields long enough to test, flattened."""
     out = []
 
     def walk(node):
@@ -552,7 +568,9 @@ def _observation_strings(record: dict) -> list:
         elif isinstance(node, list):
             for value in node:
                 walk(value)
-        elif isinstance(node, str) and len(node) >= NOT_APPLICABLE_MIN:
+        elif isinstance(node, str) and (
+                len(node) >= NOT_APPLICABLE_MIN
+                or (len(node) >= NOT_APPLICABLE_MIN_CJK and _contains_cjk(node))):
             out.append(node)
 
     for field in NOT_APPLICABLE_FIELDS:
