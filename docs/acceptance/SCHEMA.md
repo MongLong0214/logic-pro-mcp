@@ -159,7 +159,7 @@ one of the ten.
 | `expect` | expectations over the bound readings; the row PASSES only if every one PASSES. Each is an effect, or an invariant with `"invariant": true` (below) |
 | `counterexample` | substitutions that must make named expectations FAIL (below) |
 | `restore` | steps that return the fixture to its as-found state (may be empty) |
-| `restore_expect` | expectations that prove it was returned; they read only steps after the first call in `restore`, and are empty when `restore` has no call (below) |
+| `restore_expect` | expectations that prove it was returned; they read only steps after the last call in `restore`, and are empty when `restore` has no call (below) |
 | `independence` | the names whose readings do not come from the operation's own reply |
 
 ### Steps
@@ -309,11 +309,13 @@ what it credits to the operation was read after the operation ran.
 
 A restore check (`restore_expect`) reads only what a restore produced.
 
-- Every step it reads is bound AFTER the first call in `restore`: the restoring action. A call is a
+- Every step it reads is bound AFTER the last call in `restore`: the restoring action. A call is a
   step with `call`, the same test the order rules use for the operation and the calls before it.
 - A probe in `restore` before that call, the call's own reply, and every step of `steps` from the
   operation on are refused. A reading taken after the operation and before a restore is a claim
-  about the operation, so it belongs in `expect`, with a counterexample.
+  about the operation, so it belongs in `expect`, with a counterexample. A reading between two
+  calls in `restore` is refused as well: the later call can undo what it read (an undo, the
+  reading, then a redo).
 - Its path may not name a step bound before the operation either. Its `ref.obs` may: that is the
   as-found state the restore is compared with, the point of a restore check.
 - No restore check reads a call's reply, in `steps` or in `restore`, in its path or its `ref.obs`.

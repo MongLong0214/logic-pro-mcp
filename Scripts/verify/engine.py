@@ -58,7 +58,7 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
         with the reading just before the operation, so its witness may be any differing earlier
         reading.
       - A RESTORE CHECK (`restore_expect`) reads only what a restore produced: every step it reads
-        is bound AFTER the first call in `restore` (the restoring action; a call is a step with
+        is bound AFTER the last call in `restore` (the restoring action; a call is a step with
         `call`, `is_call`, the test every rule here uses). A probe in `restore` before that call,
         the call's own reply, and every step of `steps` from the operation on are refused: a
         reading taken after the operation and before a restore is a claim about the operation, so
@@ -468,20 +468,21 @@ BEFORE_RESTORE = ("A reading taken after the operation and before a restore is a
 
 
 def restore_problems(row: dict, order: dict, at: int) -> list:
-    """A restore check reads only what a restore produced: steps bound AFTER the first call in
+    """A restore check reads only what a restore produced: steps bound AFTER the last call in
     `restore` (the restoring action, `is_call`). A probe before that call, the call's own reply,
     and every step of `steps` from the operation on are claims about the operation, not about the
-    restore; no restore check reads any call's reply. With no call in `restore` nothing was
+    restore; no restore check reads any call's reply. A reading between two calls in `restore` is
+    refused too: a later call can undo what it read (a redo after the undo). With no call in `restore` nothing was
     restored, so `restore_expect` is empty; with one, it is not (#984). A check's `ref.obs` may
     also name a reading bound before the operation: the as-found state it compares with. `order`
     and `at` are the positions in `steps`."""
     restore = [s["as"] for s in row["restore"]]
-    first = next((k for k, s in enumerate(row["restore"]) if is_call(s)), None)
-    if first is None:
+    last = max((k for k, s in enumerate(row["restore"]) if is_call(s)), default=None)
+    if last is None:
         n = len(row["restore_expect"])
         return [f"restore_expect has {n} check(s), but `restore` has no call, so nothing restored "
                 f"the state and there is nothing for a restore check to read. {BEFORE_RESTORE}"] if n else []
-    call, left = restore[first], set(restore[first + 1:])
+    call, left = restore[last], set(restore[last + 1:])
     if not row["restore_expect"]:
         return [f"`restore` has the call {call!r} and restore_expect is empty, so nothing shows the "
                 f"fixture was put back. A write is credited only when its restore is verified (#984): "
@@ -503,8 +504,11 @@ def restore_problems(row: dict, order: dict, at: int) -> list:
                            f"itself. A restore check reads the state the call left behind: a step "
                            f"after it")
             elif name in restore and name not in left:
+                between = any(is_call(s) for s in row["restore"][:restore.index(name)])
                 out.append(f"restore_expect[{j}] {what} {name!r}, a restore step before the restoring "
-                           f"call {call!r}. {BEFORE_RESTORE}")
+                           f"call {call!r}. " + (f"{call!r} is a later call in `restore` and can undo "
+                                                 f"what it read: a restore check reads a step after "
+                                                 f"the last call" if between else BEFORE_RESTORE))
             elif name in calls:
                 out.append(f"restore_expect[{j}] {what} {name!r}, the reply of a call. A reply is what "
                            f"a call says it did, not the state it left; a restore check reads a state")
