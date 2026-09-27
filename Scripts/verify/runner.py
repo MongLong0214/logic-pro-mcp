@@ -246,7 +246,15 @@ def order(locales, current) -> list:
 # ---------------------------------------------------------------------------------------------
 
 def _dirt_text(dirt: list) -> str:
-    return ", ".join(sorted({str(d.get("kind")) if isinstance(d, dict) else str(d) for d in dirt}))
+    """Each kind of dirt, and for a process what, which pid and which name it was seen as, or for an
+    unreadable condition its cause: the evidence says which process made a step unreadable."""
+    def one(d):
+        if not isinstance(d, dict):
+            return str(d)
+        said = [f"pid {d['pid']}" if key == "pid" else str(d[key])
+                for key in ("what", "pid", "comm", "cause") if d.get(key) is not None]
+        return str(d.get("kind")) + (f" ({', '.join(said)})" if said else "")
+    return ", ".join(sorted({one(d) for d in dirt}))
 
 
 def _holds(until: dict, text: str) -> bool:

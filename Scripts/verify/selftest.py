@@ -398,6 +398,9 @@ MUTANTS = [
     {"id": "lifecycle-ignored", "file": "runner.py",
      "old": '    if dirt:\n        return E.unreadable_observation(step, f"the machine was not clean before',
      "new": '    if False:\n        return E.unreadable_observation(step, f"the machine was not clean before'},
+    {"id": "dirt-kind-only", "file": "runner.py",
+     "old": '        return str(d.get("kind")) + (f" ({\', \'.join(said)})" if said else "")\n',
+     "new": '        return str(d.get("kind"))\n'},
     {"id": "restore-skipped-after-failure", "file": "runner.py",
      "old": '        for step in row["restore"]:\n            entries[step["as"]] = execute_step(ctx, step)',
      "new": ('        for step in (row["restore"] if all("raw" in e for e in entries.values()) else []):\n'
