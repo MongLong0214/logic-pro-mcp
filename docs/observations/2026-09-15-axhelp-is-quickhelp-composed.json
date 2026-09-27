@@ -351,6 +351,46 @@
         {
           "source": "strings",
           "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
         }
       ],
       "why_runtime": "An exhaustive scan of all 75,535 non-media files in the bundle, in UTF-8 and both UTF-16 byte orders, found it nowhere, and a separate scan of all 1,169 nibs found it nowhere. It is most plausibly drawn from AppKit, whose localised strings live in the dyld shared cache rather than in files this corpus can hold -- and that plausibility is stated as unverified: the shared cache was not opened."

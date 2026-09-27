@@ -184,10 +184,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "audioPluginSlotLabel": {
@@ -310,7 +310,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "automationModeRead": {
@@ -367,10 +367,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "automationModeWrite": {
@@ -1547,10 +1547,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
+    "it-IT": "unmeasured",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "displayModePopupLabel": {
@@ -2793,10 +2793,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "inspectorChannelStripHelpPrefix": {
@@ -2839,10 +2839,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "keyCommandsWindowTitle": {
@@ -3107,10 +3107,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "midiFileMenuItem": {
@@ -3911,7 +3911,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "okButton": {
@@ -4065,10 +4065,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "playheadPositionFieldLabel": {
@@ -4085,10 +4085,10 @@
     "de-DE": "derived",
     "es-ES": "unmeasured",
     "fr-FR": "derived",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "playheadPositionGroupLabel": {
@@ -4760,10 +4760,10 @@
     "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "derived",
+    "it-IT": "unmeasured",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "pluginWindowViewSwitcher": {
@@ -5014,10 +5014,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "recordArmKeyCommandName": {
@@ -5039,10 +5039,10 @@
     "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "regionBarsSentence": {
@@ -5284,7 +5284,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "savePanelFolderRadio": {
@@ -5391,7 +5391,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "setLocatorsMenuItem": {
@@ -5748,7 +5748,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "sortTracksByAudioChannelMenuItem": {
@@ -6495,10 +6495,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-regions-census",
@@ -6685,10 +6685,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "trackSoloButton": {
@@ -6942,8 +6942,8 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-CN": "unmeasured",
+    "zh-TW": "unmeasured"
    }
   },
   "transportContainerMetadata": {
@@ -7242,10 +7242,10 @@
     "de-DE": "measured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "derived",
-    "pt-BR": "derived",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    },
    "coverage_records": {
     "de-DE": "2026-09-12-de-DE-arrange-menus-census",
