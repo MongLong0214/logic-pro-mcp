@@ -131,6 +131,7 @@ actor CGEventChannel: Channel {
     /// 2026-09-27 on a Korean Logic with the 2-Set Korean input method active: Q, N and X ran
     /// nothing, while Control-B, Option-Command-W, Command-Z, Space, comma, period and the keypad
     /// keys ran their commands. Under the ABC layout Q, N and X ran theirs too.
+    /// The other bare letters here (R, C, K, P, Y, A, Z) were not tried but are bare letters too; a separate defect.
     ///
     /// An op whose function has no default binding carries NO entry: a keystroke bound to some
     /// other command changes the wrong state and reports that it was sent, which is worse than the
