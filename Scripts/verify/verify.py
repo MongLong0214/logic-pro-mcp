@@ -22,7 +22,9 @@ ONLY `run` CERTIFIES CLEAN
 `recheck` reads a file, and every field of a file was written by whoever wrote it. It recomputes
 every verdict and can FAIL, REFUSE or report incomplete; it never reports clean. Clean needs an
 in-process `engine.Attestation`, which only the process that built the binary and ran the rows
-holds: `verify.py run` (P0b-2). A worker cannot hand the verifier a verdict.
+holds: `verify.py run` (P0b-2). A worker cannot hand the verifier a verdict. A clean verdict counts
+only when the gate itself invokes `verify.py run`; one printed by any other process, including a
+script that calls `engine.judge` with an attestation it built, is not evidence (ADR-027 D7).
 
 `record` of a file is refused with exit 2, not 3. Exit 3 says the evidence could still become
 clean with more observations; no content of a file can make `record` write, so the command itself

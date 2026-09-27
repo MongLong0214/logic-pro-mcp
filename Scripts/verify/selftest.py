@@ -198,6 +198,10 @@ MUTANTS = [
      "new": ("    import dataclasses\n"
              "    attestation = dataclasses.replace(attestation, evidence_sha256=E.sha256_of(doc))\n"
              "    result = engine.judge(doc, attestation=attestation)")},
+    {"id": "attestation-check-scoped-to-verify", "file": "selftest.py",
+     "old": '    files = sorted(f for f in proc.stdout.decode("utf-8").split("\\0") if f)',
+     "new": ('    files = sorted(f for f in proc.stdout.decode("utf-8").split("\\0") '
+             'if f.startswith(VERIFY_DIR))')},
     {"id": "provenance-file-unchecked", "file": "engine.py",
      "old": "    if not (isinstance(path, str) and os.path.isfile(path)):",
      "new": "    if False:"},
@@ -532,11 +536,21 @@ def check_records_cite_their_bytes(case: dict, where: dict):
     return None
 
 
-#: Where an `engine.Attestation` may be named, as (file, top-level definition). The class itself,
-#: the engine's type check, and the self-test's in-process `attest`. Nothing else: no command-line
-#: path and nothing that reads a file.
-ATTESTATION_SITES = {("engine.py", "Attestation"), ("engine.py", "attestation_problems"),
-                     ("selftest.py", "attest")}
+#: Where an `engine.Attestation` may be named, as (repo-relative file, top-level definition): the
+#: class itself, the engine's type check, and the self-test's in-process `attest`. ADR-027 D7 allows
+#: one more constructor, `verify.py run`; it is a stub today and names nothing, so it has no entry
+#: yet. P0b-2 adds its site here when it builds one, and the review of that change sees the entry.
+ATTESTATION_SITES = {("Scripts/verify/engine.py", "Attestation"),
+                     ("Scripts/verify/engine.py", "attestation_problems"),
+                     ("Scripts/verify/selftest.py", "attest")}
+SELFTEST_FILE = "Scripts/verify/selftest.py"
+#: The verifier's own code. The rules that catch an Attestation built without naming it (unpickling,
+#: importlib, `__import__`, `__new__`, a dataclass copy) apply here only: elsewhere in the repository
+#: the same calls are ordinary code (guards load their helpers with importlib). Hiding a construction
+#: behind them outside the verifier is editing code on purpose, the insider class ADR-027 D7 leaves
+#: to review and CI (#816). Naming it -- a call, an import, an attribute, a lookup by its name --
+#: is refused in every tracked file.
+VERIFY_DIR = "Scripts/verify/"
 #: Modules that rebuild objects without a visible constructor call.
 UNPICKLERS = {"pickle", "marshal", "shelve", "copyreg", "dill", "cloudpickle", "importlib"}
 #: What `attest` may not do: read a file or parse JSON, or read the document's own binding claims.
@@ -553,78 +567,152 @@ def _top_level_sites(tree):
             yield name, node
 
 
-def attestation_construction_problems(root: str = HERE) -> list:
-    """Why something other than the in-process sites could build, alias or forge an Attestation."""
+def tracked_python(repo: str) -> tuple:
+    """(every tracked .py file of `repo`, repo-relative; None) or ([], why the listing failed).
+    A listing that fails is a problem, never an empty list: a check that read nothing must not
+    report that it found nothing."""
+    proc = subprocess.run(["git", "-C", repo, "ls-files", "-z", "--", "*.py"], capture_output=True)
+    if proc.returncode != 0:
+        return [], (f"git ls-files in {repo}: exit {proc.returncode}; "
+                    f"{proc.stderr.decode('utf-8', 'replace').strip()}")
+    files = sorted(f for f in proc.stdout.decode("utf-8").split("\0") if f)
+    if not files:
+        return [], f"git ls-files in {repo} listed no .py file"
+    return files, None
+
+
+def _naming_problems(here: str, node, allowed: bool, target: str) -> list:
+    """A construction that names the class: refused in every tracked file."""
+    if allowed:
+        return []
+    if isinstance(node, ast.Name) and node.id == target:
+        return [f"{here} names {target} outside the in-process sites"]
+    if isinstance(node, ast.Attribute) and node.attr == target:
+        return [f"{here} reaches {target} as an attribute outside the in-process sites"]
+    if isinstance(node, ast.ImportFrom) and any(a.name == target for a in node.names):
+        return [f"{here} imports {node.module or ''}.{target}"]
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
+            and node.func.id in ("getattr", "setattr", "hasattr", "delattr") \
+            and any(isinstance(a, ast.Constant) and a.value == target for a in node.args):
+        return [f"{here} looks {target} up by name with {node.func.id}"]
+    if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) \
+            and node.slice.value == target:
+        return [f"{here} looks {target} up by name with a subscript"]
+    return []
+
+
+def _indirect_problems(here: str, node, rel: str, site, target: str) -> list:
+    """A construction that does not name the class: refused in the verifier's own code."""
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        module = getattr(node, "module", None) or ""
+        return [f"{here} imports {module + '.' if module else ''}{alias.name}" for alias in node.names
+                if alias.name == "*" or alias.name.split(".")[0] in UNPICKLERS
+                or module.split(".")[0] in UNPICKLERS]
+    if not isinstance(node, ast.Call):
+        return []
+    func = node.func
+    if isinstance(func, ast.Name) and func.id == "__import__":
+        return [f"{here} looks {target} up by name with __import__"]
+    if isinstance(func, ast.Attribute) and func.attr == "replace" \
+            and isinstance(func.value, ast.Name) and func.value.id in ("dataclasses", "copy"):
+        return [f"{here} copies a dataclass with new fields ({func.value.id}.replace)"]
+    if isinstance(func, ast.Attribute) and func.attr in ("__setattr__", "__new__") \
+            and (rel, site) != ("Scripts/verify/engine.py", target):
+        return [f"{here} calls {func.attr}, which can set a frozen field or skip __init__"]
+    return []
+
+
+def _attest_body_problems(here: str, node) -> list:
+    """What the self-test's `attest` may not do: read a file, or copy the document's claims."""
+    if isinstance(node, ast.Call):
+        called = node.func.attr if isinstance(node.func, ast.Attribute) else \
+            node.func.id if isinstance(node.func, ast.Name) else None
+        if called in FILE_READS:
+            return [f"{here}: attest calls {called}; the attestation is built in "
+                    f"process from what the runner measured, not from a file"]
+    if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) \
+            and node.slice.value in CLAIM_KEYS:
+        return [f"{here}: attest reads the document's {node.slice.value!r}; an "
+                f"attestation that copies the document's claims attests nothing"]
+    if isinstance(node, ast.Attribute) and node.attr in CLAIM_ATTRS:
+        return [f"{here}: attest reads the document's {node.attr}; an attestation "
+                f"that copies the document's claims attests nothing"]
+    return []
+
+
+def attestation_construction_problems(root: str = ROOT, repo: str = None) -> list:
+    """Why something other than the in-process sites could build, alias or forge an Attestation.
+
+    Parses every tracked .py file of the repository: the list from `git ls-files` in `repo`
+    (default engine.repo_root(), which a mutant's tree points at the real checkout), the bytes from
+    `root`, the tree under test. A file it cannot read or parse is a problem, not a skip."""
+    import engine
     target = "Attest" + "ation"  # spelt apart so this checker does not name it as a string itself
+    files, why = tracked_python(repo or engine.repo_root())
+    if why:
+        return [why]
     out = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in ("__pycache__", "fixtures"))
-        for fname in sorted(f for f in filenames if f.endswith(".py")):
-            path = os.path.join(dirpath, fname)
-            rel = os.path.relpath(path, root)
-            with open(path, encoding="utf-8") as handle:
+    for rel in files:
+        try:
+            with open(os.path.join(root, rel), encoding="utf-8") as handle:
                 tree = ast.parse(handle.read(), rel)
-            for site, node in _top_level_sites(tree):
-                here = f"{rel}:{getattr(node, 'lineno', '?')}"
-                allowed = (rel, site) in ATTESTATION_SITES
-                if isinstance(node, ast.Name) and node.id == target and not allowed:
-                    out.append(f"{here} names {target} outside the in-process sites")
-                elif isinstance(node, ast.Attribute) and node.attr == target and not allowed:
-                    out.append(f"{here} reaches {target} as an attribute outside the in-process sites")
-                elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                    module = getattr(node, "module", None) or ""
-                    for alias in node.names:
-                        if alias.name in (target, "*") or alias.name.split(".")[0] in UNPICKLERS \
-                                or module.split(".")[0] in UNPICKLERS:
-                            out.append(f"{here} imports {module + '.' if module else ''}{alias.name}")
-                elif isinstance(node, ast.Call):
-                    func = node.func
-                    if isinstance(func, ast.Name) and func.id in ("getattr", "setattr", "hasattr",
-                                                                    "delattr", "__import__"):
-                        if func.id == "__import__" or any(
-                                isinstance(a, ast.Constant) and a.value == target for a in node.args):
-                            out.append(f"{here} looks {target} up by name with {func.id}")
-                    elif isinstance(func, ast.Attribute) and func.attr == "replace" \
-                            and isinstance(func.value, ast.Name) and func.value.id in ("dataclasses", "copy"):
-                        out.append(f"{here} copies a dataclass with new fields ({func.value.id}.replace)")
-                    elif isinstance(func, ast.Attribute) and func.attr in ("__setattr__", "__new__") \
-                            and (rel, site) != ("engine.py", target):
-                        out.append(f"{here} calls {func.attr}, which can set a frozen field or skip __init__")
-                elif isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) \
-                        and node.slice.value == target:
-                    out.append(f"{here} looks {target} up by name with a subscript")
-                if rel == "selftest.py" and site == "attest":
-                    if isinstance(node, ast.Call):
-                        called = node.func.attr if isinstance(node.func, ast.Attribute) else \
-                            node.func.id if isinstance(node.func, ast.Name) else None
-                        if called in FILE_READS:
-                            out.append(f"{here}: attest calls {called}; the attestation is built in "
-                                       f"process from what the runner measured, not from a file")
-                    if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) \
-                            and node.slice.value in CLAIM_KEYS:
-                        out.append(f"{here}: attest reads the document's {node.slice.value!r}; an "
-                                   f"attestation that copies the document's claims attests nothing")
-                    if isinstance(node, ast.Attribute) and node.attr in CLAIM_ATTRS:
-                        out.append(f"{here}: attest reads the document's {node.attr}; an attestation "
-                                   f"that copies the document's claims attests nothing")
-            if rel != "selftest.py":
-                for site, node in _top_level_sites(tree):
-                    if (isinstance(node, ast.Attribute) and node.attr == "attest") or \
-                            (isinstance(node, ast.Name) and node.id == "attest"):
-                        out.append(f"{rel}:{node.lineno} calls the self-test's attest outside the self-test")
+        except (OSError, UnicodeDecodeError, SyntaxError, ValueError) as exc:
+            out.append(f"{rel}: not read ({type(exc).__name__}: {exc}); a file this check could not "
+                       f"read is not a file without a construction")
+            continue
+        inside = rel.startswith(VERIFY_DIR)
+        for site, node in _top_level_sites(tree):
+            here = f"{rel}:{getattr(node, 'lineno', '?')}"
+            out += _naming_problems(here, node, (rel, site) in ATTESTATION_SITES, target)
+            if inside:
+                out += _indirect_problems(here, node, rel, site, target)
+            if rel == SELFTEST_FILE and site == "attest":
+                out += _attest_body_problems(here, node)
+            if rel != SELFTEST_FILE and ((isinstance(node, ast.Attribute) and node.attr == "attest")
+                                         or (isinstance(node, ast.Name) and node.id == "attest")):
+                out.append(f"{here} calls the self-test's attest outside the self-test")
     return out
 
 
 def check_attestation_built_only_in_process(case: dict, where: dict):
-    """RV-02, round 2: nothing builds an Attestation from JSON or from a file. Parses every .py
-    under Scripts/verify; a construction, alias, subclass, by-name lookup, dataclass copy with new
-    fields, or unpickling anywhere but the in-process sites fails."""
+    """RV-02: nothing builds an Attestation but the in-process sites. Parses every tracked .py file
+    of the repository; see attestation_construction_problems for what each file is held to."""
     problems = attestation_construction_problems()
     return "; ".join(problems) if problems else None
 
 
+def check_attestation_check_sees_the_whole_repository(case: dict, where: dict):
+    """RV-02, round 3: the check is red on a construction planted outside Scripts/verify. A scratch
+    repository tracks three files that build an Attestation three ways and one that uses the engine
+    honestly, importlib included; each forger must be named and the honest file must not be."""
+    target = "Attest" + "ation"
+    planted = {
+        "Scripts/elsewhere/forge_call.py": f"import engine\nmade = engine.{target}(binary_sha256='0' * 64)\n",
+        "Scripts/elsewhere/forge_import.py": f"from engine import {target} as Made\nmade = Made()\n",
+        "Scripts/elsewhere/forge_getattr.py": f"import engine\nmade = getattr(engine, '{target}')()\n",
+        "Scripts/elsewhere/honest.py": "import importlib.util\nimport engine\n"
+                                       "result = engine.judge({}, attestation=None)\n",
+    }
+    repo = os.path.join(where["tmp"], "planted-repo")
+    for rel, text in planted.items():
+        os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
+        with open(os.path.join(repo, rel), "w", encoding="utf-8") as handle:
+            handle.write(text)
+    for argv in (["init", "-q"], ["add", "--", "Scripts"]):
+        proc = subprocess.run(["git", "-C", repo] + argv, capture_output=True, text=True)
+        if proc.returncode != 0:
+            return f"git {argv[0]} in the scratch repository: exit {proc.returncode}; {proc.stderr.strip()}"
+    problems = attestation_construction_problems(root=repo, repo=repo)
+    missed = [rel for rel in planted if "forge" in rel and not any(p.startswith(rel + ":") for p in problems)]
+    honest = [p for p in problems if p.startswith("Scripts/elsewhere/honest.py")]
+    if missed or honest:
+        return f"forgers not named: {missed}; honest file named: {honest}; problems: {problems}"
+    return None
+
+
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
-          "attestation_built_only_in_process": check_attestation_built_only_in_process}
+          "attestation_built_only_in_process": check_attestation_built_only_in_process,
+          "attestation_check_sees_the_whole_repository": check_attestation_check_sees_the_whole_repository}
 
 
 def run_case(case: dict, where: dict):

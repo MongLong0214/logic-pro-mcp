@@ -50,6 +50,7 @@
  {"name": "attested-run-missing-from-evidence", "patch": {"file": "{fixtures}/ev-base.json", "ops": [{"bind": true}]}, "attest": {"readings": {"ko": "ko", "en": "en", "ja": null}}, "cmd": ["recheck"], "exit": 3, "says": "attestation: ja: the runner ran this locale and the evidence has no run"},
  {"name": "attestation-lookalike", "patch": {"file": "{fixtures}/ev-base.json", "ops": [{"bind": true}]}, "attest": {"lookalike": true}, "cmd": ["recheck"], "exit": 3, "says": "is not an in-process Attestation"},
  {"name": "attestation-built-only-in-process", "check": "attestation_built_only_in_process"},
+ {"name": "attestation-check-sees-the-whole-repository", "check": "attestation_check_sees_the_whole_repository"},
  {"name": "committed-ev-base-is-unbound", "cmd": ["recheck", "{fixtures}/ev-base.json"], "exit": 3, "says": "INCOMPLETE binary: binding is 'unbound'"},
  {"name": "ev-fail", "patch": {"file": "{fixtures}/ev-base.json", "ops": [{"bind": true}, {"obs": ["ko", "arm-sets", "post"], "raw": {"armed": false, "track": 0}}], "restamp": true}, "cmd": ["recheck", "{patched}"], "exit": 1, "says": "expect[2] FAIL: post.armed -- false eq true"},
  {"name": "ev-unreadable", "patch": {"file": "{fixtures}/ev-base.json", "ops": [{"bind": true}, {"obs": ["ko", "arm-sets", "post"], "raw": {"track": 0}}], "restamp": true}, "cmd": ["recheck", "{patched}"], "exit": 3, "says": "expect[2] UNREADABLE: post.armed -- post.armed: no such key"},

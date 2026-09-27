@@ -46,9 +46,23 @@ each other, or with the host, does not show that the verifier produced them. So:
   for each locale, and the sha256 of the evidence's canonical bytes when the runner produced them.
   The engine grants clean only when every one of these equals the document it judges.
 - Nothing builds an attestation from JSON or from a file. `verify.py run` (P0b-2) builds one in the
-  process that ran the rows; in P0a only the self-test does. The self-test check
-  `attestation-built-only-in-process` parses `Scripts/verify/*.py` to hold that.
+  process that ran the rows; in P0a only the self-test does.
 - A worker cannot hand the verifier a verdict. This is the design, not a gap in it.
+
+The trust boundary, in plain words:
+
+- **Clean is honoured only from `verify.py run` invoked by the gate itself.** A verdict printed by
+  any other process is not evidence, including one from a script that imports the engine and calls
+  `judge` with an attestation it built.
+- **An attestation is a value of the running verifier, not a document.** It exists only inside the
+  process that measured what it holds; there is no file form of it to check.
+- **Forging one requires editing code the verifier runs, which review and CI guard.** The self-test
+  check `attestation-built-only-in-process` parses every tracked `.py` file of the repository
+  (`git ls-files '*.py'`) and fails when anything outside the in-process sites names `Attestation`.
+  Inside `Scripts/verify/` it also refuses the routes that build one without naming it (unpickling,
+  importlib, `__new__`, a dataclass copy). Code that hides a construction elsewhere is the insider
+  class (#816), which this design leaves to review. Runtime secrets or signatures inside one Python
+  process would protect nothing against code in that process, so there are none.
 
 ## The document
 

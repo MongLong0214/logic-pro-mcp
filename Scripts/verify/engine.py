@@ -97,11 +97,24 @@ Every field of an evidence document on disk is written by whoever wrote the file
 with each other, or with this host, does not show that the verifier produced them. So a document
 read from disk is never clean. `judge` takes an in-process `Attestation`: what the process that
 produced the document measured while producing it. It is `None` on every command-line path that
-reads a file (`recheck`, `record`), and the result is then at best exit 3. Only `verify.py run`
-(P0b-2) builds one, in the process that ran the rows; in P0a only the self-test does. Nothing
-builds one from JSON or from a file, and the self-test's `attestation-built-only-in-process` check
-parses Scripts/verify to hold that. `recheck` recomputes, and can FAIL, REFUSE or report
-incomplete; only `run` certifies clean. A worker cannot hand the verifier a verdict.
+reads a file (`recheck`, `record`), and the result is then at best exit 3. `recheck` recomputes,
+and can FAIL, REFUSE or report incomplete; only `run` certifies clean. A worker cannot hand the
+verifier a verdict. The trust boundary, in plain words:
+
+  * Clean is honoured only from `verify.py run` invoked by the gate itself. A verdict printed by
+    any other process is not evidence, including one from a script that imports this engine and
+    calls `judge` with an `Attestation` it built.
+  * An attestation is a value of the running verifier, not a document. Only `verify.py run`
+    (P0b-2) builds one, in the process that ran the rows; in P0a only the self-test does. Nothing
+    builds one from JSON or from a file.
+  * Forging one requires editing code the verifier runs, and review and CI guard that code, not
+    the verifier. The self-test's `attestation-built-only-in-process` check parses every tracked
+    .py file of the repository (`git ls-files '*.py'`) and fails when anything outside the
+    in-process sites names `Attestation`; inside Scripts/verify it also refuses the routes that
+    build one without naming it (unpickling, importlib, `__new__`, a dataclass copy). Code that
+    hides a construction outside Scripts/verify is the insider class (#816), not engineered
+    against. Runtime secrets and signatures inside one Python process are ruled out: they protect
+    nothing against code in that process.
 
 The host checks (`host_provenance`) stay as consistency checks: a disagreement counts against the
 evidence, and agreement never grants `measured` on its own.
