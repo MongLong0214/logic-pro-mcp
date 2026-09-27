@@ -29,7 +29,18 @@ import Foundation
 @Test func testMCULoopbackButtonRoundTrip() async {
     let transport = MockMCUTransport()
     let cache = StateCache()
-    let channel = MCUChannel(transport: transport, cache: cache)
+    // #1020: the strip button reads the track before pressing and confirms after; the reading
+    // follows the press onto the wire. The LED echo below still lands in the cache on its own.
+    let mutePress = MCUProtocol.encodeButton(.mute, strip: 3, on: true)
+    let channel = MCUChannel(
+        transport: transport,
+        cache: cache,
+        axReadback: MCUChannel.AXReadback(
+            readVolume: { _ in nil },
+            readPan: { _ in nil },
+            readMuted: { _ in await transport.sentBytes.contains(mutePress) }
+        )
+    )
     await cache.updateTracks((0..<8).map { TrackState(id: $0, name: "Track \($0)", type: .audio) })
 
     let result = await channel.execute(operation: "track.set_mute", params: ["index": "3", "enabled": "true"])

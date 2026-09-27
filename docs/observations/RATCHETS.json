@@ -327,7 +327,6 @@
         "showMixerMenuItem",
         "sliderZoomHint",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "transportRecordArmExclusion"
       ],
@@ -352,7 +351,6 @@
         "sliderSendHint",
         "tickSliderLabel",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "transportRecordArmExclusion",
         "undoMenuItemPrefix"
@@ -375,7 +373,6 @@
         "sliderZoomHint",
         "tickSliderLabel",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "undoMenuItemPrefix"
       ],
@@ -397,7 +394,6 @@
         "showMixerMenuItem",
         "sliderSendHint",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "transportRecordArmExclusion",
         "undoMenuItemPrefix"
@@ -413,7 +409,6 @@
         "settingPopupValue",
         "showMixerMenuItem",
         "sliderZoomHint",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "transportRecordArmExclusion",
         "undoMenuItemPrefix"
@@ -441,7 +436,6 @@
         "settingPopupValue",
         "showMixerMenuItem",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
         "transportRecordArmExclusion",
         "undoMenuItemPrefix"
@@ -467,7 +461,6 @@
         "sliderSendHint",
         "sliderZoomHint",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeAux",
         "trackTypeDrummer",
         "trackTypeGMDevice",
@@ -501,7 +494,6 @@
         "sliderSendHint",
         "sliderZoomHint",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "trackTypeDrummer",
         "trackTypeGMDevice",
         "trackTypeMaster",
@@ -709,7 +701,6 @@
         "projectPickerWindow",
         "recordArmKeyCommandName",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "undoMenuItemPrefix"
       ],
       "reason": "#1028 (ADR-027 D6, audit B D1): it.lproj/QuickHelp.plist is the English file byte for byte and three .strings units are English row for row, so the canon now records them `not_localized` and neither the casefold ledger nor a derived LabelSet credits their English as Italian any more. These cells were `derived` only from that English; they were never measured. recordArmKeyCommandName is the one AXLocaleValues typed. Nothing in the product changed."
@@ -727,7 +718,6 @@
         "projectPickerWindow",
         "recordArmKeyCommandName",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "undoMenuItemPrefix"
       ],
       "reason": "#1028 (ADR-027 D6, audit B D1): pt.lproj/QuickHelp.plist is the English file byte for byte and three .strings units are English row for row, so the canon now records them `not_localized` and nothing credits their English as Portuguese. These cells were `derived` only from that English; they were never measured. Nothing in the product changed."
@@ -759,7 +749,6 @@
         "sendOrIOControlLabel",
         "sliderZoomHint",
         "trackContentGeneric",
-        "trackRecordEnableCheckbox",
         "transportContainerControlKeywords",
         "undoMenuItemPrefix"
       ],

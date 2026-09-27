@@ -22,10 +22,32 @@ import Testing
     #expect(sent[0][0] == 0xE0) // PitchBend ch0
 }
 
+/// Windows of eight distinct six-character names each, for `LCDBankSurface`'s bank model: every
+/// bank step redraws a different upper row, so the verified bank walk behind every strip-relative
+/// write (#1020) can witness each step.
+private func distinctBankWindows(_ count: Int) -> [String] {
+    (0..<count).map { bank in
+        (0..<8).map { "W\(bank)S\($0)".padding(toLength: 7, withPad: " ", startingAt: 0) }.joined()
+    }
+}
+
+/// A channel on a surface that banks the way Logic 12.3 does, with the upper row already drawn.
+private func makeBankingChannel(
+    windows: Int,
+    axReadback: MCUChannel.AXReadback? = nil
+) async -> (channel: MCUChannel, surface: LCDBankSurface) {
+    let rows = distinctBankWindows(windows)
+    let surface = LCDBankSurface(response: .windows(rows))
+    let channel = MCUChannel(
+        transport: surface, cache: StateCache(), axReadback: axReadback, sleep: CountingSleeper().closure
+    )
+    await surface.attach(channel: channel)
+    await surface.seedUpperRow(rows[0])
+    return (channel, surface)
+}
+
 @Test func testMCUBankingAtomic() async {
-    let transport = MockMCUTransport()
-    let cache = StateCache()
-    let channel = MCUChannel(transport: transport, cache: cache)
+    let (channel, surface) = await makeBankingChannel(windows: 2)
 
     // Track 12 → needs banking (bank 1, strip 4)
     let result = await channel.execute(
@@ -35,14 +57,18 @@ import Testing
     #expect(result.isSuccess)
 
     // Verify banking sequence: bankRight → fader → bankLeft (restore)
-    let sent = await transport.sentBytes
-    #expect(sent.count >= 3) // bank + fader + restore
+    let sent = await surface.sentBytes
+    #expect(sent == [
+        MCUProtocol.encodeButton(.bankRight, on: true),
+        MCUProtocol.encodeButton(.bankRight, on: false),
+        MCUProtocol.encodeFader(track: 4, value: 0.5),
+        MCUProtocol.encodeButton(.bankLeft, on: true),
+        MCUProtocol.encodeButton(.bankLeft, on: false),
+    ])
 }
 
 @Test func testMCUBankingQueueDuringBank() async {
-    let transport = MockMCUTransport()
-    let cache = StateCache()
-    let channel = MCUChannel(transport: transport, cache: cache)
+    let (channel, _) = await makeBankingChannel(windows: 2)
 
     // Fire two commands that need different banks concurrently
     async let r1 = channel.execute(operation: "mixer.set_volume", params: ["index": "12", "volume": "0.5"])
@@ -178,7 +204,19 @@ import Testing
 
 @Test func testMCUChannelPanMasterAndStripButtonCommands() async {
     let transport = MockMCUTransport()
-    let channel = MCUChannel(transport: transport, cache: StateCache())
+    // #1020: solo and arm read the track before pressing and confirm after; select does not.
+    let soloPress = MCUProtocol.encodeButton(.solo, strip: 3, on: true)
+    let armPress = MCUProtocol.encodeButton(.recArm, strip: 4, on: true)
+    let channel = MCUChannel(
+        transport: transport,
+        cache: StateCache(),
+        axReadback: MCUChannel.AXReadback(
+            readVolume: { _ in nil },
+            readPan: { _ in nil },
+            readSoloed: { _ in await transport.sentBytes.contains(soloPress) },
+            readArmed: { _ in await transport.sentBytes.contains(armPress) }
+        )
+    )
 
     let panClockwise = await channel.execute(
         operation: "mixer.set_pan",
@@ -384,7 +422,8 @@ private func decodeMCUJSON(_ s: String) -> [String: Any] {
 }
 
 @Test func testStripButtonReturnsHonestContractEnvelope() async {
-    let channel = MCUChannel(transport: MockMCUTransport(), cache: StateCache())
+    // Track 56 is bank 7: the walk steps seven verified banks out and seven back (#1020).
+    let (channel, _) = await makeBankingChannel(windows: 8)
 
     let result = await channel.execute(
         operation: "track.select",
@@ -404,15 +443,21 @@ private func decodeMCUJSON(_ s: String) -> [String: Any] {
     // not a toggle); the envelope mirrors that decision so callers can audit.
     #expect((obj["enabled"] as? Bool)!)
 
-    // Mute / Solo / Arm honor the inbound enabled flag.
+    // Mute / Solo / Arm honor the inbound enabled flag — and since #1020 they are sets, not
+    // toggles: with no track reading this channel sends nothing and refuses non-terminally,
+    // instead of the old State B behind a press that could have cleared the flag it was asked
+    // to set.
     let mute = await channel.execute(
         operation: "track.set_mute",
         params: ["index": "3", "enabled": "false"]
     )
+    #expect(!mute.isSuccess)
     let muteObj = decodeMCUJSON(mute.message)
     #expect(muteObj["function"] as? String == "mute")
     #expect(!((muteObj["enabled"] as? Bool)!))
-    #expect(muteObj["reason"] as? String == "readback_unavailable")
+    #expect(muteObj["state"] as? String == "C")
+    #expect(muteObj["error"] as? String == "track_state_unreadable")
+    #expect(!((muteObj["write_attempted"] as? Bool)!))
 }
 
 @Test func testSendTransportReturnsHonestContractEnvelope() async {

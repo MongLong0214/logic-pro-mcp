@@ -1813,7 +1813,8 @@ enum AXLocalePolicy {
         canonical: "Record",
         variants: ["Rec", "녹음 활성화", "레코드 활성화", "Aufnahme", "녹음", "録音", "Grabar", "Enregistrement", "Registra", "Gravação", "录音", "錄音"],
         rationale: "Identifies the track Record/arm button by description substring; read-only state extraction. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
-            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Record#mti` in Apple's own namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. The row is the KEYWORD the containment consumer in AXValueExtractors matches inside a track-header control's description, not the element's whole label: `Rec`, `녹음 활성화` and `레코드 활성화` stay as the readings they were, and Apple's `녹음` is the word inside two of them. Checked offline by Scripts/check-labelsets-are-derived.py.",
+            + " Extended on 2026-09-26 to every locale Logic ships by reading the row Apple keys this control keyed `Record#mti` in Apple's own namespace; the strings this label already carried are each one of that row's own values or a tolerance spelling kept beside them, so nothing measured was dropped and nothing was typed. The row is the KEYWORD the containment consumer in AXValueExtractors matches inside a track-header control's description, not the element's whole label: `Rec`, `녹음 활성화` and `레코드 활성화` stay as the readings they were, and Apple's `녹음` is the word inside two of them. Checked offline by Scripts/check-labelsets-are-derived.py."
+            + " Since #1020 (2026-09-27) no reader in AXValueExtractors consults it: `isArmed` is read from the record-enable checkbox through `AXLogicProElements.trackArmControl`, the control the arm write verifies, because this keyword's Spanish `Grabar` is not inside Logic's `Activar grabación`. It is kept because observation records and RATCHETS.json name it; removing it is a change of its own.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Record%23mti#value"
     )
 
@@ -1821,8 +1822,10 @@ enum AXLocalePolicy {
     /// the original `desc == "녹음 활성화" || ...` locator semantics.
     static let trackRecordEnableCheckbox = LabelSet(
         canonical: "녹음 활성화",
-        variants: ["Record Enable", "Record"],
+        variants: ["Record Enable", "Record", "録音を可能にする", "Aufnahme aktivieren", "Activar grabación", "Enregistrement activé", "Abilita registrazione", "Ativar Gravação", "录音启用", "錄音啟用"],
         rationale: "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator."
+            + " Extended on 2026-09-27 (#1020) to every locale Logic ships by reading the plain `Record Enable` row, not its `#acc` sibling: the two differ only in Japanese, and the ja-JP track-header census of 2026-09-05 read `録音を可能にする`, the plain row's value, where `#acc` has `録音可能`. The ko-KR census of that day read `녹음 활성화`, which both rows carry. Before this the set matched in Korean and English only, so the record-enable checkbox was not found in the other eight languages and every arm through it refused. `Record` stays as the tolerance it was. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Record%20Enable#value"
     )
 
     // --- Track-header automation-mode read (WS3 AC2, value-only honesty fix) ---

@@ -734,11 +734,17 @@ struct AXLocalePolicyTests {
     @Test("record-enable checkbox labels are verbatim and ordered")
     func recordEnableCheckboxLabels() {
         let labels = AXLocalePolicy.trackRecordEnableCheckbox.labels
-        #expect(labels == ["녹음 활성화", "Record Enable", "Record"])
+        #expect(labels == ["녹음 활성화", "Record Enable", "Record", "録音を可能にする", "Aufnahme aktivieren",
+                           "Activar grabación", "Enregistrement activé", "Abilita registrazione",
+                           "Ativar Gravação", "录音启用", "錄音啟用"])
         // Verbatim contains (the production call site uses `labels.contains(desc)`).
         #expect(labels.contains("녹음 활성화"))
         #expect(labels.contains("Record Enable"))
         #expect(labels.contains("Record"))
+        // Japanese is the plain `Record Enable` row, which the ja-JP track-header census read; the
+        // `#acc` row's `録音可能` is a different string and is not what the checkbox says (#1020).
+        #expect(labels.contains("録音を可能にする"))
+        #expect(!labels.contains("録音可能"))
         // Case-sensitive: a lowercased English variant is NOT in the set.
         #expect(!labels.contains("record"))
         #expect(!labels.contains("record enable"))

@@ -103,7 +103,7 @@ import Testing
     #expect(abs(strips[8].volume - 0.5) < 0.01) // strip 8 updated
 }
 
-@Test func testFeedbackParserHandlesNoteOffForRecArmAndSelect() async {
+@Test func testFeedbackParserHandlesNoteOffForSelectAndLeavesTheArmAlone() async {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)
     await cache.updateTracks((0..<8).map { index in
@@ -117,8 +117,31 @@ import Testing
     await parser.handle(.noteOff(channel: 0, note: 0x19, velocity: 0))
 
     let tracks = await cache.getTracks()
-    #expect(!(tracks[0].isArmed))
+    // A dark Rec LED is half of Logic's blink on an armed track, not a disarm (#1020).
+    #expect(tracks[0].isArmed)
     #expect(!(tracks[1].isSelected))
+}
+
+/// Logic blinks an armed track's Rec LED. Replayed as the frames it sends, the cached arm state has to
+/// hold through every dark frame, and a lit frame on a disarmed track does not arm it either: the arm
+/// state is the poller's reading of the checkbox (#1020).
+@Test func testFeedbackParserRecArmBlinkDoesNotMoveTheCachedArm() async {
+    let cache = StateCache()
+    let parser = MCUFeedbackParser(cache: cache)
+    await cache.updateTracks((0..<2).map { index in
+        var track = TrackState(id: index, name: "Track \(index)", type: .audio)
+        track.isArmed = index == 0
+        return track
+    })
+
+    for frame in 0..<6 {
+        let lit: UInt8 = frame % 2 == 0 ? 0x7F : 0x00
+        await parser.handle(.noteOn(channel: 0, note: 0x00, velocity: lit))
+        await parser.handle(.noteOn(channel: 0, note: 0x01, velocity: lit))
+        let tracks = await cache.getTracks()
+        #expect(tracks[0].isArmed, "frame \(frame)")
+        #expect(!tracks[1].isArmed, "frame \(frame)")
+    }
 }
 
 @Test func testFeedbackParserSelectOnEnforcesSingleSelection() async {
