@@ -133,11 +133,30 @@ def new_document(spec: dict, spec_path: str, binary: dict) -> dict:
     }
 
 
+def _refuse_duplicate_keys(pairs: list) -> dict:
+    """The object_pairs_hook of every spec and evidence read. JSON keeps the last of two equal keys
+    silently, so a document could say one thing to a reader of its text and another to the engine
+    (`"locales": "all"` then `"locales": {...}`). A duplicate is refused, naming the key."""
+    out = {}
+    for key, value in pairs:
+        if key in out:
+            raise ValueError(f"key {key!r} appears twice in one object; JSON would keep the last one "
+                             f"silently, so the document is refused rather than read")
+        out[key] = value
+    return out
+
+
+def loads(text: str):
+    """Parse a spec or evidence document's text, refusing a duplicate key (ValueError)."""
+    return json.loads(text, object_pairs_hook=_refuse_duplicate_keys)
+
+
 def load(path: str) -> dict:
-    """Read an evidence (or acceptance) document. Raises OSError or ValueError; callers map both
-    to a refusal rather than to an empty document."""
+    """Read an evidence (or acceptance) document. Raises OSError or ValueError, including for a key
+    that appears twice in one object; callers map both to a refusal rather than to an empty
+    document."""
     with open(path, encoding="utf-8") as handle:
-        doc = json.load(handle)
+        doc = loads(handle.read())
     if not isinstance(doc, dict):
         raise ValueError(f"{path}: the top level is {type(doc).__name__}, not an object")
     return doc

@@ -676,7 +676,7 @@ def observation_value(entry) -> "P.Found | P.Unreadable":
     if stored != size:
         return P.Unreadable(f"truncated or altered: {stored} bytes stored of the {size} received")
     try:
-        return P.Found(json.loads(raw))
+        return P.Found(E.loads(raw))  # a key twice in the reply is refused, as in the document
     except ValueError as exc:
         return P.Unreadable(f"the raw text is not JSON ({exc})")
 

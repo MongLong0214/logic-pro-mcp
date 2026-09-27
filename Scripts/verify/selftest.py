@@ -15,6 +15,8 @@ CASES (`fixtures/cases.json`)
                                               store v as that observation's raw text (an
                                               unreadable one becomes readable); with keep_bytes
                                               the stored byte count is left as it was
+        {"obs": [locale, row, step], "text": s}   store s itself as the raw text: text no value
+                                              serializes to, such as a key given twice
         {"bind": true}                        write a temporary binary, hash it, and make the
                                               evidence built-by-verifier over it, so the file the
                                               host checks is real on this host
@@ -23,6 +25,9 @@ CASES (`fixtures/cases.json`)
         "resha": true                         recompute spec_sha256 after editing the embedded spec
         "restamp": true                       recompute the stored verdicts with the engine, so the
                                               case judges the observations, not a verdict mismatch
+        "edit_text": [old, new]               after the ops, replace the one occurrence of old in the
+                                              written file's text with new: a document no value
+                                              serializes to, such as one with a key given twice
     A case may name a guard to run afterwards (`then`), as a subprocess, or a built-in check
     (`check`) that needs more than one command.
 
@@ -160,6 +165,12 @@ MUTANTS = [
     {"id": "restore-check-reads-any-reply-allowed", "file": "engine.py",
      "old": "            elif name in calls:",
      "new": "            elif False:"},
+    {"id": "duplicate-keys-kept-silently", "file": "evidence_doc.py",
+     "old": "        if key in out:",
+     "new": "        if False:"},
+    {"id": "closed-stdout-changes-the-exit", "file": "verify.py",
+     "old": "    sys.stdout = _StdoutWithoutReader(sys.stdout)\n",
+     "new": ""},
     {"id": "counterexample-after-operation-allowed", "file": "engine.py",
      "old": 'if order.get(cx["observation"], -1) >= at:',
      "new": "if False:"},
@@ -391,7 +402,7 @@ def _apply(doc, ops: list, label: str, where: dict) -> None:
             locale, row, step = op["obs"]
             entry = doc["runs"][locale]["rows"][row]["observations"][step]
             entry.pop("unreadable", None)
-            entry["raw"] = json.dumps(op["raw"], ensure_ascii=False, sort_keys=True)
+            entry["raw"] = op["text"] if "text" in op else json.dumps(op["raw"], ensure_ascii=False, sort_keys=True)
             if not op.get("keep_bytes"):
                 entry["raw_bytes"] = len(entry["raw"].encode("utf-8"))
         elif "copy" in op:
@@ -429,7 +440,14 @@ def _restamp(doc: dict) -> None:
 def _patched(case: dict, where: dict) -> str:
     import evidence_doc as E
     path = os.path.join(where["tmp"], f"{case['name']}.json")
-    E.write_atomic(path, _patched_doc(case, where))
+    data = E.serialize(_patched_doc(case, where))
+    if "edit_text" in case["patch"]:
+        old, new = case["patch"]["edit_text"]
+        text = data.decode("utf-8")
+        if text.count(old) != 1:
+            raise ValueError(f"{case['name']}: edit_text's old text occurs {text.count(old)} time(s), not once")
+        data = text.replace(old, new).encode("utf-8")
+    E.write_bytes_atomic(path, data)
     return path
 
 
@@ -731,7 +749,44 @@ def check_attestation_check_sees_the_whole_repository(case: dict, where: dict):
     return None
 
 
+def check_closed_stdout_keeps_the_exit(case: dict, where: dict):
+    """N5 (round 4): the exit code is the verdict, so a reader that closes the pipe early must not
+    change it. Each command runs twice as a subprocess of this tree's verify.py: once with stdout
+    read, once with stdout a pipe whose read end is already closed. The exits must match, and the
+    first must be the one wanted, so the check aims at a real verdict. `recheck` of ev-base prints
+    little (Python's final flush fails: exit 120 without the fix); `check-spec` of a spec with 2000
+    refused rows prints far more than a pipe holds (a write fails mid-run: a traceback)."""
+    import evidence_doc as E
+    with open(os.path.join(FIXTURES, "spec-base.json"), encoding="utf-8") as handle:
+        spec = json.load(handle)
+    row = dict(spec["rows"][0], operation="no-such-step")
+    spec["rows"] = [dict(row, id=f"row-{n}") for n in range(2000)]
+    big = os.path.join(where["tmp"], "closed-stdout-many-refusals.json")
+    E.write_atomic(big, spec)
+    env = dict(os.environ, LPM_VERIFY_ISSUE_BODIES=os.path.join(FIXTURES, "issues"),
+               PYTHONDONTWRITEBYTECODE="1")
+    for argv, wanted in ((["recheck", os.path.join(FIXTURES, "ev-base.json")], 3),
+                         (["check-spec", big], 2)):
+        cmd = [sys.executable, os.path.join(HERE, "verify.py")] + argv
+        read = subprocess.run(cmd, env=env, capture_output=True, timeout=120)
+        if read.returncode != wanted:
+            return f"{argv[0]} with stdout read: exit {read.returncode}, wanted {wanted}"
+        if argv[0] == "check-spec" and len(read.stdout) < 1 << 17:
+            return f"check-spec printed {len(read.stdout)} bytes, too few to fill a pipe mid-run"
+        r, w = os.pipe()
+        os.close(r)
+        try:
+            closed = subprocess.run(cmd, env=env, stdout=w, stderr=subprocess.PIPE, timeout=120)
+        finally:
+            os.close(w)
+        if closed.returncode != wanted:
+            tail = closed.stderr.decode("utf-8", "replace").strip().splitlines()[-1:]
+            return f"{argv[0]} with stdout closed by the reader: exit {closed.returncode}, not the verdict's {wanted}; {tail}"
+    return None
+
+
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
+          "closed_stdout_keeps_the_exit": check_closed_stdout_keeps_the_exit,
           "attestation_built_only_in_process": check_attestation_built_only_in_process,
           "attestation_check_sees_the_whole_repository": check_attestation_check_sees_the_whole_repository}
 

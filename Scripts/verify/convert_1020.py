@@ -173,7 +173,7 @@ def mapping(src: Source) -> dict:
 def convert(src_path: str, locale: str, spec: dict) -> dict:
     with open(src_path, "rb") as handle:
         raw = handle.read()
-    old = json.loads(raw)
+    old = E.loads(raw.decode("utf-8"))  # the recorded run, read refusing a key given twice
     art = old["artifact"]
     binary = {
         E.BINARY_PATH: None,
@@ -213,8 +213,7 @@ def main(argv) -> int:
         print(__doc__.split("\n\n")[1])
         return 2
     src_path, locale, out = argv
-    with open(os.path.join(os.path.dirname(os.path.dirname(HERE)), SPEC_PATH), encoding="utf-8") as h:
-        spec = json.load(h)
+    spec = E.load(os.path.join(os.path.dirname(os.path.dirname(HERE)), SPEC_PATH))
     E.write_atomic(out, convert(src_path, locale, spec))
     print(f"wrote {out}")
     return 0

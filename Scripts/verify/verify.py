@@ -11,11 +11,15 @@ EXIT CODES
 ----------
     0  clean       check-spec: admissible. recheck: never -- see below.
     1  failed      a row FAILED, a stored verdict disagrees with the engine, or self-test failed
-    2  refused     usage error, malformed input, a refusal rule (engine.validate_spec), or
-                   `record` of a file
+    2  refused     usage error, malformed input (a key given twice in one object included), a
+                   refusal rule (engine.validate_spec), or `record` of a file
     3  incomplete  unreadable or incomplete: a row UNREADABLE, a locale not run, an unbound binary,
                    a source whose text could not be fetched -- and every `recheck` that nothing
                    failed or refused, because evidence read from a file has no attestation
+
+The exit code stays the verdict when the reader closes stdout early (`recheck x | head -1`): the
+rest of the output goes to /dev/null and the command exits with the code it computed
+(`_StdoutWithoutReader`).
 
 ONLY `run` CERTIFIES CLEAN
 --------------------------
@@ -42,7 +46,6 @@ SEAMS, for the self-test and nothing else:
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import os
 import subprocess
@@ -282,7 +285,7 @@ def record_attested(data: bytes, attestation, out: str) -> int:
     can never take an earlier record's evidence. In-process only: `run` (P0b-2) calls it with its
     own attestation; no command-line path reaches it."""
     try:
-        doc = json.loads(data.decode("utf-8"))
+        doc = E.loads(data.decode("utf-8"))
     except ValueError as exc:
         print(f"REFUSED evidence: {exc}")
         return engine.EXIT_REFUSED
@@ -380,6 +383,42 @@ def main(argv=None) -> int:
     return args.func(args)
 
 
+class _StdoutWithoutReader:
+    """The command line's stdout. The exit code is the verdict, so a reader that closes the pipe
+    early (`verify.py recheck x | head -1`) must not change it: Python exits 120 when its final
+    flush fails, and 1 on a BrokenPipeError raised mid-run. The first broken write points stdout
+    at devnull; the command runs on to the code it computes and exits with that."""
+
+    def __init__(self, stream):
+        self._stream = stream
+
+    def _reader_gone(self) -> None:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(devnull, self._stream.fileno())
+        finally:
+            os.close(devnull)
+
+    def write(self, text):
+        try:
+            return self._stream.write(text)
+        except BrokenPipeError:
+            self._reader_gone()
+            return len(text)
+
+    def flush(self):
+        try:
+            self._stream.flush()
+        except BrokenPipeError:
+            self._reader_gone()
+            self._stream.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
 if __name__ == "__main__":
-    with contextlib.suppress(BrokenPipeError):
-        sys.exit(main())
+    sys.stdout = _StdoutWithoutReader(sys.stdout)
+    code = main()
+    sys.stdout.flush()
+    sys.exit(code)

@@ -80,8 +80,7 @@ def host(lproj: str) -> dict:
 
 
 def build(spec_name: str) -> dict:
-    with open(os.path.join(FIXTURES, spec_name), encoding="utf-8") as handle:
-        spec = json.load(handle)
+    spec = E.load(os.path.join(FIXTURES, spec_name))
     doc = E.new_document(spec, f"Scripts/verify/fixtures/{spec_name}", dict(UNBOUND_BINARY))
     for lproj in engine.required_locales(spec):
         run = {"date": DATE, "host": host(lproj), E.LOCALE_READING: locale_reading(lproj), "rows": {}}

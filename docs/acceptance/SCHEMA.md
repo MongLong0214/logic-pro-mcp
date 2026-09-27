@@ -24,12 +24,21 @@ python3 Scripts/verify/verify.py self-test                                 # fix
 |---|---|---|---|
 | 0 | clean | admissible, and every quote is verbatim in its source | never. Evidence read from a file cannot attest to how it was made (below); only `verify.py run` certifies clean |
 | 1 | failed | — | a row FAILS, or a stored verdict differs from the recomputed one |
-| 2 | refused | shape, a refusal rule, or a quote that is not in its source | the evidence is malformed (an observation entry included), its `spec_sha256` is not the digest of its spec, `--spec` names a different document, or a run's locale reading names another locale |
+| 2 | refused | shape, a refusal rule, a key given twice in one object, or a quote that is not in its source | the evidence is malformed (an observation entry included, or a key given twice in one object), its `spec_sha256` is not the digest of its spec, `--spec` names a different document, or a run's locale reading names another locale |
 | 3 | incomplete | a source could not be fetched, so its quote is unchecked | the best a file can reach. Also: a row is UNREADABLE, a required locale was not run or carries no readable locale reading, the binary is `unbound`, or this host disagrees with the binary block |
 
 `record` of a file is refused with exit 2 (below). In P0a no command writes a record: the producer is `run`, in P0b-2.
 
 A failure outranks incompleteness: evidence with one FAIL and nine missing locales exits 1.
+
+The exit code is the verdict even when the reader stops reading early (`verify.py recheck x | head -1`):
+once the pipe is closed, the rest of the output goes to `/dev/null` and the command exits with the
+code it computed, not with Python's 120 or a traceback.
+
+Every spec and evidence document is parsed refusing a key given twice in one object. JSON keeps
+the last of two equal keys silently, so a document could say `"locales": "all"` to a reader of its
+text and something else to the engine. Such a document is refused (exit 2), naming the key. A raw
+reading with a key given twice is UNREADABLE, for the same reason.
 
 ### Only `run` certifies clean
 
