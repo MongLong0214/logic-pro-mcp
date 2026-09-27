@@ -1395,9 +1395,10 @@ import Testing
     /// The record-arm command's cell as each language's Key Commands list DISPLAYS it: the
     /// `match_identity` the setup read back on a live Logic 12.3 (6674) in each of the ten
     /// languages on 2026-09-28, one matching row each, from the release build of 1d1db130 (sha256
-    /// 0170e59f...0195a7; the table is in #1049). Each hashes to the `value` digest that
-    /// `docs/canon/index/strings.tsv` records for `Toggle Track Record Enable` in that language's
-    /// `Logic.framework` `Localizable.strings`.
+    /// 0170e59f...0195a7). The readings are the record
+    /// `docs/observations/2026-09-28-1028-the-arm-key-setup-types-each-languages-own-command-name.json`.
+    /// Each hashes to the `value` digest that `docs/canon/index/strings.tsv` records for
+    /// `Toggle Track Record Enable` in that language's `Logic.framework` `Localizable.strings`.
     ///
     /// Written as literals on purpose, unlike the rest of this file. The table the product types
     /// from is generated, so a case that takes its expectation from that table, or builds its

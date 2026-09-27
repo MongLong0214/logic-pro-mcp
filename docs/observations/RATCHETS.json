@@ -62,7 +62,8 @@
       "2026-09-15-the-automation-lane-is-legible-and-inert",
       "2026-09-15-the-korean-project-chooser-names-itself",
       "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
-      "2026-09-23-972-en-US-plugin-instance-identity"
+      "2026-09-23-972-en-US-plugin-instance-identity",
+      "2026-09-28-1028-the-arm-key-setup-types-each-languages-own-command-name"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
@@ -507,11 +508,11 @@
   "note": "What the ledger does not know, as SETS of identities. A member may leave; a new member fails CI. Sets rather than counts because a count is defeated by a swap — add one undocumented variant, document a different one, and the total is unchanged while the ledger knows strictly less about a new string. The guard also compares against the MERGE BASE, so raising the file in the same commit as the regression does not help. Raising requires a dated reason under `raised`. ADR-019 D8. Live: observations-status.py --unproven",
   "raised": {
     "manual_reverify": {
-      "date": "2026-09-24",
+      "date": "2026-09-28",
       "members": [
-        "2026-09-23-972-en-US-plugin-instance-identity"
+        "2026-09-28-1028-the-arm-key-setup-types-each-languages-own-command-name"
       ],
-      "reason": "#976: the plug-in instance identity record (#972) reverifies by hand. Its subject is a host application's own AUv3 view setting kAXIdentifier on its root and a docked Mixer with N instances open; no livekit harness in this repository can stage that, so the reverify block carries the manual command, the expected counts and the cost. Registered by the contributor in the same commit as the record; the eight members of the previous raise are in the base and are no longer growth."
+      "reason": "#1028 P1b (#1049): the ten-language arm-key setup record reverifies by hand. The drive rewrites the KeyCommands and AppleLanguages preferences and relaunches Logic once per language, and no livekit harness here stages that; reverify.command carries the steps and expected carries the readings. The member of the previous raise (#976) is in the base and is no longer growth."
     },
     "records_without_evidence": {
       "date": "2026-09-19",
