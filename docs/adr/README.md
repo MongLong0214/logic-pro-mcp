@@ -29,6 +29,7 @@ Two parts of that paragraph no longer hold. ADR-004's in-memory `MutationSaga` i
 | ADR-006 | Versioned Cache | B | `Shipped` | [#289](https://github.com/MongLong0214/logic-pro-mcp/issues/289) |
 | ADR-007 | AX Selector Atlas | B | `Shipped` | [#290](https://github.com/MongLong0214/logic-pro-mcp/issues/290), reopened 2026-09-21 for the qualification evidence adapter only; the shipped selectors stand |
 | ADR-019 | Observation Ledger | B | `Shipped` | no issue of its own; landed with [#768](https://github.com/MongLong0214/logic-pro-mcp/issues/768) |
+| ADR-027 | A Fixed Verifier | B | `Accepted` | [#1028](https://github.com/MongLong0214/logic-pro-mcp/issues/1028) |
 
 ## Category C — Expansion foundations
 

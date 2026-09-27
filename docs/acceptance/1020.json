@@ -1,0 +1,173 @@
+{
+ "format": "lpm-acceptance/1",
+ "issue": 1020,
+ "surface": "system.midi",
+ "sources": [
+  {
+   "doc": "issue:1020",
+   "sha": null,
+   "quote": "reads the current state first, and presses only when it differs, then confirms the change by readback"
+  },
+  {
+   "doc": "issue:1020",
+   "sha": null,
+   "quote": "refuses, so the router moves on to the next channel."
+  },
+  {
+   "doc": "issue:1020",
+   "sha": null,
+   "quote": "A toggle must not be presented as a set."
+  }
+ ],
+ "fixture": {
+  "id": "lpm-locale-campaign-19",
+  "note": "The 19-track lpm-locale-campaign project with nothing armed, the Mackie Control surface bound, and the server started with LOGIC_PRO_MCP_ARM_KEYCODE set to a value that does not parse, so the Accessibility arm rung refuses arm_key_config_invalid (not terminal) and the router walks on to the MCU rung. Track 15 is strip 7 of bank 1; track 16 sits in the last bank, which Logic stops short at the last strip."
+ },
+ "locales": "all",
+ "rows": [
+  {
+   "id": "arm-unarmed-sets",
+   "criterion": 0,
+   "steps": [
+    {"as": "pre", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
+    {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "operation": "reply",
+   "expect": [
+    {"path": "reply.state", "op": "eq", "value": "A"},
+    {"path": "reply.write_source", "op": "eq", "value": "mcu"},
+    {"path": "reply.write_attempted", "op": "eq", "value": true},
+    {"path": "post.armed", "op": "eq", "value": true},
+    {"path": "pre.armed", "op": "eq", "value": false, "invariant": true}
+   ],
+   "counterexample": [
+    {"observation": "pre", "replaces": "post", "must_fail": [3]}
+   ],
+   "restore": [
+    {"as": "undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
+    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "restore_expect": [
+    {"path": "restored.armed", "op": "eq", "ref": {"obs": "pre.armed"}}
+   ],
+   "independence": ["pre", "post"]
+  },
+  {
+   "id": "arm-armed-writes-nothing",
+   "criterion": 0,
+   "steps": [
+    {"as": "as_found", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
+    {"as": "pre", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
+    {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "operation": "reply",
+   "expect": [
+    {"path": "pre.armed", "op": "eq", "value": true, "invariant": true},
+    {"path": "reply.state", "op": "eq", "value": "A"},
+    {"path": "reply.write_attempted", "op": "eq", "value": false},
+    {"path": "post.armed", "op": "unchanged", "ref": {"obs": "pre.armed"}}
+   ],
+   "counterexample": [
+    {"observation": "as_found", "replaces": "post", "must_fail": [3]},
+    {"observation": "setup", "replaces": "reply", "must_fail": [2]}
+   ],
+   "restore": [
+    {"as": "undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
+    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "restore_expect": [
+    {"path": "restored.armed", "op": "eq", "ref": {"obs": "as_found.armed"}}
+   ],
+   "independence": ["as_found", "pre", "post"]
+  },
+  {
+   "id": "disarm-clears",
+   "criterion": 0,
+   "steps": [
+    {"as": "as_found", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
+    {"as": "pre", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
+    {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "operation": "reply",
+   "expect": [
+    {"path": "pre.armed", "op": "eq", "value": true, "invariant": true},
+    {"path": "reply.state", "op": "eq", "value": "A"},
+    {"path": "reply.write_source", "op": "eq", "value": "mcu"},
+    {"path": "reply.write_attempted", "op": "eq", "value": true},
+    {"path": "post.armed", "op": "eq", "value": false},
+    {"path": "as_found.armed", "op": "eq", "value": false, "invariant": true}
+   ],
+   "counterexample": [
+    {"observation": "pre", "replaces": "post", "must_fail": [4]}
+   ],
+   "restore": [],
+   "restore_expect": [],
+   "independence": ["as_found", "pre", "post"]
+  },
+  {
+   "id": "bank-1-only-the-target-changes",
+   "criterion": 0,
+   "steps": [
+    {"as": "pre", "probe": {"name": "armed_set", "args": {}}},
+    {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 15, "enabled": true}}},
+    {"as": "post", "probe": {"name": "armed_set", "args": {}}}
+   ],
+   "operation": "reply",
+   "expect": [
+    {"path": "pre.armed", "op": "eq", "value": [], "invariant": true},
+    {"path": "reply.state", "op": "eq", "value": "A"},
+    {"path": "reply.write_source", "op": "eq", "value": "mcu"},
+    {"path": "post.armed", "op": "eq", "value": [15]}
+   ],
+   "counterexample": [
+    {"observation": "pre", "replaces": "post", "must_fail": [3]}
+   ],
+   "restore": [
+    {"as": "undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 15, "enabled": false}}},
+    {"as": "restored", "probe": {"name": "armed_set", "args": {}}}
+   ],
+   "restore_expect": [
+    {"path": "restored.armed", "op": "eq", "ref": {"obs": "pre.armed"}}
+   ],
+   "independence": ["pre", "post"]
+  },
+  {
+   "id": "clamped-last-bank-refused-unchanged",
+   "criterion": 1,
+   "steps": [
+    {"as": "control", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 15, "enabled": true}}},
+    {"as": "control_post", "probe": {"name": "armed_set", "args": {}}},
+    {"as": "control_undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 15, "enabled": false}}},
+    {"as": "off_home", "call": {"tool": "logic_mixer", "command": "bank", "params": {"direction": "right", "count": 2}}},
+    {"as": "off_home_row", "probe": {"name": "mcu_upper_row", "args": {}}},
+    {"as": "home", "call": {"tool": "logic_mixer", "command": "bank", "params": {"direction": "left", "count": 2}}},
+    {"as": "pre", "probe": {"name": "armed_set", "args": {}}},
+    {"as": "pre_row", "probe": {"name": "mcu_upper_row", "args": {}}},
+    {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 16, "enabled": true}}},
+    {"as": "post", "probe": {"name": "armed_set", "args": {}}},
+    {"as": "post_row", "probe": {"name": "mcu_upper_row", "args": {}}}
+   ],
+   "operation": "reply",
+   "expect": [
+    {"path": "reply.state", "op": "eq", "value": "C"},
+    {"path": "reply.success", "op": "eq", "value": false},
+    {"path": "pre.armed", "op": "eq", "value": [], "invariant": true},
+    {"path": "post.armed", "op": "unchanged", "ref": {"obs": "pre.armed"}},
+    {"path": "post_row.upper_row", "op": "unchanged", "ref": {"obs": "pre_row.upper_row"}}
+   ],
+   "counterexample": [
+    {"observation": "control_post", "replaces": "post", "must_fail": [3]},
+    {"observation": "control", "replaces": "reply", "must_fail": [0, 1]},
+    {"observation": "off_home_row", "replaces": "post_row", "must_fail": [4]}
+   ],
+   "restore": [],
+   "restore_expect": [],
+   "independence": ["control_post", "off_home_row", "pre", "pre_row", "post", "post_row"]
+  }
+ ]
+}

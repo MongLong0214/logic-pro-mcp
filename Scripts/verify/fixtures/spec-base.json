@@ -1,0 +1,53 @@
+{
+ "format": "lpm-acceptance/1",
+ "issue": 1020,
+ "surface": "arrange.track_headers",
+ "sources": [
+  {
+   "doc": "docs/adr/ADR-019-observation-ledger.md",
+   "sha": "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea",
+   "quote": "The observation system exists so that when Logic moves"
+  },
+  {
+   "doc": "issue:1020",
+   "sha": null,
+   "quote": "A toggle must not be presented as a set."
+  }
+ ],
+ "fixture": {
+  "id": "selftest-two-tracks",
+  "note": "A self-test fixture. Nothing runs it; its evidence documents are written by hand."
+ },
+ "locales": {
+  "subset": ["ko", "en"],
+  "reason": "self-test: two locales exercise the per-locale rules without ten copies of each case"
+ },
+ "rows": [
+  {
+   "id": "arm-sets",
+   "criterion": 1,
+   "steps": [
+    {"as": "pre", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
+    {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "operation": "reply",
+   "expect": [
+    {"path": "reply.state", "op": "eq", "value": "A"},
+    {"path": "reply.write_attempted", "op": "eq", "value": true},
+    {"path": "post.armed", "op": "eq", "value": true}
+   ],
+   "counterexample": [
+    {"observation": "pre", "replaces": "post", "must_fail": [2]}
+   ],
+   "restore": [
+    {"as": "undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
+    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "restore_expect": [
+    {"path": "restored.armed", "op": "eq", "value": false}
+   ],
+   "independence": ["pre", "post"]
+  }
+ ]
+}
