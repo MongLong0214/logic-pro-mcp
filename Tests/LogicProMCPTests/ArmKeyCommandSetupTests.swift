@@ -1487,11 +1487,14 @@ import Testing
             firstVerify: .unmapped,
             verify: .verified
         )
-        guard case .configuredAndVerified = Self.run(fixture) else {
+        guard case .configuredAndVerified(let evidence) = Self.run(fixture) else {
             Issue.record("\(locale): expected a completed assignment")
             return
         }
         #expect(fixture.probe.typed == [query])
+        // The envelope names what went into the search, so a live run records it rather than
+        // inferring it. Kills `search_query` left unset or not emitted.
+        #expect(evidence.extras["search_query"] as? String == query)
     }
 
 }

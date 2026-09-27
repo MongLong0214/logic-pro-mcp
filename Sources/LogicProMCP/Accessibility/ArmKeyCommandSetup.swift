@@ -128,6 +128,10 @@ enum ArmKeyCommandSetup {
         var verifyRestored: Bool?
         var windowOpened = false
         var searchTyped = false
+        /// The string handed to the Key Commands search, set before the first key is posted:
+        /// `search_typed` says whether all of it went in. Reported so a run in another language
+        /// shows WHAT it typed rather than leaving it to be inferred from the table.
+        var searchQuery: String?
         var matchIdentity: String?
         var matchCount: Int?
         var selectionReadback = false
@@ -164,6 +168,7 @@ enum ArmKeyCommandSetup {
             if writeSource == .guiAssignment {
                 out["window_opened"] = windowOpened
                 out["search_typed"] = searchTyped
+                if let searchQuery { out["search_query"] = searchQuery }
                 if let matchIdentity { out["match_identity"] = matchIdentity }
                 if let matchCount { out["match_count"] = matchCount }
                 out["selection_readback"] = selectionReadback
@@ -557,6 +562,7 @@ enum ArmKeyCommandSetup {
         // filter is a live search: an English name typed into a Korean Logic collapses the list
         // to nothing, and the setup then reported "could not find the command — Logic may be
         // non-English" having never had a chance.
+        evidence.searchQuery = typedQuery
         guard runtime.typeText(typedQuery) else { return timedOut() }
         evidence.searchTyped = true
         runtime.sleep(1.0)  // let the filter collapse the list
