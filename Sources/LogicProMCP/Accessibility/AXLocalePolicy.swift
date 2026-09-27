@@ -1458,11 +1458,17 @@ enum AXLocalePolicy {
     )
 
     static let transportRecordControl = LabelSet(
-        canonical: "record",
-        variants: ["녹음", "録音", "Aufnahme", "grabar", "enregistrer", "registra", "gravar", "录音", "錄製"],
+        canonical: "Record",
+        variants: ["녹음", "録音", "Aufnahme", "Grabar", "Enregistrement", "Registra", "Grava", "录音", "錄音"],
         rationale: "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMALiveLoopsUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/record#value"
+            + " Apple's row is Localizable `StrTransportBtns|||Record`, the label the control bar draws:"
+            + " it was read live on 2026-09-28 as `Enregistrement`, `Grava` and `錄音` on a French,"
+            + " Portuguese and Traditional Chinese Logic 12.3. Until #1028 P1b the set held MALiveLoopsUI"
+            + " `record` (`enregistrer`, `gravar`, `錄製`), a row the ten-locale derivation check passed and"
+            + " the control bar does not show in those three languages, so the record-arm setup read the"
+            + " transport as unreadable there and answered verify_environment_unavailable. The other seven"
+            + " values equal the old members up to case, and every comparison is case-insensitive.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTransportBtns%7C%7C%7CRecord#value"
     )
 
     static let transportCycleControl = LabelSet(

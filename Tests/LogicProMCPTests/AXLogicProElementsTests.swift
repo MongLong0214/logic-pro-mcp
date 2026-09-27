@@ -358,6 +358,56 @@ import Testing
     #expect(AXLogicProElements.findControlBarBeatSlider(runtime: runtime) == beatSlider)
 }
 
+/// #1028 P1b: the transport Record control is read by the label the control bar draws, in all ten
+/// languages. Each label is Apple's Localizable `StrTransportBtns|||Record` value; the fr, pt, zh_TW
+/// and ko ones were also read live on 2026-09-28, with the free-tempo neighbour beside them. The
+/// record-arm setup's verify answers `verify_environment_unavailable` when this read is nil, which is
+/// what it did on a French, Portuguese and Traditional Chinese Logic.
+/// Kills: the MALiveLoopsUI `record` members restored (`enregistrer`, `gravar`, `錄製`) -- fr, pt and
+/// zh_TW read nil.
+@Test(
+    "the control bar's Record reads in all ten languages by the label Logic draws",
+    arguments: [
+        ("de", "Aufnahme", nil), ("en", "Record", nil), ("es", "Grabar", nil),
+        ("fr", "Enregistrement", "Enregistrement de tempo libre"), ("it", "Registra", nil),
+        ("ja", "録音", nil), ("ko", "녹음", "프리 템포 녹음"),
+        ("pt", "Grava", "Gravação de Andamento Livre"), ("zh_CN", "录音", nil),
+        ("zh_TW", "錄音", "自由拍速錄製"),
+    ] as [(String, String, String?)]
+)
+func controlBarRecordReadsInEveryLanguage(locale: String, record: String, freeTempo: String?) throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(9100)
+    let window = builder.element(9101)
+    let controlBar = builder.element(9102)
+    let recordBox = builder.element(9103)
+    let freeTempoBox = builder.element(9104)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    // The neighbour comes first, reading the opposite value, so a read that took it would answer false.
+    builder.setChildren(controlBar, freeTempo == nil ? [recordBox] : [freeTempoBox, recordBox])
+    if let freeTempo {
+        builder.setAttribute(freeTempoBox, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        builder.setAttribute(freeTempoBox, kAXDescriptionAttribute as String, freeTempo)
+        builder.setAttribute(freeTempoBox, kAXValueAttribute as String, NSNumber(value: false))
+    }
+    builder.setAttribute(recordBox, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(recordBox, kAXDescriptionAttribute as String, record)
+    builder.setAttribute(recordBox, kAXValueAttribute as String, NSNumber(value: true))
+    let runtime = builder.makeLogicRuntime(appElement: app)
+
+    #expect(AXLogicProElements.findControlBarCheckbox(
+        named: AXLocalePolicy.transportRecordControl, runtime: runtime
+    ) == recordBox, "\(locale): \(record)")
+    // Unreadable (nil) fails the require, the neighbour's false fails the expect. Not written as
+    // `#expect(reading ?? false)`: measured 2026-09-28 on Swift 6.2.4, that form passes on nil.
+    let reading = try #require(AccessibilityChannel.transportRecordingState(runtime: runtime), "\(locale): \(record)")
+    #expect(reading, "\(locale): \(record)")
+}
+
 /// #628: two groups labelled "Control Bar" must not resolve by tree order either.
 ///
 /// Measured on one arrange window: (10, 54, 1900, 58) with twenty direct checkboxes and

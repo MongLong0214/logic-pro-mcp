@@ -7317,17 +7317,17 @@
    }
   },
   "transportRecordControl": {
-   "canonical": "record",
+   "canonical": "Record",
    "variants": [
     "녹음",
     "録音",
     "Aufnahme",
-    "grabar",
-    "enregistrer",
-    "registra",
-    "gravar",
+    "Grabar",
+    "Enregistrement",
+    "Registra",
+    "Grava",
     "录音",
-    "錄製"
+    "錄音"
    ],
    "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only.",
    "match": "contains",

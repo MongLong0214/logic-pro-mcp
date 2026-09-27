@@ -109,12 +109,12 @@
     "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/quickhelp.tsv": "2d68dc5b1b7c1d81526c0f6822b73c724de01e723590eaeed225b7db6c2cdee5",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/strings.tsv": "3bb87b29cc73fe28d02038575bcbbebc8cd960af0c20efaf3f9b273ee24feadb",
+    "index/strings.tsv": "d13b23cee44745bcb909ab77cb3720b89ec043ab6a6877e2125f56bd4aebf621",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "ledger/casefold.tsv": "8ccce39c7dead10a403f5d420a7c8b281c7cda79593a01da0def1c461df88c14",
-    "ledger/presence.tsv": "2ad41be639701ce30c45dcebd4d5810b9fac8e500c1eb80555dff8d5b96c97ed"
+    "ledger/casefold.tsv": "d453f64743960efb03236b1537bd51e97aa7fde97b88c969bb65c8e795ce0048",
+    "ledger/presence.tsv": "91ac2b6a46cea5d91dd77dc39be4ec2e8cefbac643283383ebca2c1043010163"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
@@ -130,9 +130,9 @@
       "it": 30,
       "ja": 34,
       "ko": 40,
-      "pt": 30,
+      "pt": 29,
       "zh_CN": 33,
-      "zh_TW": 33
+      "zh_TW": 32
     },
     "nibstrings": {
       "en": 97
@@ -157,7 +157,7 @@
       "ko": 175,
       "pt": 165,
       "zh_CN": 146,
-      "zh_TW": 145
+      "zh_TW": 144
     }
   },
   "ledger_presence_entries": {
@@ -201,7 +201,7 @@
       "it": 153,
       "ja": 158,
       "ko": 174,
-      "pt": 156,
+      "pt": 157,
       "zh_CN": 146,
       "zh_TW": 141
     }
@@ -855,7 +855,7 @@
         "zh_CN": 1.1548866e-05,
         "zh_TW": 1.087226e-05
       },
-      "cited_rows": 4986,
+      "cited_rows": 5016,
       "cited_values": 2,
       "corpus_digest": "830a5131378ede72bb0a20211985166f367b7a35a30a85d875c9c25ff0b89e1a",
       "english_equal_rows_in_translated_units": {
