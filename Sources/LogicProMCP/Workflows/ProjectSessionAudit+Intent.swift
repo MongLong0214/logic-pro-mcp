@@ -886,6 +886,19 @@ extension ProjectSessionAudit {
                 findings.append(roleFinding(statuses.count == 1 ? dropped[0].status : .unverified, reasons: reasons))
                 continue
             }
+            // The rest of what a direct target reads before it looks for its node: the graph's
+            // epoch, then both domains complete. A capture whose project reference went stale is
+            // published with every domain `unstable` and stops here, and so does every real read
+            // while #291 leaves both domains partial.
+            if let reason = graphEpochMismatch(graph, capture: capture) {
+                findings.append(roleFinding(.unverified, reasons: [reason]))
+                continue
+            }
+            let coverageReasons = domainCoverageReasons(of: graph)
+            if !coverageReasons.isEmpty {
+                findings.append(roleFinding(.unverified, reasons: coverageReasons))
+                continue
+            }
             findings.append(roleFinding(.needsInput, reasons: [.roleHasNoAcceptedMember]))
             questions.append(IntentQuestion(
                 id: "role.\(name)",
@@ -972,6 +985,29 @@ extension ProjectSessionAudit {
         return .located(trackIndex: trackIndex)
     }
 
+    /// The graph carries the epoch of the registry snapshot the capture issued under; any other
+    /// epoch is `graph_epoch_mismatch`.
+    private static func graphEpochMismatch(
+        _ graph: RoutingGraph,
+        capture: SessionPopulationObservation.Capture
+    ) -> IntentReason? {
+        graph.projectEpoch == capture.targetSnapshot?.projectEpoch ? nil : .graphEpochMismatch
+    }
+
+    /// The token for each of the two domains the rule reads that is not `complete`. The state
+    /// decides, never a reason string. A capture whose project reference went stale is published
+    /// with every domain `unstable`, so this is where it stops.
+    private static func domainCoverageReasons(of graph: RoutingGraph) -> [IntentReason] {
+        var reasons: [IntentReason] = []
+        if graph.coverage.mainOutput.state != .complete {
+            reasons.append(.mainOutputCoverageIncomplete)
+        }
+        if graph.coverage.stripTrackAssociation.state != .complete {
+            reasons.append(.stripTrackAssociationIncomplete)
+        }
+        return reasons
+    }
+
     /// The one P1 rule, in a fixed order. `compliant` and `violation` need a capture and graph that
     /// pass every gate, a target the capture issued, both the `main_output` and the
     /// `strip_track_association` domains complete, and a source whose output the graph classifies
@@ -1033,19 +1069,14 @@ extension ProjectSessionAudit {
         case .located(let index):
             trackIndex = index
         }
-        // The graph carries the epoch of the registry snapshot the capture issued under.
-        guard graph.projectEpoch == capture.targetSnapshot?.projectEpoch else {
-            return finding(.unverified, nil, trackIndex: trackIndex, reasons: [.graphEpochMismatch])
+        if let reason = graphEpochMismatch(graph, capture: capture) {
+            return finding(.unverified, nil, trackIndex: trackIndex, reasons: [reason])
         }
 
+        // The observation is read first only so an unverified finding can carry it as evidence;
+        // the coverage verdict does not depend on it.
         let observation = observeMainOutput(of: trackRef, in: graph)
-        var coverageReasons: [IntentReason] = []
-        if graph.coverage.mainOutput.state != .complete {
-            coverageReasons.append(.mainOutputCoverageIncomplete)
-        }
-        if graph.coverage.stripTrackAssociation.state != .complete {
-            coverageReasons.append(.stripTrackAssociationIncomplete)
-        }
+        let coverageReasons = domainCoverageReasons(of: graph)
         if !coverageReasons.isEmpty {
             return finding(
                 .unverified,
