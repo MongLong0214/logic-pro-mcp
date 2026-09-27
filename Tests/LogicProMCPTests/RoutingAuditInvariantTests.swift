@@ -35,6 +35,12 @@ struct RoutingAuditInvariantTests {
     static let expectedKeycmdOnlyOps: Set<String> = [
         // Reachable from MCP tools — manual MIDI Learn binding is the only
         // path that fires these on Logic 12.2.
+        // #1029: Apple's U.S. preset binds no key to these three functions, so
+        // CGEventChannel no longer posts the keys it used to guess (Delete, I,
+        // Option-Command-I); their chains are [.midiKeyCommands, .cgEvent].
+        "edit.delete",                    // logic_edit.delete
+        "view.toggle_inspector",          // logic_navigate.toggle_view view=inspector
+        "view.toggle_step_editor",        // logic_navigate.toggle_view view=step_editor
         "edit.duplicate",                 // logic_edit.duplicate
         "edit.normalize",                 // logic_edit.normalize
         "nav.goto_marker",                // logic_navigate.goto_marker (with index)
