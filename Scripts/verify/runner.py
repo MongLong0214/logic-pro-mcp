@@ -517,6 +517,6 @@ def run_spec(spec: dict, spec_path: str, head: str, locales, out_path: str, reco
     """Build `head`, drive `spec` in `locales` (default: the spec's), write the evidence to
     `out_path`, judge it with this run's attestation, and record it when `record_dir` is given."""
     if _life is None:
-        raise NotImplementedError("the live lifecycle is runner_live.py (P0b-2 commit 6)")
+        raise NotImplementedError("runner_live.LiveLifecycle is wired to verify.py run in P0b-2 commit 9")
     entry = {"spec": spec, "spec_path": spec_path, "head": head, "locales": locales, "out": out_path}
     return _drive(_life, [entry], record_dir)

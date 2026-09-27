@@ -12,13 +12,20 @@ command or the resource URI:
                                     it before that request (a stale reply ahead of the current one)
               command "noise"       writes a non-JSON line, then the reply
               command "exit"        exits without replying
+              command "scripted"    answers with the JSON-RPC members the script file holds under
+                                    params["key"]: {"result": ...} or {"error": ...}, written as
+                                    given, so a result's text keeps its exact characters
   resources/read                    contents[0].text = JSON {"uri": uri}
+The script file is named by the environment variable SCRIPT_ENV and read on every scripted call.
 It also writes one line to stderr at start, which the client must capture in its file.
 """
 
 import json
+import os
 import sys
 import time
+
+SCRIPT_ENV = "LPM_FAKE_MCP_SCRIPT"
 
 
 def reply(rid, result):
@@ -65,6 +72,12 @@ def main():
             if command == "noise":
                 sys.stdout.write("this line is not json\n")
                 sys.stdout.flush()
+            if command == "scripted":
+                with open(os.environ[SCRIPT_ENV], encoding="utf-8") as handle:
+                    members = json.load(handle)[params["key"]]
+                sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": rid, **members}) + "\n")
+                sys.stdout.flush()
+                continue
             if command == "swap":
                 held = (rid, tool_result("echo", params))
                 continue

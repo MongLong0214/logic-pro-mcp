@@ -154,5 +154,12 @@
  {"name": "run-gate-miss-resets-then-runs", "run": {"spec": "{fixtures}/spec-base.json", "script": {"gate": {"ko": [["track 0 armed"], []]}}, "events": {"reset": 1}}, "exit": 0, "says": "ko/arm-sets: gate missed (track 0 armed); one reset"},
  {"name": "run-gate-stays-dirty-row-unreadable", "run": {"spec": "{fixtures}/spec-base.json", "script": {"gate": {"ko": [["track 0 armed"], ["track 0 armed"]]}}}, "exit": 3, "says": "fixture not as declared after one reset: track 0 armed"},
  {"name": "run-tuple-in-reading", "run": {"spec": "{fixtures}/spec-base.json", "script": {"tuple_in_reading": true}}, "exit": 0, "says": "clean (exit 0)"},
- {"name": "life-keyword-outside-selftest-named", "check": "life_seam_named_outside_selftest"}
+ {"name": "life-keyword-outside-selftest-named", "check": "life_seam_named_outside_selftest"},
+ {"name": "reply-text-exact", "check": "reply", "reply": {"command": "scripted", "params": {"key": "exact"}, "script": {"exact": {"result": {"content": [{"type": "text", "text": "{ \"state\" :\"set\",\n  \"index\":0, \"label\": \"\\u00e9t\\u00e9 · été\" }"}], "structuredContent": {"state": "set", "index": 0, "label": "été · été"}}}}}, "stores": "{ \"state\" :\"set\",\n  \"index\":0, \"label\": \"\\u00e9t\\u00e9 · été\" }"},
+ {"name": "reply-without-text-unreadable", "check": "reply", "reply": {"command": "echo", "params": {"a": 1}}, "unreadable": "no text in content[0]"},
+ {"name": "reply-jsonrpc-error-unreadable", "check": "reply", "reply": {"command": "scripted", "params": {"key": "err"}, "script": {"err": {"error": {"code": -32603, "message": "internal error"}}}}, "unreadable": "JSON-RPC error"},
+ {"name": "reply-timeout-unreadable", "check": "reply", "reply": {"command": "slow", "params": {"s": 0.5}, "timeout_s": 0.1}, "unreadable": "no reply within"},
+ {"name": "reply-server-exit-unreadable", "check": "reply", "reply": {"command": "exit"}, "unreadable": "the server exited"},
+ {"name": "reply-text-disagrees-with-structured-unreadable", "check": "reply", "reply": {"command": "scripted", "params": {"key": "two"}, "script": {"two": {"result": {"content": [{"type": "text", "text": "{\"state\": \"set\"}"}], "structuredContent": {"state": "toggled"}}}}}, "unreadable": "not the same JSON"},
+ {"name": "read-text-exact", "check": "reply", "reply": {"uri": "logic://fake/state"}, "stores": "{\"uri\": \"logic://fake/state\"}"}
 ]

@@ -66,6 +66,13 @@ RUN CASES (`"run": {...}`)
         "poll_limit": n                     the fake raises after n reads of one step, so a wait
                                             that ignores its bound ends
 
+REPLY CASES (`"check": "reply"`)
+    What a `call` or `read` step stores (D2), over a real stdio server: live/tests/
+    fake_mcp_server.py is started through runner_live.McpSession, one step goes through
+    runner.execute_step, and the stored entry must hold exactly `stores` (text, compared as str)
+    or be unreadable saying `unreadable`. `reply` names the fake's command and params, or a `uri`
+    to read; `script` is the file its `scripted` command answers from; `timeout_s` bounds the step.
+
 MUTANTS
     Each mutant is one textual rewrite of one file, applied to a temporary copy of Scripts/verify.
     The copy's `self-test --cases-only` must then fail, naming at least one case: that case is the
@@ -100,6 +107,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.dirname(HERE)
 ROOT = os.path.dirname(SCRIPTS)
 FIXTURES = os.path.join(HERE, "fixtures")
+FAKE_SERVER = os.path.join(HERE, "live", "tests", "fake_mcp_server.py")
+#: fake_mcp_server.SCRIPT_ENV. The two are not shared code; a mismatch fails every scripted case.
+FAKE_SCRIPT_ENV = "LPM_FAKE_MCP_SCRIPT"
 CASES = os.path.join(FIXTURES, "cases.json")
 #: The head the self-test "checks out" when it plays the runner: a commit of main that the fixtures
 #: already name (fixtures_build.UNBOUND_BINARY), so the host's head check can agree with it.
@@ -399,6 +409,17 @@ MUTANTS = [
     {"id": "runner-private-guard-off", "file": "selftest.py",
      "old": "    if rel != RUNNER_FILE and named in RUNNER_" + "PRIVATE:",
      "new": "    if False:"},
+    {"id": "body-reserialized", "file": "runner_live.py",
+     "old": '    return first["text"]',
+     "new": '    return json.dumps(json.loads(first["text"]))'},
+    {"id": "timeout-as-empty-object", "file": "runner_live.py",
+     "old": """        raise runner.StepUnreadable(f"no reply within {call.get('elapsed_s') or 0:.1f} s")""",
+     "new": '        return "{}"'},
+    {"id": "structured-preferred", "file": "runner_live.py",
+     "old": '    if structured is not None and not _same_json(first["text"], structured):',
+     "new": ("    if structured is not None:\n"
+             "        return json.dumps(structured, ensure_ascii=False, sort_keys=True)\n"
+             "    if False:")},
     {"id": "control", "file": "engine.py", "control": True,
      "old": '"""The verdict on one evidence document.',
      "new": '"""The verdict on one evidence document (control: a docstring edit, no behaviour).'},
@@ -1064,6 +1085,43 @@ def check_life_seam_named_outside_selftest(case: dict, where: dict):
     return None
 
 
+def check_reply(case: dict, where: dict):
+    """D2: a `call` step stores its reply's content[0].text exactly, and a `read` step its
+    contents[0].text; anything else is unreadable with why. One step, over the fake stdio server,
+    through runner.execute_step, so the check covers the storing as well as the reading."""
+    import runner_live
+    from live import mcp
+    reply = case["reply"]
+    script = os.path.join(where["tmp"], f"{case['name']}.script.json")
+    with open(script, "w", encoding="utf-8") as handle:
+        json.dump(reply.get("script", {}), handle, ensure_ascii=False)
+    if "uri" in reply:
+        step = {"as": "reply", "read": {"uri": reply["uri"]}}
+    else:
+        step = {"as": "reply", "call": {"tool": "fake", "command": reply["command"],
+                                        "params": reply.get("params", {})}}
+    session = runner_live.McpSession(mcp.Server(FAKE_SERVER, env={FAKE_SCRIPT_ENV: script},
+                                                stderr_dir=where["tmp"],
+                                                argv=[sys.executable, FAKE_SERVER]), init_timeout_s=30.0)
+    ctx = {"life": FakeLifecycle({}, where, case["name"], {}), "lproj": "ko", "decl": {}, "built": None,
+           "session": session, "row": "reply", "step": None, "log": []}
+    saved = runner.CALL_TIMEOUT_S, runner.READ_TIMEOUT_S
+    runner.CALL_TIMEOUT_S = runner.READ_TIMEOUT_S = float(reply.get("timeout_s", 10.0))
+    try:
+        entry = runner.execute_step(ctx, step)
+    finally:
+        runner.CALL_TIMEOUT_S, runner.READ_TIMEOUT_S = saved
+        session.close()
+    got = f"stored {entry.get('raw')!r}; unreadable {entry.get('unreadable')!r}"
+    if "stores" in case:
+        exact = entry.get("raw") == case["stores"] and \
+            entry.get("raw_bytes") == len(case["stores"].encode("utf-8"))
+        return None if exact else f"{got}; wanted exactly {case['stores']!r}"
+    if "raw" in entry or case["unreadable"] not in (entry.get("unreadable") or ""):
+        return f"{got}; wanted unreadable saying {case['unreadable']!r}"
+    return None
+
+
 def check_closed_stdout_keeps_the_exit(case: dict, where: dict):
     """N5 (round 4): the exit code is the verdict, so a reader that closes the pipe early must not
     change it. Each command runs twice as a subprocess of this tree's verify.py: once with stdout
@@ -1118,7 +1176,8 @@ CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
           "closed_stdout_keeps_the_exit": check_closed_stdout_keeps_the_exit,
           "attestation_built_only_in_process": check_attestation_built_only_in_process,
           "attestation_check_sees_the_whole_repository": check_attestation_check_sees_the_whole_repository,
-          "life_seam_named_outside_selftest": check_life_seam_named_outside_selftest}
+          "life_seam_named_outside_selftest": check_life_seam_named_outside_selftest,
+          "reply": check_reply}
 
 
 def run_case(case: dict, where: dict):
