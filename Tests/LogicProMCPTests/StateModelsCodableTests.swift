@@ -110,6 +110,58 @@ struct StateModelsCodableTests {
         try assertRoundTrips(PluginSlotState(index: 2, name: "Channel EQ", isBypassed: true), "PluginSlotState")
     }
 
+    /// #291's `send_slots`, carried as VALUES so the keys are on the wire. `sends` stays absent
+    /// beside it: occupancy is not a send list, and the two must not be confused by a consumer.
+    ///
+    /// Kills: renaming any of the four snake_case keys, or dropping `sendSlots` from CodingKeys.
+    @Test func channelStripSendSlotsUseSnakeCaseKeys() throws {
+        var strip = ChannelStripState(trackIndex: 3)
+        strip.sendSlots = [
+            SendSlotObservation(ordinal: 0, state: .occupiedUnknownDestination, levelRaw: 0.5, levelDescription: "-6.0 dB"),
+            SendSlotObservation(ordinal: 1, state: .observedEmpty),
+            SendSlotObservation(ordinal: 2, state: .unreadable),
+        ]
+        try assertRoundTrips(strip, "ChannelStripState (send slots)")
+        let wire = string(try encoder().encode(strip))
+        #expect(wire.contains("\"send_slots\":[{"))
+        #expect(wire.contains("\"level_raw\":0.5"))
+        #expect(wire.contains("\"level_description\":\"-6.0 dB\""))
+        #expect(wire.contains("\"state\":\"occupied_unknown_destination\""))
+        #expect(wire.contains("\"state\":\"observed_empty\""))
+        #expect(wire.contains("\"state\":\"unreadable\""))
+        #expect(!wire.contains("\"sendSlots\""))
+        #expect(!wire.contains("\"levelRaw\""))
+        #expect(!wire.contains("\"sends\""))
+        let decoded = try decoder().decode(ChannelStripState.self, from: try encoder().encode(strip))
+        #expect(decoded.sendSlots == strip.sendSlots)
+        #expect(decoded.sends == nil)
+    }
+
+    /// A payload written before the field existed decodes with `sendSlots == nil`, and an empty
+    /// list on the wire stays an empty list: "nobody looked" and "looked, none" survive the wire
+    /// as different values.
+    ///
+    /// Kills: defaulting a missing key to `[]`.
+    @Test func channelStripOmittedSendSlotsDecodesAsNil() throws {
+        let legacy = #"{"trackIndex":0,"volume":0,"pan":0,"eqEnabled":false,"plugins":[]}"#
+        let strip = try decoder().decode(ChannelStripState.self, from: Data(legacy.utf8))
+        #expect(strip.sendSlots == nil)
+        let empty = #"{"trackIndex":0,"volume":0,"pan":0,"eqEnabled":false,"plugins":[],"send_slots":[]}"#
+        let read = try decoder().decode(ChannelStripState.self, from: Data(empty.utf8))
+        #expect(read.sendSlots == [])
+        #expect(string(try encoder().encode(read)).contains("\"send_slots\":[]"))
+        #expect(!string(try encoder().encode(strip)).contains("send_slots"))
+    }
+
+    /// The four occupancy states are the wire contract ADR-008 section 5's endpoint-and-edge-observations requirement names; a rename would change
+    /// what every consumer of `send_slots` reads.
+    @Test func sendSlotStateRawValuesAreStable() {
+        #expect(SendSlotState.observedEmpty.rawValue == "observed_empty")
+        #expect(SendSlotState.occupiedUnknownDestination.rawValue == "occupied_unknown_destination")
+        #expect(SendSlotState.occupiedKnownDestination.rawValue == "occupied_known_destination")
+        #expect(SendSlotState.unreadable.rawValue == "unreadable")
+    }
+
     @Test func regionStateRoundTrips() throws {
         try assertRoundTrips(
             RegionState(id: "0:1:2:Intro", name: "Intro", trackIndex: 0, startPosition: "1 1", endPosition: "2 1", length: "1 0", isLooped: true),

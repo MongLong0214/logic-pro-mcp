@@ -32,6 +32,8 @@ cat "$WORK/out.txt"
 
 field() { awk -F': ' -v k="$1" '$1 == k {print $2}' "$WORK/out.txt"; }
 CONTROL=$(field "control mute moved")
+# `moved` no longer includes the way back; the probe reports that as `restored` (#291).
+MUTE_BACK=$(field "control mute restored")
 MENUS=$(field "menus opened")
 DISTINCT=$(field "distinct titles")
 CHANGED=$(field "readback changed")
@@ -61,6 +63,8 @@ fi
 
 [ "${CONTROL:-0}" = "1" ] || {
   echo "REVERIFY INCONCLUSIVE: the CONTROL failed — a Mute that should move did not, so the readings say nothing"; exit 1; }
+[ "${MUTE_BACK:-0}" = "1" ] || {
+  echo "REVERIFY FAIL: the CONTROL's Mute did not read back at the value it found — check the track Mutes"; exit 1; }
 [ -n "${MENUS:-}" ] && [ "$MENUS" -ge 2 ] || {
   echo "REVERIFY FAIL: the press opened ${MENUS:-0} menu(s). This record says it opens them."; exit 1; }
 [ -n "${DISTINCT:-}" ] && [ "$DISTINCT" -ge 20 ] || {

@@ -10,6 +10,20 @@ enum RoutingNodeKind: String, Codable, Sendable {
     case output
 }
 
+/// What a source strip's output-slot description was classified as (#291).
+///
+/// A classification of the SOURCE's own slot, read by the canon-derived label sets in
+/// `AXLocalePolicy`. `physicalOutput` and `noOutput` publish no node and no edge; only `bus`
+/// publishes a `bus_<n>` node and a `mainOutput` edge. `unclassified` is a label none of the sets
+/// recognise — an I/O-label rename, or a locale the sets do not carry — and is never guessed into
+/// one of the other three.
+enum RoutingOutputClassification: String, Codable, Sendable {
+    case physicalOutput = "physical_output"
+    case bus
+    case noOutput = "no_output"
+    case unclassified
+}
+
 struct RoutingNode: Codable, Equatable, Sendable {
     let id: String
     let kind: RoutingNodeKind
@@ -19,10 +33,14 @@ struct RoutingNode: Codable, Equatable, Sendable {
     /// What the source strip displays in its output slot. This is a label, not
     /// an identity: it is locale- and user-rename-dependent, and may repeat.
     let observedOutputLabel: String?
+    /// How `observedOutputLabel` classified. Nil when the slot was not read, and on every node
+    /// that is not a source.
+    let outputClassification: RoutingOutputClassification?
 
     enum CodingKeys: String, CodingKey {
         case id, kind, displayName, busNumber, targetRef
         case observedOutputLabel = "observed_output_label"
+        case outputClassification = "output_classification"
     }
 
     init(
@@ -31,7 +49,8 @@ struct RoutingNode: Codable, Equatable, Sendable {
         displayName: String,
         busNumber: Int?,
         targetRef: TargetReference?,
-        observedOutputLabel: String? = nil
+        observedOutputLabel: String? = nil,
+        outputClassification: RoutingOutputClassification? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -39,6 +58,7 @@ struct RoutingNode: Codable, Equatable, Sendable {
         self.busNumber = busNumber
         self.targetRef = targetRef
         self.observedOutputLabel = observedOutputLabel
+        self.outputClassification = outputClassification
     }
 
     init(from decoder: Decoder) throws {
@@ -49,6 +69,10 @@ struct RoutingNode: Codable, Equatable, Sendable {
         busNumber = try container.decodeIfPresent(Int.self, forKey: .busNumber)
         targetRef = try container.decodeIfPresent(TargetReference.self, forKey: .targetRef)
         observedOutputLabel = try container.decodeIfPresent(String.self, forKey: .observedOutputLabel)
+        outputClassification = try container.decodeIfPresent(
+            RoutingOutputClassification.self,
+            forKey: .outputClassification
+        )
     }
 
     func encode(to encoder: Encoder) throws {
@@ -59,6 +83,7 @@ struct RoutingNode: Codable, Equatable, Sendable {
         try container.encodeIfPresent(busNumber, forKey: .busNumber)
         try container.encodeIfPresent(targetRef, forKey: .targetRef)
         try container.encodeIfPresent(observedOutputLabel, forKey: .observedOutputLabel)
+        try container.encodeIfPresent(outputClassification, forKey: .outputClassification)
     }
 }
 
@@ -93,6 +118,74 @@ struct RoutingEdge: Codable, Equatable, Sendable {
     let provenance: RoutingProvenance
 }
 
+enum RoutingCoverageState: String, Codable, Sendable {
+    case complete
+    case partial
+    case unavailable
+    case unstable
+    case notObserved = "not_observed"
+}
+
+/// One routing domain's coverage and the reasons it is not `complete`.
+struct RoutingDomainCoverage: Codable, Equatable, Sendable {
+    let state: RoutingCoverageState
+    let reasons: [String]
+}
+
+/// Per-domain coverage of a routing graph (#291).
+///
+/// The graph is `complete` only when every domain is; `isConsistent` enforces that, so a graph
+/// that claims completeness while any domain is partial, unread, moved or not observed is refused
+/// by `RoutingWriteGate` without that gate knowing the domains exist.
+struct RoutingCoverage: Codable, Equatable, Sendable {
+    let population: RoutingDomainCoverage
+    let stripTrackAssociation: RoutingDomainCoverage
+    let mainOutput: RoutingDomainCoverage
+    let physicalOutput: RoutingDomainCoverage
+    let busToAuxInput: RoutingDomainCoverage
+    let sends: RoutingDomainCoverage
+
+    enum CodingKeys: String, CodingKey {
+        case population
+        case stripTrackAssociation = "strip_track_association"
+        case mainOutput = "main_output"
+        case physicalOutput = "physical_output"
+        case busToAuxInput = "bus_to_aux_input"
+        case sends
+    }
+
+    /// Every domain the same, for a capture that answers nothing domain by domain.
+    static func uniform(_ domain: RoutingDomainCoverage) -> RoutingCoverage {
+        RoutingCoverage(
+            population: domain,
+            stripTrackAssociation: domain,
+            mainOutput: domain,
+            physicalOutput: domain,
+            busToAuxInput: domain,
+            sends: domain
+        )
+    }
+
+    /// In wire order.
+    var domains: [RoutingDomainCoverage] {
+        [population, stripTrackAssociation, mainOutput, physicalOutput, busToAuxInput, sends]
+    }
+
+    var isComplete: Bool {
+        domains.allSatisfy { $0.state == .complete }
+    }
+
+    /// The domain whose evidence an edge of `kind` rests on. An input assignment is the receiving
+    /// side of a bus-to-aux edge, the one input edge this model publishes.
+    func domain(for kind: RoutingEdgeKind) -> RoutingDomainCoverage {
+        switch kind {
+        case .mainOutput: return mainOutput
+        case .send: return sends
+        case .inputAssignment: return busToAuxInput
+        }
+    }
+}
+
 struct RoutingGraph: Codable, Equatable, Sendable {
     /// Issued through `ProjectReferenceIssuance`, the same observed project
     /// identity `logic://project/info` uses, from the cached name and bundle
@@ -105,8 +198,25 @@ struct RoutingGraph: Codable, Equatable, Sendable {
     let nodes: [RoutingNode]
     let edges: [RoutingEdge]
     let provenance: [RoutingProvenance]
+    /// The cache revision the graph was read from, `SessionPopulationObservation.snapshotID(for:)`
+    /// of the same capture, so it equals `inspect_session`'s `snapshot_id` for that capture.
+    let snapshotId: String
+    let coverage: RoutingCoverage
+
+    enum CodingKeys: String, CodingKey {
+        case projectReference, projectEpoch, complete, partialReason, nodes, edges, provenance
+        case snapshotId = "snapshot_id"
+        case coverage
+    }
 
     var isConsistent: Bool {
+        // Completeness is the coverage's to claim, and an edge is published only from a domain
+        // that was read.
+        guard complete == coverage.isComplete,
+              edges.allSatisfy({ [.complete, .partial].contains(coverage.domain(for: $0.kind).state) })
+        else {
+            return false
+        }
         if !complete {
             return partialReason?.isEmpty == false
         }

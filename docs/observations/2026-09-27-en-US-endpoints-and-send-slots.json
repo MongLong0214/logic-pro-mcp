@@ -1,0 +1,136 @@
+{
+  "schema": 3,
+  "id": "2026-09-27-en-US-endpoints-and-send-slots",
+  "date": "2026-09-27",
+  "subject": "logic://mixer strips[].output, strips[].send_slots and routing_graph, and inspect_session's routing section, against an independent Accessibility walk of the Mixer and two undone assignments",
+  "question": "Does the product publish every strip's output with a classification, the number and occupancy of every send slot the Mixer shows, a mainOutput edge for a bus output, and one snapshot identity across its two surfaces, in this language?",
+  "verdict": "works",
+  "surface": "mixer.routing",
+  "issues": [
+    291
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_291_endpoints_and_send_slots_in_every_locale.py --worktree <worktree> --head <full-40-char-head> --locale en (with LPM_EVIDENCE_ROOT exported as an absolute path)",
+    "expected": "locale-is-active and all eleven checks pass: every witnessed output published verbatim and classified, send_slots as long as the witnessed send buttons with occupancy exactly where the level knob follows, a bus in send slot 0 read back as occupied_unknown_destination with no send edge, a bus output read back as a bus node and a mainOutput edge, both undone through the Edit menu, snapshot ids equal, coverage never complete while the mixer filters are unread, every Mute control moved within three presses and read back as found within three more, every track's mute, solo and arm flags as found after the last undo, no menu or modal left",
+    "cost": "needs Logic already in this language on lpm-locale-campaign (or --switch), a TCC-granted shell, and swiftc; starts one server, compiles the menu probe, presses X only if the product's mixer read is not fresh, makes two assignments and undoes each"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift:sendSlotObservations",
+    "Sources/LogicProMCP/Routing/RoutingGraphPublication.swift:publish",
+    "Sources/LogicProMCP/Routing/RoutingGraphPublication.swift:classifyOutputLabel",
+    "Scripts/livekit/live_291_endpoints_and_send_slots_in_every_locale.py:witness_of",
+    "Scripts/livekit/live_291_endpoints_and_send_slots_in_every_locale.py:pred_occupancy_matches_knob_witness",
+    "Scripts/livekit/live_291_endpoints_and_send_slots_in_every_locale.py:pred_bus_output_then_undo",
+    "Scripts/livekit/live_291_endpoints_and_send_slots_in_every_locale.py:pred_positive_control_mute",
+    "Scripts/livekit/live_291_endpoints_and_send_slots_in_every_locale.py:pred_track_flags_as_found"
+  ],
+  "evidence": [
+    "evidence/2026-09-27-en-US-endpoints-and-send-slots.json"
+  ],
+  "method": "The release binary at 0188d6249b63b10e63763a685ed0404e93abe781 was started against lpm-locale-campaign with Logic already in this language. The harness read logic://tracks, logic://mixer and inspect_session (tracks, strips, routing) and, beside each mixer read, walked Logic's windows through Accessibility itself, grouping the Mixer's strips by AXLayoutItem and matching slots with the AXLocalePolicy label sets the product carries. ax_routing_slot_menu_probe.swift, compiled for the run, pressed send slot 0 and then the output slot of one audio strip, selected a bus by its title, and checked its own Mute control each time; each assignment was undone with menu item 1 of Logic's Edit menu, named by Apple's own Edit row for this language, and both instruments read again.",
+  "observations": [
+    {
+      "binary": "0188d6249b63b10e63763a685ed0404e93abe781",
+      "strips": {
+        "product": 21,
+        "witness": 21,
+        "witness_read_failures": 0,
+        "witnessed_output_slots": 19,
+        "strips_without_an_output_slot": 2
+      },
+      "output_classification_counts": {
+        "physical_output": 19
+      },
+      "send_slots_before": {
+        "send_slots": 19,
+        "occupied_product": 0,
+        "occupied_witness": 0,
+        "knobs_witnessed": 0,
+        "knobs_in_no_slot": 0,
+        "strips": 21,
+        "send_groups_named": []
+      },
+      "send_slots_after_the_assignment": {
+        "send_slots": 40,
+        "occupied_product": 1,
+        "occupied_witness": 1,
+        "knobs_witnessed": 1,
+        "knobs_in_no_slot": 0,
+        "strips": 22,
+        "send_groups_named": [
+          "B256"
+        ]
+      },
+      "assigned_knob_level_raw": [
+        0
+      ],
+      "bus_number_selected": 256,
+      "edges_per_reading": {
+        "before": 0,
+        "send-after": 0,
+        "send-after-undo": 0,
+        "output-after": 1,
+        "output-after-undo": 0,
+        "final": 0
+      },
+      "coverage_states": {
+        "population": "partial",
+        "strip_track_association": "partial",
+        "main_output": "partial",
+        "physical_output": "partial",
+        "bus_to_aux_input": "not_observed",
+        "sends": "partial"
+      },
+      "inspect_routing_coverage": "partial",
+      "snapshot_attempts": 1,
+      "probe_runs": 4,
+      "mute_control_attempts": {
+        "runs": 4,
+        "runs_unparsed": 0,
+        "runs_moved": 4,
+        "runs_restored": 4,
+        "move_attempts": 8,
+        "restore_attempts": 5,
+        "runs_needing_a_second_move": 4,
+        "dropped_move_presses": 4,
+        "dropped_restore_presses": 1
+      },
+      "menu_samples": 6,
+      "mutations": [
+        {
+          "label": "send",
+          "undo_exit": 0,
+          "changed": true,
+          "restored": true
+        },
+        {
+          "label": "output",
+          "undo_exit": 0,
+          "changed": true,
+          "restored": true
+        }
+      ],
+      "checks_passed": 11
+    }
+  ],
+  "conclusion": "The product published 21 strips against 21 the walk found, with 0 unreadable elements inside the Mixer. 19 strips with an issued trk_ carried an output classification (physical_output 19). The walk saw 19 send slots and 0 level knobs, and the product reported 0 occupied, each where a knob followed. Assigning bus 256 to send slot 0 of strip 1 turned that slot alone occupied_unknown_destination with no send edge published; assigning it as the strip's output published a bus node and a mainOutput edge; each undo gave every reading back. Coverage was never complete (population partial) while the mixer filters were unread. The probe's Mute control moved and read back as found in 4 of 4 runs, taking 8 move and 5 restore presses, of which 4 and 1 were dropped; every track's mute, solo and arm flags read after the last undo as they read before the first probe run.",
+  "limits": [
+    "Occupancy is the level knob's presence after the send button; which bus a send goes to is not read from the source slot, so occupied_known_destination and send edges are never expected.",
+    "Strip-to-track association is positional (trackIndex against the logic://tracks id); the walk confirms the same strip count and order, not that each strip is the track at its index.",
+    "The witness and the product read the same AXLocalePolicy label sets, so a set that is wrong for this language would be wrong in both; the Mute control and the undo readback are what show the instruments could see.",
+    "One project, one run, one host, one bus (number 256); bus-to-aux-input edges and hidden or filtered strips were not observed.",
+    "The Mute control may take up to three focused presses each way: while a LogicProMCP server polls, Logic dropped 4 of 8 move presses and 1 of 5 restore presses in this run. The attempt counts are data, not part of the check, and why a press is dropped was not identified."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states the server's behaviour -- what it publishes for the strips an independent walk found, and how it answers two undone assignments -- as counts and the product's own wire tokens. It quotes no output label, menu title, level description or undo item Logic ships."
+  }
+}

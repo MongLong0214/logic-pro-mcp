@@ -61,7 +61,8 @@ enum SessionPopulationObservation {
         case mixerFiltersUnread = "mixer_filters_unread"
         case noObservedAssociationEvidence = "no_observed_association_evidence"
         case parentDepthNotObserved = "parent_depth_not_observed"
-        case routingDeferredToIssue291R1 = "routing_deferred_to_issue_291_r1"
+        case routingGraphPartial = "routing_graph_partial"
+        case routingGraphUnavailable = "routing_graph_unavailable"
         case colorDeferredToIssue970 = "color_deferred_to_issue_970"
     }
 
@@ -113,6 +114,10 @@ enum SessionPopulationObservation {
         /// captured project, in which case nothing was issued and the report must not be returned.
         let requestedProjectMatches: Bool?
         let referencesEnabled: Bool
+        /// The registry snapshot `issued` and `projectIssuance` were issued under; nil exactly when
+        /// `referencesEnabled` is false. `logic://mixer` binds its `mixer_strip_ref`s under it and
+        /// the routing graph reports its epoch.
+        let targetSnapshot: TargetRegistrySnapshot?
         /// Nil while `referencesEnabled` means the registry moved on during issuance.
         let issued: IssuedTrackReferences?
         let projectIssuance: ProjectIssuance?
@@ -216,6 +221,7 @@ enum SessionPopulationObservation {
             projectFileNotBound: fileBound == false,
             requestedProjectMatches: requestedProjectMatches,
             referencesEnabled: targetSnapshot != nil,
+            targetSnapshot: targetSnapshot,
             issued: issued,
             projectIssuance: projectIssuance,
             beganAt: beganAt,
@@ -243,7 +249,7 @@ enum SessionPopulationObservation {
         let strips: StripsSection
         let associations: DomainSection
         let hierarchy: DomainSection
-        let routing: DomainSection?
+        let routing: RoutingSection?
         let color: DomainSection?
         let overall: Overall
         let uiEffects: UIEffects
@@ -454,6 +460,22 @@ enum SessionPopulationObservation {
         let reasons: [Reason]
     }
 
+    /// The routing domain (#291): the section's own coverage, and the coverage of the graph
+    /// `logic://mixer` publishes for the same capture, carried verbatim under `graph`.
+    struct RoutingSection: Encodable, Sendable {
+        let coverage: Coverage
+        let reasons: [Reason]
+        let graph: RoutingCoverage
+        let snapshotId: String
+
+        enum CodingKeys: String, CodingKey {
+            case coverage
+            case reasons
+            case graph
+            case snapshotId = "snapshot_id"
+        }
+    }
+
     struct Overall: Encodable, Sendable {
         let complete: Bool
         let incompleteDomains: [Domain]
@@ -632,7 +654,7 @@ enum SessionPopulationObservation {
         // An ordinal or name join between a strip and a track is not evidence of association.
         let associations = deferred(.noObservedAssociationEvidence)
         let hierarchy = deferred(.parentDepthNotObserved)
-        let routing = request.domains.contains(.routing) ? deferred(.routingDeferredToIssue291R1) : nil
+        let routing = request.domains.contains(.routing) ? routingSection(capture: capture, moved: moved) : nil
         let color = request.domains.contains(.color) ? deferred(.colorDeferredToIssue970) : nil
 
         func coverage(of domain: Domain) -> Coverage {
@@ -689,6 +711,50 @@ enum SessionPopulationObservation {
             color: color,
             overall: Overall(complete: incompleteDomains.isEmpty, incompleteDomains: incompleteDomains),
             uiEffects: UIEffects()
+        )
+    }
+
+    /// Built by the same `RoutingGraphPublication.publish` `logic://mixer` calls, over this capture.
+    /// A project reference that went stale during issuance is a moved capture here: `build` cannot
+    /// throw the way the resource does.
+    static func routingSection(capture: Capture, moved: Bool) -> RoutingSection {
+        let project: RoutingProjectBinding
+        switch capture.projectIssuance {
+        case .issued(let reference)?:
+            project = .issued(reference)
+        case .unobserved(let reason)?:
+            project = .unavailable(reason: reason)
+        case .stale?:
+            project = .moved
+        case nil:
+            // With references off nothing was issued, which is not a movement.
+            project = capture.referencesEnabled ? .moved : .referencesUnavailable
+        }
+        let graph = RoutingGraphPublication.publish(capture: capture, project: project)
+
+        let coverage: Coverage
+        let reasons: [Reason]
+        if moved {
+            coverage = .unstable
+            reasons = [.cacheMovedDuringCapture]
+        } else if graph.coverage.domains.contains(where: { $0.state == .unstable }) {
+            coverage = .unstable
+            reasons = [.targetSnapshotStale]
+        } else if capture.mixerFetchedAt == .distantPast {
+            coverage = .unavailable
+            reasons = [.routingGraphUnavailable]
+        } else if graph.complete {
+            coverage = .complete
+            reasons = []
+        } else {
+            coverage = .partial
+            reasons = [.routingGraphPartial]
+        }
+        return RoutingSection(
+            coverage: coverage,
+            reasons: reasons,
+            graph: graph.coverage,
+            snapshotId: graph.snapshotId
         )
     }
 

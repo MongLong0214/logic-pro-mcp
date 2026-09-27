@@ -42,6 +42,9 @@ extension AccessibilityChannel {
             // means "not identified", never "routed nowhere".
             state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
             state.input = AXLogicProElements.inputSlotSource(in: strip, runtime: runtime.ax)
+            // #291: occupancy per send slot, from the send-level knob beside an assigned send's
+            // group. `nil` stays nil — an absent key is "nobody could look", never "no sends".
+            state.sendSlots = AXLogicProElements.sendSlotObservations(in: strip, runtime: runtime.ax)
             channelStrips.append(state)
         }
         return encodeResult(channelStrips)
@@ -89,6 +92,7 @@ extension AccessibilityChannel {
         readPluginChain(of: strip, into: &state, runtime: runtime)
         state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
         state.input = AXLogicProElements.inputSlotSource(in: strip, runtime: runtime.ax)
+        state.sendSlots = AXLogicProElements.sendSlotObservations(in: strip, runtime: runtime.ax)
         return encodeResult(state)
     }
 

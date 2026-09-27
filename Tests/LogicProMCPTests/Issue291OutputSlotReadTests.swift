@@ -91,20 +91,21 @@ struct Issue291OutputSlotReadTests {
         #expect(read == nil)
     }
 
-    /// A Logic in a language nobody has read must yield nothing — the caller then sees an absent
-    /// output rather than a wrong one, and the variants list grows when a locale is observed, not
-    /// when one is translated.
+    /// A slot whose help is no locale's title must yield nothing — the caller then sees an absent
+    /// output rather than a wrong one.
     ///
     /// This test used to make that point with Korean, which stopped being true on 2026-09-04 when
-    /// the ko-KR rendering was measured. Keeping the fixture would have made the test assert the
-    /// opposite of the shipped behaviour, so the fixture moved to a locale that really is unread
-    /// and the Korean case became its own test below. The intent is unchanged; the example had to.
-    @Test("an unmeasured locale yields no output rather than a guess")
+    /// the ko-KR rendering was measured, and then with Japanese, which stopped being true on
+    /// 2026-09-27 when the set was derived from Apple's QuickHelp row for all ten languages
+    /// (`Issue291SendSlotReadTests` carries each locale's title). No shipped language is unread
+    /// by derivation any more, so the fixture is a phrase that is the title of nothing. The
+    /// intent is unchanged; the example had to move twice.
+    @Test("a help that is no locale's title yields no output rather than a guess")
     func unmeasuredLocaleYieldsNothing() {
         let builder = FakeAXRuntimeBuilder()
         let element = strip(
             builder, id: 29_400,
-            outputHelp: "出力スロット。クリックしたまま押さえてチャンネルストリップの出力先を選択します。",
+            outputHelp: "Routing slot. Click and hold to choose the channel strip output.",
             outputDescription: "ステレオ出力"
         )
         let read = AXLogicProElements.outputSlotDestination(
