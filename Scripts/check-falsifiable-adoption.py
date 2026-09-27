@@ -60,14 +60,19 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 24 -> 25 on 2026-09-27: live_1022_project_name_has_no_view_suffix, whose counterexample for every
 # check is the arrange window's raw title read through System Events — the value `name` held before
 # the change — so a predicate that would still accept the old reading fails in the same run.
-# 25 -> 26 on 2026-09-27, the union again: live_965_inspect_session_reports_the_cached_population,
+# 25 -> 26 on 2026-09-27, the union again: live_1020_mcu_set_arm_is_a_set was the 25th on its own
+# branch. Its disarm counterexample is the reply and track list before #1020 — State B from the LED
+# echo with the track still armed — so a predicate that accepted a lone velocity-0 release would
+# fail in the same run.
+# 26 -> 27 on 2026-09-27, the union again: live_965_inspect_session_reports_the_cached_population,
 # whose five counterexamples are each the state its check exists to refuse -- a second issuer's
 # references, a report that counted no strips, an association claimed complete, a refusal that
 # wrote, a new window.
-# 26 -> 27 on 2026-09-27: live_291_endpoints_and_send_slots_in_every_locale, whose ten counterexamples
-# are each derived from the live observation with one earlier defect put in -- a null output, absent
-# send_slots, occupancy read from level, `edges: []` beside a bus output.
-FLOOR = 27
+# 27 -> 28 on 2026-09-27, the union again: live_291_endpoints_and_send_slots_in_every_locale was
+# the 27th on its own branch. Its ten counterexamples are each derived from the live observation
+# with one earlier defect put in -- a null output, absent send_slots, occupancy read from level,
+# `edges: []` beside a bus output.
+FLOOR = 28
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

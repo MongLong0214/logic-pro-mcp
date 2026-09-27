@@ -149,11 +149,6 @@
       "candidate": "0 candidate(s)",
       "members": 7
     },
-    "trackRecordEnableCheckbox": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Record#mti via #mti",
-      "members": 3
-    },
     "trackTypeAux": {
       "verdict": "no-row",
       "candidate": "0 candidate(s)",

@@ -6839,20 +6839,28 @@
    "canonical": "녹음 활성화",
    "variants": [
     "Record Enable",
-    "Record"
+    "Record",
+    "録音を可能にする",
+    "Aufnahme aktivieren",
+    "Activar grabación",
+    "Enregistrement activé",
+    "Abilita registrazione",
+    "Ativar Gravação",
+    "录音启用",
+    "錄音啟用"
    ],
    "rationale": "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },

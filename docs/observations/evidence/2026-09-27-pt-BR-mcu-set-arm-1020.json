@@ -1,0 +1,2210 @@
+{
+  "name": "live_1020_mcu_set_arm_is_a_set",
+  "head": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+  "artifact": {
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin-f1020/LogicProMCP-4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+    "sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
+    "built_from": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
+    "worktree_clean": true,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": false
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "non_ui"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1020/mcu-state",
+      "payload": {
+        "isConnected": true,
+        "registeredAsDevice": true
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1020/track-census",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "rows": [
+          {
+            "id": 0,
+            "name": "Absolute Zero",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 1,
+            "name": "Audio 1",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 2,
+            "name": "Deluxe Classic",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 3,
+            "name": "Deluxe Classic",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 4,
+            "name": "Deluxe Classic",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 5,
+            "name": "Deluxe Classic",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 6,
+            "name": "Deluxe Classic",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 7,
+            "name": "Deluxe Classic",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 8,
+            "name": "Deluxe Classic",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 9,
+            "name": "Deluxe Classic",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 10,
+            "name": "Deluxe Classic",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 11,
+            "name": "Studio Grand",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 12,
+            "name": "Studio Grand",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 13,
+            "name": "Studio Grand",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 14,
+            "name": "Studio Grand",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 15,
+            "name": "Studio Grand",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 16,
+            "name": "Studio Grand",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 17,
+            "name": "Studio Grand",
+            "type": "unknown",
+            "isArmed": false
+          },
+          {
+            "id": 18,
+            "name": "Studio Grand",
+            "type": "unknown",
+            "isArmed": false
+          }
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_tracks",
+      "command": "arm",
+      "params": {
+        "index": 0,
+        "enabled": true
+      },
+      "response": {
+        "state": "A",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": true,
+        "write_attempted": true
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1020/arm-track-0",
+      "payload": {
+        "enabled": true,
+        "fallback_from_channel": "Accessibility",
+        "fallback_from_error": "arm_key_config_invalid",
+        "fallback_from_hint": "record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\"not-a-keycode\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.",
+        "function": "recArm",
+        "observed": true,
+        "state": "A",
+        "success": true,
+        "trace_id": "lpmcp_6F6F2BDB-EE89-49F0-9D22-02F62179B7C3",
+        "track": 0,
+        "verification_source": "ax_value",
+        "verified": true,
+        "write_attempted": true,
+        "write_source": "mcu"
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "1020/precondition-the-arm-reached-the-mcu-rung",
+      "passed": true,
+      "expected": "the MCU surface is connected, and with LOGIC_PRO_MCP_ARM_KEYCODE unparseable an arm on a disarmed track is answered by the MCU rung (write_source mcu)",
+      "observed": {
+        "mcu": {
+          "isConnected": true,
+          "registeredAsDevice": true
+        },
+        "candidates": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "tried": [
+          {
+            "index": 0,
+            "state": "A",
+            "reason": null,
+            "error": null,
+            "write_source": "mcu",
+            "verification_source": "ax_value",
+            "write_attempted": true,
+            "observed": true,
+            "fallback_from_channel": "Accessibility",
+            "fallback_from_error": "arm_key_config_invalid"
+          }
+        ]
+      },
+      "mutation": "give the Accessibility arm rung a working chord: it answers and the MCU rung is never reached",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_tracks",
+      "command": "arm",
+      "params": {
+        "index": 0,
+        "enabled": false
+      },
+      "response": {
+        "state": "A",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": true,
+        "write_attempted": true
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1020/disarm-track-0",
+      "payload": {
+        "enabled": false,
+        "fallback_from_channel": "Accessibility",
+        "fallback_from_error": "arm_key_config_invalid",
+        "fallback_from_hint": "record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\"not-a-keycode\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.",
+        "function": "recArm",
+        "observed": false,
+        "state": "A",
+        "success": true,
+        "trace_id": "lpmcp_712840CD-7AAF-4563-8691-C6CC382899D9",
+        "track": 0,
+        "verification_source": "ax_value",
+        "verified": true,
+        "write_attempted": true,
+        "write_source": "mcu"
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "1020/arm-through-the-mcu-sets-and-confirms",
+      "passed": true,
+      "expected": "arming a disarmed track through the MCU rung answers State A with write_attempted true and observed true, and the refreshed track list shows the track armed. THE COUNTEREXAMPLE is the reply before #1020: State B readback_unavailable from the LED echo, with no reading of the track",
+      "observed": {
+        "observation": "{'state': 'A', 'reason': None, 'error': None, 'write_source': 'mcu', 'verification_source': 'ax_value', 'write_attempted': True, 'observed': True, 'fallback_from_channel': 'Accessibility', 'fallback_from_error': 'arm_key_config_invalid', 'track': 0, 'armed_in_track_list_after': True}",
+        "accepted_the_observation": true,
+        "counterexample": "{'state': 'B', 'reason': 'readback_unavailable', 'error': None, 'write_source': 'mcu', 'verification_source': 'mcu_led_echo', 'write_attempted': None, 'observed': None, 'fallback_from_channel': 'Accessibility', 'fallback_from_error': 'arm_key_config_invalid', 'track': 0, 'armed_in_track_list_after': True}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "drop the confirming read in MCUChannel.executeStripButtonSet and answer State B after the press",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1020/the-cached-arm-holds-through-the-rec-led-blink",
+      "passed": true,
+      "expected": "while the track is armed, 30 reads of logic://tracks 100 ms apart with no refresh all report it armed. THE COUNTEREXAMPLE is what they read before #1020, when every dark frame of Logic's blinking Rec LED was written into the cache as a disarm",
+      "observed": {
+        "observation": "{'track': 0, 'reads': [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]}",
+        "accepted_the_observation": true,
+        "counterexample": "{'track': 0, 'reads': [False, False, False, True, True, True, True, True, True, True, False, False, False, False, False, False, False, True, True, True, True, True, True, True, False, False, False, False, False, False]}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "write isArmed from the Rec LED frame in MCUFeedbackParser.handleButton, as before #1020",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1020/disarm-through-the-mcu-clears-the-arm",
+      "passed": true,
+      "expected": "disarming the same track through the MCU rung answers State A with observed false, and the refreshed track list shows it disarmed. THE COUNTEREXAMPLE is the shape before #1020: a lone velocity-0 release that Logic ignores, State B, and the track still armed",
+      "observed": {
+        "observation": "{'state': 'A', 'reason': None, 'error': None, 'write_source': 'mcu', 'verification_source': 'ax_value', 'write_attempted': True, 'observed': False, 'fallback_from_channel': 'Accessibility', 'fallback_from_error': 'arm_key_config_invalid', 'track': 0, 'armed_in_track_list_after': False}",
+        "accepted_the_observation": true,
+        "counterexample": "{'state': 'B', 'reason': 'readback_unavailable', 'error': None, 'write_source': 'mcu', 'verification_source': 'mcu_led_echo', 'write_attempted': None, 'observed': None, 'fallback_from_channel': 'Accessibility', 'fallback_from_error': 'arm_key_config_invalid', 'track': 0, 'armed_in_track_list_after': True}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "send enabled:false as the bare velocity-0 release, as MCUChannel did before #1020",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "1020/precondition-bank-1-and-final-bank-tracks-are-listed-and-disarmed",
+      "passed": true,
+      "expected": "logic://tracks lists at least 17 tracks (the fixture has 19), tracks 15 and 16 read disarmed, and tracks 7 and 13 read their arm as a boolean",
+      "observed": {
+        "tracks_listed": 19,
+        "found": {
+          "7": false,
+          "13": false,
+          "15": false,
+          "16": false
+        },
+        "armed_set": [],
+        "message": null
+      },
+      "mutation": "open a project with 16 or fewer tracks: the phases have no bank-1 or final-bank track to drive",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_tracks",
+      "command": "arm",
+      "params": {
+        "index": 15,
+        "enabled": true
+      },
+      "response": {
+        "state": "A",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": true,
+        "write_attempted": true
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1020/arm-track-15",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_presses_sent": 4,
+        "bank_probe_unresolved": false,
+        "bank_restored": true,
+        "bank_step_short_of_eight": false,
+        "bank_steps_disambiguated": 1,
+        "bank_window_unaligned": false,
+        "banks_moved": 1,
+        "banks_requested": 1,
+        "enabled": true,
+        "fallback_from_channel": "Accessibility",
+        "fallback_from_error": "arm_key_config_invalid",
+        "fallback_from_hint": "record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\"not-a-keycode\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.",
+        "function": "recArm",
+        "observed": true,
+        "state": "A",
+        "step_windows": [
+          "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+          "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+          "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+          "AbsZer Audio1 DelCls DelCls DelCls      Ativar Gravacao "
+        ],
+        "success": true,
+        "trace_id": "lpmcp_CDF7C1B1-9BFE-4277-A497-515E32F8A9C5",
+        "track": 15,
+        "verification_source": "ax_value",
+        "verified": true,
+        "write_attempted": true,
+        "write_source": "mcu"
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_tracks",
+      "command": "arm",
+      "params": {
+        "index": 15,
+        "enabled": false
+      },
+      "response": {
+        "state": "A",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": true,
+        "write_attempted": true
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1020/disarm-track-15",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_presses_sent": 4,
+        "bank_probe_unresolved": false,
+        "bank_restored": true,
+        "bank_step_short_of_eight": false,
+        "bank_steps_disambiguated": 1,
+        "bank_window_unaligned": false,
+        "banks_moved": 1,
+        "banks_requested": 1,
+        "enabled": false,
+        "fallback_from_channel": "Accessibility",
+        "fallback_from_error": "arm_key_config_invalid",
+        "fallback_from_hint": "record-arm key configuration is invalid: LOGIC_PRO_MCP_ARM_KEYCODE=\"not-a-keycode\" is not a valid decimal virtual keycode. Fix LOGIC_PRO_MCP_ARM_KEYCODE/LOGIC_PRO_MCP_ARM_KEY_MODIFIERS (or unset them to use the default Ctrl+Shift+E) — the key was NOT posted.",
+        "function": "recArm",
+        "observed": false,
+        "state": "A",
+        "step_windows": [
+          "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+          "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+          "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+          "AbsZer Audio1 DelCls DelCls DelCls      Ativar Gravacao "
+        ],
+        "success": true,
+        "trace_id": "lpmcp_DC517EA8-EB73-4C96-B459-74347D03EBA1",
+        "track": 15,
+        "verification_source": "ax_value",
+        "verified": true,
+        "write_attempted": true,
+        "write_source": "mcu"
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1020/bank-1-bank-fields",
+      "payload": {
+        "arm": {
+          "bank_presses_sent": 4,
+          "banks_moved": 1,
+          "banks_requested": 1,
+          "bank_restored": true,
+          "step_windows": [
+            "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+            "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            "AbsZer Audio1 DelCls DelCls DelCls      Ativar Gravacao "
+          ],
+          "bank_bookkeeping_after": 0,
+          "bank_step_short_of_eight": false,
+          "bank_window_unaligned": false,
+          "bank_steps_disambiguated": 1,
+          "bank_probe_unresolved": false
+        },
+        "disarm": {
+          "bank_presses_sent": 4,
+          "banks_moved": 1,
+          "banks_requested": 1,
+          "bank_restored": true,
+          "step_windows": [
+            "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+            "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            "AbsZer Audio1 DelCls DelCls DelCls      Ativar Gravacao "
+          ],
+          "bank_bookkeeping_after": 0,
+          "bank_step_short_of_eight": false,
+          "bank_window_unaligned": false,
+          "bank_steps_disambiguated": 1,
+          "bank_probe_unresolved": false
+        }
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "1020/bank-1-arm-through-the-mcu-sets-and-confirms",
+      "passed": true,
+      "expected": "arming disarmed track 15 through the MCU rung walks one step that provably shifted the row by eight strips, answers State A with write_attempted true and observed true, walks back, and the refreshed track list shows it armed. THE COUNTEREXAMPLE is b1f16569's refusal on the ko fixture, whose bank-0 and bank-1 names repeat: the step could not be proved a full shift and nothing was pressed",
+      "observed": {
+        "observation": "{'state': 'A', 'reason': None, 'error': None, 'write_source': 'mcu', 'verification_source': 'ax_value', 'write_attempted': True, 'observed': True, 'fallback_from_channel': 'Accessibility', 'fallback_from_error': 'arm_key_config_invalid', 'bank_presses_sent': 4, 'banks_moved': 1, 'banks_requested': 1, 'bank_restored': True, 'step_windows': ['DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn '",
+        "accepted_the_observation": true,
+        "counterexample": "{'state': 'C', 'reason': None, 'error': None, 'write_source': None, 'verification_source': 'ax_value', 'write_attempted': None, 'observed': None, 'fallback_from_channel': 'Accessibility', 'fallback_from_error': 'arm_key_config_invalid', 'bank_presses_sent': 2, 'banks_moved': 0, 'banks_requested': 1, 'bank_restored': True, 'step_windows': ['DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ',",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "drop the probe in MCUChannel.walkBank and refuse every ambiguous step, as at b1f16569",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1020/bank-1-the-cached-arm-holds-through-the-rec-led-blink",
+      "passed": true,
+      "expected": "while track 15 is armed, 30 reads of logic://tracks 100 ms apart with no refresh all report it armed. THE COUNTEREXAMPLE is what they read before #1020, when every dark frame of the blinking Rec LED was written as a disarm",
+      "observed": {
+        "observation": "{'track': 15, 'reads': [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]}",
+        "accepted_the_observation": true,
+        "counterexample": "{'track': 15, 'reads': [False, False, False, True, True, True, True, True, True, True, False, False, False, False, False, False, False, True, True, True, True, True, True, True, False, False, False, False, False, False]}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "write isArmed from the Rec LED frame in MCUFeedbackParser.handleButton, as before #1020",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1020/bank-1-disarm-through-the-mcu-clears-the-arm",
+      "passed": true,
+      "expected": "disarming track 15 through the MCU rung walks one full step and back, answers State A with observed false, and the refreshed track list shows it disarmed. THE COUNTEREXAMPLE is the shape before #1020: a lone velocity-0 release that Logic ignores, State B, and the track still armed",
+      "observed": {
+        "observation": "{'state': 'A', 'reason': None, 'error': None, 'write_source': 'mcu', 'verification_source': 'ax_value', 'write_attempted': True, 'observed': False, 'fallback_from_channel': 'Accessibility', 'fallback_from_error': 'arm_key_config_invalid', 'bank_presses_sent': 4, 'banks_moved': 1, 'banks_requested': 1, 'bank_restored': True, 'step_windows': ['DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+        "accepted_the_observation": true,
+        "counterexample": "{'state': 'B', 'reason': 'readback_unavailable', 'error': None, 'write_source': 'mcu', 'verification_source': 'mcu_led_echo', 'write_attempted': None, 'observed': None, 'fallback_from_channel': 'Accessibility', 'fallback_from_error': 'arm_key_config_invalid', 'bank_presses_sent': 4, 'banks_moved': 1, 'banks_requested': 1, 'bank_restored': True, 'step_windows': ['DelCls DelCls DelCls StdGrn StdGrn ",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "send enabled:false as the bare velocity-0 release, as MCUChannel did before #1020",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1020/bank-1-census-armed-set-is-15-then-as-found",
+      "passed": true,
+      "expected": "the refreshed census's armed set is the as-found set plus track 15 after the arm (on the fixture, where nothing is armed, [15]) and the as-found set after the disarm ([]). THE COUNTEREXAMPLE is a strip byte that landed on an unmoved bank 0: track 7 armed instead",
+      "observed": {
+        "observation": "{'as_found': [], 'after_arm': [15], 'after_disarm': []}",
+        "accepted_the_observation": true,
+        "counterexample": "{'as_found': [], 'after_arm': [7], 'after_disarm': []}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "run the strip write in MCUChannel.withBanking even when a bank step did not move",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1020/bank-1-writes-leave-track-7-arm-unchanged",
+      "passed": true,
+      "expected": "track 7's arm, read before the bank-1 arm, after it and after the disarm, never changes. THE COUNTEREXAMPLE is the strip byte landing on an unmoved bank 0, where strip 7 is track 7",
+      "observed": {
+        "observation": "{'before': False, 'after_arm': False, 'after_disarm': False}",
+        "accepted_the_observation": true,
+        "counterexample": "{'before': False, 'after_arm': True, 'after_disarm': True}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "run the strip write in MCUChannel.withBanking even when a bank step did not move",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_tracks",
+      "command": "arm",
+      "params": {
+        "index": 16,
+        "enabled": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "channels_exhausted",
+        "hint": "No keyboard shortcut mapped for: track.set_arm",
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1020/arm-track-16",
+      "payload": {
+        "error": "channels_exhausted",
+        "hint": "No keyboard shortcut mapped for: track.set_arm",
+        "last_error": "No keyboard shortcut mapped for: track.set_arm",
+        "operation": "track.set_arm",
+        "state": "C",
+        "success": false
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "1020/final-bank-reply-raw",
+      "payload": {
+        "state": "C",
+        "reason": null,
+        "error": "channels_exhausted",
+        "write_source": null,
+        "verification_source": null,
+        "write_attempted": null,
+        "observed": null,
+        "fallback_from_channel": null,
+        "fallback_from_error": null,
+        "bank_presses_sent": null,
+        "banks_moved": null,
+        "banks_requested": null,
+        "bank_restored": null,
+        "step_windows": null,
+        "bank_bookkeeping_after": null,
+        "bank_step_short_of_eight": null,
+        "bank_window_unaligned": null,
+        "bank_steps_disambiguated": null,
+        "bank_probe_unresolved": null,
+        "code": null,
+        "last_error": "No keyboard shortcut mapped for: track.set_arm",
+        "success": false
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "1020/final-bank-arm-is-refused-with-nothing-armed",
+      "passed": true,
+      "expected": "arming track 16, which sits in the clamped last bank, is refused (State C, no success, no write attempted), nothing is armed: the census armed set is the same before and after, track 16 reads disarmed and track 13 is unchanged. THE COUNTEREXAMPLE is the reply measured at 78581bbf (ko): State B readback_mismatch after a strip byte that armed track 13",
+      "observed": {
+        "observation": "{'state': 'C', 'success': False, 'error': 'channels_exhausted', 'last_error': 'No keyboard shortcut mapped for: track.set_arm', 'write_source': None, 'write_attempted': None, 'armed_set_before': [], 'armed_set_after': [], 'track_16_armed_after': False, 'track_13_before': False, 'track_13_after': False}",
+        "accepted_the_observation": true,
+        "counterexample": "{'state': 'B', 'success': None, 'error': 'readback_mismatch', 'last_error': None, 'write_source': 'mcu', 'write_attempted': True, 'armed_set_before': [], 'armed_set_after': [13], 'track_16_armed_after': False, 'track_13_before': False, 'track_13_after': True}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "drop the full-shift requirement from withBanking's outward walk in MCUChannel",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "1020/final-bank-leaves-the-mcu-window-home",
+      "passed": true,
+      "expected": "the MCU upper row read from logic://mcu/state after the refused arm is the row it showed before: the walk went back as far as it went out. THE COUNTEREXAMPLE is a walk left on the clamped bank, the rows measured 2026-09-27 (ko) for bank 0 and bank 2",
+      "observed": {
+        "observation": "{'before': 'AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ', 'after': 'AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls '}",
+        "accepted_the_observation": true,
+        "counterexample": "{'before': 'AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ', 'after': 'StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master '}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "skip the walk back in MCUChannel.withBanking when the outward walk falls short",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1020/track-disarmed-again",
+      "restored": true,
+      "detail": "{\"track\": 0, \"armed_in_track_list\": false}"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1020/track-15-arm-as-found",
+      "restored": true,
+      "detail": "{\"track\": 15, \"armed_before\": false, \"armed_in_track_list\": false}"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1020/track-16-arm-as-found",
+      "restored": true,
+      "detail": "{\"track\": 16, \"armed_before\": false, \"armed_in_track_list\": false}"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1020/track-7-arm-as-found",
+      "restored": true,
+      "detail": "{\"track\": 7, \"armed_before\": false, \"armed_in_track_list\": false}"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "1020/track-13-arm-as-found",
+      "restored": true,
+      "detail": "{\"track\": 13, \"armed_before\": false, \"armed_in_track_list\": false}"
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    }
+  ]
+}
