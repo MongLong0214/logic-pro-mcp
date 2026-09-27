@@ -293,7 +293,11 @@ A restore check (`restore_expect`) reads only what a restore produced.
   about the operation, so it belongs in `expect`, with a counterexample.
 - Its path may not name a step bound before the operation either. Its `ref.obs` may: that is the
   as-found state the restore is compared with, the point of a restore check.
+- No restore check reads a call's reply, in `steps` or in `restore`, in its path or its `ref.obs`.
+  A reply is what a call says it did, not the state it left.
 - A `restore` with no call restored nothing, so its `restore_expect` is empty (`[]`).
+- A `restore` with a call has at least one restore check. A write is credited only when its
+  restore is verified (#984).
 - A restore check needs no counterexample. Nothing yet shows one can fail: a restoring call that
   changes nothing passes these rules.
 

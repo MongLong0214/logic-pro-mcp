@@ -64,9 +64,12 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
         reading taken after the operation and before a restore is a claim about the operation, so
         it belongs in `expect`, with a counterexample. Its path may not name a step bound before
         the operation either; its `ref.obs` may, since that is the as-found state a restore is
-        compared with. A `restore` with no call restored nothing, so its `restore_expect` is
-        empty. A restore check needs no counterexample, so nothing yet shows it can fail: a
-        restoring call that changes nothing passes these rules.
+        compared with. No restore check reads a call's reply, in `steps` or in `restore`: a reply
+        is what a call says it did, not the state it left. A `restore` with no call restored
+        nothing, so its `restore_expect` is empty; a `restore` with a call has at least one
+        restore check, since a write is credited only when its restore is verified (#984). A
+        restore check needs no counterexample, so nothing yet shows it can fail: a restoring call
+        that changes nothing passes these rules.
   * THE INDEPENDENCE RULE: a row with no effect over an independent step bound after the
     operation that a `must_fail` lists. An operation's own reply (a `call` step) is never
     independent. A row whose only falsifiable checks read the reply is self-report.
@@ -468,9 +471,10 @@ def restore_problems(row: dict, order: dict, at: int) -> list:
     """A restore check reads only what a restore produced: steps bound AFTER the first call in
     `restore` (the restoring action, `is_call`). A probe before that call, the call's own reply,
     and every step of `steps` from the operation on are claims about the operation, not about the
-    restore. With no call in `restore` nothing was restored, so `restore_expect` is empty. A
-    check's `ref.obs` may also name a step bound before the operation: the as-found state it
-    compares with. `order` and `at` are the positions in `steps`."""
+    restore; no restore check reads any call's reply. With no call in `restore` nothing was
+    restored, so `restore_expect` is empty; with one, it is not (#984). A check's `ref.obs` may
+    also name a reading bound before the operation: the as-found state it compares with. `order`
+    and `at` are the positions in `steps`."""
     restore = [s["as"] for s in row["restore"]]
     first = next((k for k, s in enumerate(row["restore"]) if is_call(s)), None)
     if first is None:
@@ -478,11 +482,14 @@ def restore_problems(row: dict, order: dict, at: int) -> list:
         return [f"restore_expect has {n} check(s), but `restore` has no call, so nothing restored "
                 f"the state and there is nothing for a restore check to read. {BEFORE_RESTORE}"] if n else []
     call, left = restore[first], set(restore[first + 1:])
+    if not row["restore_expect"]:
+        return [f"`restore` has the call {call!r} and restore_expect is empty, so nothing shows the "
+                f"fixture was put back. A write is credited only when its restore is verified (#984): "
+                f"give a restore check that reads a step after {call!r}"]
+    calls = {s["as"] for s in row["steps"] + row["restore"] if is_call(s)}
     out = []
     for j, e in enumerate(row["restore_expect"]):
-        ref = e.get("ref") or {}
-        for what, name in (("reads", _safe_root(e["path"])),
-                           ("compares with", _safe_root(ref["obs"]) if "obs" in ref else None)):
+        for what, name in (("reads", _safe_root(e["path"])), ("compares with", ref_obs_root(e))):
             # `steps` and `restore` never share a name (row_problems refuses one bound twice).
             if name in order and order[name] >= at:
                 out.append(f"restore_expect[{j}] {what} {name!r}, taken at or after the operation "
@@ -498,9 +505,12 @@ def restore_problems(row: dict, order: dict, at: int) -> list:
             elif name in restore and name not in left:
                 out.append(f"restore_expect[{j}] {what} {name!r}, a restore step before the restoring "
                            f"call {call!r}. {BEFORE_RESTORE}")
-            # What remains: a step after the restoring call, or a ref.obs bound before the operation
-            # (the as-found baseline a restore check compares with). An unbound name is refused by
-            # expectation_problems.
+            elif name in calls:
+                out.append(f"restore_expect[{j}] {what} {name!r}, the reply of a call. A reply is what "
+                           f"a call says it did, not the state it left; a restore check reads a state")
+            # What remains: a reading after the restoring call, or a ref.obs reading bound before
+            # the operation (the as-found baseline a restore check compares with). An unbound name
+            # is refused by expectation_problems.
     return out
 
 
