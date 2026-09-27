@@ -1,0 +1,36 @@
+Limit: the fixture builder reopens the pinned lpm-locale-campaign project; it does not create one from nothing.
+Limit: product track types read 'unknown' for all 19 tracks, so the fingerprint records types but no fixture pins them.
+Limit: the import check scans the live package's __init__ only, not each submodule; all of them import the standard library alone.
+Limit: #291 slot labels come from QuickHelp rows, which are English copies for it, pt and zh_TW.
+Limit: the tooltip sample is constructed from a recorded base, not recorded; this package moves no pointer.
+Provenance: inherited 1e102fc42273adf504d64503b0f64eb8358a449c
+
+Limit: a window whose subrole cannot be read is refused, even if it is a palette.
+Limit: the helpers reach live.locale by putting Scripts/verify on sys.path.
+Provenance: inherited f46b5e757b2439d41e4fad02010ebadef8260f3a
+
+Limit: every run now spends a release build (about 160 s measured in phase 1).
+Limit: old binaries and logs under the build root are not cleaned up here.
+Limit: selftest_live.py moves to Builds() in a following commit.
+Provenance: inherited b2f831b75c36d430b999eab2a5b5c2149e728427
+
+Limit: the recovery flock wait is bounded at 10 s; a recoverer that times out reports it and does not take the lane.
+Limit: LIVE.lock.recover is left beside the lock on purpose.
+Provenance: inherited 863466e6f4e665754ff883fdbe280a3c170f3f90
+
+Limit: the flags go through the product's MCU rung, which timed out once at the 25 s server deadline while exploring (2026-09-27, ko).
+Limit: whether solo on one track changes other tracks' checkbox values was not measured offline; the live run shows it.
+Limit: selftest_live.py wires the controls in a following commit.
+Provenance: inherited 94df6243aca015b1756cf84767865b43ff920336
+
+Limit: the per-locale step list is fixed in code; a new required step needs an edit there.
+Limit: restore and final are recorded against the resting locale only.
+Provenance: inherited c07f3f1cadc1ff3d7e8e185d0efbbc56bf17866a
+
+Limit: the retry hides a product failure from the control; each attempt is kept in the record.
+Limit: the solo-implied -1 was seen on 4 of 18 tracks (ko) and 18 of 18 (de), so either 0 or -1 is accepted.
+Provenance: inherited 73b5921c516c08dd3396951ea88118f9366c8295
+
+Limit: only the fixture was open live; the untitled, iCloud and failed-read outcomes are exercised offline only.
+Limit: which of the two windows is the arrange window was not recorded, because their titles are Logic strings.
+Provenance: inherited 148aa321d064d701db158638175c3aec853b928e
