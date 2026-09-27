@@ -214,6 +214,47 @@ struct Issue965InspectSessionCommandTests {
         }
     }
 
+    /// #291 R1. Kills: a hard-coded routing section, or one built from a different read than
+    /// `logic://mixer` — the section's `graph` must be the mixer graph's `coverage` and its
+    /// `snapshot_id` the mixer graph's, over the same unchanged cache and registry.
+    @Test("the routing section carries logic://mixer's graph coverage and snapshot_id")
+    func routingSectionMirrorsTheMixerGraph() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cache = await populatedCache()
+            var busStrip = ChannelStripState(trackIndex: 0, output: "Bus 4")
+            busStrip.sendSlots = []
+            await cache.updateChannelStrips([busStrip, ChannelStripState(trackIndex: 1, output: "Stereo Output")])
+            let registry = TargetRegistry()
+
+            let mixer = try await ResourceHandlers.read(
+                uri: "logic://mixer",
+                cache: cache,
+                router: ChannelRouter(),
+                targetRegistry: registry
+            )
+            let mixerBody = try #require(sharedJSONObject(sharedResourceText(mixer)))
+            let graph = try #require(mixerBody["routing_graph"] as? [String: Any])
+            let graphCoverage = try #require(graph["coverage"] as? [String: Any])
+
+            let result = await inspect(
+                ["domains": .array([.string("routing")])],
+                cache: cache,
+                targetRegistry: registry
+            )
+            let body = try successBody(result)
+            let routing = try section(body, "routing")
+            let sectionGraph = try #require(routing["graph"] as? [String: Any])
+
+            #expect(routing["coverage"] as? String == "partial")
+            #expect(routing["reasons"] as? [String] == ["routing_graph_partial"])
+            #expect(NSDictionary(dictionary: sectionGraph).isEqual(to: graphCoverage))
+            #expect(routing["snapshot_id"] as? String == graph["snapshot_id"] as? String)
+            #expect(body["snapshot_id"] as? String == graph["snapshot_id"] as? String)
+            let edges = try #require(graph["edges"] as? [[String: Any]])
+            #expect(edges.map { $0["destination"] as? String } == ["bus_4"])
+        }
+    }
+
     @Test("a stale, foreign or malformed project_ref is refused before any capture")
     func staleProjectRefIsRefused() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {

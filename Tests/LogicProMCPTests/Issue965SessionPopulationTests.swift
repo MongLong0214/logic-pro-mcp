@@ -84,6 +84,7 @@ private func makeCapture(
         projectFileNotBound: projectFileNotBound,
         requestedProjectMatches: nil,
         referencesEnabled: referencesEnabled,
+        targetSnapshot: referencesEnabled ? TargetRegistrySnapshot(projectEpoch: 3, topologyGeneration: 0) : nil,
         issued: issued,
         projectIssuance: projectIssuance,
         beganAt: fixedNow.addingTimeInterval(-0.01),
@@ -388,9 +389,15 @@ struct Issue965StripsAndDomainsTests {
             capture,
             request: Observation.Request(domains: [.tracks, .routing, .color])
         )
+        // The mixer was never polled in this capture, so the graph built for the section has
+        // nothing to say about any strip (#291 R1).
         let routing = try section(requested, "routing")
         #expect(try coverage(routing) == "unavailable")
-        #expect(try reasons(routing) == ["routing_deferred_to_issue_291_r1"])
+        #expect(try reasons(routing) == ["routing_graph_unavailable"])
+        #expect(routing["snapshot_id"] as? String == requested["snapshot_id"] as? String)
+        let graph = try #require(routing["graph"] as? [String: Any])
+        let population = try #require(graph["population"] as? [String: Any])
+        #expect(population["state"] as? String == "unavailable")
         let color = try section(requested, "color")
         #expect(try coverage(color) == "unavailable")
         #expect(try reasons(color) == ["color_deferred_to_issue_970"])

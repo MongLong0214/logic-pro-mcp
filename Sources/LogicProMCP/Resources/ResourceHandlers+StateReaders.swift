@@ -364,32 +364,28 @@ extension ResourceHandlers {
         uri: String,
         targetRegistry: TargetRegistry? = nil
     ) async throws -> ReadResource.Result {
-        let targetSnapshot: TargetRegistrySnapshot?
-        if FeatureFlags.adr002TargetRef, let targetRegistry {
-            targetSnapshot = await targetRegistry.currentSnapshot
-        } else {
-            targetSnapshot = nil
-        }
-        let strips = await cache.getChannelStrips()
-        let tracks = TrackReferenceIssuance.liveInventory(await cache.getTracks())
-        let tracksWereObserved = await cache.getTracksFetchedAt() > .distantPast
+        // The one capture `inspect_session` builds from, so the graph and that report's routing
+        // section come from the same reading (#291 R1). This read runs after every poll, outside
+        // the #199 deadline: the inert file reader keeps it to cache and registry reads, with no
+        // project-file or AppleScript read.
+        let capture = await SessionPopulationObservation.capture(
+            cache: cache,
+            targetRegistry: targetRegistry,
+            fileReader: .unavailable
+        )
+        let strips = capture.channelStrips
+        let tracks = TrackReferenceIssuance.liveInventory(capture.tracks)
         let conn = await cache.getMCUConnection()
-        let fetchedAt = await cache.getMixerFetchedAt()
-        let axOccluded = await cache.getAXOccluded()
+        let fetchedAt = capture.mixerFetchedAt
+        let axOccluded = capture.before.axOccluded
         let stripsJSON: String
-        var issued: IssuedTrackReferences?
-        var project = RoutingProjectBinding.unavailable(reason: "project reference is unavailable")
-        if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
+        var project = RoutingProjectBinding.referencesUnavailable
+        if let targetRegistry, let targetSnapshot = capture.targetSnapshot {
             // The mixer issues through the same path as logic://tracks, so reading it first binds
             // the same trk_ references rather than finding none (#291 R0).
-            guard let issuedReferences = await TrackReferenceIssuance.issue(
-                for: tracks,
-                registry: targetRegistry,
-                snapshot: targetSnapshot
-            ) else {
+            guard let issuedReferences = capture.issued else {
                 throw MCPError.internalError("mixer target snapshot became stale during resource emission")
             }
-            issued = issuedReferences
             var payload: [[String: Any]] = []
             payload.reserveCapacity(strips.count)
             for strip in strips {
@@ -406,13 +402,10 @@ extension ResourceHandlers {
                 payload.append(object)
             }
             stripsJSON = encodeJSONObject(payload)
-            // From the cached name and poller-filled bundle path only: this read runs after every
-            // poll, outside the #199 deadline, so it must not read the project file or AppleScript.
-            project = try routingProjectBinding(for: await ProjectReferenceIssuance.issue(
-                cached: await cache.getProject(),
-                registry: targetRegistry,
-                snapshot: targetSnapshot
-            ))
+            // From the cached name and poller-filled bundle path only.
+            if let issuance = capture.projectIssuance {
+                project = try routingProjectBinding(for: issuance)
+            }
         } else {
             stripsJSON = encodeJSON(strips)
         }
@@ -423,15 +416,7 @@ extension ResourceHandlers {
         // can decide whether to trust the strips. `registered` is kept as a
         // one-release alias of `mcu_registered` for existing parsers.
         let dataSource = mixerDataSource(fetchedAt: fetchedAt)
-        let routingGraph = RoutingGraphPublication.publish(
-            strips: strips,
-            tracks: tracks,
-            issued: issued,
-            project: project,
-            projectEpoch: targetSnapshot?.projectEpoch ?? 0,
-            mixerWasObserved: fetchedAt > .distantPast,
-            tracksWereObserved: tracksWereObserved
-        )
+        let routingGraph = RoutingGraphPublication.publish(capture: capture, project: project)
         let routingGraphJSON = encodeJSON(routingGraph)
         let ageMsPart = conn.lastFeedbackAgeMs().map { "\($0)" } ?? "null"
         let versionedFragment: String

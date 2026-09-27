@@ -7,48 +7,67 @@ import Testing
 /// `logic://mixer`; the #291 R0 group below reads them in both orders, because
 /// both readers issue `trk_` references through `TrackReferenceIssuance` and the
 /// graph must not depend on which one ran first.
+///
+/// Since #291 R1 an output label is classified, never joined to a track by name: a bus output is
+/// a `bus_<n>` node, a physical output or no output is a classification on the source node. The
+/// R0 cases that used a track-named destination now use a bus, and the `unresolved output
+/// destination endpoint` clause went with the join that produced it.
 @Suite("#291 routing graph publication", .serialized)
 struct RoutingGraphPublicationTests {
-    @Test("an issued trk_ destination produces a reference-to-reference output edge")
-    func issuedTrackDestinationEmitsEdgeAndKeepsTheLabelOnTheSource() async throws {
+    /// Kills: restoring the track-name join — the track named `Bus 3` would become the edge's
+    /// destination instead of `bus_3`.
+    @Test("a bus output produces a reference-to-bus edge and keeps the label on the source")
+    func busOutputEmitsEdgeToTheBusAndKeepsTheLabelOnTheSource() async throws {
         let fixture = try await fixture(
             tracks: [
                 track(index: 0, name: "Source"),
-                track(index: 1, name: "Destination"),
+                track(index: 1, name: "Bus 3"),
             ],
-            strips: [ChannelStripState(trackIndex: 0, output: "Destination")]
+            strips: [ChannelStripState(trackIndex: 0, output: "Bus 3")]
         )
 
         let graph = try fixture.graph
         let nodes = try #require(graph["nodes"] as? [[String: Any]])
         let edges = try #require(graph["edges"] as? [[String: Any]])
         let sourceReference = try #require(fixture.references["Source"])
-        let destinationReference = try #require(fixture.references["Destination"])
+        let busNamedTrackReference = try #require(fixture.references["Bus 3"])
         let edge = try #require(edges.first)
         let sourceNode = try #require(nodes.first { $0["id"] as? String == sourceReference })
+        let busNode = try #require(nodes.first { $0["id"] as? String == "bus_3" })
         let observedOutputLabel = try #require(sourceNode["observed_output_label"] as? String)
 
+        #expect(edges.count == 1)
         #expect(edge["kind"] as? String == "mainOutput")
         #expect(edge["source"] as? String == sourceReference)
-        #expect(edge["destination"] as? String == destinationReference)
-        #expect(observedOutputLabel == "Destination")
-        #expect(!nodes.contains { $0["id"] as? String == "Destination" })
+        #expect(edge["destination"] as? String == "bus_3")
+        #expect(edge["destination"] as? String != busNamedTrackReference)
+        #expect(observedOutputLabel == "Bus 3")
+        #expect(sourceNode["output_classification"] as? String == "bus")
+        #expect(busNode["kind"] as? String == "bus")
+        #expect(busNode["busNumber"] as? Int == 3)
+        #expect(busNode["targetRef"] == nil)
+        #expect(!nodes.contains { $0["id"] as? String == "Bus 3" })
     }
 
-    @Test("an unissued output destination emits no edge and identifies that endpoint")
-    func unresolvedDestinationIsPartialNotANode() async throws {
+    /// Kills: publishing a node for the physical label — `Stereo Output` would appear as a node.
+    @Test("the stereo output is a physical output on the source, with no node and no edge")
+    func stereoOutputIsAClassificationNotANode() async throws {
         let fixture = try await fixture(
             tracks: [track(index: 0, name: "Source")],
             strips: [ChannelStripState(trackIndex: 0, output: "Stereo Output")]
         )
 
         let graph = try fixture.graph
+        let nodes = try #require(graph["nodes"] as? [[String: Any]])
         let edges = try #require(graph["edges"] as? [[String: Any]])
         let partialReason = try #require(graph["partialReason"] as? String)
         let complete = try #require(graph["complete"] as? Bool)
+        let sourceReference = try #require(fixture.references["Source"])
 
         #expect(edges.isEmpty)
-        #expect(partialReason.contains("unresolved output destination endpoint \"Stereo Output\""))
+        #expect(nodes.map { $0["id"] as? String } == [sourceReference])
+        #expect(nodes.first?["output_classification"] as? String == "physical_output")
+        #expect(!partialReason.contains("unclassified output destination label"))
         #expect(!complete)
     }
 
@@ -70,7 +89,7 @@ struct RoutingGraphPublicationTests {
         #expect(!complete)
     }
 
-    @Test("the send list is omitted and its measured unreadability is declared")
+    @Test("the send list is omitted and sends are covered as occupancy only")
     func sendsAreAbsentInsteadOfAnEmptyClaim() async throws {
         let fixture = try await fixture(
             tracks: [track(index: 0, name: "Source")],
@@ -79,11 +98,15 @@ struct RoutingGraphPublicationTests {
 
         let graph = try fixture.graph
         let partialReason = try #require(graph["partialReason"] as? String)
+        let edges = try #require(graph["edges"] as? [[String: Any]])
+        let sends = try #require((graph["coverage"] as? [String: Any])?["sends"] as? [String: Any])
         let sendList = graph["sends"] as? [Any]
 
         #expect(sendList == nil)
-        #expect(partialReason.contains("sends are not covered"))
-        #expect(partialReason.contains("no AXValue, AXValueDescription, or AXTitle"))
+        #expect(!edges.contains { $0["kind"] as? String == "send" })
+        #expect(sends["state"] as? String == "partial")
+        #expect(partialReason.contains("send destinations are not readable at the source slot: occupancy only"))
+        #expect(partialReason.contains("send slots unreadable for track_index=0"))
     }
 
     @Test("an empty output label is unreadable rather than a destination named empty string")
@@ -111,12 +134,11 @@ struct RoutingGraphPublicationTests {
 
     @Test("the published graph remains partial while sends have no readable endpoint")
     func declaredSendCoverageKeepsOtherwiseResolvedGraphPartial() async throws {
+        var strip = ChannelStripState(trackIndex: 0, output: "Bus 1")
+        strip.sendSlots = []
         let fixture = try await fixture(
-            tracks: [
-                track(index: 0, name: "Source"),
-                track(index: 1, name: "Destination"),
-            ],
-            strips: [ChannelStripState(trackIndex: 0, output: "Destination")]
+            tracks: [track(index: 0, name: "Source")],
+            strips: [strip]
         )
 
         let graph = try fixture.graph
@@ -126,12 +148,13 @@ struct RoutingGraphPublicationTests {
 
         #expect(edges.count == 1)
         #expect(!complete)
-        #expect(partialReason.contains("sends are not covered"))
+        #expect(partialReason.contains("send destinations are not readable at the source slot: occupancy only"))
+        #expect(!partialReason.contains("send slots unreadable"))
     }
 
     // MARK: - #291 R0: reader order
 
-    @Test("mixer-first and tracks-first publish the same nodes and edges, and node ids are the tracks' track_ref")
+    @Test("mixer-first and tracks-first publish the same nodes and edges, and track node ids are the tracks' track_ref")
     func mixerFirstAndTracksFirstPublishTheSameMembership() async throws {
         let tracks = [
             track(index: 0, name: "Source"),
@@ -139,8 +162,9 @@ struct RoutingGraphPublicationTests {
             track(index: 2, name: "Other"),
         ]
         let strips = [
-            ChannelStripState(trackIndex: 0, output: "Destination"),
-            ChannelStripState(trackIndex: 2, output: "Destination"),
+            ChannelStripState(trackIndex: 0, output: "Bus 1"),
+            ChannelStripState(trackIndex: 1, output: "Stereo Output"),
+            ChannelStripState(trackIndex: 2, output: "Bus 1"),
         ]
 
         let mixerFirst = await Server(tracks: tracks, strips: strips)
@@ -152,12 +176,12 @@ struct RoutingGraphPublicationTests {
         let tracksFirstGraph = try await tracksFirst.readGraph()
 
         for (graph, rows) in [(mixerFirstGraph, mixerFirstRows), (tracksFirstGraph, tracksFirstRows)] {
-            #expect(Set(graph.nodes.map(\.displayName)) == ["Source", "Destination", "Other"])
+            #expect(Set(graph.nodes.map(\.displayName)) == ["Source", "Destination", "Other", "Bus 1"])
             #expect(edgeNames(graph) == [
-                EdgeNames(kind: "mainOutput", source: "Source", destination: "Destination"),
-                EdgeNames(kind: "mainOutput", source: "Other", destination: "Destination"),
+                EdgeNames(kind: "mainOutput", source: "Source", destination: "Bus 1"),
+                EdgeNames(kind: "mainOutput", source: "Other", destination: "Bus 1"),
             ])
-            for node in graph.nodes {
+            for node in graph.nodes where node.kind == .track {
                 let row = try #require(rows.first { $0["name"] as? String == node.displayName })
                 #expect(row["track_ref"] as? String == node.id)
             }
@@ -170,21 +194,18 @@ struct RoutingGraphPublicationTests {
     func aMixerFirstReadEmitsTheOutputEdge() async throws {
         let server = await Server(
             tracks: [track(index: 0, name: "Source"), track(index: 1, name: "Destination")],
-            strips: [ChannelStripState(trackIndex: 0, output: "Destination")]
+            strips: [ChannelStripState(trackIndex: 0, output: "Bus 2")]
         )
 
         let graph = try await server.readGraph()
         let rows = try await server.readTrackRows()
         let sourceReference = try #require(rows.first { $0["name"] as? String == "Source" }?["track_ref"] as? String)
-        let destinationReference = try #require(
-            rows.first { $0["name"] as? String == "Destination" }?["track_ref"] as? String
-        )
         let edge = try #require(graph.edges.first)
         let partialReason = try #require(graph.partialReason)
 
         #expect(graph.edges.count == 1)
         #expect(edge.source == sourceReference)
-        #expect(edge.destination == destinationReference)
+        #expect(edge.destination == "bus_2")
         #expect(!partialReason.contains("no live track observation"))
         #expect(!partialReason.contains("track observations are unavailable"))
     }
@@ -203,9 +224,9 @@ struct RoutingGraphPublicationTests {
 
             #expect(graph.nodes.count == 1)
             #expect(graph.edges.isEmpty)
-            #expect(partialReason.contains(
-                "unresolved output destination endpoint \"Stereo Output\" for source track_index=0: no unique live track carries that name"
-            ))
+            #expect(graph.nodes.map(\.outputClassification) == [.physicalOutput])
+            #expect(!graph.nodes.contains { $0.id == "Stereo Output" || $0.displayName == "Stereo Output" })
+            #expect(!partialReason.contains("Stereo Output"))
             for node in graph.nodes {
                 let binding = try #require(await server.registry.resolve(TargetReference(rawValue: node.id)))
                 #expect(binding.kind == .track)
@@ -236,7 +257,10 @@ struct RoutingGraphPublicationTests {
     func aStripWithNoTrackObservationIsUnknown() async throws {
         let server = await Server(
             tracks: [track(index: 1, name: "Destination")],
-            strips: [ChannelStripState(trackIndex: 0, output: "Destination")]
+            strips: [
+                ChannelStripState(trackIndex: 0, output: "Bus 2"),
+                ChannelStripState(trackIndex: 1, output: "Stereo Output"),
+            ]
         )
 
         let graph = try await server.readGraph()
@@ -256,8 +280,8 @@ struct RoutingGraphPublicationTests {
         let server = await Server(
             tracks: [track(index: 0, name: "Source"), track(index: 1, name: "Destination")],
             strips: [
-                ChannelStripState(trackIndex: 0, output: "Destination"),
-                ChannelStripState(trackIndex: 0, output: "Destination"),
+                ChannelStripState(trackIndex: 0, output: "Bus 1"),
+                ChannelStripState(trackIndex: 0, output: "Bus 1"),
             ]
         )
 
@@ -278,7 +302,7 @@ struct RoutingGraphPublicationTests {
                 track(index: 1, name: "Destination"),
             ],
             strips: [
-                ChannelStripState(trackIndex: 0, output: "Destination"),
+                ChannelStripState(trackIndex: 0, output: "Bus 1"),
                 ChannelStripState(trackIndex: 1, output: nil),
             ]
         )
@@ -319,19 +343,22 @@ struct RoutingGraphPublicationTests {
     func aTopologyBumpReissuesFreshReferencesInBothReaders() async throws {
         let server = await Server(
             tracks: [track(index: 0, name: "Source"), track(index: 1, name: "Destination")],
-            strips: [ChannelStripState(trackIndex: 0, output: "Destination")]
+            strips: [
+                ChannelStripState(trackIndex: 0, output: "Bus 1"),
+                ChannelStripState(trackIndex: 1, output: "Stereo Output"),
+            ]
         )
         let before = try await server.readTrackRows().compactMap { $0["track_ref"] as? String }
         let graphBefore = try await server.readGraph()
         #expect(before.count == 2)
-        #expect(Set(graphBefore.nodes.map(\.id)) == Set(before))
+        #expect(Set(graphBefore.nodes.filter { $0.kind == .track }.map(\.id)) == Set(before))
 
         await server.registry.bumpTopologyGeneration()
         let graphAfter = try await server.readGraph()
         let after = try await server.readTrackRows().compactMap { $0["track_ref"] as? String }
 
         #expect(after.count == 2)
-        #expect(Set(graphAfter.nodes.map(\.id)) == Set(after))
+        #expect(Set(graphAfter.nodes.filter { $0.kind == .track }.map(\.id)) == Set(after))
         #expect(Set(after).isDisjoint(with: before))
         for reference in after {
             let binding = try #require(await server.registry.resolve(TargetReference(rawValue: reference)))
@@ -343,7 +370,10 @@ struct RoutingGraphPublicationTests {
     func aProjectEpochBumpInvalidatesEveryPublishedNode() async throws {
         let server = await Server(
             tracks: [track(index: 0, name: "Source"), track(index: 1, name: "Destination")],
-            strips: [ChannelStripState(trackIndex: 0, output: "Destination")]
+            strips: [
+                ChannelStripState(trackIndex: 0, output: "Stereo Output"),
+                ChannelStripState(trackIndex: 1, output: "Stereo Output"),
+            ]
         )
         let graphBefore = try await server.readGraph()
         #expect(graphBefore.projectEpoch == 0)

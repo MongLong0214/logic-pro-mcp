@@ -30,6 +30,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `project_ref` that no longer names the cached project is refused with State C
   `stale_target_reference` without binding the other project. `allow_ui_navigation=true` is
   refused with State C `not_implemented` until the navigating increment lands. Registry censuses grow to 116 operations / 24 read-only.
+- **`logic://mixer`'s `routing_graph` publishes typed endpoints and per-domain coverage (#291 R1).**
+  An output label is classified, never joined to a track by name: a track is never an output
+  destination in Logic, so a track named `Bus 3` is no longer one. The source node carries
+  `output_classification` — `physical_output` (`Stereo Output`, `Output 3-4`) and `no_output`
+  publish no node and no edge, `unclassified` names the strip in a reason, and `bus` publishes a
+  `bus_<n>` node (`busNumber: n`, `targetRef: null`) with a `mainOutput` edge from the source's
+  `trk_`. The classifiers are the canon-derived ten-locale sets in `AXLocalePolicy`. The graph gains
+  `snapshot_id` (the same value as `inspect_session`'s for the same cache revision) and `coverage`
+  over six domains (`population`, `strip_track_association`, `main_output`, `physical_output`,
+  `bus_to_aux_input`, `sends`), each `complete` / `partial` / `unavailable` / `unstable` /
+  `not_observed` with its reasons; `partialReason` is those reasons joined, and a graph claiming
+  `complete` while any domain is not is inconsistent and refused by the write gate. `sends` is
+  derived from the strips' `send_slots` (`send slots unreadable for track_index=N` when a strip's
+  slots were not read) and no send edge is published. A cache that moved while the graph was
+  read makes every domain `unstable` with no nodes. `logic://mixer` now reads through the same
+  cache-only capture as `inspect_session`, and `inspect_session`'s `routing` section carries the
+  graph's coverage instead of `routing_deferred_to_issue_291_r1`. Removed with the name join:
+  the `unresolved output destination endpoint "<label>" … no unique live track carries that name`
+  clause and the `sends are not covered: …` clause. Limits: the bus number is parsed from the
+  source slot's description, so an I/O-label rename reads `unclassified` rather than as a bus and
+  `main_output` says so; the strip-to-track attribution is still positional; bus-to-aux input edges
+  are `not_observed`; whether Logic localises these descriptions in the eight locales other than
+  en and ko is unmeasured, and nothing here was driven against a live Logic.
 
 ### Fixed
 - MCU button presses now send the button release: bank left/right (`mixer.bank` and the bank walk behind every strip-relative MCU operation), track select, automation mode, the mute / solo / arm / select strip buttons, and the MCU transport buttons (play, stop, record, rewind, fast forward, cycle). Before, each press was a Note On with no release, so Logic saw every button as held, and it auto-repeats held bank buttons: after one bank walk left and one press right, the LCD kept redrawing between two bank windows for seconds. `track.set_mute` / `set_solo` / `set_arm` with `enabled: false` still send what they sent before, a single release with no press. (#862)
