@@ -83,6 +83,11 @@ import Testing
         // reaches cleanup and its assertion holds for the wrong reason — measured 2026-09-15 when
         // exactly that case survived the mutation it was written to catch.
         documentReadFailsAfter: Int? = nil,
+        // What the AXDocument read of a window WITHOUT a document answers. Logic 12.3 answers
+        // kAXErrorNoValue (-25212) for the Key Commands window, read raw 2026-09-28; the builder's
+        // own answer for an unset attribute is success-with-nil, which AX never returns, and a
+        // fixture that answered it hid a lookup that failed on every running Logic.
+        documentAbsence: AXError = .noValue,
         // The Learn checkbox's TITLE, for the same reason as `windowTitle`: Logic localizes it.
         learnTitle: String = ArmKeyCommandSetup.learnCheckboxTitle,
         // What Logic reports its UI language as. nil models a reading that failed.
@@ -207,9 +212,12 @@ import Testing
         let ax = builder.makeAXRuntime(
             appElement: app,
             attributeValueHandler: nil,
-            attributeValueResultHandler: (documentReadFails || documentReadFailsAfter != nil)
-                ? Self.documentReadThatFails(after: documentReadFailsAfter)
-                : nil,
+            attributeValueResultHandler: Self.documentRead(
+                hasDocument: documentURL != nil,
+                absence: documentAbsence,
+                failsAlways: documentReadFails && documentReadFailsAfter == nil,
+                failsAfter: documentReadFailsAfter
+            ),
             setAttributeHandler: { element, attribute, value in
                 if CFEqual(element, search), attribute == (kAXFocusedAttribute as String),
                    !focusSetSucceeds {
@@ -1258,21 +1266,23 @@ import Testing
         }
     }
 
-    /// A reader whose AXDocument read FAILS. Every other attribute falls through to the builder,
-    /// so the fixture is unchanged apart from the one status this case is about.
-    /// A reader whose AXDocument read fails — immediately, or only after `after` successful reads.
-    /// Every other attribute falls through to the builder.
-    private static func documentReadThatFails(after: Int?)
-        -> @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>? {
+    /// The AXDocument reader. A read that FAILS answers cannotComplete -- immediately, or only
+    /// after `failsAfter` answered reads. Otherwise a window with a document falls through to the
+    /// builder, which serves the URL, and a window without one answers `absence`, the status a
+    /// running Logic returns. Every other attribute falls through to the builder.
+    private static func documentRead(
+        hasDocument: Bool, absence: AXError, failsAlways: Bool, failsAfter: Int?
+    ) -> @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>? {
         let seen = Counter()
         return { _, attribute in
             guard attribute == (kAXDocumentAttribute as String) else { return nil }
-            guard let after else {
+            if failsAlways {
                 return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
             }
-            return seen.next() > after
-                ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
-                : nil          // nil = fall through to the builder, which answers honestly
+            if let failsAfter, seen.next() > failsAfter {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            }
+            return hasDocument ? nil : .failure(AXHelpers.AXStatusError(raw: absence.rawValue))
         }
     }
 
@@ -1308,6 +1318,25 @@ import Testing
         if case .undetermined = ArmKeyCommandSetup.keyCommandsWindowLookup(runtime: fixture.runtime) {
         } else {
             Issue.record(Comment(rawValue: "a title match whose document read failed must be .undetermined, never .notPresent — closeWindow reads .notPresent as 'the window is gone'"))
+        }
+    }
+
+    /// Read raw 2026-09-28 on a Korean Logic 12.3: the Key Commands window's AXDocument answers
+    /// kAXErrorNoValue (-25212). The lookup counted every non-success read as unclassifiable, so it
+    /// answered undetermined for the window it was looking at and the setup reported
+    /// `open_key_commands` ("did not open") on every running Logic, in every language, while the
+    /// fixture -- which answered success-with-nil -- kept the suite green. Both absence statuses
+    /// are the answer "no document"; cannotComplete stays a failed read (the case above).
+    ///
+    /// Kills: the lookup treating -25212 / -25205 as a failed read again.
+    @Test("a Key Commands window whose AXDocument answers noValue or attributeUnsupported is found")
+    func documentAbsenceStatusMeansNoDocument() {
+        for absence in [AXError.noValue, AXError.attributeUnsupported] {
+            let fixture = Self.fixture(documentAbsence: absence)
+            #expect(
+                ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) != nil,
+                "AXDocument answering \(absence.rawValue) is a window without a document"
+            )
         }
     }
 

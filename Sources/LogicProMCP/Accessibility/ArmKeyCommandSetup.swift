@@ -899,7 +899,16 @@ enum ArmKeyCommandSetup {
                 AXHelpers.getTitle(win, runtime: runtime.ax), mode: .contains) else { continue }
             let documentRead: Result<AnyObject?, AXHelpers.AXStatusError> =
                 AXHelpers.getAttributeResult(win, kAXDocumentAttribute as String, runtime: runtime.ax)
-            guard case .success(let document) = documentRead else {
+            let document: AnyObject?
+            switch documentRead {
+            case .success(let value):
+                document = value
+            case .failure(let error) where error.isDefinitiveAbsence:
+                // The answer "no document", not a failed read. Logic 12.3 returns kAXErrorNoValue
+                // (-25212) for the Key Commands window's AXDocument (read raw 2026-09-28); counting
+                // it as unclassifiable made the setup report that the window had not opened.
+                document = nil
+            case .failure:
                 sawUnclassifiable = true
                 continue
             }
