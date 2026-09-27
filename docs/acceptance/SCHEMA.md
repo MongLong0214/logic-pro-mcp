@@ -215,12 +215,21 @@ A missing path is never FAIL and never PASS. A reading of the wrong type for its
 | `is_null`, `not_null` | none | the path exists and holds / does not hold `null` |
 | `matches_canon` | `ref.canon` + `ref.locale` + `ref.quote` only | the reading's canon digest equals the pinned digest of that canon row |
 
-`changed`/`unchanged` compute what `ne`/`eq` compute. They are separate names so that a row meaning
-"this moved relative to the pre-state" cannot be written against a constant by mistake.
+`changed`/`unchanged` compute what `ne`/`eq` compute, apart from the absence rules below. They are
+separate names so that a row meaning "this moved relative to the pre-state" cannot be written
+against a constant by mistake.
 
 `changed`, `ne` and `not_in` PASS on a difference, and null differs from every reading, so a null
-would satisfy them by absence. Under these three a null on either side is UNREADABLE, never PASS.
-The positive operators are unchanged: a null fails them except against a null operand and under
+would satisfy them by absence. Under these three a null anywhere in either value, at any depth
+(`[null]`, `{"armed": null}`), is UNREADABLE, never PASS. So is a key that one value has and the
+other lacks at the same place (for `not_in`, the reading against each element of the list): a
+missing key is absence too. Objects are compared key by key and lists index by index; a list element
+on one side only is a difference, since a list's length is part of what was read.
+
+`unchanged` PASSES when the two readings are equal, and two nulls are equal. When they are equal and
+hold a null, at any depth, it is UNREADABLE: two absences agree without showing that nothing
+changed. With a null on one side only it FAILS. The other positive operators fail a null except
+against a null operand (`eq` with a null on the other side, `in` a list that holds null) and under
 `is_null`.
 
 `matches_canon` references are `logic-canon://strings/<source>/<locale>/<key>#value` with

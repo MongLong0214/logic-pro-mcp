@@ -159,6 +159,14 @@ MUTANTS = [
     {"id": "null-difference-passes", "file": "predicates.py",
      "old": 'NULL_IS_UNREADABLE = ("changed", "ne", "not_in")',
      "new": "NULL_IS_UNREADABLE = ()"},
+    {"id": "null-rule-top-level-only", "file": "predicates.py",
+     "old": "    if op in NULL_IS_UNREADABLE:\n",
+     "new": ("    if op in NULL_IS_UNREADABLE:\n"
+             '        return (f"a null cannot show a difference; {op} does not pass on absence"\n'
+             "                if a is None or b is None else None)\n")},
+    {"id": "unchanged-null-passes", "file": "predicates.py",
+     "old": '    elif op == "unchanged" and same(a, b):',
+     "new": "    elif False:"},
     {"id": "restore-call-without-a-check-allowed", "file": "engine.py",
      "old": '    if not row["restore_expect"]:',
      "new": "    if False:"},
