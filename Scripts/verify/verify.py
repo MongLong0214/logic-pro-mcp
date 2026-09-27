@@ -6,7 +6,8 @@
     verify.py record <evidence> --out <dir>      refused (exit 2): a file cannot attest; see below
     verify.py run <spec> --head H --out F [--locales L] [--record DIR]
                                                  build H, drive the spec in Logic, judge it
-    verify.py batch ...                          P0b: a stub (exit 2)
+    verify.py batch --queue Q --out-dir D [--record DIR]
+                                                 every queued spec and head, one switch per locale
     verify.py self-test                          fixtures and engine mutants, offline
 
 EXIT CODES
@@ -35,11 +36,13 @@ script that calls `engine.judge` with an attestation it built, is not evidence (
 `record` of a file is refused with exit 2, not 3. Exit 3 says the evidence could still become
 clean with more observations; no content of a file can make `record` write, so the command itself
 is refused. The recording logic is `record_attested`, which takes an attestation in process:
-`run --record DIR` calls it with the attestation of the run that produced the bytes, and that is
-the one command that writes records. The self-test exercises it the same way.
+`run --record DIR` and `batch --record DIR` call it with the attestation of the run that produced
+the bytes, and they are the only commands that write records. The self-test exercises it the same
+way.
 
-`run` always drives the live world: it calls `runner.run_spec` without a lifecycle, so the runner
-builds `runner_live.LiveLifecycle`. No flag and no environment variable selects another one; the
+`run` and `batch` always drive the live world: they call `runner.run_spec` and `runner.run_batch`
+without a lifecycle, so the runner builds `runner_live.LiveLifecycle`. No flag and no environment
+variable selects another one; the
 self-test's fake is reached only by passing `_life=` in process, which the self-test refuses in
 every tracked file but its own.
 
@@ -364,13 +367,65 @@ def cmd_run(args) -> int:
 
 
 # ---------------------------------------------------------------------------------------------
-# P0b stubs
+# batch
 # ---------------------------------------------------------------------------------------------
 
-def cmd_p0b(args) -> int:
-    print(f"verify.py {args.command}: P0b, not wired yet; `verify.py run` drives one spec. "
-          f"Nothing was run. (exit 2)")
-    return engine.EXIT_REFUSED
+QUEUE_FORMAT = "lpm-queue/1"
+QUEUE_ENTRY_KEYS = {"spec", "head", "locales"}
+
+
+def queue_problems(queue) -> list:
+    """Why `queue` is not a queue: {"format": "lpm-queue/1", "entries": [{"spec": a path relative
+    to the repository, "head": 40 hex, "locales"?: [lproj, ...]}, ...]}, at least one entry."""
+    if not isinstance(queue, dict) or queue.get("format") != QUEUE_FORMAT:
+        given = queue.get("format") if isinstance(queue, dict) else type(queue).__name__
+        return [f"not an {QUEUE_FORMAT} queue (its format is {given!r})"]
+    out = [f"unknown key {key!r}" for key in sorted(set(queue) - {"format", "entries"})]
+    entries = queue.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return out + ["entries is not a non-empty list"]
+    for n, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            out.append(f"entries[{n}] is not an object")
+            continue
+        out += [f"entries[{n}]: unknown key {key!r}" for key in sorted(set(entry) - QUEUE_ENTRY_KEYS)]
+        if not isinstance(entry.get("spec"), str) or not entry["spec"]:
+            out.append(f"entries[{n}]: spec is not a path")
+        if not (isinstance(entry.get("head"), str) and HEAD_RE.match(entry["head"])):
+            out.append(f"entries[{n}]: head {entry.get('head')!r} is not a full 40-hex commit")
+        locales = entry.get("locales")
+        if locales is not None and not (isinstance(locales, list)
+                                        and all(isinstance(x, str) for x in locales)):
+            out.append(f"entries[{n}]: locales is not a list of locale names")
+    return out
+
+
+def cmd_batch(args) -> int:
+    """Every queued entry, with one switch per locale: each head built once before the lock, one
+    evidence document in --out-dir and one attestation per entry, each entry's verdict printed,
+    and the exit the worst of theirs (2, then 1, then 3, then 0). Refusals come first (exit 2)."""
+    import runner
+    try:
+        queue = E.load(args.queue)
+        problems = queue_problems(queue)
+    except (OSError, ValueError) as exc:
+        queue, problems = None, [f"{args.queue}: {exc}"]
+    entries = []
+    for n, item in enumerate([] if problems else queue["entries"]):
+        path = item["spec"] if os.path.isabs(item["spec"]) else os.path.join(repo(), item["spec"])
+        try:
+            spec = E.load(path)
+        except (OSError, ValueError) as exc:
+            problems.append(f"entries[{n}]: {path}: {exc}")
+            continue
+        entries.append({"spec": spec, "spec_path": os.path.relpath(os.path.abspath(path), repo()),
+                        "head": item["head"], "locales": item.get("locales")})
+    if problems:
+        for line in problems:
+            print(f"REFUSED {args.queue}: {line}")
+        print("batch: refused before anything was built or driven (exit 2)")
+        return engine.EXIT_REFUSED
+    return runner.run_batch(entries, args.out_dir, args.record)
 
 
 def cmd_self_test(args) -> int:
@@ -401,10 +456,12 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--record", help="the records directory, e.g. docs/observations: publish the "
                                     "evidence under its sha256 and one record per measured locale")
     p.set_defaults(func=cmd_run)
-    p = sub.add_parser("batch", help="P0b: switch each locale once and run every queued head's rows")
-    p.add_argument("--queue", default="docs/acceptance/QUEUE.json")
-    p.add_argument("--out-dir", required=True)
-    p.set_defaults(func=cmd_p0b)
+    p = sub.add_parser("batch", help="every queued spec and head, with one switch per locale")
+    p.add_argument("--queue", required=True, help=f"an {QUEUE_FORMAT} queue; spec paths are "
+                                                  f"relative to the repository")
+    p.add_argument("--out-dir", required=True, help="where each entry's evidence document is written")
+    p.add_argument("--record", help="as for run: the records directory, e.g. docs/observations")
+    p.set_defaults(func=cmd_batch)
     p = sub.add_parser("self-test", help="fixtures and engine mutants, offline")
     p.add_argument("--cases-only", action="store_true", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_self_test)

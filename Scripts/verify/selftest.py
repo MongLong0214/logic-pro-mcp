@@ -54,7 +54,9 @@ RUN CASES (`"run": {...}`)
     and judges it; the case requires its exit code and a substring of its output. `events` counts
     what the lifecycle was asked to do ({"switch": 0}); `start_env` requires every server start to
     carry those variables; `recheck` then rechecks the written file from the command line;
-    `"record": true` passes a records directory, as `run --record` does. The script:
+    `"record": true` passes a records directory, as `run --record` does. `"entries": [{"spec",
+    "spec_ops"?, "head"?, "locales"?}, ...]` in place of `spec` runs them as one
+    `runner.run_batch`. The script:
         "answers": {"[<lproj>/]<row>/<as>": answer | [answer, ...]}   a list answers successive
                   reads in turn and repeats its last; an answer is {"value": v} (stored as its JSON
                   text), {"text": s}, {"unreadable": why} or {"timeout": true}. Unscripted steps
@@ -425,6 +427,12 @@ MUTANTS = [
              '                out.append(f"track {i} {word}")\n'),
      "new": ('            elif False:\n'
              '                out.append(f"track {i} {word}")\n')},
+    {"id": "switch-per-entry", "file": "runner.py",
+     "old": ("            for lproj in order(wanted, life.current_locale()):\n"
+             "                switched = life.switch(lproj)\n"),
+     "new": ("            for lproj in order(wanted, life.current_locale()):\n"
+             "                switched = [life.switch(lproj) for entry in entries\n"
+             "                            if lproj in entry[\"locales\"]][-1]\n")},
     {"id": "record-without-attestation", "file": "runner.py",
      "old": "        recorded = verify.record_attested(data, att, record_dir)\n",
      "new": "        recorded = verify.record_attested(data, None, record_dir)\n"},
@@ -815,19 +823,30 @@ def _run_fake(case: dict, where: dict):
     """(exit, output) of the runner driven over FakeLifecycle, as a run case asks."""
     import fixtures_build
     run = case["run"]
-    path = _fill(run["spec"], where)
-    with open(path, encoding="utf-8") as handle:
-        spec = json.load(handle)
-    _apply(spec, run.get("spec_ops", []), case["name"], where)
+    items = run.get("entries") or [{"spec": run["spec"], "spec_ops": run.get("spec_ops", []),
+                                    "locales": run.get("locales")}]
+    entries = []
+    for item in items:
+        path = _fill(item["spec"], where)
+        with open(path, encoding="utf-8") as handle:
+            spec = json.load(handle)
+        _apply(spec, item.get("spec_ops", []), case["name"], where)
+        entries.append({"spec": spec, "spec_path": os.path.relpath(path, ROOT),
+                        "head": item.get("head", SELFTEST_HEAD), "locales": item.get("locales")})
     life = FakeLifecycle(run.get("script", {}), where, case["name"],
-                         fixtures_build.READINGS[os.path.basename(path)])
+                         fixtures_build.READINGS[os.path.basename(_fill(items[0]["spec"], where))])
     out = os.path.join(where["tmp"], f"{case['name']}.evidence.json")
     records = os.path.join(where["tmp"], f"{case['name']}.records") if run.get("record") else None
     printed = io.StringIO()
     with contextlib.redirect_stdout(printed):
         try:
-            code = runner.run_spec(spec, os.path.relpath(path, ROOT), SELFTEST_HEAD, run.get("locales"),
-                                   out, records, _life=life)
+            if "entries" in run:
+                code = runner.run_batch(entries, os.path.join(where["tmp"], f"{case['name']}.batch"),
+                                        records, _life=life)
+            else:
+                one = entries[0]
+                code = runner.run_spec(one["spec"], one["spec_path"], one["head"], one["locales"],
+                                       out, records, _life=life)
         except Exception as exc:  # a crash is a failed case, reported with its type
             code = f"crash {type(exc).__name__}: {exc}"
     text = printed.getvalue()
@@ -1125,23 +1144,24 @@ def check_attestation_check_sees_the_whole_repository(case: dict, where: dict):
 #: here can start a real build even when a mutant breaks the refusal before it.
 ABSENT_HEAD = "0123456789abcdef0123456789abcdef01234567"
 RUN_OPTIONS = {"-h", "--help", "--head", "--locales", "--out", "--record"}
+BATCH_OPTIONS = {"-h", "--help", "--queue", "--out-dir", "--record"}
 SEAM_VARIABLES = {"LPM_VERIFY_REPO", "LPM_VERIFY_ISSUE_BODIES"}
 
 
 def check_run_cli_has_no_life_seam(case: dict, where: dict):
-    """`verify.py run` reaches the live lifecycle and nothing else. Its options are exactly the
-    documented ones, so no flag can select another world; verify.py, runner.py and engine.py name
+    """`verify.py run` and `batch` reach the live lifecycle and nothing else. Their options are
+    exactly the documented ones, so no flag can select another world; verify.py, runner.py and engine.py name
     no environment variable but the two SEAMS verify.py documents, neither of which picks a
     lifecycle; and the command line over the self-test's own spec is refused by
     runner_live.LiveLifecycle, which alone says a self-test fixture is the self-test's to drive."""
     import engine
     import verify
-    run = next(a for a in verify.parser()._subparsers._group_actions[0].choices.items()
-               if a[0] == "run")[1]
-    options = {s for action in run._actions for s in action.option_strings}
-    positionals = [action.dest for action in run._actions if not action.option_strings]
-    if options != RUN_OPTIONS or positionals != ["spec"]:
-        return f"run takes {sorted(options)} and {positionals}, not {sorted(RUN_OPTIONS)} and ['spec']"
+    commands = verify.parser()._subparsers._group_actions[0].choices
+    for name, wanted, args in (("run", RUN_OPTIONS, ["spec"]), ("batch", BATCH_OPTIONS, [])):
+        options = {s for action in commands[name]._actions for s in action.option_strings}
+        positionals = [action.dest for action in commands[name]._actions if not action.option_strings]
+        if options != wanted or positionals != args:
+            return f"{name} takes {sorted(options)} and {positionals}, not {sorted(wanted)} and {args}"
     named = set()
     for name in ("verify.py", "runner.py", "engine.py"):
         with open(os.path.join(HERE, name), encoding="utf-8") as handle:

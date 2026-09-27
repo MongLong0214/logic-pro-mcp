@@ -544,3 +544,18 @@ def run_spec(spec: dict, spec_path: str, head: str, locales, out_path: str, reco
         _life = runner_live.LiveLifecycle()
     entry = {"spec": spec, "spec_path": spec_path, "head": head, "locales": locales, "out": out_path}
     return _drive(_life, [entry], record_dir)
+
+
+def run_batch(entries: list, out_dir: str, record_dir=None, *, _life=None) -> int:
+    """Every entry ({spec, spec_path, head, locales}) with one switch per locale: each head built
+    once, each entry its own evidence document in `out_dir`, its own locale readings and its own
+    attestation, recorded when `record_dir` is given. The exit is the worst of the entries'."""
+    if _life is None:
+        import runner_live
+        _life = runner_live.LiveLifecycle()
+    for n, entry in enumerate(entries):
+        stem = os.path.splitext(os.path.basename(entry["spec_path"]))[0]
+        entry["out"] = os.path.join(out_dir, f"{n:02d}-{stem}-{entry['head'][:12]}.json")
+    code = _drive(_life, entries, record_dir)
+    print(f"batch: {len(entries)} entries; exit {code}, the worst of theirs")
+    return code
