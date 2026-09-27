@@ -318,6 +318,8 @@ actor AccessibilityChannel: Channel {
         // MARK: - Transport reads
         case "transport.get_state":
             return runtime.transportState()
+        case "transport.get_tempo":
+            return Self.defaultGetObservedTempo(runtime: runtime.logicRuntime)
 
         // MARK: - Transport mutations
         case "transport.toggle_cycle":

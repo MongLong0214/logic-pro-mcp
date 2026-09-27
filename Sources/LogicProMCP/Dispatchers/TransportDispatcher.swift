@@ -399,9 +399,20 @@ struct TransportDispatcher: OperationTraceDispatching {
         if first.isPlaying == false {
             return notPlaying(first)
         }
-        extras["observed_tempo"] = first.tempo
-        guard let gap = pauseStillnessGapNanoseconds(tempo: first.tempo) else {
-            return refusalBeforeWrite("At this tempo a beat is too long to tell a paused playhead from a playing one within the command deadline, so nothing was sent.")
+        guard let tempo = await observedTempo(router: router) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_unreadable",
+                hint: "Play is on, but the tempo was not read, so the gap that tells a paused playhead from a playing one could not be sized. Nothing was sent, and the transport was not called paused or playing.",
+                extras: extras
+            )
+        }
+        extras["observed_tempo"] = tempo
+        guard let gap = pauseStillnessGapNanoseconds(tempo: tempo) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_too_slow_to_measure",
+                hint: "Play is on, but at this tempo a beat lasts too long for two readings within the command deadline to tell a paused playhead from a playing one. Nothing was sent.",
+                extras: extras
+            )
         }
         extras["stillness_gap_ms"] = Int(gap / 1_000_000)
         await sleep(gap)
@@ -466,14 +477,50 @@ struct TransportDispatcher: OperationTraceDispatching {
     /// The control bar shows bar and beat only (measured: `12.4`, components bar and beat), so a
     /// playing transport can read the same position for up to one beat. Two readings can call the
     /// playhead still only when they are more than a beat apart: 1.25 beats at the observed tempo,
-    /// and never under the one second the measurement used. Above four seconds (tempo under 18.75)
-    /// the two waits would not fit the command deadline, so there is no gap and pause refuses.
+    /// and never under the one second the measurement used (120 BPM: 1000 ms, 60 BPM: 1250 ms,
+    /// 20 BPM: 3750 ms). Above five seconds (under 15 BPM) there is no gap, and pause and play
+    /// answer `tempo_too_slow_to_measure` without waiting. Five seconds keeps the two waits and the
+    /// settle at 10.3 s of the 25 s command deadline, which leaves room for the reads.
     /// Play uses the same gap to tell a moving playhead from a paused one.
     static func pauseStillnessGapNanoseconds(tempo: Double) -> UInt64? {
         guard tempo.isFinite, tempo > 0 else { return nil }
         let seconds = max(1.0, 1.25 * 60.0 / tempo)
-        guard seconds <= 4.0 else { return nil }
+        guard seconds <= 5.0 else { return nil }
         return UInt64(seconds * 1_000_000_000)
+    }
+
+    /// The tempo the stillness gap is sized from, read in the same measurement, or nil when it was
+    /// not read. A reading's own `tempo` is not used: `TransportState.tempo` keeps the model's 120
+    /// default when its tempo read fails, and a gap sized from 120 during slow playback reads a
+    /// moving playhead as still (#1029 review, R-02).
+    static func observedTempo(router: ChannelRouter) async -> Double? {
+        let result = await router.route(operation: "transport.get_tempo")
+        guard result.isSuccess,
+              let object = jsonValue(from: result.message) as? [String: Any],
+              let tempo = object["tempo"] as? Double,
+              tempo.isFinite, tempo > 0 else {
+            return nil
+        }
+        return tempo
+    }
+
+    /// State B before any write, for pause and play: the stillness check could not be made, so
+    /// nothing was sent and the transport is called neither paused nor playing. `reason` names why
+    /// (`tempo_unreadable`, `tempo_too_slow_to_measure`).
+    private static func stillnessUnmeasuredResult(
+        reason: String,
+        hint: String,
+        extras: [String: Any]
+    ) -> CallTool.Result {
+        var extras = extras
+        extras["reason"] = reason
+        extras["hint"] = hint
+        extras["write_attempted"] = false
+        extras["safe_to_retry"] = true
+        return toolTextResult(
+            HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras),
+            isError: true
+        )
     }
 
     /// Whether two readings show the same playhead. nil when either position was not read from
@@ -513,7 +560,6 @@ struct TransportDispatcher: OperationTraceDispatching {
         var extras: [String: Any] = [
             "operation": "transport.play",
             "verify_source": "transport_state",
-            "observed_tempo": first.tempo,
         ]
         func refusalBeforeWrite(_ hint: String) -> CallTool.Result {
             extras["write_attempted"] = false
@@ -524,8 +570,20 @@ struct TransportDispatcher: OperationTraceDispatching {
                 extras: extras
             ), isError: true)
         }
-        guard let gap = pauseStillnessGapNanoseconds(tempo: first.tempo) else {
-            return refusalBeforeWrite("Play is on, but at this tempo a beat is too long to tell a moving playhead from a paused one within the command deadline, so nothing was sent.")
+        guard let tempo = await observedTempo(router: router) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_unreadable",
+                hint: "Play is on, but the tempo was not read, so the gap that tells a moving playhead from a paused one could not be sized. Nothing was sent, and the transport was not called paused or playing.",
+                extras: extras
+            )
+        }
+        extras["observed_tempo"] = tempo
+        guard let gap = pauseStillnessGapNanoseconds(tempo: tempo) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_too_slow_to_measure",
+                hint: "Play is on, but at this tempo a beat lasts too long for two readings within the command deadline to tell a moving playhead from a paused one. Nothing was sent.",
+                extras: extras
+            )
         }
         extras["stillness_gap_ms"] = Int(gap / 1_000_000)
         await sleep(gap)

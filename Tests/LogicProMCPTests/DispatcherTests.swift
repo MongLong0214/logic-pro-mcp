@@ -268,6 +268,10 @@ private actor SequencedTransportReadbackChannel: Channel {
     nonisolated let id: ChannelID
     let toggleResult: ChannelResult
     let gotoPositionResult: ChannelResult
+    /// What the tempo slider reads, or nil when it could not be read. It is independent of the
+    /// `tempo` field in `transportStates`, which is the model's 120 default whenever the reading's
+    /// own tempo read failed.
+    let observedTempo: Double?
     var transportStates: [TransportState]
     var executedOps: [(String, [String: String])] = []
 
@@ -275,11 +279,13 @@ private actor SequencedTransportReadbackChannel: Channel {
         id: ChannelID = .accessibility,
         toggleResult: ChannelResult = .error("unexpected toggle"),
         gotoPositionResult: ChannelResult = .error("unexpected goto"),
+        observedTempo: Double? = 120.0,
         transportStates: [TransportState]
     ) {
         self.id = id
         self.toggleResult = toggleResult
         self.gotoPositionResult = gotoPositionResult
+        self.observedTempo = observedTempo
         self.transportStates = transportStates
     }
 
@@ -299,6 +305,11 @@ private actor SequencedTransportReadbackChannel: Channel {
             }
             let next = transportStates.removeFirst()
             return .success(encodeDispatcherJSON(next))
+        case "transport.get_tempo":
+            guard let observedTempo else {
+                return .error("tempo slider not read")
+            }
+            return .success("{\"tempo\":\(observedTempo)}")
         default:
             return .error("unexpected operation: \(operation)")
         }
@@ -842,13 +853,162 @@ private actor RecordedSleeps {
     (120.0, UInt64?(1_000_000_000)),
     (40.0, UInt64?(1_875_000_000)),
     (20.0, UInt64?(3_750_000_000)),
-    (18.0, UInt64?.none),
+    (15.0, UInt64?(5_000_000_000)),
+    (14.0, UInt64?.none),
+    (5.0, UInt64?.none),
     (0.0, UInt64?.none),
 ])
 func testTransportDispatcherPauseStillnessGapIsLongerThanABeat(tempo: Double, expected: UInt64?) {
     // The control bar shows bar and beat only, so the gap must exceed a beat at the observed tempo.
-    // Mutation killed: the gap not scaled by tempo (`max(1.0, 1.25 * 60.0 / tempo)` -> `1.0`).
+    // Mutations killed: the gap not scaled by tempo (`max(1.0, 1.25 * 60.0 / tempo)` -> `1.0`), and
+    // the limit moved off 5 s (15 BPM measured, 14 BPM not).
     #expect(TransportDispatcher.pauseStillnessGapNanoseconds(tempo: tempo) == expected)
+}
+
+/// The write each stillness command sends when it decides: pause presses Pause, play sends the Play
+/// key to a paused transport.
+private let stillnessCommands: [(command: String, write: String)] = [
+    ("pause", "transport.pause"),
+    ("play", "transport.resume"),
+]
+
+@Test(arguments: stillnessCommands)
+func testTransportDispatcherStillnessWithTheTempoUnreadSendsNothingAndSaysSo(
+    command: String, write: String
+) async throws {
+    // #1029 review round 1 (R-02): the reading's `tempo` is the model's 120 default when its tempo
+    // read fails, and a gap sized from it can call a slow, moving playhead still. With the tempo
+    // slider unread, neither command may decide: nothing is sent, and the answer is unverified with
+    // the reason.
+    // Mutation killed: the gap sized from the reading's own tempo again (`observedTempo(router:)`
+    // -> `first.tempo`), which reads these equal positions as a paused transport.
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: nil,
+        transportStates: [
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+        ]
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+    let sleeps = RecordedSleeps()
+
+    let result = await TransportDispatcher.handle(
+        command: command,
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { await sleeps.append($0) }
+    )
+
+    let writeOps = await keyWrite.executedOps
+    #expect(!writeOps.map(\.0).contains(write))
+    #expect(writeOps.isEmpty, "\(command) sent \(writeOps.map(\.0)) with the tempo unread")
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "B")
+    #expect(object["reason"] as? String == "tempo_unreadable")
+    let verified = try #require(object["verified"] as? Bool)
+    #expect(!verified)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(object["already_paused"] == nil)
+    #expect(object["resumed_from_pause"] == nil)
+    // Nothing was measured, so nothing was waited for.
+    let slept = await sleeps.nanoseconds
+    #expect(slept.isEmpty)
+}
+
+@Test(arguments: stillnessCommands)
+func testTransportDispatcherStillnessAtFiveBPMDoesNotReadEqualPositionsAsStill(
+    command: String, write: String
+) async throws {
+    // #1029 review round 1 (R-02): at 5 BPM a beat lasts 12 s, so two readings a second apart are
+    // equal while the playhead moves. The readings here carry the model's 120 default (their own
+    // tempo read failed); the tempo slider reads 5. A 1.25-beat gap is 15 s, past the 5 s limit, so
+    // neither command waits or decides, and neither calls the transport paused.
+    // Mutation killed: the gap sized from the reading's own tempo again (`observedTempo(router:)`
+    // -> `first.tempo`): 120 gives a 1 s gap, and the equal readings become "already paused" for
+    // pause and a paused transport that gets the Play key for play.
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: 5.0,
+        transportStates: [
+            pauseReading(playing: true, at: "3.2"),
+            pauseReading(playing: true, at: "3.2"),
+            pauseReading(playing: true, at: "3.2"),
+            pauseReading(playing: true, at: "3.2"),
+        ]
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+    let sleeps = RecordedSleeps()
+
+    let result = await TransportDispatcher.handle(
+        command: command,
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { await sleeps.append($0) }
+    )
+
+    let writeOps = await keyWrite.executedOps
+    #expect(!writeOps.map(\.0).contains(write))
+    #expect(writeOps.isEmpty, "\(command) sent \(writeOps.map(\.0)) at 5 BPM")
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "B")
+    #expect(object["reason"] as? String == "tempo_too_slow_to_measure")
+    #expect(object["observed_tempo"] as? Double == 5.0)
+    #expect(object["already_paused"] == nil)
+    #expect(object["resumed_from_pause"] == nil)
+    let slept = await sleeps.nanoseconds
+    #expect(slept.isEmpty)
+}
+
+@Test func testTransportDispatcherPauseAtAnObservedTempoStillDecides() async throws {
+    // Positive control for the two tests above: with the tempo slider read at 120 BPM, equal
+    // readings a 1000 ms gap apart are still decided. Pause answers "already paused" and sends
+    // nothing, from the observed tempo rather than the reading's.
+    let router = ChannelRouter()
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: 120.0,
+        transportStates: [
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+        ]
+    )
+    await router.register(pauseWrite)
+    await router.register(readback)
+    let sleeps = RecordedSleeps()
+
+    let result = await TransportDispatcher.handle(
+        command: "pause",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { await sleeps.append($0) }
+    )
+
+    #expect(!result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "A")
+    #expect(try #require(object["already_paused"] as? Bool))
+    #expect(object["observed_tempo"] as? Double == 120.0)
+    #expect(object["stillness_gap_ms"] as? Int == 1000)
+    let writeOps = await pauseWrite.executedOps
+    #expect(writeOps.isEmpty)
+    let slept = await sleeps.nanoseconds
+    #expect(slept == [1_000_000_000])
 }
 
 @Test func testTransportDispatcherPauseReturnsStateAUnchangedWhenAlreadyStopped() async throws {

@@ -48,6 +48,10 @@ extension ChannelRouter {
         // Router fallback just obscures the real AX error message.
         "transport.set_tempo":        [.accessibility],
         "transport.get_state":        [.accessibility],
+        // Internal read (#1029 review, R-02): the tempo slider on its own, an error when it was not
+        // read. transport.get_state cannot say so, because its tempo keeps the model's 120 default.
+        // Pause and play size their stillness gap from this.
+        "transport.get_tempo":        [.accessibility],
         "transport.goto_position":    [.accessibility, .mcu, .coreMIDI, .cgEvent],
         "transport.set_cycle_range":  [.accessibility],
         "transport.toggle_count_in":  [.accessibility, .midiKeyCommands, .cgEvent],
