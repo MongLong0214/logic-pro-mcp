@@ -34,6 +34,27 @@ Condition 3 is what separates a real finding from noise. `Audio Units`, `Termina
 literal is safe, and refusing them would make this guard wrong far more often than right. 192
 candidates narrow to 11 under condition 3, and 11 to 7 once the untranslated ones drop out.
 
+SINCE #1028 (ADR-027 D6, audit B D5) EVERY LITERAL IS CLASSIFIED, NOT ONLY APPLE'S
+-----------------------------------------------------------------------------------
+Conditions 2 and 3 used to be a pass: a literal Apple does not ship was "not Apple's at all: safe
+to match" -- so a FRAGMENT of a translated label (`Input Port` of `Input Port:`), a plug-in name the
+corpus does not hold, or this product's own prose all passed unexamined. Each literal is now one of
+
+  apple_translated   Apple ships it and translates it: a LabelSet, or the separator rule
+  apple_value        Apple ships it as a whole value and does not translate it: safe
+  identifier         a shape no locale translates: an UPPER_SNAKE sentinel this product emits
+                     (with an optional `: detail`), punctuation, a `.ext` extension, a reverse-DNS
+                     prefix, or a fragment of a sentinel-coded message a string literal in the
+                     SAME file spells out (`cleanup was not observed` inside
+                     `"MENU_PICK_FAILED: menu cleanup was not observed"`) -- this product's own
+                     words, which Logic never draws
+  unknown            anything else -- FAILS, unless `docs/canon/AX-COMPARISON-WAIVERS.json` gives
+                     it a reason. That file is the ONE exemption list; an entry nothing matches
+                     fails too, so it only shrinks.
+
+`--classify` prints every literal with its class. Swift escapes are decoded first: `\\u{FF1A}` is
+the full-width colon, not eight ASCII characters.
+
 Exit: 0 = every AX comparison goes through a LabelSet or is declared · 1 = one does not
 """
 import collections
@@ -53,6 +74,13 @@ _spec.loader.exec_module(policy)
 canon = policy.canon
 
 LOCALES = ["de", "en", "es", "fr", "it", "ja", "ko", "pt", "zh_CN", "zh_TW"]
+
+_ll_spec = importlib.util.spec_from_file_location(
+    "locale_labels_for_ax_comparisons", os.path.join(REPO, "Scripts", "locale_labels.py"))
+_ll = importlib.util.module_from_spec(_ll_spec)
+_ll_spec.loader.exec_module(_ll)
+#: Swift's escapes, decoded by the same reader that writes ui-labels.json (#993, #1028).
+_unescape = _ll._unescape
 
 #: Names that read like an AX attribute. Matching on the VARIABLE is what keeps this from firing on
 #: every string comparison in the tree — a JSON key named `name` is not an AX reading.
@@ -175,25 +203,26 @@ def comparisons_outside_labelsets():
                 variable = re.match(r"[\w.]+", match.group(0).lstrip('"')).group(0).split(".")[0]
                 if variable not in backed and match.group(0).lstrip()[0] != '"':
                     continue
-                literal = canon.normalize(match.group(1).replace('\\"', '"'))
+                literal = canon.normalize(_unescape(match.group(1)))
                 if literal and literal not in inside:
                     found[literal].add(os.path.relpath(path, REPO))
         for match in _CASE_FOLDED.finditer(source):
             variable = re.match(r"[\w.]+", match.group(0)).group(0).split(".")[0]
             if variable not in backed:
                 continue
-            raw = canon.normalize(match.group(1).replace('\\"', '"'))
+            raw = canon.normalize(_unescape(match.group(1)))
             if not raw or raw in inside:
                 continue
             # Report the spelling Apple ships, so the message names a label a reader can find.
+            # And the literal itself otherwise: until #1028 a folded literal Apple does not
+            # translate was dropped here, before anything could classify it.
             shipped = next((c for c in _folded_candidates(raw) if canon.is_translated(c)), None)
-            if shipped:
-                found[shipped].add(os.path.relpath(path, REPO))
+            found[shipped or raw].add(os.path.relpath(path, REPO))
         for match in _COLLECTION_CONTAINS.finditer(source):
             if match.group(2).split(".")[0] not in backed:
                 continue
             for raw in re.findall(r'"((?:[^"\\\n]|\\.)*)"', match.group(1)):
-                literal = canon.normalize(raw.replace('\\"', '"'))
+                literal = canon.normalize(_unescape(raw))
                 if literal and literal not in inside:
                     found[literal].add(os.path.relpath(path, REPO))
         for match in _SWITCH.finditer(source):
@@ -201,18 +230,79 @@ def comparisons_outside_labelsets():
                 continue
             for group in _CASE_LITERAL.findall(match.group(2)):
                 for raw in re.findall(r'"((?:[^"\\\n]|\\.)*)"', group):
-                    literal = canon.normalize(raw.replace('\\"', '"'))
+                    literal = canon.normalize(_unescape(raw))
                     if literal and literal not in inside:
                         found[literal].add(os.path.relpath(path, REPO))
     return found
 
 
 def waived() -> dict:
-    try:
-        with open(WAIVER, "r", encoding="utf-8") as handle:
-            return json.load(handle).get("literals") or {}
-    except (OSError, json.JSONDecodeError):
+    """`{literal: reason}`. A file that exists and cannot be read is a failure, not an empty list."""
+    if not os.path.exists(WAIVER):
         return {}
+    with open(WAIVER, "r", encoding="utf-8") as handle:
+        entries = json.load(handle).get("literals") or {}
+    return {literal: (entry.get("reason") if isinstance(entry, dict) else entry)
+            for literal, entry in entries.items()}
+
+
+#: An error or state code this product emits: `DIALOG_PREEXISTING`, `MENU_PICK_FAILED: <detail>`.
+#: At least one underscore, so `EQ` or `MIDI` -- which are words Apple ships -- are not codes.
+_SENTINEL = re.compile(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?::.*)?", re.S)
+_EXTENSION = re.compile(r"\.[a-z0-9]+")
+_REVERSE_DNS = re.compile(r"[a-z][a-z0-9-]*(?:\.[a-z][A-Za-z0-9-]*)+\.?")
+
+APPLE_TRANSLATED, APPLE_VALUE, IDENTIFIER, UNKNOWN = (
+    "apple_translated", "apple_value", "identifier", "unknown")
+
+
+def _apple_ships(literal: str) -> bool:
+    """Apple ships `literal` as a WHOLE value in some source, in English or in no `.lproj`.
+
+    Over the 32-bit absence sets, whose collisions run one way: an absent string can look present
+    (rate in MANIFEST.json, `absence_false_positive`), which would class an unknown literal as
+    `apple_value`. A present one never looks absent.
+    """
+    for source, block in (canon.load_manifest().get("sources") or {}).items():
+        for locale in ("en", "-"):
+            if locale in (block.get("locales") or []) and not canon.is_absent(source, locale, literal):
+                return True
+    return False
+
+
+_SENTINEL_MESSAGE = re.compile(r'"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+:[^"\\\n]*)"')
+
+
+def _fragment_of_own_message(literal: str, paths) -> bool:
+    """`literal` is inside a sentinel-coded message a string literal in one of `paths` spells out.
+
+    Only after it is known to be neither an Apple value nor translated, so a Logic label quoted in
+    a product message is never excused by this: it is classed as Apple's first.
+    """
+    for path in paths or ():
+        try:
+            with open(os.path.join(REPO, path), "r", encoding="utf-8") as handle:
+                source = handle.read()
+        except OSError:
+            continue
+        if any(literal in message and literal != message
+               for message in _SENTINEL_MESSAGE.findall(source)):
+            return True
+    return False
+
+
+def classify(literal: str, paths=()) -> str:
+    if canon.is_translated(literal):
+        return APPLE_TRANSLATED
+    if not any(ch.isalnum() for ch in literal):
+        return IDENTIFIER
+    if any(pattern.fullmatch(literal) for pattern in (_SENTINEL, _EXTENSION, _REVERSE_DNS)):
+        return IDENTIFIER
+    if _apple_ships(literal):
+        return APPLE_VALUE
+    if _fragment_of_own_message(literal, paths):
+        return IDENTIFIER
+    return UNKNOWN
 
 
 #: Separator spellings Apple ships for the same mark, from docs/canon/DECORATION-RULES.json.
@@ -265,12 +355,31 @@ def check(app: str = None) -> list:
         return ["docs/canon/absence/translated.en.u32 is missing or empty, so nothing can tell a "
                 "translated label from an untranslated one. Run Scripts/logic_canon.py build on a "
                 "machine with Logic."]
-    allowed = waived()
+    try:
+        allowed = waived()
+    except (OSError, json.JSONDecodeError, AttributeError) as exc:
+        return [f"{os.path.relpath(WAIVER, REPO)} cannot be read: {exc}"]
     problems = []
+    used = set()
+    for literal, reason in sorted(allowed.items()):
+        if not (isinstance(reason, str) and reason.strip()):
+            problems.append(f"{os.path.relpath(WAIVER, REPO)}: {literal!r} carries no reason. An "
+                            f"exemption without one is a literal nobody checked.")
     for literal, paths in sorted(comparisons_outside_labelsets().items()):
-        if not canon.is_translated(literal):
-            continue                      # untranslated, or not Apple's at all: safe to match
+        kind = classify(literal, paths)
+        if kind in (APPLE_VALUE, IDENTIFIER):
+            continue                      # shipped untranslated, or a shape no locale translates
         if literal in allowed:
+            used.add(literal)
+            continue
+        if kind == UNKNOWN:
+            where = ", ".join(sorted(os.path.basename(p) for p in paths))
+            problems.append(
+                f"{literal!r} is compared against an AX reading in {where}, and it is neither a "
+                f"whole value Apple ships nor an identifier. A fragment of a translated label or a "
+                f"string from somewhere else works in whatever language it happens to be in. Use "
+                f"a LabelSet, or declare it in {os.path.relpath(WAIVER, REPO)} with the reason it "
+                f"is safe.")
             continue
         if not literal.strip(policy.canon._DECORATION):
             # Punctuation, not a label. It passes when the file handles every spelling Apple ships.
@@ -289,17 +398,33 @@ def check(app: str = None) -> list:
             f"TRANSLATES it -- so this comparison works in English and fails in every other "
             f"language. Move it into an AXLocalePolicy LabelSet, or declare it in "
             f"{os.path.relpath(WAIVER, REPO)} with the reason it is safe.")
+    # Only over the real tree: an exemption describes a comparison in `Sources/`, and a scan the
+    # self-test pointed somewhere else cannot say whether that comparison still exists.
+    stale = set() if os.environ.get("LPM_AX_COMPARISON_ROOTS") else set(allowed) - used
+    for literal in sorted(stale):
+        problems.append(
+            f"{os.path.relpath(WAIVER, REPO)} exempts {literal!r}, and no comparison that needs an "
+            f"exemption uses it. Delete the entry: the list only shrinks.")
     return problems
 
 
 def main() -> int:
+    if "--classify" in sys.argv[1:]:
+        for literal, paths in sorted(comparisons_outside_labelsets().items()):
+            where = ", ".join(sorted(os.path.basename(p) for p in paths))
+            print(f"{classify(literal, paths):17s} {literal!r}  ({where})")
+        return 0
     problems = check()
     if problems:
         print(f"{len(problems)} AX comparison(s) bypass AXLocalePolicy:", file=sys.stderr)
         for problem in problems:
             print(f"  {problem}", file=sys.stderr)
         return 1
-    print("every AX comparison outside a LabelSet is on a string Apple does not translate")
+    found = comparisons_outside_labelsets()
+    kinds = collections.Counter(classify(literal, paths) for literal, paths in found.items())
+    print(f"every AX comparison outside a LabelSet is classified: {len(found)} literal(s) -- "
+          + ", ".join(f"{kind} {count}" for kind, count in sorted(kinds.items()))
+          + f"; {len(waived())} exempted by reason")
     return 0
 
 

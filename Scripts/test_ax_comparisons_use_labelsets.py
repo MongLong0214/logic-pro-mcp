@@ -92,10 +92,9 @@ class TheGuardActuallyRefusesSomething(unittest.TestCase):
     anything, which is the definition of a decorative guard.
 
     `LPM_AX_COMPARISON_ROOTS` points the scan at a directory the case builds, so a positive input
-    exists at all. The waiver cases use a temporary file: `docs/canon/AX-COMPARISON-WAIVERS.json`
-    is deliberately absent from the tree (a waiver hides a defect instead of removing it, and nine
-    of the eleven findings it would have carried were this guard's own false positives), and these
-    cases must not be the reason it appears.
+    exists at all. The waiver cases use a temporary file, so the tree's own
+    `docs/canon/AX-COMPARISON-WAIVERS.json` -- which since #1028 holds the one literal the guard
+    cannot classify, with its reason -- is never what makes a case pass.
     """
 
     def _scan(self, source, waiver=None):
@@ -155,6 +154,65 @@ class TheGuardActuallyRefusesSomething(unittest.TestCase):
         ]:
             with self.subTest(shape=label):
                 self.assertTrue(self._scan(source), f"{label} must be refused like `==` is")
+
+
+class EveryLiteralIsClassified(unittest.TestCase):
+    """#1028 (ADR-027 D6, audit B D5). A literal Apple does not ship used to pass as "not Apple's
+    at all: safe to match" -- a fragment of a translated label, a plug-in name the corpus does not
+    hold and this product's own prose all went through unexamined."""
+
+    _READ = TheGuardActuallyRefusesSomething._READ
+
+    def _scan(self, source, waiver=None):
+        return TheGuardActuallyRefusesSomething._scan(self, source, waiver)
+
+    def test_an_unknown_literal_is_refused(self):
+        problems = self._scan(self._READ + 'if title == "Zqxv Frobnicator" { }\n')
+        self.assertTrue(problems, "a literal that is neither Apple's nor an identifier passed")
+        self.assertIn("Zqxv Frobnicator", problems[0])
+
+    def test_a_fragment_of_a_translated_label_is_refused(self):
+        """`Input Port` is Apple's; `Input Po` is nobody's, and matches only in English."""
+        self.assertTrue(self._scan(self._READ + 'if title.hasPrefix("Input Po") { }\n'))
+
+    def test_a_reasoned_exemption_excuses_an_unknown_literal(self):
+        self.assertEqual(self._scan(self._READ + 'if title == "Zqxv Frobnicator" { }\n',
+                                    waiver={"Zqxv Frobnicator": {"reason": "declared by the case"}}),
+                         [])
+
+    def test_an_exemption_without_a_reason_is_refused(self):
+        self.assertTrue(self._scan(self._READ + 'if title == "Zqxv Frobnicator" { }\n',
+                                   waiver={"Zqxv Frobnicator": {"reason": "  "}}))
+
+    def test_identifiers_are_not_refused(self):
+        """The control: a sentinel code, a file extension, a reverse-DNS prefix, punctuation."""
+        for literal in ("DIALOG_PREEXISTING", "MENU_PICK_FAILED: detail", ".logicx",
+                        "com.apple.keylayout.", "/"):
+            with self.subTest(literal=literal):
+                self.assertEqual(self._scan(self._READ + f'if title == "{literal}" {{ }}\n'), [])
+
+    def test_a_fragment_of_this_products_own_message_is_an_identifier(self):
+        source = (self._READ + 'let refusal = "MENU_PICK_FAILED: menu cleanup was not seen"\n'
+                  + 'if title.contains("cleanup was not seen") { }\n')
+        self.assertEqual(self._scan(source), [])
+
+    def test_swift_escapes_are_decoded_before_classifying(self):
+        """`\\u{FF1A}` is the full-width colon, not eight ASCII characters."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.join(tmp, "Sources")
+            os.makedirs(root)
+            with open(os.path.join(root, "Offender.swift"), "w", encoding="utf-8") as handle:
+                handle.write(self._READ + 'if title.contains("\\u{FF1A}") { }\n')
+            before = os.environ.get("LPM_AX_COMPARISON_ROOTS")
+            os.environ["LPM_AX_COMPARISON_ROOTS"] = root
+            try:
+                found = guard.comparisons_outside_labelsets()
+            finally:
+                if before is None:
+                    os.environ.pop("LPM_AX_COMPARISON_ROOTS", None)
+                else:
+                    os.environ["LPM_AX_COMPARISON_ROOTS"] = before
+        self.assertIn("\uff1a", found)
 
 
 class TheEntryPointRefuses(unittest.TestCase):
