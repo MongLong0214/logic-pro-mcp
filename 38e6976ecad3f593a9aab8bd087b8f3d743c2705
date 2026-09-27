@@ -1,0 +1,35 @@
+Limit: 73 folder names are exclusions, not seeds (35 stompboxes, 21 variants, 17 units no seed measures); the 80 excluded (root, folder) pairs hold 383 .pst no entry carries, 261 in stompbox folders and 122 in 14 of the unmeasured units
+Limit: the category is the folder path as shipped; what a localised Logic shows for it was not read
+Limit: StockInstrumentCatalog has no Studio Piano row
+Limit: nothing checks that an exclusion still names a folder Apple ships
+Provenance: inherited 6ab6907e3b754d533730ea90e2ed87428cb881c3
+
+Limit: the shared /Library/Application Support/Logic/Plug-In Settings root is outside the bundle and outside this corpus
+Limit: folder names only; the presets inside a folder are covered by the digest, not pinned by name
+Provenance: inherited 85323c63766a8bbd217ad7c2f9cd45c411881752
+
+Limit: the set holds 32-bit prefixes, so the guard counts a missing folder and cannot name it; `unaccountedFactorySettingsFolders(roots:)` names it on a machine with Logic
+Limit: an unaccounted folder whose prefix equals an accounted name's passes, about 143 in 2^32 per new folder; an exact answer through `logic_canon.py confirm` was not taken because it adds about 642 presence rows across other corpora
+Limit: the shared library root is not checked here
+Limit: an exclusion naming a folder Apple no longer ships is not reported
+Provenance: inherited 9e8267ee0a3c2c9e75c478b6a877236f334ccd7a
+
+Limit: only pluginsettings was rebuilt; the other eight sources are main's bytes, not re-extracted here
+Warn: pluginsettings is locale-independent in SOURCE_LOCALES, so locale_independent_citations reads its pinned rows; measured, `ES2` returns the pluginsettings ES2 folder citation, and an AX comparison with that literal would classify as apple_value
+Provenance: inherited beeafdf29c5cc24608c1e5e9b60831de6ccab55d
+
+Limit: the list resource's top-level logic_version, the provenance's optional fields and a preset's nil category are still omitted rather than null when nil; the capabilities text promises null for none of them
+Provenance: inherited bc74cff0fed2f521c03a2e46bc6eeb9f5e5ff91e
+
+Limit: CI has no shared root, so there the host test is skipped; a folder that ships only in the shared root is caught only on a host that has it
+Limit: no production path reports an unaccounted folder; the catalog has no existing place for one, and none was added
+Provenance: inherited dfbbd82575d768d1b85cc6a17b41ade57e8a33d2
+
+Limit: the Swift unaccountedFactorySettingsFolders still counts any key as accounted; the table is a static let with no seam, so an empty reason there is refused by this guard in CI rather than by a Swift test
+Provenance: inherited 4a375e37dcba08d67000228915a3613d26e886bd
+
+Limit: the shared /Library/Application Support/Logic/Plug-In Settings root is outside the bundle and outside this digest
+Provenance: inherited 5aa16a18dc9a5388e138ec85d6b834c5af00c12b
+
+Limit: only pluginsettings was rebuilt; the other eight sources are main's bytes, not re-extracted here
+Provenance: inherited f7372daee10876904f1fe1e3cf01aa0e4af52d70
