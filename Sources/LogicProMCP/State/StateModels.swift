@@ -140,7 +140,7 @@ struct ChannelStripState: Sendable, Codable {
     /// `AXTitle`, so there is nothing to read a destination from — and a send list cannot be
     /// published until there is.
     var sends: [SendState]?
-    /// Per-slot send OCCUPANCY, when the strip's descendants were read (#291 R1).
+    /// Per-slot send OCCUPANCY, when the strip's descendants were read (#291).
     ///
     /// Three answers, kept apart on the wire. Key absent: nobody could look — a children read
     /// below the strip failed with a status that is not an answer. `[]`: the strip was read and
@@ -178,7 +178,7 @@ struct SendState: Sendable, Codable {
     var isPreFader: Bool
 }
 
-/// What one send slot was seen to be (#291 R1, ADR-008 §5 R1).
+/// What one send slot was seen to be (#291, ADR-008 section 5's endpoint-and-edge-observations requirement).
 ///
 /// `occupiedKnownDestination` is declared and produced by nothing this increment: the source slot
 /// exposes no destination, so a consumer that later learns one can say so without the unknown case

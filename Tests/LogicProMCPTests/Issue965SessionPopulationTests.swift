@@ -390,7 +390,7 @@ struct Issue965StripsAndDomainsTests {
             request: Observation.Request(domains: [.tracks, .routing, .color])
         )
         // The mixer was never polled in this capture, so the graph built for the section has
-        // nothing to say about any strip (#291 R1).
+        // nothing to say about any strip (#291).
         let routing = try section(requested, "routing")
         #expect(try coverage(routing) == "unavailable")
         #expect(try reasons(routing) == ["routing_graph_unavailable"])

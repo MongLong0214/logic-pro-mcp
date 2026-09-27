@@ -110,7 +110,7 @@ struct StateModelsCodableTests {
         try assertRoundTrips(PluginSlotState(index: 2, name: "Channel EQ", isBypassed: true), "PluginSlotState")
     }
 
-    /// #291 R1's `send_slots`, carried as VALUES so the keys are on the wire. `sends` stays absent
+    /// #291's `send_slots`, carried as VALUES so the keys are on the wire. `sends` stays absent
     /// beside it: occupancy is not a send list, and the two must not be confused by a consumer.
     ///
     /// Kills: renaming any of the four snake_case keys, or dropping `sendSlots` from CodingKeys.
@@ -153,7 +153,7 @@ struct StateModelsCodableTests {
         #expect(!string(try encoder().encode(strip)).contains("send_slots"))
     }
 
-    /// The four occupancy states are the wire contract ADR-008 §5 R1 names; a rename would change
+    /// The four occupancy states are the wire contract ADR-008 section 5's endpoint-and-edge-observations requirement names; a rename would change
     /// what every consumer of `send_slots` reads.
     @Test func sendSlotStateRawValuesAreStable() {
         #expect(SendSlotState.observedEmpty.rawValue == "observed_empty")

@@ -3,7 +3,7 @@ import MCP
 import Testing
 @testable import LogicProMCP
 
-// #291 R1: typed endpoints and per-domain coverage.
+// #291: typed endpoints and per-domain coverage.
 //
 // The pure cases drive `RoutingGraphPublication.publish(capture:project:)` and
 // `SessionPopulationObservation.build` on a hand-built capture; the last suite reads

@@ -8,7 +8,7 @@ import Testing
 /// both readers issue `trk_` references through `TrackReferenceIssuance` and the
 /// graph must not depend on which one ran first.
 ///
-/// Since #291 R1 an output label is classified, never joined to a track by name: a bus output is
+/// Since #291 an output label is classified, never joined to a track by name: a bus output is
 /// a `bus_<n>` node, a physical output or no output is a classification on the source node. The
 /// R0 cases that used a track-named destination now use a bus, and the `unresolved output
 /// destination endpoint` clause went with the join that produced it.

@@ -460,7 +460,7 @@ enum SessionPopulationObservation {
         let reasons: [Reason]
     }
 
-    /// The routing domain (#291 R1): the section's own coverage, and the coverage of the graph
+    /// The routing domain (#291): the section's own coverage, and the coverage of the graph
     /// `logic://mixer` publishes for the same capture, carried verbatim under `graph`.
     struct RoutingSection: Encodable, Sendable {
         let coverage: Coverage

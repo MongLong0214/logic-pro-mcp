@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-// MARK: - #291 R1 — send-slot occupancy from the knob that follows the button
+// MARK: - #291 — send-slot occupancy from the knob that follows the button
 //
 // Measured 2026-09-13 on Logic 12.3 (6674), en: an empty send slot is an `AXButton` whose help
 // begins "Send slot." and names no destination anywhere; an assigned send adds an `AXSlider`
@@ -278,7 +278,7 @@ struct Issue291SendSlotReadTests {
         #expect(helpRead.map(\.state) == [.unreadable, .occupiedUnknownDestination])
     }
 
-    /// ADR-008 §5 R1: "an automated level or minus infinity is not an absent send". The knob's
+    /// ADR-008 section 5's endpoint-and-edge-observations requirement: "an automated level or minus infinity is not an absent send". The knob's
     /// value is carried when it is a finite number and decides nothing — a knob at -∞, a knob
     /// whose value is a string, and a knob whose value will not read are all occupied slots. And
     /// -∞ cannot be written as JSON, so the strip must still encode.
@@ -376,7 +376,8 @@ struct Issue291SendSlotReadTests {
         #expect(slots[1]["level_raw"] as? Double == 0.25)
         #expect(slots[1]["level_description"] as? String == "-12.0 dB")
         // The plain simple strip has no send button at all: read, and none.
-        #expect((strips[1]["send_slots"] as? [[String: Any]])?.isEmpty == true)
+        let plainStripSendSlots = try #require(strips[1]["send_slots"] as? [[String: Any]])
+        #expect(plainStripSendSlots.isEmpty)
     }
 
     /// The single-strip readback takes the same per-strip pass, so it carries the field too.
@@ -396,7 +397,7 @@ struct Issue291SendSlotReadTests {
     }
 }
 
-// MARK: - #291 R1 — the destination labels the classifier will read, in every locale
+// MARK: - #291 — the destination labels the classifier will read, in every locale
 
 @Suite("#291 R1 destination labels are Apple's values in every locale")
 struct Issue291DestinationLabelTests {
@@ -459,7 +460,7 @@ struct Issue291DestinationLabelTests {
     }
 }
 
-// MARK: - #291 R1 — the assigned send as a running Logic draws it (2026-09-27)
+// MARK: - #291 — the assigned send as a running Logic draws it (2026-09-27)
 //
 // Three strips dumped off Logic 12.3 (6674) on 2026-09-27 by Scripts/livekit/ax_mixer_strip_dump.swift
 // and kept in docs/observations/evidence/2026-09-27-send-slot-strip-dumps-ko-KR-en-US.json. The rows

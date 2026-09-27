@@ -20,7 +20,7 @@ enum RoutingProjectBinding: Sendable {
 /// so the graph does not depend on which resource was read first (#291 R0).
 ///
 /// The AX reader contributes an output *label*, and the label is classified, never joined: a track
-/// is never an output destination in Logic, so a track named like a bus is not one (#291 R1). A
+/// is never an output destination in Logic, so a track named like a bus is not one (#291). A
 /// label that classifies as a bus becomes a `bus_<n>` node whose only identity is the number parsed
 /// from the source's own slot description, and `main_output` coverage says so. A physical output
 /// or no output is recorded on the source node and publishes no node and no edge. No send edge is

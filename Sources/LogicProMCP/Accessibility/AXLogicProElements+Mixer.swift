@@ -463,7 +463,7 @@ extension AXLogicProElements {
         slotDescription(in: strip, matching: AXLocalePolicy.inputSlotHelpKeyword, runtime: runtime)
     }
 
-    // MARK: - Send slots (#291 R1)
+    // MARK: - Send slots (#291)
 
     /// Each send slot on a channel strip and whether it is OCCUPIED, or `nil` when the strip's
     /// descendants could not be read.

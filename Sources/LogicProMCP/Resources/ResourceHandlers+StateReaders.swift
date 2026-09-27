@@ -365,7 +365,7 @@ extension ResourceHandlers {
         targetRegistry: TargetRegistry? = nil
     ) async throws -> ReadResource.Result {
         // The one capture `inspect_session` builds from, so the graph and that report's routing
-        // section come from the same reading (#291 R1). This read runs after every poll, outside
+        // section come from the same reading (#291). This read runs after every poll, outside
         // the #199 deadline: the inert file reader keeps it to cache and registry reads, with no
         // project-file or AppleScript read.
         let capture = await SessionPopulationObservation.capture(

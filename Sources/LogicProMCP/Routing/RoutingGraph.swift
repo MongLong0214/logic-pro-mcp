@@ -10,7 +10,7 @@ enum RoutingNodeKind: String, Codable, Sendable {
     case output
 }
 
-/// What a source strip's output-slot description was classified as (#291 R1).
+/// What a source strip's output-slot description was classified as (#291).
 ///
 /// A classification of the SOURCE's own slot, read by the canon-derived label sets in
 /// `AXLocalePolicy`. `physicalOutput` and `noOutput` publish no node and no edge; only `bus`
@@ -132,7 +132,7 @@ struct RoutingDomainCoverage: Codable, Equatable, Sendable {
     let reasons: [String]
 }
 
-/// Per-domain coverage of a routing graph (#291 R1).
+/// Per-domain coverage of a routing graph (#291).
 ///
 /// The graph is `complete` only when every domain is; `isConsistent` enforces that, so a graph
 /// that claims completeness while any domain is partial, unread, moved or not observed is refused

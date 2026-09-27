@@ -2495,7 +2495,7 @@ enum AXLocalePolicy {
     /// a Korean Logic. `live_291_output_slot_is_read` is what surfaced it: the product published no
     /// output while a second instrument read four off the same screen.
     ///
-    /// Widened on 2026-09-27 (#291 R1) to every locale Logic ships by DERIVATION: the help's first
+    /// Widened on 2026-09-27 (#291) to every locale Logic ships by DERIVATION: the help's first
     /// sentence is the Title of QuickHelp row `INS_014_OutputSlot`, and Apple pins that row in all
     /// ten languages. Italian, Portuguese and Traditional Chinese keep the English title, so six
     /// members cover ten. Apple's French value carries a trailing space; the match is a substring,
@@ -2532,7 +2532,7 @@ enum AXLocalePolicy {
     /// with `입력 슬롯` exactly as `Input Monitoring` shares one with `Input slot`. Matching the full
     /// phrase rather than the word is what keeps the toggle from being published as a source.
     ///
-    /// Widened on 2026-09-27 (#291 R1) from QuickHelp row `INS_012_InputSlot`, the same way and with
+    /// Widened on 2026-09-27 (#291) from QuickHelp row `INS_012_InputSlot`, the same way and with
     /// the same three English-keeping locales as the output slot. The neighbour hazard above holds
     /// in every language the row was read for as far as the title goes: `Output-Slot` does not
     /// contain `Input-Slot`, `Ranura de salida` does not contain `Ranura de entrada`; whether each
@@ -2548,7 +2548,7 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_012_InputSlot#Title"
     )
 
-    /// Identifies a channel strip's SEND slot by its AXHelp string (#291 R1).
+    /// Identifies a channel strip's SEND slot by its AXHelp string (#291).
     ///
     /// Measured 2026-09-27 on Logic 12.3 (6674), ko and en
     /// (`docs/observations/2026-09-27-an-assigned-send-is-a-group-named-by-its-destination-beside-its-knob.json`):
@@ -2570,7 +2570,7 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_010_SendSlot#Title"
     )
 
-    /// Identifies the level knob Logic grows beside an ASSIGNED send (#291 R1).
+    /// Identifies the level knob Logic grows beside an ASSIGNED send (#291).
     ///
     /// Measured 2026-09-13 and 2026-09-27 on Logic 12.3 (6674): before a send is assigned the strip
     /// has no such element; after one is, an `AXSlider` described `send knob` (`센드 노브` in
@@ -2592,7 +2592,7 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_011_SendLevelKnob#Title"
     )
 
-    /// The output slot's description when the strip goes to the main output (#291 R1).
+    /// The output slot's description when the strip goes to the main output (#291).
     ///
     /// Measured en 2026-09-04 and ko-KR the same day: the ko slot was described `Stereo Output` in
     /// English while its help was Korean. That is not a gap in the reading — Apple's own row leaves
@@ -2610,7 +2610,7 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Stereo%20Output#value"
     )
 
-    /// The output slot's description when the strip is routed nowhere (#291 R1).
+    /// The output slot's description when the strip is routed nowhere (#291).
     ///
     /// Measured en 2026-09-11 on the output experiment: `No Output` is a real destination Logic
     /// draws, and a strip left there has no output menu to recover through — which is why this is
@@ -2628,7 +2628,7 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMixer.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/No%20Output#value"
     )
 
-    /// The word an output slot's description BEGINS with when the strip goes to a bus (#291 R1).
+    /// The word an output slot's description BEGINS with when the strip goes to a bus (#291).
     ///
     /// Logic composes the label from the template `Bus %d` in the same table as the cited row, and
     /// that template's prefix is this row's value in every one of the ten languages — which is what
@@ -2652,7 +2652,7 @@ enum AXLocalePolicy {
     )
 
     /// The word an output slot's description BEGINS with when the strip goes to a physical output
-    /// pair or channel (#291 R1): `Output 3-4`, measured en 2026-09-11.
+    /// pair or channel (#291): `Output 3-4`, measured en 2026-09-11.
     ///
     /// Logic composes these from `Output %d-%d` and `Output %d` in Logic.framework's
     /// Localizable.strings. The cited row `Output#mix` is the one whose values are those
