@@ -56,6 +56,9 @@ READINGS = {
     "spec-ops.json": {"every-operator": {
         "before": {"armed": [], "mode": "idle", "gone": None, "stable": 7, "title": "Tracks"},
         "other": {"armed": [3], "mode": "idle", "gone": "left", "stable": 9, "title": None},
+        # A second read before the operation, equal to `before`: the witness that `changed` FAILS
+        # when nothing moved. `before` cannot be it, since the claim compares with `before`.
+        "again": {"armed": [], "mode": "idle", "gone": None, "stable": 7, "title": "Tracks"},
         "op": {"state": "A", "success": True},
         "after": {"armed": [15], "mode": "armed", "gone": None, "stable": 7, "title": "Smart Controls"}}},
 }

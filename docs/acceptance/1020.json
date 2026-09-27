@@ -39,10 +39,10 @@
     {"path": "reply.write_source", "op": "eq", "value": "mcu"},
     {"path": "reply.write_attempted", "op": "eq", "value": true},
     {"path": "post.armed", "op": "eq", "value": true},
-    {"path": "post.armed", "op": "changed", "ref": {"obs": "pre.armed"}}
+    {"path": "pre.armed", "op": "eq", "value": false, "invariant": true}
    ],
    "counterexample": [
-    {"observation": "pre", "replaces": "post", "must_fail": [3, 4]}
+    {"observation": "pre", "replaces": "post", "must_fail": [3]}
    ],
    "restore": [
     {"as": "undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
@@ -100,11 +100,10 @@
     {"path": "reply.write_source", "op": "eq", "value": "mcu"},
     {"path": "reply.write_attempted", "op": "eq", "value": true},
     {"path": "post.armed", "op": "eq", "value": false},
-    {"path": "post.armed", "op": "changed", "ref": {"obs": "pre.armed"}},
     {"path": "as_found.armed", "op": "eq", "value": false, "invariant": true}
    ],
    "counterexample": [
-    {"observation": "pre", "replaces": "post", "must_fail": [4, 5]}
+    {"observation": "pre", "replaces": "post", "must_fail": [4]}
    ],
    "restore": [],
    "restore_expect": [],

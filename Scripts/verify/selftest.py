@@ -142,6 +142,18 @@ MUTANTS = [
              '        root = _safe_root(e["path"])\n'
              '        if root in order and order[root] <= at:\n'
              '            out.append(f"restore_expect[{j}] reads {root!r}, which is not bound after the operation")\n')},
+    {"id": "effect-ref-to-a-call-allowed", "file": "engine.py",
+     "old": "        if baseline in order and (is_call(steps[baseline]) or order[baseline] >= at):",
+     "new": "        if baseline in order and order[baseline] >= at:"},
+    {"id": "effect-ref-after-operation-allowed", "file": "engine.py",
+     "old": "        if baseline in order and (is_call(steps[baseline]) or order[baseline] >= at):",
+     "new": "        if baseline in order and is_call(steps[baseline]):"},
+    {"id": "witness-compared-with-itself-allowed", "file": "engine.py",
+     "old": '            elif ref_obs_root(expect[i]) == cx["observation"]:',
+     "new": "            elif False:"},
+    {"id": "null-difference-passes", "file": "predicates.py",
+     "old": 'NULL_IS_UNREADABLE = ("changed", "ne", "not_in")',
+     "new": "NULL_IS_UNREADABLE = ()"},
     {"id": "counterexample-after-operation-allowed", "file": "engine.py",
      "old": 'if order.get(cx["observation"], -1) >= at:',
      "new": "if False:"},

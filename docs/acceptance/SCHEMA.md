@@ -204,6 +204,11 @@ A missing path is never FAIL and never PASS. A reading of the wrong type for its
 `changed`/`unchanged` compute what `ne`/`eq` compute. They are separate names so that a row meaning
 "this moved relative to the pre-state" cannot be written against a constant by mistake.
 
+`changed`, `ne` and `not_in` PASS on a difference, and null differs from every reading, so a null
+would satisfy them by absence. Under these three a null on either side is UNREADABLE, never PASS.
+The positive operators are unchanged: a null fails them except against a null operand and under
+`is_null`.
+
 `matches_canon` references are `logic-canon://strings/<source>/<locale>/<key>#value` with
 `"locale": "$locale"` (the run's locale) or one fixed code, and a `quote`: the value the ref text's
 own locale pins, checked by `check-spec` against the canon digest. Put `"quote": "..."` on a line of
@@ -234,6 +239,10 @@ what it credits to the operation was read after the operation ran.
   proof, and may not be listed in `must_fail`.
 - Every other expectation is an **effect**.
   - Its path may not name a step bound before the operation.
+  - Its `ref.obs`, when it has one, names a step bound BEFORE the operation that is not a call:
+    the baseline. A claim about the operation is compared with the state before it. A reply (the
+    operation's own or a setup call's) or a reading taken after the operation is not an
+    independent expected value, so a `ref.obs` to one is refused.
   - An effect that reads any step bound after the operation is listed in some counterexample's
     `must_fail`. No flag exempts one.
   - That includes preservation claims ("the other tracks are unchanged", "the upper row is
@@ -254,14 +263,24 @@ what it credits to the operation was read after the operation ran.
     the same resource, or the same tool and command. A witness of another kind fails a check only
     because it is another kind of value.
   - Each listed expectation reads the replaced step; otherwise substituting could not change it.
+  - A listed expectation whose `ref.obs` reads the counterexample's own observation is refused.
+    With that observation in place of the replaced step, both sides of the check read the same
+    reading, so it FAILS whatever was observed and shows nothing about the check.
   - The engine judges those expectations again with the replaced reading swapped for the other
     one. Each must then FAIL. If one PASSES, the row FAILS with `counterexample_accepted`: the
     check cannot tell the two states apart. If one is UNREADABLE, the row is UNREADABLE.
 - A row needs at least one effect over an independent step bound after the operation, listed in
   `must_fail`. Otherwise the only falsifiable checks read the operation's own reply or a state
   read before it acted, and the row is refused as self-report.
-- Use the pre-state reading as the counterexample of a post-state expectation. It is what the
+- Use a pre-state reading as the counterexample of a post-state expectation. It is what the
   reading would be if the operation did nothing.
+  - When the expectation itself compares with the pre-state (`changed`, `unchanged` or `ne`, with
+    a `ref.obs` to it), the witness must be a different, earlier reading of the same kind. The
+    pre-state reading in place of the post-state one compares the baseline with itself.
+  - If the fixture has no such reading, the row adds a probe step that takes one. Or, when the
+    states are known values, it states the pre-state as an invariant (`pre.armed eq false`) and
+    the post-state against a fixed value (`post.armed eq true`), which says the same and whose
+    witness is the pre-state reading.
 
 ### Restore
 

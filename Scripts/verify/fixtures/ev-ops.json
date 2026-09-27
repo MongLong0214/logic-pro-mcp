@@ -40,6 +40,12 @@
       }
      },
      {
+      "as": "again",
+      "read": {
+       "uri": "logic://tracks"
+      }
+     },
+     {
       "as": "op",
       "call": {
        "tool": "logic_tracks",
@@ -147,6 +153,11 @@
       "path": "op.state",
       "op": "eq",
       "value": "A"
+     },
+     {
+      "path": "before.stable",
+      "op": "not_null",
+      "invariant": true
      }
     ],
     "counterexample": [
@@ -161,7 +172,6 @@
        5,
        6,
        7,
-       8,
        12
       ]
      },
@@ -174,6 +184,13 @@
        10,
        11
       ]
+     },
+     {
+      "observation": "again",
+      "replaces": "after",
+      "must_fail": [
+       8
+      ]
      }
     ],
     "restore": [],
@@ -181,12 +198,13 @@
     "independence": [
      "before",
      "other",
+     "again",
      "after"
     ]
    }
   ]
  },
- "spec_sha256": "94600f1b9c143ea647c5bbd514321513e02e4ef72fc57f02b7abea80e781cd29",
+ "spec_sha256": "6b2a3a5d5949e909625ac53e0e2b3ffef9d0a098ce4b518f06664b4f285fade4",
  "binary": {
   "binary_path": null,
   "binary_sha256": null,
@@ -247,6 +265,16 @@
        "raw": "{\"armed\": [3], \"gone\": \"left\", \"mode\": \"idle\", \"stable\": 9, \"title\": null}",
        "raw_bytes": 74
       },
+      "again": {
+       "step": {
+        "as": "again",
+        "read": {
+         "uri": "logic://tracks"
+        }
+       },
+       "raw": "{\"armed\": [], \"gone\": null, \"mode\": \"idle\", \"stable\": 7, \"title\": \"Tracks\"}",
+       "raw_bytes": 75
+      },
       "op": {
        "step": {
         "as": "op",
@@ -282,6 +310,7 @@
    "every-operator": {
     "verdict": "PASS",
     "expect": [
+     "PASS",
      "PASS",
      "PASS",
      "PASS",

@@ -27,6 +27,10 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
     is not the same reading as the one it replaces (the same probe and args, the same resource,
     or the same tool and command): a witness of another kind fails a check only because it is
     another kind of value, which says nothing about the check;
+  * a counterexample that lists an expectation whose `ref.obs` reads the counterexample's own
+    observation: with that observation in place of the replaced step, both sides of the check read
+    the same reading, so it FAILS whatever was observed and shows nothing about the check (a
+    `changed` claim against the pre-state takes a DIFFERENT pre-operation reading as its witness);
   * THE ORDER RULES. A row names its `operation`, the call step it judges; steps run in order,
     and no call follows the operation in `steps` (a reading taken after a second call cannot be
     credited to the first; later calls belong in `restore`). An expectation READS the step its
@@ -36,7 +40,10 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
         step is refused: a reading after the operation is a claim about the operation, and so is
         an effect.
       - Every other expectation is an EFFECT. Its path may not name a step bound before the
-        operation. An effect that reads any step bound after the operation must be listed in some
+        operation. Its `ref.obs`, when it has one, names a step bound BEFORE the operation that is
+        not a call: the baseline. A claim about the operation is compared with the state before
+        it; a reply (the operation's or a setup call's) or a later reading is not an independent
+        expected value. An effect that reads any step bound after the operation must be listed in some
         counterexample's `must_fail`; no flag exempts one. That covers preservation claims ("the
         upper row is unchanged"): their witness is a before-operation reading that differs from
         the preserved one, so the claim FAILS under substitution.
@@ -371,6 +378,12 @@ def row_problems(row: dict, n_sources: int) -> list:
                 out.append(f"counterexample[{k}].must_fail: expect[{i}] reads "
                            f"{_safe_root(expect[i]['path'])!r}, not {cx['replaces']!r}, so the "
                            f"substitution cannot change its outcome")
+            elif ref_obs_root(expect[i]) == cx["observation"]:
+                out.append(f"counterexample[{k}].must_fail: expect[{i}] compares with "
+                           f"{cx['observation']!r}, the counterexample's own observation, so with it "
+                           f"in place of {cx['replaces']!r} the check compares {cx['observation']!r} "
+                           f"with itself and FAILS whatever was read. The witness is a different "
+                           f"reading from the one the check compares with")
             else:
                 listed.add(i)
                 witnesses.setdefault(i, []).append(cx["observation"])
@@ -391,6 +404,11 @@ def row_problems(row: dict, n_sources: int) -> list:
                            f"operation. A reading after the operation is a claim about the "
                            f"operation, and so is an effect: list it in a counterexample's must_fail")
             continue
+        baseline = ref_obs_root(e)
+        if baseline in order and (is_call(steps[baseline]) or order[baseline] >= at):
+            which = (f"the reply of the call {baseline!r}" if is_call(steps[baseline])
+                     else f"{baseline!r}, bound after the operation {operation!r}")
+            out.append(f"expect[{i}] compares {root!r} with {which}. {EXPECTED_VALUE}")
         if order[root] < at:
             out.append(f"expect[{i}] reads {root!r}, bound before the operation {operation!r}, as an "
                        f"effect. An effect is read after the operation it is credited to; a "
@@ -401,7 +419,6 @@ def row_problems(row: dict, n_sources: int) -> list:
                            f"and no counterexample's must_fail lists it, so nothing shows it can "
                            f"fail. Every reading after the operation is a claim about it")
             else:
-                baseline = _safe_root(e["ref"]["obs"]) if "obs" in (e.get("ref") or {}) else None
                 if baseline in order and order[baseline] < at:
                     if order[baseline] < last_call:
                         out.append(f"expect[{i}] compares {latest!r} with {baseline!r}, read before the "
@@ -428,6 +445,18 @@ def is_call(step: dict) -> bool:
     """Whether a step acts (a `tools/call`) rather than reads. The one definition every order rule
     uses: the operation, the calls before it, a call after it, and the call that restores."""
     return "call" in step
+
+
+#: Why an effect's expected value comes from the state before the operation (the baseline).
+EXPECTED_VALUE = ("A claim about the operation is compared with the state before it; a reply or a "
+                  "later reading is not an independent expected value")
+
+
+def ref_obs_root(e: dict):
+    """The step an expectation's `ref.obs` reads, or None when it has none (or it does not parse;
+    expectation_problems says so)."""
+    ref = e.get("ref") or {}
+    return _safe_root(ref["obs"]) if "obs" in ref else None
 
 
 #: Why a reading taken between the operation and the restore cannot be a restore check.

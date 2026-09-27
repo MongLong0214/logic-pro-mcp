@@ -46,6 +46,14 @@ pre-state" cannot be written against a typed constant by mistake.
 
 A reading of the wrong type for its operator (count_eq on a string) is FAIL, not UNREADABLE: the
 value was read, and it is not what the row says it should be.
+
+NULL UNDER A NEGATIVE OPERATOR
+------------------------------
+`changed`, `ne` and `not_in` PASS when two values differ, and null differs from every reading, so
+a null on either side would satisfy them by absence, whatever the element was: absence counted as
+success. Under these three a null is UNREADABLE instead, never PASS. The positive
+operators are unchanged: a null fails them except against a null operand (`eq` or `unchanged`
+with a null on the other side, `in` a list that holds null) and under `is_null`.
 """
 from __future__ import annotations
 
@@ -211,6 +219,10 @@ OPS = {
 }
 
 
+#: Operators that PASS on a difference. A null on either side is UNREADABLE under them (above).
+NULL_IS_UNREADABLE = ("changed", "ne", "not_in")
+
+
 def check(op: str, actual, operand=None):
     """(outcome, detail) for one operator over an already-resolved reading and operand.
 
@@ -227,8 +239,10 @@ def check(op: str, actual, operand=None):
             raise ValueError(f"{op} needs an operand")
         if isinstance(operand, Unreadable):
             return UNREADABLE, f"operand: {operand.reason}"
-        ok = test(actual.value, operand.value)
         shown = f"{_show(actual.value)} {op} {_show(operand.value)}"
+        if op in NULL_IS_UNREADABLE and (actual.value is None or operand.value is None):
+            return UNREADABLE, f"{shown}: a null cannot show a difference; {op} does not pass on absence"
+        ok = test(actual.value, operand.value)
     else:
         ok = test(actual.value, None)
         shown = f"{_show(actual.value)} {op}"
