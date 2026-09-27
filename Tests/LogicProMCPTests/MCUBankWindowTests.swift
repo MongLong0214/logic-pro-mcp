@@ -32,6 +32,19 @@ actor LCDBankSurface: MCUTransportProtocol {
         /// set, every press after that many bank presses neither moves nor redraws — the second
         /// of two back-to-back presses that Logic absorbed.
         case windows([String], start: Int = 0, silentAfter: Int? = nil)
+        /// Logic's bank window over a project of `names.count` strips (six-character LCD names),
+        /// as measured on 12.3 (#1020, 2026-09-27): the window starts at strip 0; bank right moves
+        /// it eight strips but never past the last full window, so the last bank stops at the last
+        /// strip (21 strips: 0, 8, 13); bank left moves it back to the previous multiple of eight
+        /// (13, 8, 0). A press that moves the window redraws the eight names it lands on; a press
+        /// at either end redraws the row it is already on, byte for byte.
+        case strips([String])
+    }
+
+    /// A non-bank button press, and the track its strip named at the offset the surface was on.
+    struct ButtonPress: Sendable, Equatable {
+        let function: MCUProtocol.ButtonFunction
+        let track: Int
     }
 
     private(set) var sentBytes: [[UInt8]] = []
@@ -40,6 +53,10 @@ actor LCDBankSurface: MCUTransportProtocol {
     private var currentRow: String
     private var windowPosition = 0
     private var bankPressesSeen = 0
+    /// The strip the window starts at, for `.strips`.
+    private(set) var stripOffset = 0
+    /// Every non-bank button press (the release is not a press), with the track it landed on.
+    private(set) var buttonPresses: [ButtonPress] = []
 
     init(response: Response, currentRow: String = String(repeating: " ", count: 56)) {
         self.response = response
@@ -66,9 +83,11 @@ actor LCDBankSurface: MCUTransportProtocol {
 
     func send(_ bytes: [UInt8]) async {
         sentBytes.append(bytes)
-        guard let button = MCUProtocol.decodeButton(bytes), button.on,
-              button.function == .bankLeft || button.function == .bankRight
-        else { return }
+        guard let button = MCUProtocol.decodeButton(bytes), button.on else { return }
+        guard button.function == .bankLeft || button.function == .bankRight else {
+            buttonPresses.append(ButtonPress(function: button.function, track: landingOffset + button.strip))
+            return
+        }
         switch response {
         case .redraw(let row):
             currentRow = row
@@ -84,6 +103,33 @@ actor LCDBankSurface: MCUTransportProtocol {
             windowPosition = min(max(windowPosition + step, 0), windows.count - 1)
             currentRow = windows[windowPosition]
             await deliverUpperRow(currentRow)
+        case .strips(let names):
+            let lastWindowStart = max(0, names.count - 8)
+            if button.function == .bankRight {
+                stripOffset = min(stripOffset + 8, lastWindowStart)
+            } else {
+                stripOffset = stripOffset % 8 == 0 ? max(0, stripOffset - 8) : stripOffset - stripOffset % 8
+            }
+            currentRow = Self.stripsRow(names, from: stripOffset)
+            await deliverUpperRow(currentRow)
+        }
+    }
+
+    /// The row a `.strips` surface shows from `offset`: seven-character cells, padded to 56.
+    static func stripsRow(_ names: [String], from offset: Int) -> String {
+        names[offset..<min(offset + 8, names.count)]
+            .map { $0.padding(toLength: 7, withPad: " ", startingAt: 0) }
+            .joined()
+            .padding(toLength: 56, withPad: " ", startingAt: 0)
+    }
+
+    /// The first strip under the surface: the window's offset for `.strips`, eight per window
+    /// for `.windows`, and 0 for the responses that model no bank position.
+    private var landingOffset: Int {
+        switch response {
+        case .strips: return stripOffset
+        case .windows: return windowPosition * 8
+        case .redraw, .redrawIdentical, .ignore: return 0
         }
     }
 

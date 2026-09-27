@@ -217,6 +217,12 @@ actor MCUChannel: Channel {
     private(set) var currentBank: Int = 0
     private var bankingQueue: [CheckedContinuation<Void, Never>] = []
     private var isBanking: Bool = false
+    /// Set when a bank step moved the window but may have moved it fewer than eight strips — Logic
+    /// stops the last bank at the last strip (#1020) — and nothing has put it back on a multiple of
+    /// eight since. While it is set and `currentBank` is not 0, no strip index can be trusted and
+    /// `withBanking` refuses before sending anything. Cleared only by a `mixer.bank` left walk that
+    /// ends on an unchanged redraw (Logic at its left end) with `currentBank` at 0.
+    private var windowOffsetUnaligned = false
 
     // The CoreMIDI callback only calls `MCUFeedbackIngress.yield`, which is a
     // non-suspending bounded hand-off. A single task drains it in arrival order;
@@ -1248,6 +1254,8 @@ actor MCUChannel: Channel {
                     break
                 }
                 banksMoved += 1
+                // The reply is unchanged either way; the flag is what a later strip write reads.
+                if !reading.fullShift { windowOffsetUnaligned = true }
             }
 
             extras["bank_presses_sent"] = pressesSent
@@ -1265,6 +1273,11 @@ actor MCUChannel: Channel {
                 )
             }
             extras["bank_bookkeeping_after"] = currentBank
+            // The one reading that re-establishes the offset: bank left redrew unchanged, which is
+            // Logic at its left end, and the bookkeeping agrees it is bank 0.
+            if stoppedUnchanged, sign < 0, currentBank == Self.bankIndexRange.lowerBound {
+                windowOffsetUnaligned = false
+            }
 
             guard let quiescent = stoppedQuiescent else {
                 extras["verify_source"] = Self.bankWindowVerifySource
@@ -1311,6 +1324,9 @@ actor MCUChannel: Channel {
         let quiescent: Bool
         /// The row reads exactly as it did before the press.
         let unchanged: Bool
+        /// The new row cannot be the old one slid by fewer than eight strips (see
+        /// `mayBeShortShift`). False for a step that did not move.
+        let fullShift: Bool
 
         /// A fresh write arrived and the row then held still.
         var redrew: Bool { writes > 0 && quiescent }
@@ -1340,12 +1356,41 @@ actor MCUChannel: Channel {
             }
             after = snapshot
         }
+        let unchanged = after.row == stepBefore.row
         return BankStepReading(
             writes: Int(clamping: after.sequence - stepBefore.sequence),
             window: after.row,
             quiescent: quiescent,
-            unchanged: after.row == stepBefore.row
+            unchanged: unchanged,
+            fullShift: !unchanged && !Self.mayBeShortShift(
+                before: stepBefore.row, after: after.row, rightward: button == .bankRight
+            )
         )
+    }
+
+    /// Whether a changed upper row could be the old one slid by k < 8 strips. Logic stops the last
+    /// bank at the last strip: measured 2026-09-27 on a 21-strip project, bank right from strips
+    /// 8-15 showed strips 13-20, a shift of five, and strip 0 then named track 13 (#1020). So a
+    /// bank-right step is suspect when, for some k in 1...7, `after[i] == before[i + k]` for every
+    /// i in 0..<8-k (bank left: `after[i + k] == before[i]`). A real short shift always satisfies
+    /// that; repeated names can only make it true more often, so the answer errs toward refusing.
+    /// A row longer than 56 characters has no provable cell boundaries and counts as suspect.
+    static func mayBeShortShift(before: String, after: String, rightward: Bool) -> Bool {
+        guard before.count <= 56, after.count <= 56 else { return true }
+        let old = bankWindowStrips(before)
+        let new = bankWindowStrips(after)
+        for k in 1...7 {
+            var slid = true
+            for i in 0..<(8 - k) {
+                let same: Bool = rightward ? (new[i] == old[i + k]) : (new[i + k] == old[i])
+                if !same {
+                    slid = false
+                    break
+                }
+            }
+            if slid { return true }
+        }
+        return false
     }
 
     /// The eight seven-character cells of a 56-character LCD row — six characters of name and
@@ -1414,18 +1459,25 @@ actor MCUChannel: Channel {
     var bankExclusionWaiterCount: Int { bankingQueue.count }
 
     /// One leg of a bank walk: the presses sent, how many of them moved, and the upper row after
-    /// each press.
+    /// each press. On the outward leg `banksMoved` counts only full eight-strip steps, and
+    /// `shortStepMoved` says the stopping step did move the window, possibly by fewer than eight.
     private struct BankWalkLeg {
         var pressesSent = 0
         var banksMoved = 0
+        var shortStepMoved = false
         var stepWindows: [String] = []
+
+        /// Steps the walk home owes: every step that moved the window, full or not.
+        var windowMoves: Int { banksMoved + (shortStepMoved ? 1 : 0) }
     }
 
     /// Walk the bank up to `steps` presses in one direction, one `bankStep` at a time, stopping
-    /// at the first press that did not move. `currentBank` moves by each step that moved and by
-    /// nothing else, so it never names a bank the walk did not reach. The caller holds
-    /// `withBankExclusion`.
-    private func walkBank(_ button: MCUProtocol.ButtonFunction, sign: Int, steps: Int) async -> BankWalkLeg {
+    /// at the first press that did not move — and, with `requireFullShift`, at the first press
+    /// that moved but may have moved fewer than eight strips. The caller holds
+    /// `withBankExclusion` and settles `currentBank` from the legs (`settleBankBookkeeping`).
+    private func walkBank(
+        _ button: MCUProtocol.ButtonFunction, steps: Int, requireFullShift: Bool
+    ) async -> BankWalkLeg {
         var leg = BankWalkLeg()
         for _ in 0..<steps {
             let stepBefore = await cache.mcuUpperRowSnapshot()
@@ -1433,24 +1485,38 @@ actor MCUChannel: Channel {
             leg.pressesSent += 1
             leg.stepWindows.append(reading.window)
             guard reading.moved else { break }
+            if requireFullShift, !reading.fullShift {
+                leg.shortStepMoved = true
+                break
+            }
             leg.banksMoved += 1
-            currentBank = min(
-                max(currentBank + sign, Self.bankIndexRange.lowerBound),
-                Self.bankIndexRange.upperBound
-            )
         }
         return leg
     }
 
+    /// `currentBank` after a walk: moved by every outward step that moved the window (a short step
+    /// counts, as `mixer.bank` counts it) and back by every homeward step that moved, never by a
+    /// step that did not. A short step the walk home could not undo leaves the window off a
+    /// multiple of eight, which `windowOffsetUnaligned` records.
+    private func settleBankBookkeeping(origin: Int, sign: Int, out: BankWalkLeg, back: BankWalkLeg) {
+        if out.shortStepMoved, back.banksMoved == 0 { windowOffsetUnaligned = true }
+        currentBank = min(
+            max(origin + sign * (out.windowMoves - back.banksMoved), Self.bankIndexRange.lowerBound),
+            Self.bankIndexRange.upperBound
+        )
+    }
+
     /// The fields every reply behind a bank walk carries: how far out it got and whether it got
-    /// home. `banks_moved` counts the outward steps that moved; `bank_restored` is whether the walk
-    /// back moved as many steps as the walk out did.
+    /// home. `banks_moved` counts the outward steps verified to move a full eight strips;
+    /// `bank_restored` is whether the walk back moved as many steps as the walk out moved the window.
     private func bankWalkExtras(requested: Int, out: BankWalkLeg, back: BankWalkLeg) -> [String: Any] {
         [
             "bank_presses_sent": out.pressesSent + back.pressesSent,
             "banks_moved": out.banksMoved,
             "banks_requested": requested,
-            "bank_restored": back.banksMoved == out.banksMoved,
+            "bank_restored": back.banksMoved == out.windowMoves,
+            "bank_step_short_of_eight": out.shortStepMoved,
+            "bank_window_unaligned": windowOffsetUnaligned,
             "step_windows": out.stepWindows + back.stepWindows,
             "bank_bookkeeping_after": currentBank,
         ]
@@ -1458,20 +1524,23 @@ actor MCUChannel: Channel {
 
     /// Every strip-relative MCU write addresses a strip INDEX, which names a channel only relative
     /// to the bank Logic is showing. So the bank is moved one `bankStep` at a time, the write runs
-    /// only when every step toward its bank was witnessed moving, and the walk home is stepped the
-    /// same way (#1020 review round 1). Two presses sent back to back moved Logic 12.3 ONE bank
-    /// (docs/observations/2026-09-27-*-a-bank-step-answers-from-the-redrawn-upper-row.json); the
-    /// strip byte behind them then landed a bank short — `enabled: false` for armed track 16
-    /// pressed strip 0 on bank 1 and armed track 8. A fixed settle between presses was ruled out
-    /// (#862): a delay is a guess about Logic's rate, the per-step quiescent redraw is a reading.
+    /// only when every step toward its bank was witnessed moving a FULL eight strips, and the walk
+    /// home is stepped the same way (#1020). Two presses sent back to back moved Logic 12.3 ONE bank
+    /// (docs/observations/2026-09-27-*-a-bank-step-answers-from-the-redrawn-upper-row.json), so
+    /// `enabled: false` for armed track 16 pressed strip 0 on bank 1 and armed track 8. And Logic
+    /// stops the last bank at the last strip: on a 21-strip project bank 2 showed strips 13-20, the
+    /// step redrew a different row, and strip 0 armed track 13 where 16 was asked (measured
+    /// 2026-09-27). A fixed settle between presses was ruled out (#862): a delay is a guess about
+    /// Logic's rate, the per-step quiescent redraw is a reading.
     ///
-    /// When the bank is already `currentBank` the write runs as before, on the bookkeeping alone:
-    /// nothing is pressed, and nothing in the MCU protocol reads the bank offset back (#862).
-    /// Otherwise:
+    /// While `windowOffsetUnaligned` is set and `currentBank` is not 0, nothing is sent and the
+    /// write refuses. When the bank is already `currentBank` the write runs as before, on the
+    /// bookkeeping alone: nothing is pressed, and nothing in the MCU protocol reads the bank offset
+    /// back (#862). Otherwise:
     /// - an upper row never received refuses with nothing sent;
-    /// - a step that did not move stops the walk, the strip is NOT pressed, the steps that did
-    ///   move are walked back, and the answer is State C `bank_walk_unverified`, which is not
-    ///   terminal, so the router moves on;
+    /// - a step that did not move, or moved but may have moved fewer than eight strips, stops the
+    ///   walk, the strip is NOT pressed, every step that moved the window is walked back, and the
+    ///   answer is State C `bank_walk_unverified`, which is not terminal, so the router moves on;
     /// - after the write, a walk-home step that did not move stops the walk home; the write's own
     ///   reply stands and carries `bank_restored: false`.
     private func withBanking(
@@ -1492,12 +1561,23 @@ actor MCUChannel: Channel {
         return await withBankExclusion {
             // Decided under the lock: read outside it, `currentBank` can be the bank a suspended
             // `executeBank` walk has already left.
+            if windowOffsetUnaligned, currentBank != Self.bankIndexRange.lowerBound {
+                return await bankWalkRefusal(
+                    operation: operation, track: targetTrack, strip: strip,
+                    requested: abs(targetBank - currentBank), out: BankWalkLeg(), back: BankWalkLeg(),
+                    reason: "an earlier bank move left the MCU window where Logic stopped the last bank "
+                        + "at the last strip, so its offset is not a multiple of eight and no strip index "
+                        + "names a known track; nothing was sent. Move the bank left to its end with "
+                        + "mixer.bank (the step that redraws unchanged) to clear this"
+                )
+            }
             if targetBank == currentBank {
                 return await stripWrite(strip)
             }
 
-            let requested = abs(targetBank - currentBank)
-            let sign = targetBank > currentBank ? 1 : -1
+            let origin = currentBank
+            let requested = abs(targetBank - origin)
+            let sign = targetBank > origin ? 1 : -1
             let outward: MCUProtocol.ButtonFunction = sign > 0 ? .bankRight : .bankLeft
             let homeward: MCUProtocol.ButtonFunction = sign > 0 ? .bankLeft : .bankRight
 
@@ -1510,22 +1590,28 @@ actor MCUChannel: Channel {
                 )
             }
 
-            let out = await walkBank(outward, sign: sign, steps: requested)
+            let out = await walkBank(outward, steps: requested, requireFullShift: true)
             guard out.banksMoved == requested else {
-                let back = await walkBank(homeward, sign: -sign, steps: out.banksMoved)
+                let back = await walkBank(homeward, steps: out.windowMoves, requireFullShift: false)
+                settleBankBookkeeping(origin: origin, sign: sign, out: out, back: back)
+                let stopped = "bank step \(out.pressesSent) of \(requested) toward track \(targetTrack)'s bank "
+                let reason = out.shortStepMoved
+                    ? stopped + "redrew the MCU LCD upper row, but the new row may be the old one slid by "
+                        + "fewer than eight strips: Logic stops the last bank at the last strip, so strip "
+                        + "\(strip) could name an earlier track"
+                    : stopped + "produced no quiescent redraw of the MCU LCD upper row to a different row, "
+                        + "so Logic cannot be shown to be on the bank the strip index would name (two "
+                        + "presses sent back to back were measured moving Logic 12.3 one bank)"
                 return await bankWalkRefusal(
                     operation: operation, track: targetTrack, strip: strip, requested: requested,
-                    out: out, back: back,
-                    reason: "bank step \(out.pressesSent) of \(requested) toward track \(targetTrack)'s bank "
-                        + "produced no quiescent redraw of the MCU LCD upper row to a different row, so "
-                        + "Logic cannot be shown to be on the bank the strip index would name (two presses "
-                        + "sent back to back were measured moving Logic 12.3 one bank)"
+                    out: out, back: back, reason: reason
                 )
             }
 
             let result = await stripWrite(strip)
 
-            let back = await walkBank(homeward, sign: -sign, steps: requested)
+            let back = await walkBank(homeward, steps: requested, requireFullShift: false)
+            settleBankBookkeeping(origin: origin, sign: sign, out: out, back: back)
             // `addExtras` is the merge the router already uses on success envelopes; it leaves a
             // refusal untouched, so a State C from the write is returned as the write gave it.
             guard case .success(let message) = result else { return result }
@@ -1555,12 +1641,12 @@ actor MCUChannel: Channel {
         extras["readback_source"] = Self.bankWindowVerifySource
         for (k, v) in await mcuConnectionExtras() { extras[k] = v }
         let home: String
-        if out.banksMoved == 0 {
+        if out.windowMoves == 0 {
             home = "No bank step moved, so there was nothing to walk back."
-        } else if back.banksMoved == out.banksMoved {
-            home = "The \(out.banksMoved) bank step(s) that moved were walked back."
+        } else if back.banksMoved == out.windowMoves {
+            home = "The \(out.windowMoves) bank step(s) that moved were walked back."
         } else {
-            home = "Walking back, \(back.banksMoved) of \(out.banksMoved) step(s) moved, so the MCU window "
+            home = "Walking back, \(back.banksMoved) of \(out.windowMoves) step(s) moved, so the MCU window "
                 + "may not be where it was; bank_bookkeeping_after is the bank the verified steps reached."
         }
         let hint = "\(operation): strip \(strip) was not pressed for track \(track): \(reason). \(home) "

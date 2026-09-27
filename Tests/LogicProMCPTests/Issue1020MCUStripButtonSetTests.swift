@@ -176,6 +176,52 @@ private func stripToggleBytes(_ sent: [[UInt8]]) -> [[UInt8]] {
     }
 }
 
+/// Twenty-one strips with distinct six-character names: bank 0 is strips 0-7, bank 1 is 8-15, and
+/// Logic's last bank stops at the last strip, so "bank 2" shows strips 13-20.
+private let twentyOneDistinct = (0..<21).map { String(format: "Trk%02d", $0) }
+
+/// The measured Korean fixture's upper rows (2026-09-27, 19 tracks + St Out + Master): nine
+/// `DelCls` and eight `StdGrn` in a row, so a bank step's new row repeats names from the old one.
+private let measuredKoStrips = ["AbsZer", "Audio1"] + Array(repeating: "DelCls", count: 9)
+    + Array(repeating: "StdGrn", count: 8) + ["St Out", "Master"]
+
+/// Which tracks read armed on a clamped-bank surface: those armed at the start, each flipped by
+/// every Rec press that landed on it (the surface records the track a strip named when pressed).
+private func armedTracks(on surface: LCDBankSurface, initially: Set<Int>) async -> Set<Int> {
+    var armed = initially
+    for press in await surface.buttonPresses where press.function == .recArm {
+        if armed.contains(press.track) { armed.remove(press.track) } else { armed.insert(press.track) }
+    }
+    return armed
+}
+
+private struct ClampRig {
+    let channel: MCUChannel
+    let surface: LCDBankSurface
+}
+
+/// A rig on Logic's clamped bank model (`LCDBankSurface.strips`), upper row drawn at strip 0, with
+/// an arm reading that follows the presses.
+private func makeClampRig(names: [String], armed: Set<Int> = []) async -> ClampRig {
+    let surface = LCDBankSurface(response: .strips(names))
+    let stripCount = names.count
+    let channel = MCUChannel(
+        transport: surface,
+        cache: StateCache(),
+        axReadback: MCUChannel.AXReadback(
+            readVolume: { _ in nil },
+            readPan: { _ in nil },
+            readArmed: { track in
+                track < stripCount ? await armedTracks(on: surface, initially: armed).contains(track) : nil
+            }
+        ),
+        sleep: CountingSleeper().closure
+    )
+    await surface.attach(channel: channel)
+    await surface.seedUpperRow(LCDBankSurface.stripsRow(names, from: 0))
+    return ClampRig(channel: channel, surface: surface)
+}
+
 /// A momentary press: Note On velocity 127, then velocity 0, on the strip's note.
 private func pressPair(_ function: MCUProtocol.ButtonFunction, strip: Int) -> [[UInt8]] {
     [
@@ -570,6 +616,135 @@ struct Issue1020MCUStripButtonSetTests {
         #expect(obj["bank_presses_sent"] as? Int == 2)
         #expect(await rig.surface.bank == 1)
         #expect(await rig.channel.currentBank == 1)
+    }
+
+    // MARK: - Logic stops the last bank at the last strip (#1020, measured 2026-09-27)
+
+    /// Track 16 of 21 strips: the second bank-right step shows strips 13-20, a row that differs
+    /// from the one before and redraws quietly, so it "moved" — but only five strips, and strip 0
+    /// there is track 13. The step is not a verified full shift: nothing is pressed, both steps
+    /// that moved the window are walked back, and the refusal is the non-terminal one.
+    @Test func theClampedLastBankIsRefusedAndWalkedBackWithNoStripByte() async throws {
+        let rig = await makeClampRig(names: twentyOneDistinct)
+
+        let result = await rig.channel.execute(operation: "track.set_arm", params: ["index": "16", "enabled": "true"])
+
+        let expected = [
+            pressPair(.bankRight, strip: 0), pressPair(.bankRight, strip: 0),
+            pressPair(.bankLeft, strip: 0), pressPair(.bankLeft, strip: 0),
+        ].flatMap { $0 }
+        #expect(await rig.surface.sentBytes == expected)
+        #expect(await rig.surface.buttonPresses.isEmpty, "no strip byte on a window that is not bank 2")
+        #expect(await armedTracks(on: rig.surface, initially: []).isEmpty)
+        #expect(await rig.surface.stripOffset == 0)
+        #expect(await rig.channel.currentBank == 0)
+
+        #expect(!result.isSuccess)
+        let obj = try setEnvelope(result)
+        #expect(obj["state"] as? String == "C")
+        #expect(obj["error"] as? String == "bank_walk_unverified")
+        let attempted = try #require(obj["write_attempted"] as? Bool)
+        #expect(!attempted)
+        #expect(obj["banks_moved"] as? Int == 1)
+        #expect(obj["banks_requested"] as? Int == 2)
+        #expect(obj["bank_presses_sent"] as? Int == 4)
+        let short = try #require(obj["bank_step_short_of_eight"] as? Bool)
+        #expect(short)
+        let restored = try #require(obj["bank_restored"] as? Bool)
+        #expect(restored)
+        let unaligned = try #require(obj["bank_window_unaligned"] as? Bool)
+        #expect(!unaligned)
+        let hint = try #require(obj["hint"] as? String)
+        #expect(hint.contains("fewer than eight strips"))
+        #expect(!HonestContract.isTerminalStateC(result.message))
+
+        // Home and aligned again: a bank-0 write needs no walk and lands on its own track.
+        let bank0 = await rig.channel.execute(operation: "track.set_arm", params: ["index": "3", "enabled": "true"])
+        #expect(bank0.isSuccess)
+        #expect(try setEnvelope(bank0)["state"] as? String == "A")
+        #expect(await armedTracks(on: rig.surface, initially: []) == [3])
+    }
+
+    /// Track 15 of 21: bank 1 is a full eight-strip shift, so the arm lands on track 15.
+    @Test func theFullBankBeforeTheClampedOneStillArmsItsTrack() async throws {
+        let rig = await makeClampRig(names: twentyOneDistinct)
+
+        let result = await rig.channel.execute(operation: "track.set_arm", params: ["index": "15", "enabled": "true"])
+
+        let expected = [pressPair(.bankRight, strip: 0), pressPair(.recArm, strip: 7), pressPair(.bankLeft, strip: 0)]
+            .flatMap { $0 }
+        #expect(await rig.surface.sentBytes == expected)
+        #expect(await rig.surface.buttonPresses == [LCDBankSurface.ButtonPress(function: .recArm, track: 15)])
+        #expect(await armedTracks(on: rig.surface, initially: []) == [15])
+        #expect(result.isSuccess)
+        let obj = try setEnvelope(result)
+        #expect(obj["state"] as? String == "A")
+        #expect(obj["banks_moved"] as? Int == 1)
+        let short = try #require(obj["bank_step_short_of_eight"] as? Bool)
+        #expect(!short)
+        let restored = try #require(obj["bank_restored"] as? Bool)
+        #expect(restored)
+        #expect(await rig.channel.currentBank == 0)
+    }
+
+    /// `mixer.bank` right twice lands on the clamped bank (strips 13-20) and says so the way it
+    /// always has, with the bookkeeping at 2. A strip write after it — in "bank 2", where no walk
+    /// is needed, or in bank 0 — is refused with nothing sent, because the window's offset is not
+    /// a multiple of eight. `mixer.bank` left to the end (the step that redraws unchanged) clears it.
+    @Test func mixerBankOntoTheClampedBankThenAStripWriteIsRefusedWithNothingSent() async throws {
+        let rig = await makeClampRig(names: twentyOneDistinct)
+
+        let bank = await rig.channel.execute(operation: "mixer.bank", params: ["direction": "right", "count": "2"])
+        #expect(bank.isSuccess)
+        let bankObj = try setEnvelope(bank)
+        #expect(bankObj["state"] as? String == "A")
+        #expect(bankObj["banks_moved"] as? Int == 2)
+        #expect(await rig.surface.stripOffset == 13)
+        #expect(await rig.channel.currentBank == 2)
+        let sentAfterBank = await rig.surface.sentBytes.count
+
+        for track in ["16", "3"] {
+            let arm = await rig.channel.execute(operation: "track.set_arm", params: ["index": track, "enabled": "true"])
+            #expect(!arm.isSuccess)
+            let obj = try setEnvelope(arm)
+            #expect(obj["error"] as? String == "bank_walk_unverified")
+            #expect(obj["bank_presses_sent"] as? Int == 0)
+            let attempted = try #require(obj["write_attempted"] as? Bool)
+            #expect(!attempted)
+            let unaligned = try #require(obj["bank_window_unaligned"] as? Bool)
+            #expect(unaligned)
+            #expect(!HonestContract.isTerminalStateC(arm.message))
+        }
+        #expect(await rig.surface.sentBytes.count == sentAfterBank, "nothing is sent on an unaligned window")
+        #expect(await rig.surface.buttonPresses.isEmpty)
+
+        _ = await rig.channel.execute(operation: "mixer.bank", params: ["direction": "left", "count": "3"])
+        #expect(await rig.surface.stripOffset == 0)
+        #expect(await rig.channel.currentBank == 0)
+        let cleared = await rig.channel.execute(operation: "track.set_arm", params: ["index": "3", "enabled": "true"])
+        #expect(try setEnvelope(cleared)["state"] as? String == "A")
+        #expect(await armedTracks(on: rig.surface, initially: []) == [3])
+    }
+
+    /// The limit, on the measured Korean rows: from bank 0 the bank-1 row begins with three
+    /// `DelCls`, the names bank 0 ended on, so the step reads exactly like a five-strip shift and
+    /// cannot be proved full. Repeated names make the walk refuse more; they never let it press.
+    @Test func repeatedNamesMakeAFullStepUnprovableAndTheWalkRefuses() async throws {
+        let rig = await makeClampRig(names: measuredKoStrips)
+
+        let result = await rig.channel.execute(operation: "track.set_arm", params: ["index": "15", "enabled": "true"])
+
+        let expected = [pressPair(.bankRight, strip: 0), pressPair(.bankLeft, strip: 0)].flatMap { $0 }
+        #expect(await rig.surface.sentBytes == expected)
+        #expect(await rig.surface.buttonPresses.isEmpty)
+        let obj = try setEnvelope(result)
+        #expect(obj["error"] as? String == "bank_walk_unverified")
+        #expect(obj["banks_moved"] as? Int == 0)
+        let short = try #require(obj["bank_step_short_of_eight"] as? Bool)
+        #expect(short)
+        let restored = try #require(obj["bank_restored"] as? Bool)
+        #expect(restored)
+        #expect(await rig.channel.currentBank == 0)
     }
 
     /// `track.select` is not a toggle and is left exactly as it was: one press, State B
