@@ -204,7 +204,12 @@ struct SMFReader {
         }
         let start = stack.removeFirst()
         active[key] = stack
-        guard tick > start.tick else { throw SMFReaderError.malformedEvent }
+        // #1031: a Note Off can land on its Note On's tick (a zero-length note,
+        // common for drum triggers) -- that is not malformed, only a negative
+        // span is. `tick` only ever grows while a track is parsed (deltas are
+        // non-negative VLQs), so `tick < start.tick` cannot occur here today;
+        // the guard stays as a defensive invariant on that ordering.
+        guard tick >= start.tick else { throw SMFReaderError.malformedEvent }
         notes.append(RawNote(
             pitch: pitch,
             velocity: start.velocity,
