@@ -3,6 +3,11 @@ import Testing
 import MCP
 @testable import LogicProMCP
 
+// Nested in `OperationTraceTests`, which is `.serialized`, so this suite never runs beside another
+// test that sets LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE, a process-wide variable: one test's restore
+// unset it in the middle of another (#1045 review round 2). `.serialized` orders only the tests
+// inside one suite, so every test that sets it lives under that suite.
+extension OperationTraceTests {
 /// #544, reported externally against v3.13.0: `logic_system.permissions` and `refresh_cache` returned
 /// prose under a tool registered with an `outputSchema`, so `structuredContent` came back nil and a
 /// schema-enforcing client refused the call with `MCP error -32600`.
@@ -326,4 +331,5 @@ struct Issue544OutputSchemaContractTests {
         #expect(invoked > 50)
         #expect(listedExceptions == 1)
     }
+}
 }

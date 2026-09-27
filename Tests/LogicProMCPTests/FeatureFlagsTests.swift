@@ -2,6 +2,10 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
+// Nested in `OperationTraceTests`, which is `.serialized`: this suite sets
+// LOGIC_MCP_ADR005_OPERATION_TRACE to "0", a process-wide variable, and a trace test running beside it
+// would lose its traces, or restore "0" as the value it saw (#1045 review round 2).
+extension OperationTraceTests {
 // PRD-007 Part 2 (ADR-002 #285): `LOGIC_MCP_ADR002_TARGET_REF` is DEFAULT ON.
 // The variable is now a kill-switch, not an opt-in — it is read with `!= "0"`,
 // so ONLY the exact string "0" disables the machinery.
@@ -125,4 +129,5 @@ struct FeatureFlagEnvironmentTests {
         }
     }
 
+}
 }
