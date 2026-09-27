@@ -191,10 +191,30 @@ class EveryLiteralIsClassified(unittest.TestCase):
             with self.subTest(literal=literal):
                 self.assertEqual(self._scan(self._READ + f'if title == "{literal}" {{ }}\n'), [])
 
-    def test_a_fragment_of_this_products_own_message_is_an_identifier(self):
+    def test_a_fragment_of_a_message_elsewhere_in_the_file_is_not_an_identifier(self):
+        """Review of #1034 R1-04: this case used to assert acceptance. Error text in the same file
+        says nothing about where the reading comes from. Mutation killed: restoring the
+        same-file substring rule in `classify`."""
         source = (self._READ + 'let refusal = "MENU_PICK_FAILED: menu cleanup was not seen"\n'
                   + 'if title.contains("cleanup was not seen") { }\n')
-        self.assertEqual(self._scan(source), [])
+        problems = self._scan(source)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("'cleanup was not seen'", problems[0])
+
+    def test_an_error_string_does_not_authorize_a_fragment_of_apples_label(self):
+        """The reviewer's case: `Input Po` is a fragment of Apple's `Input Port`."""
+        source = (self._READ + 'let error = "MENU_PICK_FAILED: Input Po"\n'
+                  + 'if title.hasPrefix("Input Po") { }\n')
+        problems = self._scan(source)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("'Input Po'", problems[0])
+
+    def test_a_literal_carrying_its_own_code_is_an_identifier(self):
+        """The control: the code and its delimiter inside the literal itself."""
+        self.assertEqual(guard.classify("result MENU_PICK_FAILED: x"), guard.IDENTIFIER)
+        self.assertEqual(guard.classify("MENU_PICK_FAILED"), guard.IDENTIFIER, "bare sentinel")
+        self.assertEqual(guard.classify("cleanup MENU_PICK_FAILED"), guard.UNKNOWN,
+                         "a code with no delimiter inside prose is not the code")
 
     def test_swift_escapes_are_decoded_before_classifying(self):
         """`\\u{FF1A}` is the full-width colon, not eight ASCII characters."""

@@ -51,10 +51,10 @@ corpus does not hold, or this product's own prose all passed unexamined. Each li
                      only err towards "ships".
   identifier         a shape no locale translates: an UPPER_SNAKE sentinel this product emits
                      (with an optional `: detail`), punctuation, a `.ext` extension, a reverse-DNS
-                     prefix, or a fragment of a sentinel-coded message a string literal in the
-                     SAME file spells out (`cleanup was not observed` inside
-                     `"MENU_PICK_FAILED: menu cleanup was not observed"`) -- this product's own
-                     words, which Logic never draws
+                     prefix, or a literal that itself carries a sentinel code and its delimiter
+                     (`... MENU_PICK_FAILED: ...`) -- this product's own words, which Logic never
+                     draws. Being a fragment of such a message elsewhere in the file is not
+                     enough (review of #1034 R1-04)
   unknown            anything else -- FAILS, unless `docs/canon/AX-COMPARISON-WAIVERS.json` gives
                      it a reason. That file is the ONE exemption list; an entry nothing matches
                      fails too, so it only shrinks.
@@ -290,25 +290,14 @@ def _apple_ships(literal: str) -> bool:
     return False
 
 
-_SENTINEL_MESSAGE = re.compile(r'"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+:[^"\\\n]*)"')
-
-
-def _fragment_of_own_message(literal: str, paths) -> bool:
-    """`literal` is inside a sentinel-coded message a string literal in one of `paths` spells out.
-
-    Only after it is known to be neither an Apple value nor translated, so a Logic label quoted in
-    a product message is never excused by this: it is classed as Apple's first.
-    """
-    for path in paths or ():
-        try:
-            with open(os.path.join(REPO, path), "r", encoding="utf-8") as handle:
-                source = handle.read()
-        except OSError:
-            continue
-        if any(literal in message and literal != message
-               for message in _SENTINEL_MESSAGE.findall(source)):
-            return True
-    return False
+#: A sentinel code WITH its delimiter, anywhere in the literal: `MENU_PICK_FAILED:`. Review of
+#: #1034 R1-04: a literal used to count as this product's own words when it was merely a SUBSTRING
+#: of some sentinel-coded message spelled out elsewhere in the same file, so adding
+#: `let error = "MENU_PICK_FAILED: Input Po"` beside `title.hasPrefix("Input Po")` turned a
+#: fragment of Apple's `Input Port` into an identifier. Error text a file happens to hold says
+#: nothing about where the reading compared against it comes from; the literal has to carry the
+#: code itself.
+_OWN_CODE = re.compile(r"(?<![A-Za-z0-9_])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+:")
 
 
 def citation(literal: str):
@@ -335,7 +324,7 @@ def classify(literal: str, paths=()) -> str:
         return APPLE_VALUE
     if _apple_ships(literal):
         return APPLE_VALUE
-    if _fragment_of_own_message(literal, paths):
+    if _OWN_CODE.search(literal):
         return IDENTIFIER
     return UNKNOWN
 
