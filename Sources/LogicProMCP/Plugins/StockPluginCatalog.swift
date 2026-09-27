@@ -345,6 +345,31 @@ struct StockPluginCatalogEntry: Codable, Sendable, Equatable {
         case limitations
     }
 
+    /// Written out rather than synthesized for one field: synthesized encoding drops a nil
+    /// `knownPresetsTotal`, and the capabilities resource promises `known_presets_total` is
+    /// present and null when a walk stopped. Every other field encodes as synthesis would.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encode(type, forKey: .type)
+        try container.encode(category, forKey: .category)
+        try container.encode(availabilityState, forKey: .availabilityState)
+        try container.encode(provenance, forKey: .provenance)
+        try container.encode(insertPaths, forKey: .insertPaths)
+        try container.encode(slotSupport, forKey: .slotSupport)
+        try container.encode(knownPresets, forKey: .knownPresets)
+        try container.encode(knownPresetsTruncated, forKey: .knownPresetsTruncated)
+        if let knownPresetsTotal {
+            try container.encode(knownPresetsTotal, forKey: .knownPresetsTotal)
+        } else {
+            try container.encodeNil(forKey: .knownPresetsTotal)
+        }
+        try container.encode(parameters, forKey: .parameters)
+        try container.encode(safeWriteCapabilities, forKey: .safeWriteCapabilities)
+        try container.encode(limitations, forKey: .limitations)
+    }
+
     /// The memberwise shape callers already use, plus the two truncation fields. A list that is not
     /// truncated is its own total, so `knownPresetsTotal` is read only when it is.
     init(

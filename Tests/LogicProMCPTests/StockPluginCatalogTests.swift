@@ -678,6 +678,40 @@ struct StockPluginFactoryPresetTests {
         #expect(entry.knownPresetsTotal == nil)
     }
 
+    @Test("a stopped walk encodes known_presets_total as a present null in every resource encoding")
+    func stoppedWalkEncodesTotalAsNull() throws {
+        // Kills the mutant that encodes `knownPresetsTotal` with `encodeIfPresent`, which is what
+        // synthesized Codable did: the key vanished where the capabilities promise null.
+        let stopped = StockPluginLocalManifest(
+            sourcePath: "/fixture/Stopped",
+            presets: [StockPluginFactoryPreset(name: "A", category: nil, folder: "/fixture/Stopped")],
+            scanComplete: false
+        )
+        // Manifested, verified and observed entries all carry a manifest's walk.
+        let ids = ["logic.stock.effect.limiter", "logic.stock.effect.gain", "logic.stock.effect.compressor"]
+        let snapshot = StockPluginCatalog.defaultSnapshot(census: censusFixture(
+            verified: ["logic.stock.effect.gain"],
+            observed: ["logic.stock.effect.compressor"],
+            manifests: Dictionary(uniqueKeysWithValues: ids.map { ($0, stopped) })
+        ))
+        let promised = try #require(StockPluginCatalog.capabilities(snapshot: snapshot)["catalog_entry_fields"] as? [String])
+
+        // Detail and search encode an entry through `jsonObject`; the list encodes the snapshot.
+        let listed = try #require(sharedJSONObject(encodeJSON(snapshot, compact: true))?["entries"] as? [[String: Any]])
+        for id in ids {
+            let entry = try #require(snapshot.entries.first { $0.id == id })
+            #expect(entry.knownPresetsTotal == nil)
+            let fromDetail = try #require(ResourceHandlers.jsonObject(entry) as? [String: Any])
+            let fromList = try #require(listed.first { $0["id"] as? String == id })
+            for encoded in [fromDetail, fromList] {
+                #expect(encoded.keys.contains("known_presets_total"), "\(id): the key must be present")
+                #expect(encoded["known_presets_total"] is NSNull, "\(id): the value must be null")
+                // The encoder is written out by hand, so every promised field is checked present.
+                #expect(Set(encoded.keys) == Set(promised))
+            }
+        }
+    }
+
     @Test("a factory-settings folder with no seed and no exclusion fails")
     func unaccountedFolderFails() throws {
         // Kills the mutant that removes the Studio Piano seed.
