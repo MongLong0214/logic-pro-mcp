@@ -1,0 +1,106 @@
+"""The fixture registry: what a spec's `fixture.id` means to the runner, and the gate before a row.
+
+A spec names its fixture by id; the note beside it is prose for a reader. What the runner does with
+the id is declared here, once, and nowhere else:
+
+    live        the live/fixture.py declaration the live lifecycle opens and resets, or None for a
+                fixture only the self-test's fake world has (the live lifecycle refuses those)
+    server_env  variables added to the server's environment for every start on this fixture
+    ready       what the lifecycle waits on after a start ("mcu": logic://mcu/state connected and
+                registered), or None where there is nothing to wait on
+    gate        the checks run before every row, over a reading the lifecycle takes:
+                "fingerprint"               the track count and names as declared, every arm, mute
+                                            and solo flag 0 (the verifier's own AX reading, D1)
+                "mcu_upper_row_is_baseline" the MCU LCD upper row equals the one read when the
+                                            fixture was first opened in this locale: the bank is
+                                            home (the product's reading; nothing else reads the LCD)
+
+A gate reading is {"declared": {"track_count", "names"}, "fingerprint": {"track_count", "names",
+"flags": [{"arm", "mute", "solo"}, ...]}, "upper_row": {"readable", "value" | "cause"}}. `declared`
+travels with the reading, so a recorded reading says what it was compared with. This module reads
+nothing itself and imports no live code: check-spec and the engine can load it anywhere.
+"""
+
+SETUPS = {
+    "lpm-locale-campaign-19": {
+        "live": "locale_campaign_19",
+        "server_env": {"LOGIC_PRO_MCP_ARM_KEYCODE": "not-a-keycode"},
+        "ready": "mcu",
+        "gate": ["fingerprint", "mcu_upper_row_is_baseline"],
+    },
+    # The self-test's spec fixtures (fixtures/spec-*.json). Only FakeLifecycle drives them.
+    "selftest-two-tracks": {
+        "live": None,
+        "server_env": {"LPM_VERIFY_SELFTEST_ENV": "declared-in-setups"},
+        "ready": None,
+        "gate": ["fingerprint", "mcu_upper_row_is_baseline"],
+    },
+    "selftest-canon": {"live": None, "server_env": {}, "ready": None, "gate": ["fingerprint"]},
+    "selftest-every-operator": {"live": None, "server_env": {}, "ready": None, "gate": ["fingerprint"]},
+}
+
+GATES = ("fingerprint", "mcu_upper_row_is_baseline")
+FLAG_WORDS = {"arm": "armed", "mute": "muted", "solo": "soloed"}
+
+
+def setup_problems(fixture) -> list:
+    """Why a spec's fixture is not one the runner knows; empty when it is."""
+    ident = fixture.get("id") if isinstance(fixture, dict) else None
+    if ident in SETUPS:
+        return []
+    return [f"fixture {ident!r} is not in the fixture registry (setups.SETUPS: "
+            f"{', '.join(sorted(SETUPS))}); declare it there before a spec can name it"]
+
+
+def declaration(ident: str) -> dict:
+    """The registry's entry for `ident`, with its id, as the runner and the lifecycle are given it."""
+    entry = SETUPS[ident]
+    return {"id": ident, "live": entry["live"], "server_env": dict(entry["server_env"]),
+            "ready": entry["ready"], "gate": list(entry["gate"])}
+
+
+def _fingerprint_problems(reading: dict) -> list:
+    fingerprint = reading.get("fingerprint") or {}
+    declared = reading.get("declared") or {}
+    if fingerprint.get("track_count") is None:
+        return [f"the fixture could not be read: {reading.get('cause') or 'no fingerprint'}"]
+    if fingerprint["track_count"] != declared.get("track_count"):
+        return [f"{fingerprint['track_count']} tracks, declared {declared.get('track_count')}"]
+    out = []
+    for i, (name, wanted) in enumerate(zip(fingerprint.get("names") or [], declared.get("names") or [])):
+        if name != wanted:
+            out.append(f"track {i} is named {name!r}, declared {wanted!r}")
+    flags = fingerprint.get("flags")
+    if not isinstance(flags, list) or len(flags) != fingerprint["track_count"]:
+        return out + ["the flags were not read for every track"]
+    for i, row in enumerate(flags):
+        for flag, word in FLAG_WORDS.items():
+            value = row.get(flag) if isinstance(row, dict) else None
+            if value is None:
+                out.append(f"track {i} {flag} unreadable")
+            elif value != 0:
+                out.append(f"track {i} {word}")
+    return out
+
+
+def _upper_row_problems(reading: dict, baseline: dict) -> list:
+    row = reading.get("upper_row") or {}
+    base = (baseline or {}).get("upper_row") or {}
+    if not row.get("readable"):
+        return [f"the MCU upper row could not be read: {row.get('cause')}"]
+    if not base.get("readable"):
+        return [f"the baseline MCU upper row was not read: {base.get('cause')}"]
+    if row.get("value") != base.get("value"):
+        return [f"the MCU bank is off home: upper row {row.get('value')!r}, "
+                f"baseline {base.get('value')!r}"]
+    return []
+
+
+def gate_problems(decl: dict, reading: dict, baseline: dict) -> list:
+    """Why the fixture is not as declared right now, one named problem each; empty when it is."""
+    out = [f"unknown gate {g!r}" for g in decl["gate"] if g not in GATES]
+    if "fingerprint" in decl["gate"]:
+        out += _fingerprint_problems(reading)
+    if "mcu_upper_row_is_baseline" in decl["gate"]:
+        out += _upper_row_problems(reading, baseline)
+    return out

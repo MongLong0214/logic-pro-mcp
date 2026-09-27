@@ -8,15 +8,19 @@ is stored, and it holds the one place outside the self-test that builds an `engi
 
 THE FLOW, per run (plan-p0b2 section 1)
 ---------------------------------------
-    admit    engine.validate_spec; any problem is exit 2 and Logic is not touched
+    admit    engine.validate_spec, then the fixture registry (setups.py): the spec's fixture must
+             be declared there, and the lifecycle must be able to drive the declaration
+             (life.fixture_problems); any problem is exit 2 and Logic is not touched
     build    life.build(head) -> Built; a failed build is exit 2 and writes no evidence
     claim    life.claim(): the live lock and no rival server; refused is exit 2
     locales  current locale first, Korean last. Per locale: switch once; per entry: a fresh locale
              reading; a run whose reading does not show Logic in that locale drives nothing
              (every step unreadable, and the engine refuses or reports it). Then the server is
-             started and the fixture's surface awaited; the fixture's baseline is read once per
-             locale, after it was first opened there. Before each row the screen is settled and
-             the fixture gated; a gate miss gets one full reset (server stopped, fixture reopened,
+             started with the declaration's server_env and the fixture's surface awaited; the
+             fixture's baseline (life.gate_reading) is read once per locale, after it was first
+             opened there. Before each row the screen is settled and the fixture gated: the
+             lifecycle reads, setups.gate_problems judges against the declaration and the
+             baseline, and both are logged; a gate miss gets one full reset (server stopped, fixture reopened,
              server restarted, surface awaited) and a second gate; a row whose gate still fails is
              stored with every step unreadable. A switch that found Logic already in the locale
              is followed by a reset, so every locale starts from the file on disk.
@@ -64,6 +68,7 @@ import engine  # noqa: E402
 import evidence_doc as E  # noqa: E402
 import predicates as P  # noqa: E402
 import probes  # noqa: E402
+import setups  # noqa: E402
 
 #: The locale Logic rests in between runs, and the one every run ends in.
 RESTING = "ko"
@@ -162,12 +167,13 @@ class Lifecycle:
         """Wait (bounded) until the fixture's surface answers ctx["session"]: {"ready": bool, ...}."""
         raise NotImplementedError
 
-    def baseline(self, ctx: dict) -> dict:
-        """The fixture's reading taken once per locale, after it was first opened there."""
+    def fixture_problems(self, decl: dict) -> list:
+        """Why this lifecycle cannot drive the declared fixture at all; empty when it can."""
         raise NotImplementedError
 
-    def gate(self, ctx: dict, baseline: dict) -> list:
-        """Why the fixture is not as declared right now; empty when it is."""
+    def gate_reading(self, ctx: dict) -> dict:
+        """The fixture as it is now, in the shape setups.gate_problems reads. The first one taken in
+        a locale is that locale's baseline."""
         raise NotImplementedError
 
     def reset(self, ctx: dict) -> dict:
@@ -206,13 +212,15 @@ def normalize(value):
 
 
 def declaration(spec: dict) -> dict:
-    """The fixture a spec names, as the lifecycle is given it."""
-    return {"id": spec["fixture"]["id"], "server_env": {}}
+    """The fixture a spec names, as the registry declares it (setups.SETUPS)."""
+    return setups.declaration(spec["fixture"]["id"])
 
 
 def admit(spec, locales) -> list:
     """Why this spec cannot be run in these locales; empty when it can."""
     problems = [f"spec: {p}" for p in engine.validate_spec(spec)]
+    if not problems:
+        problems = [f"spec: {p}" for p in setups.setup_problems(spec["fixture"])]
     if problems or locales is None:
         return problems
     required = engine.required_locales(spec)
@@ -375,6 +383,18 @@ def _reset(ctx: dict, run: dict) -> bool:
     return _start(ctx)
 
 
+def _gate(ctx: dict, baseline: dict, ready: bool, extra: dict) -> list:
+    """The gate before a row: the lifecycle reads, the registry judges; both are logged."""
+    life = ctx["life"]
+    if not ready:
+        dirty, reading = ["the fixture's surface is not ready"], None
+    else:
+        reading = normalize(life.gate_reading(ctx))
+        dirty = setups.gate_problems(ctx["decl"], reading, baseline)
+    ctx["log"].append({"t": life.now(), "at": ctx["row"], "gate": dirty, "reading": reading, **extra})
+    return dirty
+
+
 def run_locale(life: Lifecycle, entry: dict, lproj: str, reset_first: bool, baselines: dict):
     """(run, reading) for one entry in one locale; Logic is already switched to it. `baselines`
     holds each locale's fixture baseline, read once when the fixture was first opened there."""
@@ -397,19 +417,17 @@ def run_locale(life: Lifecycle, entry: dict, lproj: str, reset_first: bool, base
             log.append({"t": life.now(), "event": "reset", "record": life.reset(ctx)})
         ready = _start(ctx)
         if lproj not in baselines:
-            baselines[lproj] = life.baseline(ctx)
+            baselines[lproj] = normalize(life.gate_reading(ctx))
         baseline = baselines[lproj]
         log.append({"t": life.now(), "event": "baseline", "baseline": baseline})
         for row in spec["rows"]:
             ctx["row"], ctx["step"] = row["id"], None
             log.append({"t": life.now(), "at": row["id"], "settle": life.settle(ctx)})
-            dirty = life.gate(ctx, baseline) if ready else ["the fixture's surface is not ready"]
-            log.append({"t": life.now(), "at": row["id"], "gate": dirty})
+            dirty = _gate(ctx, baseline, ready, {})
             if dirty:
                 print(f"  {lproj}/{row['id']}: gate missed ({'; '.join(map(str, dirty))}); one reset")
                 ready = _reset(ctx, run)
-                dirty = life.gate(ctx, baseline) if ready else ["the fixture's surface is not ready"]
-                log.append({"t": life.now(), "at": row["id"], "gate": dirty, "after_reset": True})
+                dirty = _gate(ctx, baseline, ready, {"after_reset": True})
             if dirty:
                 run["rows"][row["id"]] = _unread_row(row, f"fixture not as declared after one reset: "
                                                           f"{'; '.join(map(str, dirty))}")
@@ -468,7 +486,11 @@ def _drive(life: Lifecycle, entries: list, record_dir) -> int:
     """Admit, build, claim, drive every entry's locales with one switch per locale, rest, finish."""
     refused = []
     for n, entry in enumerate(entries):
-        refused += [f"entry {n} ({entry['spec_path']}): {p}" for p in admit(entry["spec"], entry["locales"])]
+        problems = admit(entry["spec"], entry["locales"])
+        if not problems:
+            entry["decl"] = declaration(entry["spec"])
+            problems = life.fixture_problems(entry["decl"])
+        refused += [f"entry {n} ({entry['spec_path']}): {p}" for p in problems]
     if refused:
         for line in refused:
             print(f"REFUSED {line}")
@@ -477,7 +499,6 @@ def _drive(life: Lifecycle, entries: list, record_dir) -> int:
     builds = {}
     for entry in entries:
         entry["locales"] = entry["locales"] or engine.required_locales(entry["spec"])
-        entry["decl"] = declaration(entry["spec"])
         try:
             if entry["head"] not in builds:
                 builds[entry["head"]] = life.build(entry["head"])

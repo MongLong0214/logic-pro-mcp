@@ -52,19 +52,29 @@ RUN CASES (`"run": {...}`)
     a `script` of what the world answers. `runner.run_spec(..., _life=FakeLifecycle(...))` builds
     a temporary binary, "switches", drives every step, writes the evidence, attests it in process
     and judges it; the case requires its exit code and a substring of its output. `events` counts
-    what the lifecycle was asked to do ({"switch": 0}); `recheck` then rechecks the written file
-    from the command line. The script:
+    what the lifecycle was asked to do ({"switch": 0}); `start_env` requires every server start to
+    carry those variables; `recheck` then rechecks the written file from the command line. The
+    script:
         "answers": {"[<lproj>/]<row>/<as>": answer | [answer, ...]}   a list answers successive
                   reads in turn and repeats its last; an answer is {"value": v} (stored as its JSON
                   text), {"text": s}, {"unreadable": why} or {"timeout": true}. Unscripted steps
                   answer fixtures_build.READINGS for the spec.
         "dirt":   {"before:<row>/<as>" | "after:<row>/<as>": [dirt, ...]}
-        "gate":   {lproj: [[problem, ...], ...]}   successive gates in that locale; then clean
+        "gate":   {lproj: [[op, ...], ...]}   successive fixture readings in that locale, each as
+                  patch ops over a clean one (FAKE_TRACKS, every flag 0, upper row "home"); the
+                  first is the locale's baseline; after the list, clean
         "readings": {lproj: {key: value}}   merged over fixtures_build.locale_reading(lproj)
         "tuple_in_reading": true            the window names come back as a tuple
         "current": lproj                    the locale Logic is in when the run starts
         "poll_limit": n                     the fake raises after n reads of one step, so a wait
                                             that ignores its bound ends
+
+GATE CASES (`"check": "gate"`)
+    The gate (setups.gate_problems) over readings recorded live, in live/tests/samples/: a
+    track_flags_ax probe output (`walk`) and an MCU upper row (`row`, a key of
+    mcu-upper-rows-ko.json), made a reading by runner_live.gate_reading_of against the #1020
+    fixture's declaration, and a `baseline` [walk, row] made the same way. The gate must name
+    exactly as many problems as `problems` lists, each containing its string; [] must pass.
 
 REPLY CASES (`"check": "reply"`)
     What a `call` or `read` step stores (D2), over a real stdio server: live/tests/
@@ -394,10 +404,27 @@ MUTANTS = [
      "old": "        if life.now() >= bound:\n            break",
      "new": "        if False:\n            break"},
     {"id": "gate-skipped", "file": "runner.py",
-     "old": ('            dirty = life.gate(ctx, baseline) if ready else ["the fixture\'s surface is not ready"]\n'
-             '            log.append({"t": life.now(), "at": row["id"], "gate": dirty})'),
-     "new": ('            dirty = []\n'
-             '            log.append({"t": life.now(), "at": row["id"], "gate": dirty})')},
+     "old": '        dirty = setups.gate_problems(ctx["decl"], reading, baseline)\n',
+     "new": '        dirty = []\n'},
+    {"id": "gate-ignores-upper-row", "file": "setups.py",
+     "old": ('    if "mcu_upper_row_is_baseline" in decl["gate"]:\n'
+             '        out += _upper_row_problems(reading, baseline)\n'),
+     "new": ('    if False:\n'
+             '        out += _upper_row_problems(reading, baseline)\n')},
+    {"id": "gate-ignores-flags", "file": "setups.py",
+     "old": ('            elif value != 0:\n'
+             '                out.append(f"track {i} {word}")\n'),
+     "new": ('            elif False:\n'
+             '                out.append(f"track {i} {word}")\n')},
+    {"id": "live-fixture-unchecked", "file": "runner_live.py",
+     "old": '            return [f"fixture {decl[\'id\']!r} has no live declaration',
+     "new": '            return [] and [f"fixture {decl[\'id\']!r} has no live declaration'},
+    {"id": "server-env-dropped", "file": "runner.py",
+     "old": '    life, env = ctx["life"], dict(ctx["decl"]["server_env"])\n',
+     "new": '    life, env = ctx["life"], {}\n'},
+    {"id": "unknown-fixture-runs", "file": "runner.py",
+     "old": '        problems = [f"spec: {p}" for p in setups.setup_problems(spec["fixture"])]\n',
+     "new": '        problems = []\n'},
     {"id": "attest-reads-document", "file": "runner.py",
      "old": "locale_readings=readings,",
      "new": "locale_readings=E.loads(json.dumps(readings)),"},
@@ -639,6 +666,10 @@ class FakeSession(runner.Session):
         return {"fake": True, "env": self.env}
 
 
+#: The fake fixture's tracks: a gate reading of FakeLifecycle declares these and, unscripted, reads them.
+FAKE_TRACKS = ("Self-test one", "Self-test two")
+
+
 class FakeLifecycle(runner.Lifecycle):
     """The world, scripted (see RUN CASES). Its clock moves only when the runner sleeps, in whole
     microseconds, so a wait's poll count is exact. Every request is kept in `events`."""
@@ -702,13 +733,20 @@ class FakeLifecycle(runner.Lifecycle):
     def ready(self, ctx):
         return {"ready": True}
 
-    def baseline(self, ctx):
-        return {"upper_row": "home"}
+    def fixture_problems(self, decl):
+        return []
 
-    def gate(self, ctx, baseline):
+    def gate_reading(self, ctx):
         n = self.gates[ctx["lproj"]] = self.gates.get(ctx["lproj"], 0) + 1
+        clear = [{"arm": 0, "mute": 0, "solo": 0} for _ in FAKE_TRACKS]
+        reading = {"declared": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS)},
+                   "fingerprint": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS),
+                                   "flags": clear},
+                   "upper_row": {"readable": True, "value": "home"}}
         scripted = self.script.get("gate", {}).get(ctx["lproj"], [])
-        return list(scripted[n - 1]) if n <= len(scripted) else []
+        if n <= len(scripted):
+            _apply(reading, scripted[n - 1], self.label, self.where)
+        return reading
 
     def reset(self, ctx):
         self.events.append(("reset", ctx["lproj"]))
@@ -774,6 +812,11 @@ def _run_fake(case: dict, where: dict):
     for kind, wanted in run.get("events", {}).items():
         if life.count(kind) != wanted:
             return f"the lifecycle was asked to {kind} {life.count(kind)} time(s), not {wanted}", text
+    if "start_env" in run:
+        envs = [e[1] for e in life.events if e[0] == "start"]
+        short = [env for env in envs if any(env.get(k) != v for k, v in run["start_env"].items())]
+        if not envs or short:
+            return f"the servers were started with {envs}, each wanted to carry {run['start_env']}", text
     if "recheck" in case and code == case["exit"]:
         again, said = _verify(["recheck", out])
         if again != case["recheck"]["exit"] or case["recheck"]["says"] not in said:
@@ -1171,13 +1214,56 @@ def check_nan_not_written(case: dict, where: dict):
     return None
 
 
+def _sample(name: str) -> dict:
+    with open(os.path.join(HERE, "live", "tests", "samples", name), encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def check_gate(case: dict, where: dict):
+    """The fixture gate over recorded readings (see GATE CASES)."""
+    import runner_live
+    import setups
+    from live import fixture
+    gate = case["gate"]
+    decl = setups.declaration("lpm-locale-campaign-19")
+    rows = _sample("mcu-upper-rows-ko.json")
+
+    def reading(walk: str, row: str) -> dict:
+        return runner_live.gate_reading_of(fixture.FIXTURES[decl["live"]], _sample(walk)["probe_output"],
+                                           {"readable": True, "value": rows[row]})
+
+    got = setups.gate_problems(decl, reading(gate["walk"], gate["row"]), reading(*gate["baseline"]))
+    wanted = case["problems"]
+    if len(got) != len(wanted) or any(w not in g for w, g in zip(wanted, got)):
+        return f"the gate named {got}; wanted {len(wanted)} problem(s) saying {wanted}"
+    return None
+
+
+def check_live_fixtures(case: dict, where: dict):
+    """The live lifecycle accepts every registered fixture that has a live declaration and refuses
+    every other one before anything is built. Nothing is driven: fixture_problems reads only the
+    declarations."""
+    import runner_live
+    import setups
+    lifecycle = runner_live.LiveLifecycle()
+    for ident, entry in sorted(setups.SETUPS.items()):
+        got = lifecycle.fixture_problems(setups.declaration(ident))
+        if entry["live"] is not None and got:
+            return f"{ident}: refused: {got}"
+        if entry["live"] is None and not any("only the self-test drives it" in p for p in got):
+            return f"{ident} has no live declaration, and the live lifecycle said {got}"
+    return None
+
+
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
           "nan_not_written": check_nan_not_written,
           "closed_stdout_keeps_the_exit": check_closed_stdout_keeps_the_exit,
           "attestation_built_only_in_process": check_attestation_built_only_in_process,
           "attestation_check_sees_the_whole_repository": check_attestation_check_sees_the_whole_repository,
           "life_seam_named_outside_selftest": check_life_seam_named_outside_selftest,
-          "reply": check_reply}
+          "reply": check_reply,
+          "gate": check_gate,
+          "live_fixtures": check_live_fixtures}
 
 
 def run_case(case: dict, where: dict):

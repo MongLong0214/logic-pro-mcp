@@ -1,0 +1,10 @@
+{
+ "source": {
+  "file": "docs/observations/evidence/2026-09-27-ko-KR-mcu-set-arm-1020.json",
+  "sha256": "d33f97a3db77787e59b5f38fab9b6c484ba3fb0953759674be092181f5173392",
+  "record": "1020/final-bank-leaves-the-mcu-window-home",
+  "what": "display.upperRow of logic://mcu/state in ko on the 19-track fixture: `home` is the observation's before (bank 0), `clamped_bank` its counterexample's after (bank 2, strips 13-20), both as the record stores them"
+ },
+ "home": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+ "clamped_bank": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master "
+}

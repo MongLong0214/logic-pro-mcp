@@ -10,8 +10,16 @@
     switch    live.locale.switch_to; `reading` is live.locale.reading, taken again per entry.
     start     a live.mcp.Server from the Built path with the declaration's env, as McpSession.
               Its pid joins the pids `problems` does not count as rivals.
-    ready     a bounded wait on logic://mcu/state until connection.isConnected and
-              registeredAsDevice are both true (live_1020 slept 8 s twice instead).
+    fixture   setups.SETUPS names the live/fixture.py declaration; a fixture with none, one at a
+              path other than live.locale.FIXTURE (the file every switch reopens), or one that
+              needs the Mixer shown is refused before anything is built.
+    gate      live.fixture.read (the verifier's own track_flags_ax walk, D1; the walk goes to a
+              sidecar) plus display.upperRow of logic://mcu/state (the product's reading: nothing
+              else reads the LCD), shaped for setups.gate_problems by `gate_reading_of`.
+    reset     live.fixture.reset: Don't Save, reopen from disk, read.
+    ready     with the declaration's ready "mcu", a bounded wait on logic://mcu/state until
+              connection.isConnected and registeredAsDevice are both true (live_1020 slept 8 s
+              twice instead); with none, ready at once.
     settle    live.screen.settle_to_clean, between rows only; it may send Escape, and says so.
     problems  live.screen.clean_state's dirt, plus every LogicProMCP server or test bundle this
               run did not start. An unreadable process table is dirt of its own kind.
@@ -19,8 +27,8 @@
     sidecar   bytes too large for the evidence (transcripts, raw AX walks), written to SIDECARS
               under their own sha256, which is what the evidence cites (D5).
 
-The fixture's baseline, gate and reset come from setups.py (P0b-2 commit 7) and the declared probes
-from live/spec_probes.py (commit 8); until they land those methods are the base class's.
+The declared probes come from live/spec_probes.py (P0b-2 commit 8); until then `probe` is the base
+class's.
 
 WHAT A REPLY STORES (D2)
 ------------------------
@@ -51,7 +59,8 @@ import engine  # noqa: E402
 import evidence_doc as E  # noqa: E402
 import predicates as P  # noqa: E402
 import runner  # noqa: E402
-from live import binary, exclusive, mcp, obs, screen  # noqa: E402
+import setups  # noqa: E402
+from live import binary, exclusive, fixture, mcp, obs, screen  # noqa: E402
 from live import locale as live_locale  # noqa: E402
 
 #: Where sidecars go, one file per sha256 of its bytes (D5).
@@ -137,6 +146,35 @@ class McpSession(runner.Session):
 
 
 # ---------------------------------------------------------------------------------------------
+# the gate's reading
+# ---------------------------------------------------------------------------------------------
+
+def upper_row_of(text: str) -> dict:
+    """display.upperRow of one logic://mcu/state text: {"readable": True, "value": row}, or
+    {"readable": False, "cause": why}."""
+    try:
+        state = E.loads(text)
+    except ValueError as exc:
+        return {"readable": False, "cause": f"{MCU_STATE} is not JSON: {exc}"}
+    display = state.get("display") if isinstance(state, dict) else None
+    row = display.get("upperRow") if isinstance(display, dict) else None
+    if not isinstance(row, str):
+        return {"readable": False, "cause": f"{MCU_STATE} has no display.upperRow string"}
+    return {"readable": True, "value": row}
+
+
+def gate_reading_of(fx: dict, flags: dict, upper_row) -> dict:
+    """The reading setups.gate_problems judges, from one track_flags_ax probe output, the
+    live/fixture.py declaration `fx` it is compared with, and an upper-row reading (or None)."""
+    observation = flags.get("observation") or {}
+    reading = {"declared": {"track_count": fx["track_count"], "names": list(fx["names"])},
+               "fingerprint": fixture.fingerprint_of(observation), "upper_row": upper_row}
+    if not observation.get("readable"):
+        reading["cause"] = observation.get("cause") or flags.get("cause") or "track_flags_ax did not read"
+    return reading
+
+
+# ---------------------------------------------------------------------------------------------
 # the lifecycle
 # ---------------------------------------------------------------------------------------------
 
@@ -204,7 +242,48 @@ class LiveLifecycle(runner.Lifecycle):
             self.own_pids.add(session.pid)
         return session
 
+    def fixture_problems(self, decl):
+        name = decl.get("live")
+        fx = fixture.FIXTURES.get(name)
+        if fx is None:
+            return [f"fixture {decl['id']!r} has no live declaration (setups.SETUPS gives "
+                    f"{name!r}); only the self-test drives it"]
+        out = []
+        if os.path.realpath(fx["path"]) != os.path.realpath(live_locale.FIXTURE):
+            out.append(f"fixture {decl['id']!r} is {fx['path']}, but every locale switch reopens "
+                       f"{live_locale.FIXTURE}")
+        if fx["mixer_strips"] is not None:
+            out.append(f"fixture {decl['id']!r} needs the Mixer shown, which neither a switch nor "
+                       f"the gate does")
+        if decl.get("ready") not in (None, "mcu"):
+            out.append(f"fixture {decl['id']!r} waits on {decl.get('ready')!r}; this lifecycle "
+                       f"knows \"mcu\" and none")
+        return out
+
+    def gate_reading(self, ctx):
+        decl = ctx["decl"]
+        record = fixture.read(decl["live"], ctx["lproj"])
+        upper_row = self._upper_row(ctx) if "mcu_upper_row_is_baseline" in decl["gate"] else None
+        reading = gate_reading_of(fixture.FIXTURES[decl["live"]], record["track_flags"], upper_row)
+        data = json.dumps(record["track_flags"], ensure_ascii=False, sort_keys=True, default=repr)
+        reading["walk_sha256"] = self.sidecar(data.encode("utf-8"))
+        return reading
+
+    def _upper_row(self, ctx):
+        session = ctx.get("session")
+        if session is None:
+            return {"readable": False, "cause": "no server is running to read it"}
+        try:
+            return upper_row_of(session.read(MCU_STATE, READY_READ_S))
+        except runner.StepUnreadable as exc:
+            return {"readable": False, "cause": str(exc)}
+
+    def reset(self, ctx):
+        return fixture.reset(ctx["decl"]["live"], ctx["lproj"])
+
     def ready(self, ctx):
+        if ctx["decl"].get("ready") is None:
+            return {"ready": True, "surface": None}
         session = ctx["session"]
 
         def poll():
