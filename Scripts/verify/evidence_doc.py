@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import tempfile
 
@@ -155,10 +156,24 @@ def _refuse_constant(name: str):
                      f"refused rather than read")
 
 
+def _finite_float(text: str) -> float:
+    """The parse_float of every spec, evidence and observation read. `1e999` and `-1e999` are JSON
+    numbers, but no float holds them, and Python's json reads them as infinity: the value
+    `_refuse_constant` refuses when it is spelt `Infinity` (VFY-02). A number that overflows is
+    refused the same way; a large finite one (`1e308`) is read."""
+    value = float(text)
+    if math.isinf(value):
+        raise ValueError(f"{text} overflows a float to {value}, which is not JSON; Python's json "
+                         f"would read it as a number, so the text is refused rather than read")
+    return value
+
+
 def loads(text: str):
-    """Parse a spec, evidence document or observation's text, refusing a duplicate key and the
-    non-JSON constants NaN, Infinity and -Infinity (ValueError)."""
-    return json.loads(text, object_pairs_hook=_refuse_duplicate_keys, parse_constant=_refuse_constant)
+    """Parse a spec, evidence document or observation's text, refusing a duplicate key, the
+    non-JSON constants NaN, Infinity and -Infinity, and a number that overflows a float to
+    infinity (ValueError)."""
+    return json.loads(text, object_pairs_hook=_refuse_duplicate_keys, parse_constant=_refuse_constant,
+                      parse_float=_finite_float)
 
 
 def load(path: str) -> dict:

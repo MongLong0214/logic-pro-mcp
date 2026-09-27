@@ -164,6 +164,12 @@ OBS_OPERAND = ("changed", "unchanged")
 CANON_OPERAND = ("matches_canon",)
 LIST_OPERAND = ("in", "not_in", "subset", "superset")
 COUNT_OPERAND = ("count_eq", "count_ge")
+#: The operators that can pin the path of a `changed` check: each states what the reading became,
+#: `eq` one constant, `in` one of a listed set of constants, `matches_canon` one canon row. Every
+#: other operator passes on an open set of readings -- `ne` and `not_in` on all but the values they
+#: list, the counts, set comparisons and `not_null` on any reading of the right shape, `changed`
+#: and `unchanged` on a relation to another reading -- so noise can satisfy it as well (VFY-01).
+PIN_OPS = ("eq", "in", "matches_canon")
 
 ISSUE_DOC = re.compile(r"^issue:([1-9][0-9]*)$")
 #: The only repository documents a criterion may be quoted from (ADR-027 D1).
@@ -580,13 +586,18 @@ def step_problems(step: dict) -> list:
 def unpinned_changed(checks: list, key: str) -> list:
     """`changed` PASSES on any difference, noise included: an indicator that blinks, a second
     reading a character apart. On its own it cannot say the operation did what the row claims. It
-    is admissible only when another check in the same list pins the same path, comparing it with a
-    constant (`value`) or a canon row (`ref.canon`), which states what the reading became.
-    `not_null` and `is_null` take no operand and pin nothing."""
-    pinned = {e["path"] for e in checks if "value" in e or "canon" in (e.get("ref") or {})}
-    return [f"{key}[{i}] is changed over {e['path']!r}, and no check in {key} pins that path to a "
-            f"constant or a canon row. changed passes on any difference, noise included; add a "
-            f"check that says what {e['path']!r} becomes"
+    is admissible only when another check in the same list pins the same path, which states what
+    the reading became: `eq` a constant, `in` a listed set of constants (`value`), or
+    `matches_canon` a canon row (`ref.canon`). Nothing weaker pins (PIN_OPS): `ne "before"` passes
+    on the same noise `changed` does, and so do `not_in`, `not_null` and the rest. An `eq` or `in`
+    against another observation (`ref.obs`) states a relation, not a value, and pins nothing."""
+    pinned = {e["path"] for e in checks
+              if e["op"] in PIN_OPS and ("value" in e or "canon" in (e.get("ref") or {}))}
+    return [f"{key}[{i}] is changed over {e['path']!r}, and no check in {key} pins that path: eq "
+            f"a constant, in a listed set of constants, or matches_canon a canon row. changed "
+            f"passes on any difference, noise included, and ne, not_in and the other operators pass "
+            f"on an open set of readings that noise can land in; add a check that says what "
+            f"{e['path']!r} becomes"
             for i, e in enumerate(checks) if e["op"] == "changed" and e["path"] not in pinned]
 
 
