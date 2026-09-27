@@ -68,7 +68,11 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # whose five counterexamples are each the state its check exists to refuse -- a second issuer's
 # references, a report that counted no strips, an association claimed complete, a refusal that
 # wrote, a new window.
-FLOOR = 27
+# 27 -> 28 on 2026-09-27, the union again: live_291_endpoints_and_send_slots_in_every_locale was
+# the 27th on its own branch. Its ten counterexamples are each derived from the live observation
+# with one earlier defect put in -- a null output, absent send_slots, occupancy read from level,
+# `edges: []` beside a bus output.
+FLOOR = 28
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

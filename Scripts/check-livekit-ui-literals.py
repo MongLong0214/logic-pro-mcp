@@ -179,6 +179,13 @@ PROTOCOL_COMPARISONS = (
     # true`. Keyed by the variable so the exemption cannot spread to a window or menu title.
     ('owner == "Logic Pro"', "logic pro"),
     ('front == "Logic Pro"', "logic pro"),
+    # `r["kind"] == "output"` in the #291 slot harnesses reads the harness's OWN witness key -- the
+    # `SLOT` table's key for the row, written by the harness a few lines above the compare -- and
+    # not a string Logic displays. The word became localisable on 2026-09-27 when
+    # `physicalOutputLabelPrefix` (canonical `output`, Apple's `Output %d-%d` prefix in ten
+    # locales) joined the policy; the compare did not change. Keyed by the subscript so a
+    # `whose name contains "output"` on the same line would still be reported.
+    ('["kind"] == "output"', "output"),
 )
 ANY_LITERAL = re.compile(r'"([^"\\\n]{1,80})"')
 

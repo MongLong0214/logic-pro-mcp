@@ -32,8 +32,12 @@ References are compared within one server only: every server mints its own.
 
 WHAT THIS DOES NOT MEASURE
 --------------------------
-Output destinations and sends: the graph still leaves them unresolved (R1/#965 and the send-slot
-limit in the 2026-09-14 record), so edges are recorded, not asserted.
+Output destinations and sends: since #291 R1 a bus output publishes a mainOutput edge and sends
+publish none; which edges exist is live_291_endpoints_and_send_slots_in_every_locale.py's claim, so
+here edges are only counted and compared between the two orders.
+
+A read whose capture moved (every coverage domain `unstable`, no nodes -- RoutingGraphPublication's
+intended answer) is re-read up to MIXER_ATTEMPTS times; every attempt's partialReason is noted.
 """
 import json
 import os
@@ -68,6 +72,9 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"], surface="non_ui")
 UNISSUED_SOURCE = "no issued trk_ reference"
 # RoutingGraph.swift's own node-kind enum, serialised by this repository; not a Logic UI label.
 TRACK_NODE_KIND = "track"
+# RoutingCoverageState's wire value for a capture that moved; a read is retried at most this often.
+UNSTABLE = "unstable"
+MIXER_ATTEMPTS = 3
 
 
 def refs_in(value, prefix):
@@ -102,10 +109,23 @@ def graph_of(body):
     }
 
 
+def moved_during_capture(body):
+    """RoutingGraphPublication answers a capture the cache or registry moved under with every domain
+    `unstable` and no nodes (#291 R1 t2). That is a transient answer about the read, not the graph."""
+    coverage = (body.get("routing_graph") or {}).get("coverage") or {}
+    return any(isinstance(domain, dict) and domain.get("state") == UNSTABLE for domain in coverage.values())
+
+
 def mixer(d, label):
-    body = d.resource("logic://mixer") or {}
+    attempts = []
+    for _ in range(MIXER_ATTEMPTS):
+        body = d.resource("logic://mixer") or {}
+        attempts.append((body.get("routing_graph") or {}).get("partialReason"))
+        if not moved_during_capture(body):
+            break
     g = graph_of(body)
-    ev.note(f"291/{label}", {k: v for k, v in g.items() if k != "shape"} | {"shape": g["shape"][:40]})
+    ev.note(f"291/{label}", {k: v for k, v in g.items() if k != "shape"}
+            | {"shape": g["shape"][:40], "partial_reason_per_attempt": attempts})
     return g
 
 
