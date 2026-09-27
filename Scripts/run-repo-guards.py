@@ -80,6 +80,8 @@ def discovered():
     out += sorted(glob.glob(os.path.join(REPO, "Scripts", "check-*.py")))
     out += sorted(glob.glob(os.path.join(REPO, "Scripts", "test_*.py")))
     out += sorted(glob.glob(os.path.join(REPO, "Scripts", "livekit", "test_*.py")))
+    # The verifier's live library, offline: its tests need no Logic and no TCC.
+    out += sorted(glob.glob(os.path.join(REPO, "Scripts", "verify", "live", "tests", "test_*.py")))
     # This file is neither a guard nor a drive.
     return [p for p in out if os.path.basename(p) != os.path.basename(__file__)]
 

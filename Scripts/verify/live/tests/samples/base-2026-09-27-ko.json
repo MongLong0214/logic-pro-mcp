@@ -1,0 +1,87 @@
+{
+ "t": 0.081231875,
+ "levels": {
+  "readable": true,
+  "value": {
+   "modal_panel": 8,
+   "popup_menu": 101,
+   "help": 200
+  }
+ },
+ "screen_locked": {
+  "readable": true,
+  "value": false,
+  "session": {
+   "kCGSSessionOnConsoleKey": true,
+   "kSCSecuritySessionID": 100022,
+   "kCGSSessionSystemSafeBoot": false,
+   "kCGSessionLoginDoneKey": true,
+   "kCGSSessionUserNameKey": "isaac",
+   "kCGSSessionGroupIDKey": 20,
+   "CGSSessionUniqueSessionUUID": "79C4D747-D051-4700-9E57-78DB093EFFC3",
+   "kCGSessionLongUserNameKey": "Isaac",
+   "kCGSSessionAuditIDKey": 100022,
+   "kCGSSessionLoginwindowSafeLogin": false,
+   "kCGSSessionUserIDKey": 501
+  }
+ },
+ "frontmost": {
+  "readable": true,
+  "value": {
+   "name": "Logic Pro",
+   "pid": 70769,
+   "bundle_id": "com.apple.logic10"
+  },
+  "asn": "ASN:0x0-0x85e75df:",
+  "raw": "\"LSDisplayName\"=\"Logic Pro\"\n\"pid\"=70769\n\"CFBundleIdentifier\"=\"com.apple.logic10\"\n"
+ },
+ "windows": {
+  "readable": true,
+  "value": [
+   {
+    "owner": "Logic Pro",
+    "owner_pid": 70769,
+    "layer": 3,
+    "name": "lpm-locale-campaign - 마커 목록",
+    "number": 16564,
+    "bounds": {
+     "X": 20.0,
+     "Height": 746.0,
+     "Y": 50.0,
+     "Width": 452.0
+    }
+   }
+  ],
+  "windows_listed": 58
+ },
+ "logic_pids": {
+  "readable": true,
+  "value": [
+   70769
+  ]
+ },
+ "ax_modal": {
+  "readable": true,
+  "value": [
+   {
+    "AXRole": "AXWindow",
+    "AXSubrole": "AXStandardWindow",
+    "AXTitle": "lpm-locale-campaign - 마커 목록",
+    "AXModal": false,
+    "AXModal_status": 0,
+    "sheet": -25200
+   },
+   {
+    "AXRole": "AXWindow",
+    "AXSubrole": "AXStandardWindow",
+    "AXTitle": "lpm-locale-campaign - 트랙",
+    "AXModal": false,
+    "AXModal_status": 0,
+    "sheet": false
+   }
+  ],
+  "pid": 70769,
+  "retried": false
+ },
+ "elapsed_s": 0.150055208
+}
