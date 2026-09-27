@@ -143,7 +143,8 @@ struct ChannelStripState: Sendable, Codable {
     /// Per-slot send OCCUPANCY, when the strip's descendants were read (#291).
     ///
     /// Three answers, kept apart on the wire. Key absent: nobody could look — a children read
-    /// below the strip failed with a status that is not an answer. `[]`: the strip was read and
+    /// below the strip failed with a status that is not an answer, or a role or help read that
+    /// decides whether an element is a send slot at all did. `[]`: the strip was read and
     /// carries no send slot. A list: one entry per send slot in the reader's walk. An empty slot
     /// is a send-slot button. An assigned send, dumped live on 2026-09-27 in Korean and English,
     /// is a group whose next sibling is the send-level knob, and the reader takes that group as an
@@ -184,8 +185,9 @@ struct SendState: Sendable, Codable {
 /// `occupiedKnownDestination` is declared and produced by nothing this increment: the destination
 /// an assigned send's group names is not read, so a consumer that later learns one can say so
 /// without the unknown case silently changing meaning. `unreadable` is a slot whose button was
-/// found but whose successor would not say its role or help — unknown for that slot alone, not for
-/// the strip.
+/// found but whose successor would not say whether it is the send knob — unknown for that slot
+/// alone, not for the strip. A successor whose role will not read may be a slot of its own, and
+/// then the strip's whole list is unknown.
 enum SendSlotState: String, Sendable, Codable {
     case observedEmpty = "observed_empty"
     case occupiedUnknownDestination = "occupied_unknown_destination"

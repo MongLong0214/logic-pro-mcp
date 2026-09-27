@@ -231,12 +231,17 @@ struct Issue291SendSlotReadTests {
         #expect(AXLogicProElements.sendSlotObservations(in: noSends, runtime: builder.makeAXRuntime()) == [])
     }
 
-    /// A button was found and the element after it would not say what it is. That slot is
-    /// `unreadable` — not empty, because "no knob seen" was never established — and it keeps its
-    /// ordinal, so the readable slot after it is still ordinal 1.
+    /// A button was found and the slider after it would not give its help, so whether it is the
+    /// knob is unknown. That slot is `unreadable` — not empty, because "no knob seen" was never
+    /// established — and it keeps its ordinal, so the readable slot after it is still ordinal 1.
     ///
-    /// Kills: filing an unreadable successor as `observedEmpty`, and skipping unreadable slots
-    /// (the list would then have one entry, at ordinal 0).
+    /// When the successor's ROLE is what will not read, the list is unknown instead: that element
+    /// may be an assigned send's group, a slot of its own, and the walk reaches it next (#1035
+    /// review, R291-01).
+    ///
+    /// Kills: filing an unreadable successor as `observedEmpty`, skipping unreadable slots (the
+    /// list would then have one entry, at ordinal 0), and reading the walk's roles with the plain
+    /// `getRole` (the role failure would read as one `unreadable` slot and one occupied).
     @Test("an unreadable successor is unreadable and keeps its ordinal")
     func unreadableSuccessorIsUnreadableAndKeepsItsOrdinal() throws {
         let builder = FakeAXRuntimeBuilder()
@@ -249,21 +254,6 @@ struct Issue291SendSlotReadTests {
             sendButton(builder, id: 31_403),
             sendKnob(builder, id: 31_404),
         ])
-        let roleFails = builder.makeAXRuntime(
-            attributeValueResultHandler: { element, attribute in
-                if CFEqual(element, unreadable), attribute == (kAXRoleAttribute as String) {
-                    return .failure(readFailure)
-                }
-                return nil
-            },
-            setAttributeHandler: nil,
-            performActionHandler: nil
-        )
-        let read = try #require(AXLogicProElements.sendSlotObservations(in: strip, runtime: roleFails))
-        #expect(read.map(\.ordinal) == [0, 1])
-        #expect(read.map(\.state) == [.unreadable, .occupiedUnknownDestination])
-
-        // The same when the role reads as a slider and the HELP is what will not read.
         let helpFails = builder.makeAXRuntime(
             attributeValueResultHandler: { element, attribute in
                 if CFEqual(element, unreadable), attribute == (kAXHelpAttribute as String) {
@@ -274,8 +264,25 @@ struct Issue291SendSlotReadTests {
             setAttributeHandler: nil,
             performActionHandler: nil
         )
-        let helpRead = try #require(AXLogicProElements.sendSlotObservations(in: strip, runtime: helpFails))
-        #expect(helpRead.map(\.state) == [.unreadable, .occupiedUnknownDestination])
+        let read = try #require(AXLogicProElements.sendSlotObservations(in: strip, runtime: helpFails))
+        #expect(read.map(\.ordinal) == [0, 1])
+        #expect(read.map(\.state) == [.unreadable, .occupiedUnknownDestination])
+
+        // The ROLE will not read, through both seams: it may be a group, so the list is unknown.
+        let roleFails = builder.makeAXRuntime(
+            attributeValueHandler: { element, attribute in
+                CFEqual(element, unreadable) && attribute == (kAXRoleAttribute as String) ? .some(nil) : nil
+            },
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, unreadable), attribute == (kAXRoleAttribute as String) {
+                    return .failure(readFailure)
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+        #expect(AXLogicProElements.sendSlotObservations(in: strip, runtime: roleFails) == nil)
     }
 
     /// ADR-008 section 5's endpoint-and-edge-observations requirement: "an automated level or minus infinity is not an absent send". The knob's
@@ -766,5 +773,92 @@ struct Issue291AssignedSendAsDumpedTests {
             SendSlotObservation(ordinal: 0, state: .observedEmpty),
             SendSlotObservation(ordinal: 1, state: .observedEmpty),
         ])
+    }
+
+    // MARK: A read that decides whether an element is a send slot at all (#1035 review, R291-01)
+
+    /// The element the dump row at `path` became in `strip(_:builder:id:)`, checked by its role so a
+    /// fixture edit that moves the row cannot quietly aim the failure at something else.
+    private func element(
+        at path: String, role: String, in rows: [DumpRow], builder: FakeAXRuntimeBuilder, stripID: Int
+    ) throws -> AXUIElement {
+        let offset = try #require(rows.firstIndex { $0.path == path })
+        let element = builder.element(stripID + 1 + offset)
+        #expect(builder.attributeValue(element, kAXRoleAttribute as String) as? String == role)
+        return element
+    }
+
+    /// A runtime on which `attribute` of `target` fails with `status` through BOTH seams, the way a
+    /// production read fails: the plain read gives nothing and the status-preserving read the status.
+    private func failing(
+        _ attribute: String, of target: AXUIElement, with status: AXError, builder: FakeAXRuntimeBuilder
+    ) -> AXHelpers.Runtime {
+        let error = AXHelpers.AXStatusError(raw: status.rawValue)
+        return builder.makeAXRuntime(
+            attributeValueHandler: { element, name in
+                CFEqual(element, target) && name == attribute ? .some(nil) : nil
+            },
+            attributeValueResultHandler: { element, name in
+                CFEqual(element, target) && name == attribute ? .failure(error) : nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+    }
+
+    /// The reviewer's case: on the English strip, the knob beside the `B256` group will not give
+    /// its help. Whether the group is an assigned send is then unknown, and so is the list — `nil`,
+    /// not the one empty slot the strip reads as when the failure is taken for "no help".
+    ///
+    /// Kills: turning the knob's failed help read into "" (`?? ""` in `isSendLevelKnob`, as at
+    /// cd3b7f8c).
+    @Test("a knob whose help fails to read leaves the list unknown")
+    func knobHelpReadFailureLeavesTheListUnknown() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let dumped = strip(assignedSendStripEn, builder: builder, id: 32_300)
+        let knob = try element(at: "14", role: kAXSliderRole as String, in: assignedSendStripEn, builder: builder, stripID: 32_300)
+        let runtime = failing(kAXHelpAttribute as String, of: knob, with: .cannotComplete, builder: builder)
+        #expect(AXLogicProElements.sendSlotObservations(in: dumped, runtime: runtime) == nil)
+    }
+
+    /// The group itself will not say its role. It may be the assigned send, so the list is unknown.
+    ///
+    /// Kills: reading the walk's roles with the plain `getRole`, which turns the failure into "not
+    /// a group" (at cd3b7f8c the strip read as one `unreadable` slot, the group's own slot gone).
+    @Test("a group whose role fails to read leaves the list unknown")
+    func groupRoleReadFailureLeavesTheListUnknown() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let dumped = strip(assignedSendStripEn, builder: builder, id: 32_400)
+        let group = try element(at: "13", role: kAXGroupRole as String, in: assignedSendStripEn, builder: builder, stripID: 32_400)
+        let runtime = failing(kAXRoleAttribute as String, of: group, with: .cannotComplete, builder: builder)
+        #expect(AXLogicProElements.sendSlotObservations(in: dumped, runtime: runtime) == nil)
+    }
+
+    /// The empty send button will not give its help. It may be a send slot, so the list is unknown.
+    ///
+    /// Kills: turning a button's failed help read into "" (`?? ""` in the button branch, as at
+    /// cd3b7f8c, where the strip read as the occupied slot alone, at ordinal 0).
+    @Test("a send button whose help fails to read leaves the list unknown")
+    func sendButtonHelpReadFailureLeavesTheListUnknown() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let dumped = strip(assignedSendStripEn, builder: builder, id: 32_500)
+        let button = try element(at: "12", role: kAXButtonRole as String, in: assignedSendStripEn, builder: builder, stripID: 32_500)
+        let runtime = failing(kAXHelpAttribute as String, of: button, with: .cannotComplete, builder: builder)
+        #expect(AXLogicProElements.sendSlotObservations(in: dumped, runtime: runtime) == nil)
+    }
+
+    /// The control: -25205 on the knob's help is an ANSWER. A slider with no help is not the send
+    /// knob, so the group beside it is no slot, and the strip reads as its one empty slot — what
+    /// cd3b7f8c returns, and what it must still return.
+    ///
+    /// Kills: treating every failed read as unknown (the definitive absence would become `nil`).
+    @Test("a knob with no help attribute is not a knob, and the list stands")
+    func knobWithNoHelpAttributeIsNotAKnob() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let dumped = strip(assignedSendStripEn, builder: builder, id: 32_600)
+        let knob = try element(at: "14", role: kAXSliderRole as String, in: assignedSendStripEn, builder: builder, stripID: 32_600)
+        let runtime = failing(kAXHelpAttribute as String, of: knob, with: .attributeUnsupported, builder: builder)
+        let read = try #require(AXLogicProElements.sendSlotObservations(in: dumped, runtime: runtime))
+        #expect(read == [SendSlotObservation(ordinal: 0, state: .observedEmpty)])
     }
 }

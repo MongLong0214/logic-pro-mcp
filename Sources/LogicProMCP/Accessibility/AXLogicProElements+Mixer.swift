@@ -496,19 +496,24 @@ extension AXLogicProElements {
     /// a finite number and `levelDescription` its `AXValueDescription` when readable; neither
     /// decides anything.
     ///
-    /// Three answers are kept apart. `nil`: a children read at or below the strip failed with a
-    /// status that is not an answer (-25205 and -25212 are answers and read as no children). `[]`:
-    /// the walk completed and met no send slot of either shape. `.unreadable` on one slot: its
-    /// button matched but the element after it would not say its role or help, so whether a knob
-    /// follows is unknown for that slot alone; the slot keeps its ordinal so the next is not
-    /// renumbered.
+    /// Three answers are kept apart. `nil`: the list itself is unknown. Either a children read at
+    /// or below the strip failed, or a read that decides whether an element is a send slot at all
+    /// failed — the role of any element in the walk, the help of a button, or the help of a slider
+    /// beside a group. Each of those could be a slot nobody saw: an assigned send whose knob will
+    /// not give its help would otherwise read as the empty slot before it and nothing else, a list
+    /// that claims to be whole and is one short. In every one of those reads -25205 and -25212 are
+    /// answers and not failures — no children, no role, no help — so a slider with no help is not
+    /// the knob. `[]`: the walk completed and met no send slot of either shape. `.unreadable` on
+    /// one slot: its button matched but the element after it would not say whether it is the
+    /// knob, so occupancy is unknown for that slot alone; the slot keeps its ordinal so the next is
+    /// not renumbered. (A successor whose ROLE will not read may itself be an assigned send's
+    /// group, and the walk reaches it next and returns `nil`.)
     ///
     /// The ordinal is the index among send slots of both shapes in this walk — the same pre-order,
     /// the same depth, as `slotDescription` — and not a slot number Logic assigns; on the measured
-    /// strip it runs opposite to the order on screen. An element whose own role or help does not
-    /// read is passed over exactly as the output reader passes it over — a button, and a knob
-    /// beside a group alike; the status-preserving reads are spent on a button's SUCCESSOR, where a
-    /// failed read would otherwise be filed as "no knob, so empty".
+    /// strip it runs opposite to the order on screen. Unlike the output reader, this one does not
+    /// pass over an element whose role or help will not read: the output reader answers one slot
+    /// or `nil`, but a send slot passed over is a slot missing from a list that says it is whole.
     static func sendSlotObservations(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
@@ -518,18 +523,24 @@ extension AXLogicProElements {
         }
         var observations: [SendSlotObservation] = []
         for (index, visit) in walk.enumerated() {
-            let role = AXHelpers.getRole(visit.element, runtime: runtime)
+            guard case let .success(role) = slotDecidingString(
+                visit.element, kAXRoleAttribute as String, runtime: runtime
+            ) else { return nil }
             if role == (kAXGroupRole as String) {
-                guard let sibling = nextSibling(of: index, in: walk),
-                      isSendLevelKnob(walk[sibling].element, runtime: runtime) else { continue }
-                observations.append(
-                    occupiedSendSlot(ordinal: observations.count, knob: walk[sibling].element, runtime: runtime)
-                )
+                guard let sibling = nextSibling(of: index, in: walk) else { continue }
+                guard let isKnob = isSendLevelKnob(walk[sibling].element, runtime: runtime) else { return nil }
+                if isKnob {
+                    observations.append(
+                        occupiedSendSlot(ordinal: observations.count, knob: walk[sibling].element, runtime: runtime)
+                    )
+                }
                 continue
             }
             guard role == (kAXButtonRole as String) else { continue }
-            let help = AXHelpers.getHelp(visit.element, runtime: runtime) ?? ""
-            guard AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: help.lowercased()) else {
+            guard case let .success(help) = slotDecidingString(
+                visit.element, kAXHelpAttribute as String, runtime: runtime
+            ) else { return nil }
+            guard AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: (help ?? "").lowercased()) else {
                 continue
             }
             let successor = index + 1 < walk.count ? walk[index + 1].element : nil
@@ -549,12 +560,32 @@ extension AXLogicProElements {
         return cursor < walk.count && walk[cursor].depth == depth ? cursor : nil
     }
 
-    /// Whether `element` is the send level knob, read the way a send-slot button is: a role or
-    /// help that does not read is not a knob.
-    private static func isSendLevelKnob(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
-        guard AXHelpers.getRole(element, runtime: runtime) == (kAXSliderRole as String) else { return false }
-        let help = AXHelpers.getHelp(element, runtime: runtime) ?? ""
-        return AXLocalePolicy.sendLevelKnobHelpKeyword.containsAny(in: help.lowercased())
+    /// Whether `element` is the send level knob, or `nil` when its role or help did not read: a
+    /// slider that will not say what it is may be the knob of an assigned send. A role or help it
+    /// does not have is an answer — not a knob.
+    private static func isSendLevelKnob(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool? {
+        guard case let .success(role) = slotDecidingString(element, kAXRoleAttribute as String, runtime: runtime) else {
+            return nil
+        }
+        guard role == (kAXSliderRole as String) else { return false }
+        guard case let .success(help) = slotDecidingString(element, kAXHelpAttribute as String, runtime: runtime) else {
+            return nil
+        }
+        return AXLocalePolicy.sendLevelKnobHelpKeyword.containsAny(in: (help ?? "").lowercased())
+    }
+
+    /// A role or help that decides whether an element is part of a send slot, with the two
+    /// statuses that are answers (`isDefinitiveAbsence`) read as "has none", so `.failure` is only
+    /// ever a read that did not happen.
+    private static func slotDecidingString(
+        _ element: AXUIElement,
+        _ attribute: String,
+        runtime: AXHelpers.Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        let read: Result<String?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(element, attribute, runtime: runtime)
+        if case let .failure(error) = read, error.isDefinitiveAbsence { return .success(nil) }
+        return read
     }
 
     /// One slot's reading from the element that follows its button, if any.
