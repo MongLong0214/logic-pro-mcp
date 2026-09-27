@@ -1351,8 +1351,11 @@ extension AccessibilityChannel {
         /// The result the site reports, up to the refusal text. The parser classifies on it.
         let resultPrefix: String
 
-        static let dialogRefusal = ": dialog cleanup was not observed"
-        static let menuRefusal = ": menu cleanup was not observed"
+        /// The phrase every post-leaf cleanup refusal carries, and the one `postLeafCleanup` looks
+        /// for. Declared once so the emitter and the parser cannot drift apart (#1028).
+        static let notObservedMarker = "cleanup was not observed"
+        static let dialogRefusal = ": dialog " + notObservedMarker
+        static let menuRefusal = ": menu " + notObservedMarker
 
         static let leafClickError = Self(
             identifier: "leaf_click_error", resultPrefix: "DIALOG_ACTUATION_ISSUED"
@@ -2750,7 +2753,8 @@ extension AccessibilityChannel {
             // The parser reports only what the script observed; reconciliation has not run.
             return .menuNotObservedClosed(reconciledMenuClosed: false)
         }
-        return value.contains("cleanup was not observed") ? .dialogNotObservedClosed : .observedClosed
+        return value.contains(PostLeafCleanupSite.notObservedMarker)
+            ? .dialogNotObservedClosed : .observedClosed
     }
 
     private enum GotoPositionDialogRouteResult {
