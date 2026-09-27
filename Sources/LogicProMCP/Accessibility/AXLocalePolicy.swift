@@ -2533,11 +2533,13 @@ enum AXLocalePolicy {
 
     /// Identifies a channel strip's SEND slot by its AXHelp string (#291 R1).
     ///
-    /// Measured 2026-09-13 on Logic 12.3 (6674), en: an `AXButton` whose help begins `Send slot.`
-    /// and which is described only as `send button`. Empty or assigned, it names no destination in
-    /// any attribute, and its own menu marked `No Send` while a send existed on it — so this set
-    /// finds the SLOT and nothing about it says where the send goes. What says whether a send is
-    /// there at all is the knob the next set identifies.
+    /// Measured 2026-09-27 on Logic 12.3 (6674), ko and en
+    /// (`docs/observations/2026-09-27-an-assigned-send-is-a-group-named-by-its-destination-beside-its-knob.json`):
+    /// the EMPTY send slot is an `AXButton` whose help begins `Send slot.` and which is described
+    /// only as `send button`. An ASSIGNED send is not such a button: it is an `AXGroup` with no
+    /// help, so this set finds empty slots only, and what finds an assigned one is the knob the
+    /// next set identifies. The 2026-09-13 reading took the button before that knob for the
+    /// assigned slot; it was the empty slot Logic adds below it.
     ///
     /// Ten locales by derivation from QuickHelp row `INS_010_SendSlot`; it, pt and zh_TW keep the
     /// English title. Only the English rendering has been watched live.
@@ -2553,11 +2555,11 @@ enum AXLocalePolicy {
 
     /// Identifies the level knob Logic grows beside an ASSIGNED send (#291 R1).
     ///
-    /// Measured 2026-09-13 on Logic 12.3 (6674), en: before a send is assigned the strip has no
-    /// such element; after one is, an `AXSlider` described `send knob` whose help begins `Send
-    /// Level knob.` appears immediately after the slot's button in pre-order. Its presence is the
-    /// only evidence of occupancy the tree offers; its VALUE decides nothing, because a send at
-    /// minus infinity or under automation is still a send.
+    /// Measured 2026-09-13 and 2026-09-27 on Logic 12.3 (6674): before a send is assigned the strip
+    /// has no such element; after one is, an `AXSlider` described `send knob` (`센드 노브` in
+    /// Korean) whose help begins `Send Level knob.` is the next sibling of the `AXGroup` that is the
+    /// assigned slot. Its presence is the evidence of occupancy the reader uses; its VALUE decides
+    /// nothing, because a send at minus infinity or under automation is still a send.
     ///
     /// Ten locales by derivation from QuickHelp row `INS_011_SendLevelKnob`; it, pt and zh_TW keep
     /// the English title. The Spanish and Simplified Chinese titles carry Apple's typographic

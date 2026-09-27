@@ -468,55 +468,93 @@ extension AXLogicProElements {
     /// Each send slot on a channel strip and whether it is OCCUPIED, or `nil` when the strip's
     /// descendants could not be read.
     ///
-    /// Measured 2026-09-13 on Logic 12.3 (6674), en
-    /// (`docs/observations/2026-09-13-the-send-slot-menu-does-not-mark-its-assignment-but-an-assigned-send-grows-a-level-knob.json`):
-    /// an empty send slot is an `AXButton` whose help begins `Send slot.` and which names no
-    /// destination anywhere; an ASSIGNED send adds an `AXSlider` described `send knob` whose help
-    /// begins `Send Level knob.`, and it appears immediately after its button in the pre-order walk
-    /// `findAllDescendants` makes. The slot's own menu still marked `No Send` while the send
-    /// existed, so the knob is the only evidence of occupancy this tree offers — and the
-    /// destination is not in it. Every occupied slot therefore reads
-    /// `occupiedUnknownDestination`; `occupiedKnownDestination` is declared so a later reader can
-    /// tell the two apart and is produced by nothing here.
+    /// Two shapes are read, and only the second has been seen on a running Logic.
     ///
-    /// Occupancy is decided by the PRESENCE of that knob, never by its level: a send at minus
+    /// Measured 2026-09-27 on Logic 12.3 (6674), ko and en, on the same strip before and after a
+    /// send was assigned
+    /// (`docs/observations/2026-09-27-an-assigned-send-is-a-group-named-by-its-destination-beside-its-knob.json`):
+    /// an EMPTY send slot is an `AXButton` whose help begins with the send-slot title and which is
+    /// described only as `send button`. An ASSIGNED send is not that button. It is an `AXGroup`
+    /// with no help, described by the destination (`B256` in English, `버스 256` in Korean), whose
+    /// children are a bypass checkbox and a list button, and whose NEXT SIBLING is an `AXSlider`
+    /// whose help begins with the send-level-knob title. Assigning the send also gave every strip
+    /// in the Mixer a further empty send button, and on the assigned strip that empty button comes
+    /// FIRST in the walk: the strip's children run bottom to top on screen.
+    ///
+    /// The first shape — a send-slot button whose pre-order successor is that knob — is what the
+    /// 2026-09-13 record described. The 2026-09-27 dumps did not reproduce it in either language:
+    /// the button before the knob was the new EMPTY slot with the group between them. It is still
+    /// read, because a knob right after a send button can only mean that button's send, and
+    /// dropping it would turn such a strip, were Logic ever to draw one, from occupied to empty.
+    ///
+    /// Every occupied slot reads `occupiedUnknownDestination`. The group's description does name
+    /// the destination, but abbreviated in English and in full in Korean, so publishing it needs
+    /// its own measurement per language; `occupiedKnownDestination` stays produced by nothing here.
+    ///
+    /// Occupancy is decided by the PRESENCE of the knob, never by its level: a send at minus
     /// infinity or under automation is still a send. `levelRaw` is the knob's `AXValue` when it is
     /// a finite number and `levelDescription` its `AXValueDescription` when readable; neither
     /// decides anything.
     ///
     /// Three answers are kept apart. `nil`: a children read at or below the strip failed with a
     /// status that is not an answer (-25205 and -25212 are answers and read as no children). `[]`:
-    /// the walk completed and met no send-slot button. `.unreadable` on one slot: its button
-    /// matched but the element after it would not say its role or help, so whether a knob follows
-    /// is unknown for that slot alone; the slot keeps its ordinal so the next is not renumbered.
+    /// the walk completed and met no send slot of either shape. `.unreadable` on one slot: its
+    /// button matched but the element after it would not say its role or help, so whether a knob
+    /// follows is unknown for that slot alone; the slot keeps its ordinal so the next is not
+    /// renumbered.
     ///
-    /// The ordinal is the index among send-slot buttons in this walk — the same pre-order, the
-    /// same depth, as `slotDescription` — and not a slot number Logic assigns. A button whose own
-    /// role or help does not read is passed over exactly as the output reader passes it over; the
-    /// status-preserving reads are spent on the SUCCESSOR, where a failed read would otherwise be
-    /// filed as "no knob, so empty".
+    /// The ordinal is the index among send slots of both shapes in this walk — the same pre-order,
+    /// the same depth, as `slotDescription` — and not a slot number Logic assigns; on the measured
+    /// strip it runs opposite to the order on screen. An element whose own role or help does not
+    /// read is passed over exactly as the output reader passes it over — a button, and a knob
+    /// beside a group alike; the status-preserving reads are spent on a button's SUCCESSOR, where a
+    /// failed read would otherwise be filed as "no knob, so empty".
     static func sendSlotObservations(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> [SendSlotObservation]? {
-        guard let elements = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else {
+        guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else {
             return nil
         }
         var observations: [SendSlotObservation] = []
-        for (index, element) in elements.enumerated() {
-            guard AXHelpers.getRole(element, runtime: runtime) == (kAXButtonRole as String) else {
+        for (index, visit) in walk.enumerated() {
+            let role = AXHelpers.getRole(visit.element, runtime: runtime)
+            if role == (kAXGroupRole as String) {
+                guard let sibling = nextSibling(of: index, in: walk),
+                      isSendLevelKnob(walk[sibling].element, runtime: runtime) else { continue }
+                observations.append(
+                    occupiedSendSlot(ordinal: observations.count, knob: walk[sibling].element, runtime: runtime)
+                )
                 continue
             }
-            let help = AXHelpers.getHelp(element, runtime: runtime) ?? ""
+            guard role == (kAXButtonRole as String) else { continue }
+            let help = AXHelpers.getHelp(visit.element, runtime: runtime) ?? ""
             guard AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: help.lowercased()) else {
                 continue
             }
-            let successor = index + 1 < elements.count ? elements[index + 1] : nil
+            let successor = index + 1 < walk.count ? walk[index + 1].element : nil
             observations.append(
                 sendSlotObservation(ordinal: observations.count, following: successor, runtime: runtime)
             )
         }
         return observations
+    }
+
+    /// The index of the element after `index` at the same depth with nothing shallower between —
+    /// its next sibling in the walk — or `nil` when it is the last of its parent's children.
+    private static func nextSibling(of index: Int, in walk: [(element: AXUIElement, depth: Int)]) -> Int? {
+        let depth = walk[index].depth
+        var cursor = index + 1
+        while cursor < walk.count, walk[cursor].depth > depth { cursor += 1 }
+        return cursor < walk.count && walk[cursor].depth == depth ? cursor : nil
+    }
+
+    /// Whether `element` is the send level knob, read the way a send-slot button is: a role or
+    /// help that does not read is not a knob.
+    private static func isSendLevelKnob(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        guard AXHelpers.getRole(element, runtime: runtime) == (kAXSliderRole as String) else { return false }
+        let help = AXHelpers.getHelp(element, runtime: runtime) ?? ""
+        return AXLocalePolicy.sendLevelKnobHelpKeyword.containsAny(in: help.lowercased())
     }
 
     /// One slot's reading from the element that follows its button, if any.
@@ -552,17 +590,25 @@ extension AXLogicProElements {
                 return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
             }
         }
-        // From here the slot IS occupied. The level is carried when it can be, and a failed or
-        // non-numeric or non-finite read of it changes nothing above.
+        return occupiedSendSlot(ordinal: ordinal, knob: successor, runtime: runtime)
+    }
+
+    /// An occupied slot, with the level carried when it can be. A failed, non-numeric or
+    /// non-finite read of the level changes nothing about the occupancy.
+    private static func occupiedSendSlot(
+        ordinal: Int,
+        knob: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> SendSlotObservation {
         var levelRaw: Double?
         let value: Result<AnyObject?, AXHelpers.AXStatusError> =
-            AXHelpers.getAttributeResult(successor, kAXValueAttribute as String, runtime: runtime)
+            AXHelpers.getAttributeResult(knob, kAXValueAttribute as String, runtime: runtime)
         if case let .success(raw) = value, let number = raw as? NSNumber, number.doubleValue.isFinite {
             levelRaw = number.doubleValue
         }
         var levelDescription: String?
         let description: Result<String?, AXHelpers.AXStatusError> =
-            AXHelpers.getAttributeResult(successor, kAXValueDescriptionAttribute as String, runtime: runtime)
+            AXHelpers.getAttributeResult(knob, kAXValueDescriptionAttribute as String, runtime: runtime)
         if case let .success(text) = description, let text, !text.isEmpty {
             levelDescription = text
         }
@@ -575,21 +621,25 @@ extension AXLogicProElements {
     }
 
     /// Every descendant of `element` to `maxDepth`, in the order `AXHelpers.findAllDescendants`
-    /// visits them, or `nil` when a children read at any level failed with a status that is not an
-    /// answer. The one way this differs from the output reader's walk: that one flattens a failed
-    /// read into "no children", which is the absence-as-claim an absent `send_slots` exists to
-    /// refuse.
+    /// visits them and each with its depth below `element` (children are depth 1), or `nil` when a
+    /// children read at any level failed with a status that is not an answer. The one way this
+    /// differs from the output reader's walk: that one flattens a failed read into "no children",
+    /// which is the absence-as-claim an absent `send_slots` exists to refuse. The depth is what
+    /// lets a group be paired with its next SIBLING rather than with its own last descendant.
     private static func preOrderDescendants(
         of element: AXUIElement,
         maxDepth: Int,
-        runtime: AXHelpers.Runtime
-    ) -> [AXUIElement]? {
+        runtime: AXHelpers.Runtime,
+        depth: Int = 1
+    ) -> [(element: AXUIElement, depth: Int)]? {
         guard maxDepth > 0 else { return [] }
         guard let children = childrenIfRead(element, runtime: runtime) else { return nil }
-        var visited: [AXUIElement] = []
+        var visited: [(element: AXUIElement, depth: Int)] = []
         for child in children {
-            visited.append(child)
-            guard let below = preOrderDescendants(of: child, maxDepth: maxDepth - 1, runtime: runtime) else {
+            visited.append((child, depth))
+            guard let below = preOrderDescendants(
+                of: child, maxDepth: maxDepth - 1, runtime: runtime, depth: depth + 1
+            ) else {
                 return nil
             }
             visited.append(contentsOf: below)

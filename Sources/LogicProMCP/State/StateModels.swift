@@ -191,7 +191,7 @@ enum SendSlotState: String, Sendable, Codable {
     case unreadable = "unreadable"
 }
 
-/// One send slot on a channel strip, by its position among the strip's send-slot buttons.
+/// One send slot on a channel strip, by its position among the strip's send slots in the reader's walk.
 ///
 /// `levelRaw` is the knob's `AXValue` when it read as a finite number and `levelDescription` its
 /// `AXValueDescription` when readable. Neither decides `state`: a send at minus infinity or under
