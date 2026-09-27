@@ -1,10 +1,10 @@
 {
   "name": "live_965_inspect_session_reports_the_cached_population",
-  "head": "20246b6a63ed73f13f17a8383eac2930244d782c",
+  "head": "04081d1acae684d109c062301e2a926dca5b5e12",
   "artifact": {
-    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin965/LogicProMCP-20246b6a63ed73f13f17a8383eac2930244d782c",
-    "sha256": "724fc2e039e937625fd0c043bfd1b984b5dfed8b8e6fdf18a3367e80436d152c",
-    "built_from": "20246b6a63ed73f13f17a8383eac2930244d782c",
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin965/LogicProMCP-04081d1acae684d109c062301e2a926dca5b5e12",
+    "sha256": "aba7a2a50597ec88d6a1c48fcedd171d6a837b6442bb082bc5a7801e65c99690",
+    "built_from": "04081d1acae684d109c062301e2a926dca5b5e12",
     "worktree_clean": true,
     "built_from_is_measured": false,
     "artifact_older_than_sources": false
@@ -100,25 +100,25 @@
           "Studio Grand"
         ],
         "track_refs": [
-          "trk_A67C5AF2-D263-45B9-8614-5895F3DDC7EF",
-          "trk_5D46B564-8133-4783-9498-752048B1DBB4",
-          "trk_850FB114-CD74-443E-95C8-895F4BC299D6",
-          "trk_69A0D804-48A5-4E27-ABD2-483CD13FA06B",
-          "trk_E70205A2-644F-4E54-87F6-E8EFF0A2F7A0",
-          "trk_022A7CD9-E80B-45A8-9ADD-5ACCA159C482",
-          "trk_6716CE47-3C6A-4440-AA78-2D22177990E0",
-          "trk_5F5C2D7F-621E-42BD-ABB0-37EF5D957909",
-          "trk_C9605AF0-38B1-4C5D-BC43-6EA89A459BCE",
-          "trk_5FF2D236-FFA8-414D-90C7-439F3A886A7B",
-          "trk_67DCF21E-AE88-4BE7-9CF2-ED81B07D63E7",
-          "trk_24B2DB08-BB77-4B90-ABDC-CA1DA164ECA1",
-          "trk_305D2D79-CD05-42FF-8B79-C271AEFB91B1",
-          "trk_107DD01E-FE5F-42C9-A9DC-1549B6841F74",
-          "trk_FC08A814-A679-411C-B2BD-21076582D465",
-          "trk_617608C8-9B84-47EF-A3FB-4C20E9992FBE",
-          "trk_D59F3BC4-7911-4304-ACB3-42AD58D9E832",
-          "trk_4C161F1F-43EA-493F-8293-1E56B6EE72BF",
-          "trk_D2016647-7198-4FE3-9CB6-7692A115D97F"
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
         ]
       }
     },
@@ -196,25 +196,25 @@
           "Studio Grand"
         ],
         "track_refs": [
-          "trk_A67C5AF2-D263-45B9-8614-5895F3DDC7EF",
-          "trk_5D46B564-8133-4783-9498-752048B1DBB4",
-          "trk_850FB114-CD74-443E-95C8-895F4BC299D6",
-          "trk_69A0D804-48A5-4E27-ABD2-483CD13FA06B",
-          "trk_E70205A2-644F-4E54-87F6-E8EFF0A2F7A0",
-          "trk_022A7CD9-E80B-45A8-9ADD-5ACCA159C482",
-          "trk_6716CE47-3C6A-4440-AA78-2D22177990E0",
-          "trk_5F5C2D7F-621E-42BD-ABB0-37EF5D957909",
-          "trk_C9605AF0-38B1-4C5D-BC43-6EA89A459BCE",
-          "trk_5FF2D236-FFA8-414D-90C7-439F3A886A7B",
-          "trk_67DCF21E-AE88-4BE7-9CF2-ED81B07D63E7",
-          "trk_24B2DB08-BB77-4B90-ABDC-CA1DA164ECA1",
-          "trk_305D2D79-CD05-42FF-8B79-C271AEFB91B1",
-          "trk_107DD01E-FE5F-42C9-A9DC-1549B6841F74",
-          "trk_FC08A814-A679-411C-B2BD-21076582D465",
-          "trk_617608C8-9B84-47EF-A3FB-4C20E9992FBE",
-          "trk_D59F3BC4-7911-4304-ACB3-42AD58D9E832",
-          "trk_4C161F1F-43EA-493F-8293-1E56B6EE72BF",
-          "trk_D2016647-7198-4FE3-9CB6-7692A115D97F"
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
         ]
       }
     },
@@ -255,8 +255,8 @@
             ]
           },
           "capture": {
-            "began_at": "2026-09-26T19:25:31.015Z",
-            "ended_at": "2026-09-26T19:25:31.135Z"
+            "began_at": "2026-09-27T00:36:28.011Z",
+            "ended_at": "2026-09-27T00:36:28.139Z"
           },
           "hierarchy": {
             "coverage": "unavailable",
@@ -275,9 +275,9 @@
           },
           "project": {
             "file_path": "~/Music/Logic/lpm-locale-campaign.logicx",
-            "name": "lpm-locale-campaign - 트랙",
+            "name": "lpm-locale-campaign",
             "project_epoch": 1,
-            "project_ref": "prj_EE62EF2F-0C63-4C8D-8D0F-AF96C7FE5BF8",
+            "project_ref": "prj_770FA3E3-A9F4-419A-B3F1-526016B6B93C",
             "status": "issued"
           },
           "read_only": true,
@@ -289,7 +289,7 @@
           ],
           "schema": "logic_pro_mcp_session_population.v1",
           "scope": "whole_project",
-          "snapshot_id": "snap_1_t36_m173_p3",
+          "snapshot_id": "snap_1_t36_m174_p3",
           "sources": {
             "expected_count": "project_file",
             "strips": "ax_poll",
@@ -495,7 +495,7 @@
                 "row": 0,
                 "stack_collapsed": true,
                 "track_index": 0,
-                "track_ref": "trk_A67C5AF2-D263-45B9-8614-5895F3DDC7EF",
+                "track_ref": "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -510,7 +510,7 @@
                 "row": 1,
                 "stack_collapsed": null,
                 "track_index": 1,
-                "track_ref": "trk_5D46B564-8133-4783-9498-752048B1DBB4",
+                "track_ref": "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -525,7 +525,7 @@
                 "row": 2,
                 "stack_collapsed": null,
                 "track_index": 2,
-                "track_ref": "trk_850FB114-CD74-443E-95C8-895F4BC299D6",
+                "track_ref": "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -540,7 +540,7 @@
                 "row": 3,
                 "stack_collapsed": null,
                 "track_index": 3,
-                "track_ref": "trk_69A0D804-48A5-4E27-ABD2-483CD13FA06B",
+                "track_ref": "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -555,7 +555,7 @@
                 "row": 4,
                 "stack_collapsed": null,
                 "track_index": 4,
-                "track_ref": "trk_E70205A2-644F-4E54-87F6-E8EFF0A2F7A0",
+                "track_ref": "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -570,7 +570,7 @@
                 "row": 5,
                 "stack_collapsed": null,
                 "track_index": 5,
-                "track_ref": "trk_022A7CD9-E80B-45A8-9ADD-5ACCA159C482",
+                "track_ref": "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -585,7 +585,7 @@
                 "row": 6,
                 "stack_collapsed": null,
                 "track_index": 6,
-                "track_ref": "trk_6716CE47-3C6A-4440-AA78-2D22177990E0",
+                "track_ref": "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -600,7 +600,7 @@
                 "row": 7,
                 "stack_collapsed": null,
                 "track_index": 7,
-                "track_ref": "trk_5F5C2D7F-621E-42BD-ABB0-37EF5D957909",
+                "track_ref": "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -615,7 +615,7 @@
                 "row": 8,
                 "stack_collapsed": null,
                 "track_index": 8,
-                "track_ref": "trk_C9605AF0-38B1-4C5D-BC43-6EA89A459BCE",
+                "track_ref": "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -630,7 +630,7 @@
                 "row": 9,
                 "stack_collapsed": null,
                 "track_index": 9,
-                "track_ref": "trk_5FF2D236-FFA8-414D-90C7-439F3A886A7B",
+                "track_ref": "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -645,7 +645,7 @@
                 "row": 10,
                 "stack_collapsed": null,
                 "track_index": 10,
-                "track_ref": "trk_67DCF21E-AE88-4BE7-9CF2-ED81B07D63E7",
+                "track_ref": "trk_36034415-1906-4BAC-A2EE-A9084796E672",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -660,7 +660,7 @@
                 "row": 11,
                 "stack_collapsed": null,
                 "track_index": 11,
-                "track_ref": "trk_24B2DB08-BB77-4B90-ABDC-CA1DA164ECA1",
+                "track_ref": "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -675,7 +675,7 @@
                 "row": 12,
                 "stack_collapsed": null,
                 "track_index": 12,
-                "track_ref": "trk_305D2D79-CD05-42FF-8B79-C271AEFB91B1",
+                "track_ref": "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -690,7 +690,7 @@
                 "row": 13,
                 "stack_collapsed": null,
                 "track_index": 13,
-                "track_ref": "trk_107DD01E-FE5F-42C9-A9DC-1549B6841F74",
+                "track_ref": "trk_7C592A47-5184-4266-806E-A18910BE727C",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -705,7 +705,7 @@
                 "row": 14,
                 "stack_collapsed": null,
                 "track_index": 14,
-                "track_ref": "trk_FC08A814-A679-411C-B2BD-21076582D465",
+                "track_ref": "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -720,7 +720,7 @@
                 "row": 15,
                 "stack_collapsed": null,
                 "track_index": 15,
-                "track_ref": "trk_617608C8-9B84-47EF-A3FB-4C20E9992FBE",
+                "track_ref": "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -735,7 +735,7 @@
                 "row": 16,
                 "stack_collapsed": null,
                 "track_index": 16,
-                "track_ref": "trk_D59F3BC4-7911-4304-ACB3-42AD58D9E832",
+                "track_ref": "trk_A600616F-D172-4C56-9ED4-565811348CA7",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -750,7 +750,7 @@
                 "row": 17,
                 "stack_collapsed": null,
                 "track_index": 17,
-                "track_ref": "trk_4C161F1F-43EA-493F-8293-1E56B6EE72BF",
+                "track_ref": "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -765,7 +765,7 @@
                 "row": 18,
                 "stack_collapsed": null,
                 "track_index": 18,
-                "track_ref": "trk_D2016647-7198-4FE3-9CB6-7692A115D97F",
+                "track_ref": "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               }
@@ -773,6 +773,7 @@
             "witnesses": {
               "count": 19,
               "expected_count": 42,
+              "expected_count_matches_rail": false,
               "expected_count_source": "project_file",
               "first_row": 0,
               "last_row": 18
@@ -812,25 +813,25 @@
           "Studio Grand"
         ],
         "resource_refs": [
-          "trk_A67C5AF2-D263-45B9-8614-5895F3DDC7EF",
-          "trk_5D46B564-8133-4783-9498-752048B1DBB4",
-          "trk_850FB114-CD74-443E-95C8-895F4BC299D6",
-          "trk_69A0D804-48A5-4E27-ABD2-483CD13FA06B",
-          "trk_E70205A2-644F-4E54-87F6-E8EFF0A2F7A0",
-          "trk_022A7CD9-E80B-45A8-9ADD-5ACCA159C482",
-          "trk_6716CE47-3C6A-4440-AA78-2D22177990E0",
-          "trk_5F5C2D7F-621E-42BD-ABB0-37EF5D957909",
-          "trk_C9605AF0-38B1-4C5D-BC43-6EA89A459BCE",
-          "trk_5FF2D236-FFA8-414D-90C7-439F3A886A7B",
-          "trk_67DCF21E-AE88-4BE7-9CF2-ED81B07D63E7",
-          "trk_24B2DB08-BB77-4B90-ABDC-CA1DA164ECA1",
-          "trk_305D2D79-CD05-42FF-8B79-C271AEFB91B1",
-          "trk_107DD01E-FE5F-42C9-A9DC-1549B6841F74",
-          "trk_FC08A814-A679-411C-B2BD-21076582D465",
-          "trk_617608C8-9B84-47EF-A3FB-4C20E9992FBE",
-          "trk_D59F3BC4-7911-4304-ACB3-42AD58D9E832",
-          "trk_4C161F1F-43EA-493F-8293-1E56B6EE72BF",
-          "trk_D2016647-7198-4FE3-9CB6-7692A115D97F"
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
         ],
         "report_names": [
           "Absolute Zero",
@@ -854,25 +855,25 @@
           "Studio Grand"
         ],
         "report_refs": [
-          "trk_A67C5AF2-D263-45B9-8614-5895F3DDC7EF",
-          "trk_5D46B564-8133-4783-9498-752048B1DBB4",
-          "trk_850FB114-CD74-443E-95C8-895F4BC299D6",
-          "trk_69A0D804-48A5-4E27-ABD2-483CD13FA06B",
-          "trk_E70205A2-644F-4E54-87F6-E8EFF0A2F7A0",
-          "trk_022A7CD9-E80B-45A8-9ADD-5ACCA159C482",
-          "trk_6716CE47-3C6A-4440-AA78-2D22177990E0",
-          "trk_5F5C2D7F-621E-42BD-ABB0-37EF5D957909",
-          "trk_C9605AF0-38B1-4C5D-BC43-6EA89A459BCE",
-          "trk_5FF2D236-FFA8-414D-90C7-439F3A886A7B",
-          "trk_67DCF21E-AE88-4BE7-9CF2-ED81B07D63E7",
-          "trk_24B2DB08-BB77-4B90-ABDC-CA1DA164ECA1",
-          "trk_305D2D79-CD05-42FF-8B79-C271AEFB91B1",
-          "trk_107DD01E-FE5F-42C9-A9DC-1549B6841F74",
-          "trk_FC08A814-A679-411C-B2BD-21076582D465",
-          "trk_617608C8-9B84-47EF-A3FB-4C20E9992FBE",
-          "trk_D59F3BC4-7911-4304-ACB3-42AD58D9E832",
-          "trk_4C161F1F-43EA-493F-8293-1E56B6EE72BF",
-          "trk_D2016647-7198-4FE3-9CB6-7692A115D97F"
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
         ],
         "coverage": "partial",
         "reasons": [
@@ -945,7 +946,7 @@
       "tag": "965/mixer-before-the-report",
       "payload": {
         "data_source": "ax_poll",
-        "cache_age_sec": 0.0023049116134643555,
+        "cache_age_sec": 0.0026149749755859375,
         "strip_count": 21,
         "strip_indices": [
           0,
@@ -1009,8 +1010,8 @@
             ]
           },
           "capture": {
-            "began_at": "2026-09-26T19:25:33.370Z",
-            "ended_at": "2026-09-26T19:25:33.505Z"
+            "began_at": "2026-09-27T00:36:30.342Z",
+            "ended_at": "2026-09-27T00:36:30.469Z"
           },
           "hierarchy": {
             "coverage": "unavailable",
@@ -1029,9 +1030,9 @@
           },
           "project": {
             "file_path": "~/Music/Logic/lpm-locale-campaign.logicx",
-            "name": "lpm-locale-campaign - 트랙",
+            "name": "lpm-locale-campaign",
             "project_epoch": 1,
-            "project_ref": "prj_EE62EF2F-0C63-4C8D-8D0F-AF96C7FE5BF8",
+            "project_ref": "prj_770FA3E3-A9F4-419A-B3F1-526016B6B93C",
             "status": "issued"
           },
           "read_only": true,
@@ -1043,7 +1044,7 @@
           ],
           "schema": "logic_pro_mcp_session_population.v1",
           "scope": "whole_project",
-          "snapshot_id": "snap_1_t37_m174_p4",
+          "snapshot_id": "snap_1_t37_m175_p4",
           "sources": {
             "expected_count": "project_file",
             "strips": "ax_poll",
@@ -1249,7 +1250,7 @@
                 "row": 0,
                 "stack_collapsed": true,
                 "track_index": 0,
-                "track_ref": "trk_A67C5AF2-D263-45B9-8614-5895F3DDC7EF",
+                "track_ref": "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1264,7 +1265,7 @@
                 "row": 1,
                 "stack_collapsed": null,
                 "track_index": 1,
-                "track_ref": "trk_5D46B564-8133-4783-9498-752048B1DBB4",
+                "track_ref": "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1279,7 +1280,7 @@
                 "row": 2,
                 "stack_collapsed": null,
                 "track_index": 2,
-                "track_ref": "trk_850FB114-CD74-443E-95C8-895F4BC299D6",
+                "track_ref": "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1294,7 +1295,7 @@
                 "row": 3,
                 "stack_collapsed": null,
                 "track_index": 3,
-                "track_ref": "trk_69A0D804-48A5-4E27-ABD2-483CD13FA06B",
+                "track_ref": "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1309,7 +1310,7 @@
                 "row": 4,
                 "stack_collapsed": null,
                 "track_index": 4,
-                "track_ref": "trk_E70205A2-644F-4E54-87F6-E8EFF0A2F7A0",
+                "track_ref": "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1324,7 +1325,7 @@
                 "row": 5,
                 "stack_collapsed": null,
                 "track_index": 5,
-                "track_ref": "trk_022A7CD9-E80B-45A8-9ADD-5ACCA159C482",
+                "track_ref": "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1339,7 +1340,7 @@
                 "row": 6,
                 "stack_collapsed": null,
                 "track_index": 6,
-                "track_ref": "trk_6716CE47-3C6A-4440-AA78-2D22177990E0",
+                "track_ref": "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1354,7 +1355,7 @@
                 "row": 7,
                 "stack_collapsed": null,
                 "track_index": 7,
-                "track_ref": "trk_5F5C2D7F-621E-42BD-ABB0-37EF5D957909",
+                "track_ref": "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1369,7 +1370,7 @@
                 "row": 8,
                 "stack_collapsed": null,
                 "track_index": 8,
-                "track_ref": "trk_C9605AF0-38B1-4C5D-BC43-6EA89A459BCE",
+                "track_ref": "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1384,7 +1385,7 @@
                 "row": 9,
                 "stack_collapsed": null,
                 "track_index": 9,
-                "track_ref": "trk_5FF2D236-FFA8-414D-90C7-439F3A886A7B",
+                "track_ref": "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1399,7 +1400,7 @@
                 "row": 10,
                 "stack_collapsed": null,
                 "track_index": 10,
-                "track_ref": "trk_67DCF21E-AE88-4BE7-9CF2-ED81B07D63E7",
+                "track_ref": "trk_36034415-1906-4BAC-A2EE-A9084796E672",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1414,7 +1415,7 @@
                 "row": 11,
                 "stack_collapsed": null,
                 "track_index": 11,
-                "track_ref": "trk_24B2DB08-BB77-4B90-ABDC-CA1DA164ECA1",
+                "track_ref": "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1429,7 +1430,7 @@
                 "row": 12,
                 "stack_collapsed": null,
                 "track_index": 12,
-                "track_ref": "trk_305D2D79-CD05-42FF-8B79-C271AEFB91B1",
+                "track_ref": "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1444,7 +1445,7 @@
                 "row": 13,
                 "stack_collapsed": null,
                 "track_index": 13,
-                "track_ref": "trk_107DD01E-FE5F-42C9-A9DC-1549B6841F74",
+                "track_ref": "trk_7C592A47-5184-4266-806E-A18910BE727C",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1459,7 +1460,7 @@
                 "row": 14,
                 "stack_collapsed": null,
                 "track_index": 14,
-                "track_ref": "trk_FC08A814-A679-411C-B2BD-21076582D465",
+                "track_ref": "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1474,7 +1475,7 @@
                 "row": 15,
                 "stack_collapsed": null,
                 "track_index": 15,
-                "track_ref": "trk_617608C8-9B84-47EF-A3FB-4C20E9992FBE",
+                "track_ref": "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1489,7 +1490,7 @@
                 "row": 16,
                 "stack_collapsed": null,
                 "track_index": 16,
-                "track_ref": "trk_D59F3BC4-7911-4304-ACB3-42AD58D9E832",
+                "track_ref": "trk_A600616F-D172-4C56-9ED4-565811348CA7",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1504,7 +1505,7 @@
                 "row": 17,
                 "stack_collapsed": null,
                 "track_index": 17,
-                "track_ref": "trk_4C161F1F-43EA-493F-8293-1E56B6EE72BF",
+                "track_ref": "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               },
@@ -1519,7 +1520,7 @@
                 "row": 18,
                 "stack_collapsed": null,
                 "track_index": 18,
-                "track_ref": "trk_D2016647-7198-4FE3-9CB6-7692A115D97F",
+                "track_ref": "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00",
                 "type": "unknown",
                 "type_source": "header_aggregate"
               }
@@ -1527,6 +1528,7 @@
             "witnesses": {
               "count": 19,
               "expected_count": 42,
+              "expected_count_matches_rail": false,
               "expected_count_source": "project_file",
               "first_row": 0,
               "last_row": 18
@@ -1775,25 +1777,25 @@
           "Studio Grand"
         ],
         "track_refs": [
-          "trk_A67C5AF2-D263-45B9-8614-5895F3DDC7EF",
-          "trk_5D46B564-8133-4783-9498-752048B1DBB4",
-          "trk_850FB114-CD74-443E-95C8-895F4BC299D6",
-          "trk_69A0D804-48A5-4E27-ABD2-483CD13FA06B",
-          "trk_E70205A2-644F-4E54-87F6-E8EFF0A2F7A0",
-          "trk_022A7CD9-E80B-45A8-9ADD-5ACCA159C482",
-          "trk_6716CE47-3C6A-4440-AA78-2D22177990E0",
-          "trk_5F5C2D7F-621E-42BD-ABB0-37EF5D957909",
-          "trk_C9605AF0-38B1-4C5D-BC43-6EA89A459BCE",
-          "trk_5FF2D236-FFA8-414D-90C7-439F3A886A7B",
-          "trk_67DCF21E-AE88-4BE7-9CF2-ED81B07D63E7",
-          "trk_24B2DB08-BB77-4B90-ABDC-CA1DA164ECA1",
-          "trk_305D2D79-CD05-42FF-8B79-C271AEFB91B1",
-          "trk_107DD01E-FE5F-42C9-A9DC-1549B6841F74",
-          "trk_FC08A814-A679-411C-B2BD-21076582D465",
-          "trk_617608C8-9B84-47EF-A3FB-4C20E9992FBE",
-          "trk_D59F3BC4-7911-4304-ACB3-42AD58D9E832",
-          "trk_4C161F1F-43EA-493F-8293-1E56B6EE72BF",
-          "trk_D2016647-7198-4FE3-9CB6-7692A115D97F"
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
         ]
       }
     },
@@ -1897,25 +1899,25 @@
           "Studio Grand"
         ],
         "track_refs": [
-          "trk_A67C5AF2-D263-45B9-8614-5895F3DDC7EF",
-          "trk_5D46B564-8133-4783-9498-752048B1DBB4",
-          "trk_850FB114-CD74-443E-95C8-895F4BC299D6",
-          "trk_69A0D804-48A5-4E27-ABD2-483CD13FA06B",
-          "trk_E70205A2-644F-4E54-87F6-E8EFF0A2F7A0",
-          "trk_022A7CD9-E80B-45A8-9ADD-5ACCA159C482",
-          "trk_6716CE47-3C6A-4440-AA78-2D22177990E0",
-          "trk_5F5C2D7F-621E-42BD-ABB0-37EF5D957909",
-          "trk_C9605AF0-38B1-4C5D-BC43-6EA89A459BCE",
-          "trk_5FF2D236-FFA8-414D-90C7-439F3A886A7B",
-          "trk_67DCF21E-AE88-4BE7-9CF2-ED81B07D63E7",
-          "trk_24B2DB08-BB77-4B90-ABDC-CA1DA164ECA1",
-          "trk_305D2D79-CD05-42FF-8B79-C271AEFB91B1",
-          "trk_107DD01E-FE5F-42C9-A9DC-1549B6841F74",
-          "trk_FC08A814-A679-411C-B2BD-21076582D465",
-          "trk_617608C8-9B84-47EF-A3FB-4C20E9992FBE",
-          "trk_D59F3BC4-7911-4304-ACB3-42AD58D9E832",
-          "trk_4C161F1F-43EA-493F-8293-1E56B6EE72BF",
-          "trk_D2016647-7198-4FE3-9CB6-7692A115D97F"
+          "trk_8E91E3F7-3C2A-452A-BFF2-BFE44FDF0D0F",
+          "trk_83ADE6A9-DEA2-43C4-A9FB-1E405B84C180",
+          "trk_74786F4C-07E7-4418-B580-BA4EF3BC2DF7",
+          "trk_CE620787-76FC-43FA-992A-E35B6A139F08",
+          "trk_AB4E5A44-F3F9-4D3A-969B-85E816BAFC18",
+          "trk_282B48CB-F7A5-45DF-A4F7-5FCAA7CFACC2",
+          "trk_99DE362F-CD1C-4513-9BF3-233C40949ED7",
+          "trk_5B3491E5-F02F-4701-8E45-E0DABAED4508",
+          "trk_2EE70649-92F6-428B-98CC-5D2D2122A61E",
+          "trk_6FC9567F-CB84-4BBD-BACC-22E0FCAB71B5",
+          "trk_36034415-1906-4BAC-A2EE-A9084796E672",
+          "trk_A3843649-0FD7-4F2E-A7E8-85653BAC82BA",
+          "trk_1A830B8F-2AD6-47D6-AE95-3FCCE3DA0214",
+          "trk_7C592A47-5184-4266-806E-A18910BE727C",
+          "trk_45E0C79B-40F3-4909-9D87-A7AAA0D967E2",
+          "trk_91AB8C9F-4CE2-48C8-B7CF-CCAE0987040B",
+          "trk_A600616F-D172-4C56-9ED4-565811348CA7",
+          "trk_B93206FB-ACFC-46D4-A073-E05C0D2BCE8C",
+          "trk_E6FAC5E8-0315-44D4-A437-C45541D3AD00"
         ]
       }
     },
@@ -1927,7 +1929,7 @@
           {
             "schema": "logic_pro_mcp_session_population.v1",
             "read_only": true,
-            "snapshot_id": "snap_1_t38_m175_p6",
+            "snapshot_id": "snap_1_t39_m177_p6",
             "ui_effects": {
               "navigation_performed": false,
               "restoration": "not_applicable"
@@ -1939,7 +1941,7 @@
           {
             "schema": "logic_pro_mcp_session_population.v1",
             "read_only": true,
-            "snapshot_id": "snap_1_t38_m175_p6",
+            "snapshot_id": "snap_1_t39_m177_p6",
             "ui_effects": {
               "navigation_performed": false,
               "restoration": "not_applicable"
@@ -1951,7 +1953,7 @@
           {
             "schema": "logic_pro_mcp_session_population.v1",
             "read_only": true,
-            "snapshot_id": "snap_1_t38_m175_p6",
+            "snapshot_id": "snap_1_t39_m177_p6",
             "ui_effects": {
               "navigation_performed": false,
               "restoration": "not_applicable"
@@ -2021,9 +2023,9 @@
       "passed": true,
       "expected": "three consecutive default inspect_session calls each return a report, and Logic's window titles and logic://tracks row names read after a refresh are identical before and after them. THE COUNTEREXAMPLE is one more window after the calls than before",
       "observed": {
-        "observation": "{'calls': [{'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t38_m175_p6', 'ui_effects': {'navigation_performed': False, 'restoration': 'not_applicable'}, 'state': None, 'error': None, 'hint': None}, {'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t38_m175_p6', 'ui_effects': {'navigation_performed': False, 'resto",
+        "observation": "{'calls': [{'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t39_m177_p6', 'ui_effects': {'navigation_performed': False, 'restoration': 'not_applicable'}, 'state': None, 'error': None, 'hint': None}, {'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t39_m177_p6', 'ui_effects': {'navigation_performed': False, 'resto",
         "accepted_the_observation": true,
-        "counterexample": "{'calls': [{'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t38_m175_p6', 'ui_effects': {'navigation_performed': False, 'restoration': 'not_applicable'}, 'state': None, 'error': None, 'hint': None}, {'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t38_m175_p6', 'ui_effects': {'navigation_performed': False, 'resto",
+        "counterexample": "{'calls': [{'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t39_m177_p6', 'ui_effects': {'navigation_performed': False, 'restoration': 'not_applicable'}, 'state': None, 'error': None, 'hint': None}, {'schema': 'logic_pro_mcp_session_population.v1', 'read_only': True, 'snapshot_id': 'snap_1_t39_m177_p6', 'ui_effects': {'navigation_performed': False, 'resto",
         "rejected_the_counterexample": true
       },
       "mutation": "let SessionPopulationObservation.capture refresh the tracks it reports by driving the UI (a poll that expands a collapsed stack, or opens the Mixer) instead of reading the cache",
