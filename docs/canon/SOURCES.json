@@ -120,6 +120,40 @@
         "A nib in no `.lproj` is locale `-`. That it is shown untranslated on every locale is measured for the Compressor on de-DE only.",
         "Presence is not use, the same as for `strings`: `Loop` is a segment label in MAContentTaggingUI's STORMMainWindow.nib in zh_CN, which makes `docs/locale/ui-labels.json` read two labels' zh-CN coverage as `derived` although nothing has shown that window is reachable."
       ]
+    },
+    "stringsdict": {
+      "path": "**/<locale>.lproj/*.stringsdict",
+      "answers": "the plural FORMS of a counted label, per locale: the format string and one row per plural category the file declares (measured on this build: format 1,060, other 1,190, one 714, zero 20; no two, few or many)",
+      "fields": [
+        "format",
+        "zero",
+        "one",
+        "other"
+      ],
+      "files": 100,
+      "entries": 2984,
+      "locale_names": 10,
+      "how": "The unit is the file, the key is the stringsdict key (with `/<variable>` for a plural rule), and the field is `format` or the category. Five en.lproj files are UTF-16LE with a byte-order mark while their XML declaration says UTF-8, which plistlib refuses; they are decoded by the BOM and parsed as the same plist, and the result agrees with plutil on 100 of 100 files. Any other shape -- a rule type other than NSStringPluralRuleType, a non-string value -- stops the build naming the file.",
+      "limits": [
+        "Nothing cites a plural form yet, so the ten sets carry no index row; they answer absence and presence questions only.",
+        "The ten-locale check covers this source, and the proof of translation compares each unit with its English file; measured on this build no stringsdict is byte-identical to its English file."
+      ]
+    },
+    "plugin_names": {
+      "path": "Contents/Frameworks/MAContentTagging.framework/Versions/A/Resources/DefaultPluginMapping.plist",
+      "answers": "the display NAME Logic gives an Audio Unit, by its identity: EMAG|0236|0000 is Channel EQ",
+      "fields": [
+        "value"
+      ],
+      "files": 1,
+      "entries": 242,
+      "locale_names": 1,
+      "how": "One flat dict. The unit is the AU identity exactly as the file writes it, the key is `name`, the field is `value`. Every row is pinned, not only cited ones (PIN_EVERY_ROW), so an offline guard can cite the row a plug-in name comes from. Anything but a dict of strings stops the build naming the file.",
+      "limits": [
+        "LOCALE-INDEPENDENT: the file is in no .lproj, so its locale is `-` and the ten-locale check demands no language folder for it. That says the string has no translation in Apple's data; that the plug-in menu SHOWS it untranslated is read on a Korean Logic only (f4b8d5a0).",
+        "242 entries hold 237 distinct names: a name can belong to more than one identity, so a name alone does not say which plug-in it is.",
+        "It names the plug-ins Logic maps for content tagging. A plug-in absent from it is not thereby absent from Logic."
+      ]
     }
   },
   "not_canonical": {
