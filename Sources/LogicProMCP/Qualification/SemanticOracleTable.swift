@@ -459,8 +459,9 @@ enum SemanticOracleTable {
             + "keystroke); the paste has no arrange read-back and emits State B "
             + "send_only_no_readback, so no State A exists",
         .editDelete:
-            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Delete "
-            + "keystroke); the delete has no arrange read-back and emits State B "
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command; CGEvent posts "
+            + "no keystroke, as Apple's U.S. preset binds none to a plain delete); the delete has "
+            + "no arrange read-back and emits State B "
             + "send_only_no_readback, so no State A exists",
         .editSelectAll:
             "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+A "

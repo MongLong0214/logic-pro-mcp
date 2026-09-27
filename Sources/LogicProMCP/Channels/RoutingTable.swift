@@ -20,7 +20,10 @@ extension ChannelRouter {
         // AppleScript "stop" can still leave transport running. The
         // spacebar-equivalent CGEvent path proved to be the first reliable
         // non-AX fallback, so prefer it before MIDI/AppleScript fallbacks and
-        // let the dispatcher's live readback gate decide success.
+        // let the dispatcher's live readback gate decide success. #1029: the
+        // keystroke is now Apple's Stop (keypad 0), because Space is Play or
+        // Stop and starts playback when transport is stopped; the keypad key
+        // has not been driven live yet, so the proof above is Space's.
         "transport.stop":             [.cgEvent, .accessibility, .mcu, .coreMIDI, .appleScript],
         "transport.record":           [.accessibility, .mcu, .coreMIDI, .cgEvent, .appleScript],
         // Logic 12.x has no distinct "pause" — the playhead stops in place via
@@ -29,7 +32,8 @@ extension ChannelRouter {
         // proven transport.stop order: spacebar-equivalent CGEvent first (the
         // first reliable non-AX path, posted to Logic's PID so it is
         // frontmost-independent), the AX Stop button next, MMC last as a
-        // best-effort fallback.
+        // best-effort fallback. #1029: the CGEvent keystroke is Apple's Pause
+        // (keypad Period), not Space; not yet driven live.
         "transport.pause":            [.cgEvent, .accessibility, .coreMIDI],
         "transport.rewind":           [.mcu, .coreMIDI, .cgEvent],
         "transport.fast_forward":     [.mcu, .coreMIDI, .cgEvent],
@@ -59,7 +63,9 @@ extension ChannelRouter {
         // AX first: clicks "Track > 트랙 삭제" menu item directly. CGEvent
         // fallback uses Cmd+Delete which actually deletes regions (not tracks)
         // in Logic 12 — leaving it as last-resort only for environments where
-        // the menu path AX query fails.
+        // the menu path AX query fails. #1029: Apple's U.S. preset lists
+        // Command-Delete as Delete Track; the region reading above predates
+        // that join and was not re-measured.
         "track.delete":               [.accessibility, .midiKeyCommands, .cgEvent],
         "track.rename":               [.accessibility],
         // #448: menu-only structural reorder. The Accessibility channel reads
