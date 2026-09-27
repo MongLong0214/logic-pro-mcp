@@ -144,20 +144,14 @@ struct RoutingAuditInvariantTests {
         #expect(bytes < 1024, "manualValidationDetailSuffix is \(bytes) UTF-8 bytes; the surrounding comment claims < 1 KB.")
     }
 
-    /// #138 regression: Logic 12.x silently ignores MMC "pause", so a verified
-    /// transport.pause that routed CoreMIDI first always failed closed. The
-    /// pause chain must prefer a channel that actually halts the playhead
-    /// (AX Stop button / spacebar) BEFORE the no-op MMC fallback.
-    @Test("transport.pause routes a working stop channel before MMC")
-    func pausePrefersWorkingChannelOverMMC() throws {
+    /// #1029 review round 1 (R-01): a pause rung must pause. Logic's Pause key (keypad Period)
+    /// freezes the playhead with Play on. The Accessibility channel has no pause control and used
+    /// to press Stop, and Logic ignores MMC pause (#138), so neither may follow a refused CGEvent.
+    @Test("transport.pause routes to CGEvent alone")
+    func pauseRoutesOnlyThroughTheCGEventPauseKey() throws {
+        // Mutation killed: `.accessibility` or `.coreMIDI` put back in the pause route.
         let chain = try #require(ChannelRouter.routingTable["transport.pause"])
-        let mmcIndex = try #require(chain.firstIndex(of: .coreMIDI))
-        let axIndex = chain.firstIndex(of: .accessibility)
-        let cgIndex = chain.firstIndex(of: .cgEvent)
-        let firstWorking = [axIndex, cgIndex].compactMap { $0 }.min()
-        let working = try #require(firstWorking)
-        #expect(working < mmcIndex,
-                "transport.pause chain \(chain) must try AX/cgEvent before MMC; MMC pause is ignored by Logic 12.x")
+        #expect(chain == [.cgEvent], "transport.pause chain \(chain) may hold only the channel that posts Pause")
     }
 
     @Test("transport play prefers AppleScript before send-only fallbacks")
@@ -171,14 +165,12 @@ struct RoutingAuditInvariantTests {
         }
     }
 
-    @Test("transport stop and pause prefer CGEvent before AX while already running")
+    @Test("transport stop prefers CGEvent before AX while already running")
     func stopLikeCommandsPreferCGEventBeforeAX() throws {
-        for operation in ["transport.stop", "transport.pause"] {
-            let chain = try #require(ChannelRouter.routingTable[operation])
-            let cgIndex = try #require(chain.firstIndex(of: .cgEvent))
-            let axIndex = try #require(chain.firstIndex(of: .accessibility))
-            #expect(cgIndex < axIndex, "\(operation) chain \(chain) must use CGEvent before AX once the dispatcher has confirmed transport is running")
-        }
+        let chain = try #require(ChannelRouter.routingTable["transport.stop"])
+        let cgIndex = try #require(chain.firstIndex(of: .cgEvent))
+        let axIndex = try #require(chain.firstIndex(of: .accessibility))
+        #expect(cgIndex < axIndex, "transport.stop chain \(chain) must use CGEvent before AX once the dispatcher has confirmed transport is running")
     }
 
     @Test("transport.toggle_autopunch is AX-only and has no set_autopunch sibling")

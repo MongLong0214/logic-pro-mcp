@@ -726,7 +726,7 @@ private actor RecordedSleeps {
     // Play on with two equal positions a gap apart, not Play off.
     // Mutation killed: the old Play-off check restored (`if confirming.isPlaying == false`).
     let router = ChannelRouter()
-    let pauseWrite = FixedResultChannel(id: .coreMIDI, result: .success("MMC pause sent"))
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
     let readback = SequencedTransportReadbackChannel(
         id: .accessibility,
         transportStates: [
@@ -770,7 +770,7 @@ private actor RecordedSleeps {
     // Four still readings, so a mutant that presses can verify its own press as State A; only the
     // recorded keystroke and `write_attempted` tell the two apart, not readings running out.
     let router = ChannelRouter()
-    let pauseWrite = FixedResultChannel(id: .coreMIDI, result: .success("MMC pause sent"))
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
     let readback = SequencedTransportReadbackChannel(
         id: .accessibility,
         transportStates: [
@@ -806,7 +806,7 @@ private actor RecordedSleeps {
     // keystroke must not invite a retry.
     // Mutation killed: `safe_to_retry` restored to true on the mismatch.
     let router = ChannelRouter()
-    let pauseWrite = FixedResultChannel(id: .coreMIDI, result: .success("MMC pause sent"))
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
     let readback = SequencedTransportReadbackChannel(
         id: .accessibility,
         transportStates: [
@@ -854,7 +854,7 @@ func testTransportDispatcherPauseStillnessGapIsLongerThanABeat(tempo: Double, ex
 @Test func testTransportDispatcherPauseReturnsStateAUnchangedWhenAlreadyStopped() async throws {
     // Idempotent early-return: already stopped means no write is attempted.
     let router = ChannelRouter()
-    let pauseWrite = FixedResultChannel(id: .coreMIDI, result: .success("MMC pause sent"))
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
     let readback = SequencedTransportReadbackChannel(
         id: .accessibility,
         transportStates: [
@@ -879,7 +879,7 @@ func testTransportDispatcherPauseStillnessGapIsLongerThanABeat(tempo: Double, ex
     #expect(!writeAttempted)
     let unchanged = try #require(object["unchanged"] as? Bool)
     #expect(unchanged)
-    // No write should have been routed to the coreMIDI pause channel.
+    // No write should have been routed to the pause channel.
     let writeOps = await pauseWrite.executedOps
     #expect(writeOps.isEmpty)
 }
@@ -1038,7 +1038,7 @@ func testTransportDispatcherPauseStillnessGapIsLongerThanABeat(tempo: Double, ex
     // If no transport readback is ever available, pause must fail closed with
     // State C readback_unavailable, never bare success.
     let router = ChannelRouter()
-    let pauseWrite = FixedResultChannel(id: .coreMIDI, result: .success("MMC pause sent"))
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
     // SequencedTransportReadbackChannel returns .error when its queue is empty,
     // so an empty queue models a transport whose state can never be read.
     let readback = SequencedTransportReadbackChannel(

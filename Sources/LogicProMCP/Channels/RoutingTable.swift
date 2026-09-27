@@ -26,15 +26,15 @@ extension ChannelRouter {
         // has not been driven live yet, so the proof above is Space's.
         "transport.stop":             [.cgEvent, .accessibility, .mcu, .coreMIDI, .appleScript],
         "transport.record":           [.accessibility, .mcu, .coreMIDI, .cgEvent, .appleScript],
-        // Logic 12.x has no distinct "pause" — the playhead stops in place via
-        // the Stop button / spacebar. MMC "pause" (the old primary) is silently
-        // ignored by Logic, so a verified pause always failed closed. Mirror the
-        // proven transport.stop order: spacebar-equivalent CGEvent first (the
-        // first reliable non-AX path, posted to Logic's PID so it is
-        // frontmost-independent), the AX Stop button next, MMC last as a
-        // best-effort fallback. #1029: the CGEvent keystroke is Apple's Pause
-        // (keypad Period), not Space; not yet driven live.
-        "transport.pause":            [.cgEvent, .accessibility, .coreMIDI],
+        // #1029: CGEvent alone. Apple's Pause key (keypad Period) freezes the
+        // playhead and leaves Play on; driven live in ko on 2026-09-27, it
+        // paused at 120 and 60 BPM. No other rung pauses. The Accessibility
+        // channel has no pause control and used to press Stop, which turns Play
+        // off and clears Record, and Logic ignores MMC pause (#138). A rung that
+        // cannot pause must not run, so when CGEvent refuses (Logic not
+        // frontmost, events not trusted), pause returns that refusal and nothing
+        // is sent.
+        "transport.pause":            [.cgEvent],
         // #1029: internal, not a tool command. The play dispatcher sends it only to a paused
         // transport (Play on, playhead still), where the AX Play control already reads on and
         // would do nothing. Apple's Play key (keypad Enter) was measured to resume it.
