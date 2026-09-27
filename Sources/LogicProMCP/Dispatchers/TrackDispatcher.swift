@@ -542,7 +542,15 @@ struct TrackDispatcher: OperationTraceDispatching {
                 var disarmed: [Int] = []
                 var unverifiedDisarm: [Int] = []
                 var failedDisarm: [Int] = []
-                for t in tracks where t.id != index && t.isArmed {
+                for t in tracks where t.id != index && t.isArmed != false {
+                    // #1040: an arm the header read could not read may be on. It is not sent a
+                    // disarm, because with the checkbox unreadable the write ladder can only press
+                    // it, and a press on a disarmed track arms it. It is reported unverified, which
+                    // keeps arm_only out of State A: "every other track is disarmed" was not seen.
+                    guard t.isArmed == true else {
+                        unverifiedDisarm.append(t.id)
+                        continue
+                    }
                     let r = await router.route(
                         operation: "track.set_arm",
                         params: ["index": String(t.id), "enabled": "false"]

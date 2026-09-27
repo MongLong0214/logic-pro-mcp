@@ -26,7 +26,7 @@ import Foundation
     #expect(abs(strips[2].volume - 0.75) < 0.01)
 }
 
-@Test func testMCULoopbackButtonRoundTrip() async {
+@Test func testMCULoopbackButtonRoundTrip() async throws {
     let transport = MockMCUTransport()
     let cache = StateCache()
     // #1020: the strip button reads the track before pressing and confirms after; the reading
@@ -50,10 +50,11 @@ import Foundation
     await channel.handleFeedback(.noteOn(channel: 0, note: 0x13, velocity: 0x7F))
 
     let tracks = await cache.getTracks()
-    #expect(tracks[3].isMuted)
+    let track3Muted = try #require(tracks[3].isMuted)
+    #expect(track3Muted)
 }
 
-@Test func testMCUFeedbackSeedsTrackStateWithoutAXBootstrap() async {
+@Test func testMCUFeedbackSeedsTrackStateWithoutAXBootstrap() async throws {
     let transport = MockMCUTransport()
     let cache = StateCache()
     let channel = MCUChannel(transport: transport, cache: cache)
@@ -62,7 +63,8 @@ import Foundation
 
     let tracks = await cache.getTracks()
     #expect(tracks.count >= 4)
-    #expect(tracks[3].isMuted)
+    let track3Muted = try #require(tracks[3].isMuted)
+    #expect(track3Muted)
     #expect(tracks[3].name == "Track 4")
 }
 

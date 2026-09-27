@@ -2330,9 +2330,10 @@ extension AccessibilityChannel {
         [
             track.name,
             track.type.rawValue,
-            String(track.isMuted),
-            String(track.isSoloed),
-            String(track.isArmed),
+            // An unread toggle (#1040) is its own value here, never folded into "false".
+            track.isMuted.map { String($0) } ?? "unread",
+            track.isSoloed.map { String($0) } ?? "unread",
+            track.isArmed.map { String($0) } ?? "unread",
             // ALWAYS EMPTY, and kept deliberately. Nothing populates `TrackState.color`, so this
             // component cannot move and a recoloured track produces an identical fingerprint — a
             // consumer comparing fingerprints will not see the change. That is not an oversight to

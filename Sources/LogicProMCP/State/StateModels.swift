@@ -57,9 +57,22 @@ struct TrackState: Sendable, Codable, Identifiable {
     let id: Int          // 0-based index
     var name: String
     var type: TrackType
-    var isMuted: Bool = false
-    var isSoloed: Bool = false
-    var isArmed: Bool = false
+    /// Mute, Solo and Record Enable as the track header's checkboxes read (#1040).
+    ///
+    /// `nil` means the control was not found on the header, or its value would not read, or read as
+    /// something other than 0 or 1. It is not "off": until #1040 the header read ended in `?? false`,
+    /// so `logic://tracks` published `false` for a control nobody had read. A `nil` field is left out
+    /// of the JSON, the way `is_stack_header` is.
+    ///
+    /// A row built without a header read starts at `nil` too. The rows MCU feedback creates are served
+    /// as `source: "ax_live"` with nothing in the JSON marking them (`liveIdentityBacked` is not
+    /// encoded), and MCU feedback never writes `isArmed` (a Rec LED blinks, #1020). With a `false`
+    /// default, `logic://tracks` answered `isArmed: false` for a track whose Record Enable checkbox
+    /// read 1: measured 2026-09-28 in ko on Logic 12.3, in the read taken right after arming, when
+    /// the refresh had not replaced the MCU-created rows (#1040's ten-locale observation records).
+    var isMuted: Bool?
+    var isSoloed: Bool?
+    var isArmed: Bool?
     var isSelected: Bool = false
     var volume: Double = 0.0   // dB, 0 = unity
     var pan: Double = 0.0      // -1.0 (L) to 1.0 (R)
@@ -109,9 +122,10 @@ extension TrackState {
         id = try container.decode(Int.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         type = try container.decode(TrackType.self, forKey: .type)
-        isMuted = try container.decode(Bool.self, forKey: .isMuted)
-        isSoloed = try container.decode(Bool.self, forKey: .isSoloed)
-        isArmed = try container.decode(Bool.self, forKey: .isArmed)
+        // Absent is how an unread control is written (#1040), so absent decodes as unread.
+        isMuted = try container.decodeIfPresent(Bool.self, forKey: .isMuted)
+        isSoloed = try container.decodeIfPresent(Bool.self, forKey: .isSoloed)
+        isArmed = try container.decodeIfPresent(Bool.self, forKey: .isArmed)
         isSelected = try container.decode(Bool.self, forKey: .isSelected)
         volume = try container.decode(Double.self, forKey: .volume)
         pan = try container.decode(Double.self, forKey: .pan)

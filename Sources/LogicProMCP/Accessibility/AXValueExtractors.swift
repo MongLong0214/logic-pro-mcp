@@ -313,11 +313,14 @@ enum AXValueExtractors {
         runtime: AXHelpers.Runtime = .production
     ) -> TrackState {
         let extractedName = extractTrackName(from: header, runtime: runtime)
-        let muted = extractTrackButtonState(from: header, prefix: "Mute", runtime: runtime) ?? false
-        let soloed = extractTrackButtonState(from: header, prefix: "Solo", runtime: runtime) ?? false
+        // #1040: a toggle that was not found, or whose value would not read, stays nil. These ended
+        // in `?? false`, which published "off" for a control nobody had read; `extractTrackStackState`
+        // below refuses the same move for the stack arrow.
+        let muted = extractTrackButtonState(from: header, prefix: "Mute", runtime: runtime)
+        let soloed = extractTrackButtonState(from: header, prefix: "Solo", runtime: runtime)
         // The arm is read from the control the arm write verifies against (#1020), not by keyword.
         let armed = AXLogicProElements.trackArmControl(in: header, ax: runtime)
-            .flatMap { extractButtonState($0, runtime: runtime) } ?? false
+            .flatMap { extractButtonState($0, runtime: runtime) }
         let selected = extractSelectedState(header, runtime: runtime) ?? false
         let trackType = inferTrackType(from: header, runtime: runtime)
         let stack = extractTrackStackState(from: header, runtime: runtime)
