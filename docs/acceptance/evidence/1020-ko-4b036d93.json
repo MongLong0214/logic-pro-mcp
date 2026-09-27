@@ -20,11 +20,6 @@
     "doc": "issue:1020",
     "sha": null,
     "quote": "A toggle must not be presented as a set."
-   },
-   {
-    "doc": "docs/observations/2026-09-27-ko-KR-mcu-set-arm-sets-instead-of-toggling.json",
-    "sha": "d7fb006de0ead0e94cf3a6f73eed709a983386dc",
-    "quote": "does the same hold for a track in bank 1, and is a track in the short last bank refused with nothing armed?"
    }
   ],
   "fixture": {
@@ -67,6 +62,7 @@
       }
      }
     ],
+    "operation": "reply",
     "expect": [
      {
       "path": "reply.state",
@@ -196,11 +192,13 @@
       }
      }
     ],
+    "operation": "reply",
     "expect": [
      {
       "path": "pre.armed",
       "op": "eq",
-      "value": true
+      "value": true,
+      "invariant": true
      },
      {
       "path": "reply.state",
@@ -333,11 +331,13 @@
       }
      }
     ],
+    "operation": "reply",
     "expect": [
      {
       "path": "pre.armed",
       "op": "eq",
-      "value": true
+      "value": true,
+      "invariant": true
      },
      {
       "path": "reply.state",
@@ -395,7 +395,7 @@
    },
    {
     "id": "bank-1-only-the-target-changes",
-    "criterion": 3,
+    "criterion": 0,
     "steps": [
      {
       "as": "pre",
@@ -423,11 +423,13 @@
       }
      }
     ],
+    "operation": "reply",
     "expect": [
      {
       "path": "pre.armed",
       "op": "eq",
-      "value": []
+      "value": [],
+      "invariant": true
      },
      {
       "path": "reply.state",
@@ -563,6 +565,7 @@
       }
      }
     ],
+    "operation": "reply",
     "expect": [
      {
       "path": "reply.state",
@@ -577,7 +580,8 @@
      {
       "path": "pre.armed",
       "op": "eq",
-      "value": []
+      "value": [],
+      "invariant": true
      },
      {
       "path": "post.armed",
@@ -591,7 +595,8 @@
       "op": "unchanged",
       "ref": {
        "obs": "pre_row.upper_row"
-      }
+      },
+      "invariant": true
      }
     ],
     "counterexample": [
@@ -629,9 +634,10 @@
    }
   ]
  },
- "spec_sha256": "0e5cdb377eeb21e1aabd540cc3ef128dcc996283155bbc351d4bccd7b950cf0b",
+ "spec_sha256": "9a81d879bb845947f6e2954be7a50f2e149282be7585d1393d6adab6e3e95390",
  "binary": {
-  "sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
+  "binary_path": null,
+  "binary_sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
   "head": "4b036d9340b424759b5dc0caa7c85e87cdb7f7eb",
   "binding": "unbound",
   "note": "converted from a livekit evidence file whose artifact.built_from_is_measured is False: the head was inferred from file times, not measured from a build the verifier ran"
@@ -640,6 +646,7 @@
   "ko": {
    "date": null,
    "host": null,
+   "locale_reading": null,
    "rows": {
     "arm-unarmed-sets": {
      "observations": {

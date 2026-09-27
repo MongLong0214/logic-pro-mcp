@@ -22,10 +22,10 @@ python3 Scripts/verify/verify.py self-test                                 # fix
 
 | exit | word | check-spec | recheck |
 |---|---|---|---|
-| 0 | clean | admissible, and every quote is verbatim in its source | every row PASSES in every required locale, the stored verdicts equal the recomputed ones, and the binary is `built-by-verifier` |
+| 0 | clean | admissible, and every quote is verbatim in its source | every row PASSES in every required locale, the stored verdicts equal the recomputed ones, every run's locale reading is its run key, and the binary's provenance is verified on this host (below) |
 | 1 | failed | — | a row FAILS, or a stored verdict differs from the recomputed one |
-| 2 | refused | shape, a refusal rule, or a quote that is not in its source | the evidence is malformed, its `spec_sha256` is not the digest of its spec, or `--spec` names a different document |
-| 3 | incomplete | a source could not be fetched, so its quote is unchecked | a row is UNREADABLE, a required locale was not run, or the binary is `unbound` |
+| 2 | refused | shape, a refusal rule, or a quote that is not in its source | the evidence is malformed (an observation entry included), its `spec_sha256` is not the digest of its spec, `--spec` names a different document, or a run's locale reading names another locale |
+| 3 | incomplete | a source could not be fetched, so its quote is unchecked | a row is UNREADABLE, a required locale was not run or carries no readable locale reading, the binary is `unbound`, or its provenance could not be verified on this host |
 
 A failure outranks incompleteness: evidence with one FAIL and nine missing locales exits 1.
 
@@ -59,12 +59,15 @@ A failure outranks incompleteness: evidence with one FAIL and nine missing local
 requires the quote to appear in it byte for byte:
 
 - `"doc": "issue:<n>"` with `"sha": null` is read from GitHub with `gh issue view <n> --json body`.
-- Any other `doc` is a repository-relative path with `sha` naming the 40-hex commit it is quoted at,
-  and it is read with `git show <sha>:<doc>`. The repository squash-merges, so pin a commit on
-  `main`; a branch commit disappears when the branch is deleted.
+- `"doc": "docs/adr/ADR-<nnn>-....md"` or `"doc": "docs/prd/<name>.md"`, with `sha` naming the
+  40-hex commit it is quoted at, is read with `git show <sha>:<doc>`. The repository squash-merges,
+  so pin a commit on `main`; a branch commit disappears when the branch is deleted.
 
-A `doc` under `Sources/`, or one naming `AXLocalePolicy`/`AXLocaleValues`, is refused. A criterion
-comes from an ADR, a PRD or an issue, never from the product it judges (ADR-027 D1, D3).
+Nothing else is a criterion source. `docs/acceptance/**`, `docs/observations/**`, `Sources/**`,
+`Tests/**` and every other path are refused, whatever they say: a criterion comes from an ADR, a
+PRD or an issue, never from the rows that judge it, an earlier observation, a test or the product
+(ADR-027 D1, D3). Text anywhere in the document that points into product source
+(`Sources/`, `AXLocalePolicy`, `AXLocaleValues`) is refused as well.
 
 ### Locales
 
@@ -82,6 +85,7 @@ one of the ten.
   {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
   {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
  ],
+ "operation": "reply",
  "expect": [
   {"path": "reply.state", "op": "eq", "value": "A"},
   {"path": "post.armed", "op": "eq", "value": true},
@@ -102,7 +106,8 @@ one of the ten.
 | `id` | unique in the document, `[a-z0-9-]` |
 | `criterion` | index into `sources`: the quote this row decides |
 | `steps` | what the runner does, in order; each binds its reading to the name in `as` |
-| `expect` | expectations over the bound readings; the row PASSES only if every one PASSES |
+| `operation` | the name of the `call` step this row judges; order is measured from it |
+| `expect` | expectations over the bound readings; the row PASSES only if every one PASSES. Each is an effect, or an invariant with `"invariant": true` (below) |
 | `counterexample` | substitutions that must make named expectations FAIL (below) |
 | `restore` | steps that return the fixture to its as-found state (may be empty) |
 | `restore_expect` | expectations that prove it was returned; they may read `steps` and `restore` names |
@@ -175,17 +180,28 @@ that `check-canon-citations` can resolve it.
 
 ### Independence and counterexamples
 
-These are the D4 rules: every row proves, in the same run, that its checks can fail.
+These are the D4 rules: every row proves, in the same run, that its checks can fail, and that
+what it credits to the operation was read after the operation ran.
 
 - `independence` names steps of the row that are not calls. A call's reply is the operation
   reporting on itself, so naming one is refused.
-- Each `counterexample` names an `observation` and a step it `replaces`, and lists `must_fail`
-  indices into `expect` that read the replaced step. The engine judges those expectations again
-  with the replaced reading swapped for the other one. Each must then FAIL. If one PASSES, the row
-  FAILS with `counterexample_accepted`: the check cannot tell the two states apart. If one is
-  UNREADABLE, the row is UNREADABLE.
-- At least one `must_fail` expectation must read an independent step. Otherwise the only
-  falsifiable checks read the operation's own reply, and the row is refused as self-report.
+- `operation` names a `call` step. Steps run in the order written, so "before" and "after" are
+  positions in `steps` relative to it.
+- An expectation is an **effect** unless it says `"invariant": true`.
+  - An effect that reads an independent step must read a step bound AFTER the operation. One that
+    reads a step bound before it is refused: it is a precondition, and a precondition is written
+    as an invariant.
+  - An effect that reads an independent step must be listed in some counterexample's `must_fail`.
+  - An **invariant** ("the other tracks are unchanged", "nothing was written") must PASS, but it
+    is never credited as proof and is never listed in `must_fail`; listing one is refused.
+- Each `counterexample` names an `observation` bound BEFORE the operation and a step it
+  `replaces`, and lists `must_fail` indices into `expect`. The engine judges those expectations
+  again with the replaced reading swapped for the other one. Each must then FAIL. If one PASSES,
+  the row FAILS with `counterexample_accepted`: the check cannot tell the two states apart. If one
+  is UNREADABLE, the row is UNREADABLE.
+- A row needs at least one effect over an independent step bound after the operation, listed in
+  `must_fail`. Otherwise the only falsifiable checks read the operation's own reply or a state
+  read before it acted, and the row is refused as self-report.
 - Use the pre-state reading as the counterexample of a post-state expectation. It is what the
   reading would be if the operation did nothing.
 
@@ -199,11 +215,24 @@ fixture was left changed, and the next row's as-found state is not the one it as
 `Scripts/verify/evidence_doc.py` holds the full field list. In short:
 
 - `spec` and `spec_sha256`: the document judged and the digest of its canonical JSON.
-- `binary`: `{sha256, head, binding, note}`.
+- `binary`: `{binary_path, binary_sha256, head, binding, note}`, the names
+  `Scripts/verify/live/binary.py` returns.
   - `binding` is `built-by-verifier` only when the verifier built the binary from a clean detached
     checkout of `head` and measured its digest (P0b).
   - Anything else is `unbound`, and unbound evidence is never clean: its best exit is 3.
-- `runs.<locale>`: `{date, host, rows.<id>.observations.<name>}`.
+  - A `built-by-verifier` label is not taken on trust. `recheck` verifies, on the host running it,
+    that `binary_path` is a file, that it re-hashes to `binary_sha256`, and that `head` is a commit
+    of this repository (`git cat-file -e <head>^{commit}`). If any of these fails, provenance is
+    `unverified`, with the reason, and the best exit is 3. This proves the file named is the file
+    hashed; it does not prove the file was built from `head`. Someone with write access who builds
+    a matching file by hand is out of scope.
+- `runs.<locale>`: `{date, host, locale_reading, rows.<id>.observations.<name>}`.
+  - `locale_reading` is what `Scripts/verify/live/locale.py` `reading()` measured when the run
+    started: `{lproj, code, expected_title, language_setting, window_names}`. It must name the run
+    key: `lproj` equals the key, `code` is that locale's code, the language setting's first entry
+    is the code, and the expected title is among the window names. A reading that names another
+    locale is refused and the run does not count; a missing or unreadable one leaves the locale
+    unverified (exit 3 at best).
   - Each observation is `{step, raw, raw_bytes}`, where `raw` is the whole reply text, never
     truncated.
   - An observation the runner could not take is `{step, unreadable: reason}`.
@@ -211,12 +240,17 @@ fixture was left changed, and the next row's as-found state is not the one it as
 - `verdicts.<locale>.<row>`: what the engine computed when the evidence was written. `recheck`
   recomputes them and compares `verdict`, `expect`, `counterexample` and `restore`.
 
+Every observation entry is shape-checked before anything is judged: an entry that is not an
+object, a `step` that is not an object, or a `raw`/`raw_bytes`/`unreadable` of the wrong type is
+refused (exit 2), never a crash.
+
 Writes are atomic: a temporary file in the destination directory, `fsync`, then `os.replace`.
 
-`record` writes one observation record per locale into `docs/observations/` (schema 3). It also
-copies the evidence into `docs/observations/evidence/`, and every record's reverify command is
-`verify.py recheck` on that copy. It refuses unbound evidence, and it skips a run that stored no
-host block or date.
+`record` reads the evidence bytes once and judges those bytes. It then publishes them as
+`docs/observations/evidence/<sha256>.json`, named by their own digest, before it writes any record.
+Every record cites that file, and its reverify command is `verify.py recheck` on it, so a later run
+can never overwrite what an earlier record points at. It writes nothing unless provenance is
+verified, and it skips a locale that is not measured or that stored no host block or date.
 
 ## The pilot
 

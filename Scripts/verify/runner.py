@@ -38,7 +38,10 @@ class Session:
 def build_binary(head: str, workdir: str) -> dict:
     """Build LogicProMCP from a clean detached checkout of `head` (40 hex) under `workdir`.
 
-    Returns the evidence `binary` block: {"sha256", "head", "binding": "built-by-verifier", "note"}.
+    Returns the evidence `binary` block, keyed by the names in evidence_doc (BINARY_PATH,
+    BINARY_SHA256, HEAD, BINDING): {"binary_path", "binary_sha256", "head",
+    "binding": "built-by-verifier", "note"}. The engine re-hashes the file at binary_path when it
+    judges, so the file must still exist when the evidence is rechecked on this host.
     """
     raise NotImplementedError("P0b")
 
@@ -50,7 +53,9 @@ def start_session(binary_path: str, env: dict) -> Session:
 
 def switch_locale(locale: str) -> dict:
     """Quit Logic, set its AppleLanguages to `locale` (one of engine.ALL_LOCALES), relaunch, and
-    return Scripts/observation_host.py's host block measured afterwards."""
+    return Scripts/observation_host.py's host block measured afterwards. The run also stores
+    Scripts/verify/live/locale.py reading(locale) under runs.<locale>.locale_reading; the engine
+    refuses a run whose reading names another locale."""
     raise NotImplementedError("P0b")
 
 

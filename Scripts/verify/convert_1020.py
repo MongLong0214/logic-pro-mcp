@@ -29,8 +29,8 @@ WHAT IT CANNOT
   * TRUNCATED FIELDS. A check's `observed.observation` / `counterexample` was `repr(...)[:400]`. A
     string that no longer parses is stored as unreadable with that reason; none of the fields this
     mapping reads was cut in the 4b036d93 run, and the code path exists for the ones that would be.
-  * THE HOST BLOCK AND DATE. Neither is in the file, so both are null and `verify.py record`
-    refuses to write a record from the result.
+  * THE HOST BLOCK, DATE AND LOCALE READING. None is in the file, so all are null: the run's locale
+    is "unverified" (exit 3 at best), and `verify.py record` refuses to write a record from it.
   * NINE LOCALES. One file is one locale; the spec requires ten, so nine are "not run".
 """
 from __future__ import annotations
@@ -165,9 +165,10 @@ def convert(src_path: str, locale: str, spec: dict) -> dict:
     old = json.loads(raw)
     art = old["artifact"]
     binary = {
-        "sha256": art["sha256"],
-        "head": old["head"],
-        "binding": E.UNBOUND,
+        E.BINARY_PATH: None,
+        E.BINARY_SHA256: art["sha256"],
+        E.HEAD: old["head"],
+        E.BINDING: E.UNBOUND,
         "note": "converted from a livekit evidence file whose artifact.built_from_is_measured is "
                 f"{art['built_from_is_measured']!r}: the head was inferred from file times, not "
                 "measured from a build the verifier ran",
@@ -181,7 +182,7 @@ def convert(src_path: str, locale: str, spec: dict) -> dict:
         "converter": "Scripts/verify/convert_1020.py",
     }
     readings = mapping(Source(old))
-    run = {"date": None, "host": None, "rows": {}}
+    run = {"date": None, "host": None, E.LOCALE_READING: None, "rows": {}}
     for row in spec["rows"]:
         observations = {}
         for step in row["steps"] + row["restore"]:

@@ -8,9 +8,11 @@ field anywhere in the input, so an author cannot supply one.
 WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
 ----------------------------------------------------------------------------
   * a document that does not match `acceptance_schema.json` (shape);
-  * a repository source without a 40-hex commit, or an issue source with one;
+  * a criterion source that is not an ADR (`docs/adr/ADR-*.md`), a PRD (`docs/prd/*.md`) or an
+    issue (`issue:<n>`): not an acceptance document, an observation record, a test or product
+    source (ADR-027 D1); a repository source without a 40-hex commit, or an issue source with one;
   * any string in `fixture` or `rows` that points into product source (`Sources/`,
-    `AXLocalePolicy`, `AXLocaleValues`), or a source document under `Sources/` (ADR-027 D3);
+    `AXLocalePolicy`, `AXLocaleValues`) (ADR-027 D3);
   * a locale subset naming anything outside the ten, or without a reason;
   * a path, operand or independence name that no earlier step of the row binds;
   * an operator given the wrong kind of operand (`changed` against a constant, `matches_canon`
@@ -20,9 +22,15 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
   * a probe the registry does not declare, or args that do not match its declaration;
   * a counterexample whose `must_fail` expectation does not read the observation it replaces
     (substituting it could not change the outcome, so it proves nothing);
-  * THE INDEPENDENCE RULE: a row in which no expectation that reads an independent observation is
-    listed in a counterexample's `must_fail`. An operation's own reply (a `call` step) is never
-    independent. A row whose only falsifiable checks read the reply is self-report.
+  * THE ORDER RULES. A row names its `operation`, the call step it judges; steps run in order.
+    An expectation is an EFFECT unless it says `"invariant": true`. An effect may not read a step
+    bound before the operation (a precondition is an invariant). An effect over an independent
+    step must be listed in some counterexample's `must_fail`, and a counterexample's observation
+    must be bound before the operation: the proof that a check can fail is the pre-state failing
+    it. An invariant must pass but is never credited, so it may not be listed in `must_fail`.
+  * THE INDEPENDENCE RULE: a row with no effect over an independent step bound after the
+    operation. An operation's own reply (a `call` step) is never independent. A row whose only
+    falsifiable checks read the reply is self-report.
 
 HOW A ROW IS JUDGED -- `evaluate_row`
 -------------------------------------
@@ -35,12 +43,15 @@ else PASS.
 
 HOW EVIDENCE IS JUDGED -- `judge`
 ---------------------------------
-    2  refused     the evidence or its embedded spec is malformed or breaks a rule above
+    2  refused     the evidence or its embedded spec is malformed or breaks a rule above, or a
+                   run's measured locale reading is not the locale it is filed under
     1  failed      a row FAILED in some locale, or a stored verdict differs from the recomputed one
-    3  incomplete  nothing failed, but a row was UNREADABLE, a required locale was not run, or the
-                   binary is not bound to its head by construction ("unbound" is never clean)
+    3  incomplete  nothing failed, but a row was UNREADABLE, a required locale was not run or has
+                   no locale reading, the binary is "unbound", or its provenance does not verify
+                   on this host (the file at binary_path is missing or does not hash to
+                   binary_sha256, or head is not a commit of this repository)
     0  clean       every row PASSES in every required locale, the stored verdicts equal the
-                   recomputed ones, and the binary was built by the verifier from the head
+                   recomputed ones, and the binary is built-by-verifier with verified provenance
 
 A definite failure outranks an incomplete run: a FAIL in the one locale that ran is already an
 answer, and reporting it as "incomplete" would hide it behind the locales that did not.
@@ -78,6 +89,8 @@ LIST_OPERAND = ("in", "not_in", "subset", "superset")
 COUNT_OPERAND = ("count_eq", "count_ge")
 
 ISSUE_DOC = re.compile(r"^issue:([1-9][0-9]*)$")
+#: The only repository documents a criterion may be quoted from (ADR-027 D1).
+CRITERION_DOC = re.compile(r"^docs/adr/ADR-[0-9]{3}[A-Za-z0-9._-]*\.md$|^docs/prd/[A-Za-z0-9._-]+\.md$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -200,12 +213,12 @@ def source_problems(source: dict) -> list:
     if ISSUE_DOC.match(doc):
         return [] if sha is None else [f"{doc} is an issue; its text is read from GitHub, so `sha` is null"]
     out = []
+    if not CRITERION_DOC.match(doc):
+        out.append(f"{doc!r} is not an ADR (docs/adr/ADR-*.md), a PRD (docs/prd/*.md) or an issue "
+                   f"(issue:<n>). A criterion comes from one of those, never from the acceptance "
+                   f"rows, an observation record, a test or the product (ADR-027 D1)")
     if sha is None:
         out.append(f"{doc} is a repository document, so it names the 40-hex commit its quote is at")
-    if doc.startswith("/") or ".." in doc.split("/"):
-        out.append(f"{doc!r} is not a repository-relative path")
-    if PRODUCT_SOURCE.search(doc):
-        out.append(f"{doc!r} is product source; a criterion comes from an ADR, PRD or issue (ADR-027 D1)")
     return out
 
 
@@ -228,6 +241,7 @@ def row_problems(row: dict, n_sources: int) -> list:
     if row["criterion"] >= n_sources:
         out.append(f"criterion {row['criterion']} indexes past the {n_sources} source(s)")
     steps = {s["as"]: s for s in row["steps"]}
+    order = {s["as"]: i for i, s in enumerate(row["steps"])}
     after = {s["as"]: s for s in row["restore"]}
     names = [s["as"] for s in row["steps"] + row["restore"]]
     out += [f"step name {n!r} is bound twice" for n in sorted({n for n in names if names.count(n) > 1})]
@@ -244,26 +258,63 @@ def row_problems(row: dict, n_sources: int) -> list:
         elif "call" in steps[name]:
             out.append(f"independence names {name!r}, which is an operation's own reply (a call)")
     independent = {n for n in row["independence"] if n in steps and "call" not in steps[n]}
-    proven = set()
+
+    operation = row["operation"]
+    if operation not in steps:
+        out.append(f"operation {operation!r} is not a step of this row")
+        return out
+    if "call" not in steps[operation]:
+        out.append(f"operation {operation!r} is not a call step; the operation judged is a call")
+        return out
+    at = order[operation]
+
+    def when(i):
+        """The step index expectation i reads, or None when its path does not parse or bind."""
+        root = _safe_root(expect[i]["path"]) if i < len(expect) else None
+        return order.get(root)
+
+    listed = set()
     for k, cx in enumerate(row["counterexample"]):
         for key in ("observation", "replaces"):
             if cx[key] not in steps:
                 out.append(f"counterexample[{k}].{key} {cx[key]!r} is not a step of this row")
         if cx["observation"] == cx["replaces"]:
             out.append(f"counterexample[{k}] replaces {cx['replaces']!r} with itself")
+        if order.get(cx["observation"], -1) >= at:
+            out.append(f"counterexample[{k}].observation {cx['observation']!r} is not bound before "
+                       f"the operation {operation!r}. The counterexample is the pre-state: what the "
+                       f"reading would be had the operation done nothing")
         if len(set(cx["must_fail"])) != len(cx["must_fail"]):
             out.append(f"counterexample[{k}].must_fail names an expectation twice")
         for i in cx["must_fail"]:
             if i >= len(expect):
                 out.append(f"counterexample[{k}].must_fail: expect[{i}] does not exist")
+            elif expect[i].get("invariant"):
+                out.append(f"counterexample[{k}].must_fail: expect[{i}] is an invariant; an "
+                           f"invariant is never credited as proof, so it is not listed as one")
             elif _safe_root(expect[i]["path"]) != cx["replaces"]:
                 out.append(f"counterexample[{k}].must_fail: expect[{i}] reads "
                            f"{_safe_root(expect[i]['path'])!r}, not {cx['replaces']!r}, so the "
                            f"substitution cannot change its outcome")
             else:
-                proven.add(i)
-    if not any(_safe_root(expect[i]["path"]) in independent for i in proven):
-        out.append("no expectation that reads an independent observation is listed in a "
+                listed.add(i)
+    credited = set()
+    for i, e in enumerate(expect):
+        if e.get("invariant") or when(i) is None:
+            continue
+        root = _safe_root(e["path"])
+        if when(i) < at:
+            out.append(f"expect[{i}] reads {root!r}, bound before the operation {operation!r}, as an "
+                       f"effect. An effect is read after the operation it is credited to; a "
+                       f"precondition says \"invariant\": true")
+        elif root in independent and when(i) > at:
+            if i in listed:
+                credited.add(i)
+            else:
+                out.append(f"expect[{i}] is an effect over the independent reading {root!r} and no "
+                           f"counterexample's must_fail lists it, so nothing shows it can fail")
+    if not credited:
+        out.append("no effect over an independent reading bound after the operation is listed in a "
                    "counterexample's must_fail. A row whose only falsifiable checks read the "
                    "operation's own reply is self-report (ADR-027 D1, D4)")
     return out
@@ -504,8 +555,46 @@ def evaluate_run(spec: dict, run: dict, locale: str, resolve_canon=resolve_canon
             for row in spec["rows"]}
 
 
+def _shape(value, kind, where, out, nullable=False):
+    if value is None and nullable:
+        return False
+    if not isinstance(value, kind) or (kind is int and isinstance(value, bool)):
+        out.append(f"{where} is {type(value).__name__}, not {kind.__name__}"
+                   f"{' or null' if nullable else ''}")
+        return False
+    return True
+
+
+def entry_problems(entry, where: str) -> list:
+    """An observation entry is {step, raw, raw_bytes} or {step, unreadable}; nothing else is judged."""
+    out = []
+    if not _shape(entry, dict, where, out):
+        return out
+    _shape(entry.get("step"), dict, f"{where}.step", out)
+    if "unreadable" in entry:
+        _shape(entry["unreadable"], str, f"{where}.unreadable", out)
+        if "raw" in entry or "raw_bytes" in entry:
+            out.append(f"{where} is both unreadable and read")
+    else:
+        _shape(entry.get("raw"), str, f"{where}.raw", out)
+        _shape(entry.get("raw_bytes"), int, f"{where}.raw_bytes", out)
+    return out
+
+
+def _reading_problems(reading, where: str) -> list:
+    out = []
+    if not _shape(reading, dict, where, out, nullable=True):
+        return out
+    _shape(reading.get("lproj"), str, f"{where}.lproj", out)
+    for key in ("expected_title", "language_setting", "window_names"):
+        part = reading.get(key)
+        if _shape(part, dict, f"{where}.{key}", out):
+            _shape(part.get("readable"), bool, f"{where}.{key}.readable", out)
+    return out
+
+
 def evidence_problems(doc) -> list:
-    """Why an evidence document cannot be judged at all (shape, not verdicts)."""
+    """Why an evidence document cannot be judged at all: its shape, down to every observation entry."""
     if not isinstance(doc, dict):
         return ["the evidence is not a JSON object"]
     out = []
@@ -520,10 +609,87 @@ def evidence_problems(doc) -> list:
     if E.sha256_of(doc["spec"]) != doc["spec_sha256"]:
         out.append("spec_sha256 is not the digest of the embedded spec: the rows judged are not "
                    "the rows the run recorded against")
+    binary = doc["binary"]
+    _shape(binary.get(E.BINDING), str, f"binary.{E.BINDING}", out)
+    for key in (E.BINARY_PATH, E.BINARY_SHA256, E.HEAD):
+        _shape(binary.get(key), str, f"binary.{key}", out, nullable=True)
     for locale, run in doc["runs"].items():
-        if not isinstance(run, dict) or not isinstance(run.get("rows"), dict):
-            out.append(f"runs.{locale} carries no rows object")
+        at = f"runs.{locale}"
+        if not _shape(run, dict, at, out) or not _shape(run.get("rows"), dict, f"{at}.rows", out):
+            continue
+        _shape(run.get("date"), str, f"{at}.date", out, nullable=True)
+        _shape(run.get("host"), dict, f"{at}.host", out, nullable=True)
+        out += _reading_problems(run.get(E.LOCALE_READING), f"{at}.{E.LOCALE_READING}")
+        for rid, row in run["rows"].items():
+            if not _shape(row, dict, f"{at}.rows.{rid}", out):
+                continue
+            entries = row.get("observations")
+            if not _shape(entries, dict, f"{at}.rows.{rid}.observations", out):
+                continue
+            for name, entry in entries.items():
+                out += entry_problems(entry, f"{at}.rows.{rid}.observations.{name}")
+    for locale, verdicts in doc["verdicts"].items():
+        if _shape(verdicts, dict, f"verdicts.{locale}", out):
+            for rid, verdict in verdicts.items():
+                _shape(verdict, dict, f"verdicts.{locale}.{rid}", out)
     return out
+
+
+def repo_root() -> str:
+    """The repository whose commits a head must name: the LPM_VERIFY_REPO seam, else this checkout."""
+    return os.environ.get("LPM_VERIFY_REPO") or os.path.dirname(os.path.dirname(HERE))
+
+
+def host_provenance(binary: dict, repo: str = None):
+    """(True, "") when this host can measure what the binary block claims, else (False, why).
+
+    Measured here, at judgement: the file at binary_path exists and re-hashes to binary_sha256, and
+    head names a commit of the repository. That the binary was BUILT from head is the runner's
+    construction (P0b), not something a file on disk can show.
+    """
+    path, sha, head = binary.get(E.BINARY_PATH), binary.get(E.BINARY_SHA256), binary.get(E.HEAD)
+    if not (isinstance(path, str) and os.path.isfile(path)):
+        return False, f"binary_path {path!r} is not a file on this host"
+    if not (isinstance(sha, str) and HEX64.match(sha)):
+        return False, f"binary_sha256 {sha!r} is not a sha256"
+    measured = E.sha256_of_file(path)
+    if measured != sha:
+        return False, f"{path} hashes to {measured[:12]}, not the recorded {sha[:12]}"
+    if not (isinstance(head, str) and HEX40.match(head)):
+        return False, f"head {head!r} is not a full commit id"
+    import subprocess
+    proc = subprocess.run(["git", "-C", repo or repo_root(), "cat-file", "-e", f"{head}^{{commit}}"],
+                          capture_output=True)
+    if proc.returncode != 0:
+        return False, f"head {head[:12]} is not a commit of this repository"
+    return True, ""
+
+
+MISMATCHED, UNVERIFIED, MEASURED = "mismatched", "unverified", "measured"
+
+
+def run_locale_status(locale: str, run: dict):
+    """(MEASURED|UNVERIFIED|MISMATCHED, why) -- whether the run's own locale reading says it ran in
+    the locale it is filed under. A reading that says another language is MISMATCHED (refused); a
+    reading that is absent or could not read the setting or the title is UNVERIFIED (incomplete)."""
+    reading = run.get(E.LOCALE_READING)
+    if reading is None:
+        return UNVERIFIED, "the run carries no locale reading"
+    code = E.LOCALE_CODES.get(locale)
+    if reading.get("lproj") != locale or reading.get("code") != code:
+        return MISMATCHED, (f"its locale reading is for lproj {reading.get('lproj')!r} code "
+                            f"{reading.get('code')!r}, not {locale!r} ({code!r})")
+    setting = reading["language_setting"]
+    title, names = reading["expected_title"], reading["window_names"]
+    if not (setting["readable"] and title["readable"] and names["readable"]):
+        return UNVERIFIED, "the locale reading could not read the language setting or the window title"
+    leading = setting.get("value")[:1] if isinstance(setting.get("value"), list) else None
+    if leading != [code]:
+        return MISMATCHED, f"Logic's AppleLanguages leads with {leading!r}, not [{code!r}]"
+    if not isinstance(names.get("value"), list) or title.get("value") not in names["value"]:
+        return MISMATCHED, (f"no window is titled {title.get('value')!r}, Apple's title in "
+                            f"{locale}; the windows are {names.get('value')!r}")
+    return MEASURED, ""
 
 
 def compare_verdicts(stored: dict, recomputed: dict) -> list:
@@ -542,11 +708,12 @@ def compare_verdicts(stored: dict, recomputed: dict) -> list:
     return out
 
 
-def judge(doc, schema: dict = None, resolve_canon=resolve_canon_offline, expected_spec=None) -> dict:
+def judge(doc, schema: dict = None, resolve_canon=resolve_canon_offline, expected_spec=None,
+          provenance=host_provenance) -> dict:
     """The verdict on one evidence document. `exit` is the process exit code; everything else
-    says why."""
+    says why. `provenance` is (verified: bool, why) for the binary block, measured on this host."""
     result = {"exit": EXIT_REFUSED, "refusals": [], "failures": [], "incomplete": [],
-              "mismatches": [], "verdicts": {}}
+              "mismatches": [], "verdicts": {}, "provenance": None}
     refusals = evidence_problems(doc)
     if not refusals and expected_spec is not None and not P.same(doc["spec"], expected_spec):
         refusals.append("the embedded spec is not the acceptance document given with --spec")
@@ -561,21 +728,35 @@ def judge(doc, schema: dict = None, resolve_canon=resolve_canon_offline, expecte
         if locale not in doc["runs"]:
             result["incomplete"].append(f"{locale}: required by the spec and not run")
             continue
-        recomputed[locale] = evaluate_run(spec, doc["runs"][locale], locale, resolve_canon)
+        run = doc["runs"][locale]
+        status, why = run_locale_status(locale, run)
+        if status == MISMATCHED:
+            result["refusals"].append(f"runs.{locale}: {why}; the run does not count")
+            continue
+        if status == UNVERIFIED:
+            result["incomplete"].append(f"{locale}: locale unverified -- {why}")
+        recomputed[locale] = evaluate_run(spec, run, locale, resolve_canon)
         for rid, verdict in recomputed[locale].items():
             if verdict["verdict"] == P.FAIL:
                 result["failures"].append(f"{locale}/{rid}: FAIL")
             elif verdict["verdict"] == P.UNREADABLE:
                 result["incomplete"].append(f"{locale}/{rid}: UNREADABLE")
     result["verdicts"] = recomputed
-    result["mismatches"] = compare_verdicts(doc["verdicts"], recomputed)
+    counted = {k: v for k, v in doc["verdicts"].items() if k in recomputed or k not in doc["runs"]}
+    result["mismatches"] = compare_verdicts(counted, recomputed)
     binary = doc["binary"]
-    if binary.get("binding") != E.BOUND:
-        result["incomplete"].append(f"binary: binding is {binary.get('binding')!r}; only a binary "
+    if binary.get(E.BINDING) != E.BOUND:
+        result["provenance"] = E.UNBOUND
+        result["incomplete"].append(f"binary: binding is {binary.get(E.BINDING)!r}; only a binary "
                                     f"the verifier built from the head can be clean")
-    elif not (HEX40.match(str(binary.get("head"))) and HEX64.match(str(binary.get("sha256")))):
-        result["incomplete"].append("binary: head or sha256 is not a full hex digest")
-    if result["failures"] or result["mismatches"]:
+    else:
+        verified, why = provenance(binary)
+        result["provenance"] = MEASURED if verified else UNVERIFIED
+        if not verified:
+            result["incomplete"].append(f"binary: provenance unverified -- {why}")
+    if result["refusals"]:
+        result["exit"] = EXIT_REFUSED
+    elif result["failures"] or result["mismatches"]:
         result["exit"] = EXIT_FAILED
     elif result["incomplete"]:
         result["exit"] = EXIT_INCOMPLETE

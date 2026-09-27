@@ -17,11 +17,6 @@
    "doc": "issue:1020",
    "sha": null,
    "quote": "A toggle must not be presented as a set."
-  },
-  {
-   "doc": "docs/observations/2026-09-27-ko-KR-mcu-set-arm-sets-instead-of-toggling.json",
-   "sha": "d7fb006de0ead0e94cf3a6f73eed709a983386dc",
-   "quote": "does the same hold for a track in bank 1, and is a track in the short last bank refused with nothing armed?"
   }
  ],
  "fixture": {
@@ -38,6 +33,7 @@
     {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
     {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
    ],
+   "operation": "reply",
    "expect": [
     {"path": "reply.state", "op": "eq", "value": "A"},
     {"path": "reply.write_source", "op": "eq", "value": "mcu"},
@@ -67,8 +63,9 @@
     {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
     {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
    ],
+   "operation": "reply",
    "expect": [
-    {"path": "pre.armed", "op": "eq", "value": true},
+    {"path": "pre.armed", "op": "eq", "value": true, "invariant": true},
     {"path": "reply.state", "op": "eq", "value": "A"},
     {"path": "reply.write_attempted", "op": "eq", "value": false},
     {"path": "post.armed", "op": "eq", "value": true},
@@ -97,8 +94,9 @@
     {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
     {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
    ],
+   "operation": "reply",
    "expect": [
-    {"path": "pre.armed", "op": "eq", "value": true},
+    {"path": "pre.armed", "op": "eq", "value": true, "invariant": true},
     {"path": "reply.state", "op": "eq", "value": "A"},
     {"path": "reply.write_source", "op": "eq", "value": "mcu"},
     {"path": "reply.write_attempted", "op": "eq", "value": true},
@@ -116,14 +114,15 @@
   },
   {
    "id": "bank-1-only-the-target-changes",
-   "criterion": 3,
+   "criterion": 0,
    "steps": [
     {"as": "pre", "probe": {"name": "armed_set", "args": {}}},
     {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 15, "enabled": true}}},
     {"as": "post", "probe": {"name": "armed_set", "args": {}}}
    ],
+   "operation": "reply",
    "expect": [
-    {"path": "pre.armed", "op": "eq", "value": []},
+    {"path": "pre.armed", "op": "eq", "value": [], "invariant": true},
     {"path": "reply.state", "op": "eq", "value": "A"},
     {"path": "reply.write_source", "op": "eq", "value": "mcu"},
     {"path": "post.armed", "op": "eq", "value": [15]}
@@ -153,12 +152,13 @@
     {"as": "post", "probe": {"name": "armed_set", "args": {}}},
     {"as": "post_row", "probe": {"name": "mcu_upper_row", "args": {}}}
    ],
+   "operation": "reply",
    "expect": [
     {"path": "reply.state", "op": "eq", "value": "C"},
     {"path": "reply.success", "op": "eq", "value": false},
-    {"path": "pre.armed", "op": "eq", "value": []},
+    {"path": "pre.armed", "op": "eq", "value": [], "invariant": true},
     {"path": "post.armed", "op": "unchanged", "ref": {"obs": "pre.armed"}},
-    {"path": "post_row.upper_row", "op": "unchanged", "ref": {"obs": "pre_row.upper_row"}}
+    {"path": "post_row.upper_row", "op": "unchanged", "ref": {"obs": "pre_row.upper_row"}, "invariant": true}
    ],
    "counterexample": [
     {"observation": "control_post", "replaces": "post", "must_fail": [3]},

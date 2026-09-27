@@ -51,12 +51,13 @@
     "row": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "criterion", "steps", "expect", "counterexample", "restore",
+      "required": ["id", "criterion", "steps", "operation", "expect", "counterexample", "restore",
                    "restore_expect", "independence"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
         "criterion": {"type": "integer", "minimum": 0},
         "steps": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/step"}},
+        "operation": {"$ref": "#/$defs/name"},
         "expect": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/expectation"}},
         "counterexample": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/counterexample"}},
         "restore": {"type": "array", "items": {"$ref": "#/$defs/step"}},
@@ -126,7 +127,8 @@
         "path": {"type": "string", "minLength": 1},
         "op": {"$ref": "#/$defs/op"},
         "value": {},
-        "ref": {"$ref": "#/$defs/ref"}
+        "ref": {"$ref": "#/$defs/ref"},
+        "invariant": {"type": "boolean"}
       }
     },
     "ref": {
