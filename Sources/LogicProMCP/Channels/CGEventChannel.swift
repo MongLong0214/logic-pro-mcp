@@ -127,6 +127,11 @@ actor CGEventChannel: Channel {
     /// `Scripts/check-cgevent-keystrokes-are-apples.py`, which refuses any other value. Keycodes
     /// are physical key positions on a U.S. ANSI keyboard (HIToolbox `kVK_*`).
     ///
+    /// A posted key still carries the character the active input source gives it. Measured
+    /// 2026-09-27 on a Korean Logic with the 2-Set Korean input method active: Q, N and X ran
+    /// nothing, while Control-B, Option-Command-W, Command-Z, Space, comma, period and the keypad
+    /// keys ran their commands. Under the ABC layout Q, N and X ran theirs too.
+    ///
     /// An op whose function has no default binding carries NO entry: a keystroke bound to some
     /// other command changes the wrong state and reports that it was sent, which is worse than the
     /// honest "No keyboard shortcut mapped". That is why edit.delete, view.toggle_inspector,
