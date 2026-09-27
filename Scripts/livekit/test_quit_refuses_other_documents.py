@@ -20,6 +20,19 @@ SCRIPTS = {
     "probe_993_1004_nbsp_labels_as_drawn.py": ["x", REPO, os.devnull, tempfile.gettempdir()],
 }
 END = "lpm:end-of-documents"  # the scripts' terminator: a list cut off before it is not whole
+
+
+def listing(*rows):
+    """The shared DOCUMENTS_SCRIPT's output: a counted header, one line per window, the end."""
+    return "\n".join([f"lpm:windows {len(rows)}", *rows, END])
+
+
+def doc(url, subrole="AXStandardWindow"):
+    return f"doc\t{subrole}\t{url}"
+
+
+PALETTE = "none\tAXFloatingWindow"
+FAILED = "error\tAXStandardWindow\t-1728\tCan't get attribute"
 ICLOUD = "file:///Users/someone/Library/Mobile%20Documents/com~apple~CloudDocs/song.logicx/"
 
 failed = 0
@@ -77,18 +90,26 @@ for name, argv in SCRIPTS.items():
     module = load(name, argv)
     fixture = "file://" + module.FIXTURE.replace(" ", "%20") + "/"
     readings = {
-        "only the fixture and a palette": (fixture + "\nmissing value\n" + END, []),
-        "no windows": (END, []),
-        "an iCloud project beside the fixture": (fixture + "\n" + ICLOUD + "\n" + END, [ICLOUD]),
+        "only the fixture and a palette": (listing(doc(fixture), PALETTE), []),
+        "no windows": (listing(), []),
+        "an iCloud project beside the fixture": (listing(doc(fixture), doc(ICLOUD)), [ICLOUD]),
         "a list that could not be read": (None, None),
-        "a list cut off before its end": (fixture, None),
+        "a list cut off before its end": (listing(doc(fixture))[:-len(END)], None),
+        # PR #1033 review R1: every AXDocument read failed and the old script's silent `try`
+        # printed only the terminator, which read as "no document".
+        "every read failed silently (the old script's output)": (END, None),
+        "one window's AXDocument read failed": (listing(doc(fixture), FAILED), None),
+        "an untitled project window": (listing(doc(fixture), "none\tAXStandardWindow"),
+                                       ["none\tAXStandardWindow"]),
     }
     for label, (documents, expected) in readings.items():
         answering(module, documents, [])
         check(f"{name}: {label} reads as {expected!r}", module.unidentified_documents() == expected)
 
-    for label, documents in (("another project is open", fixture + "\n" + ICLOUD + "\n" + END),
-                             ("the document list is unreadable", None)):
+    for label, documents in (("another project is open", listing(doc(fixture), doc(ICLOUD))),
+                             ("the document list is unreadable", None),
+                             ("every read failed silently", END),
+                             ("one window's AXDocument read failed", listing(doc(fixture), FAILED))):
         calls = []
         answering(module, documents, calls)
         refused = module.quit_logic() is False
@@ -98,7 +119,7 @@ for name, argv in SCRIPTS.items():
               refused and not asked and not answered)
 
     calls = []
-    answering(module, fixture + "\n" + END, calls)
+    answering(module, listing(doc(fixture), PALETTE), calls)
     module.quit_logic()
     check(f"{name}: only the fixture is open, quit asks Logic to quit",
           any("to quit" in call for call in calls))

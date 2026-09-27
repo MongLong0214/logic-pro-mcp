@@ -167,37 +167,103 @@ def press_default_button():
 end tell''')
 
 
-def open_documents():
-    """Every Logic window's AXDocument (live_993:219-246); unreadable when the list is cut short."""
-    raw = obs.osascript('''tell application "System Events" to tell process "Logic Pro"
-  set out to ""
-  repeat with w in windows
+#: One line per window: `doc<TAB>subrole<TAB>url`, `none<TAB>subrole` (AXDocument is missing
+#: value), `absent<TAB>subrole` (no AXDocument attribute), or `error<TAB>subrole<TAB>n<TAB>message`.
+#: The header says how many windows there are, and the end marker that the loop finished, so a
+#: failed read can no longer vanish into a shorter list (PR #1033 review R1).
+DOCUMENTS_SCRIPT = '''tell application "System Events" to tell process "Logic Pro"
+  set ws to every window
+  set out to "lpm:windows " & (count of ws) & linefeed
+  repeat with w in ws
+    set sr to "?"
     try
-      set out to out & (value of attribute "AXDocument" of w as string) & linefeed
+      set sr to (value of attribute "AXSubrole" of w) as string
+    on error m number n
+      set sr to "?error " & n
+    end try
+    try
+      if exists attribute "AXDocument" of w then
+        set v to value of attribute "AXDocument" of w
+        if v is missing value then
+          set out to out & "none" & tab & sr & linefeed
+        else
+          set out to out & "doc" & tab & sr & tab & (v as string) & linefeed
+        end if
+      else
+        set out to out & "absent" & tab & sr & linefeed
+      end if
+    on error m number n
+      set out to out & "error" & tab & sr & tab & n & tab & m & linefeed
     end try
   end repeat
   return out & "lpm:end-of-documents"
-end tell''')
-    text = (raw.get("stdout") or "").strip()
-    if raw["returncode"] != 0 or not text.endswith("lpm:end-of-documents"):
-        return obs.unreadable("the document list did not complete", raw=raw)
-    docs = []
-    for line in text.splitlines()[:-1]:
-        doc = line.strip()
-        if not doc or doc == "missing value":
-            continue
+end tell'''
+DOCUMENTS_END = "lpm:end-of-documents"
+#: A standard window is a project window. One with no AXDocument is an untitled project, which
+#: the old `missing value is a palette` rule let through (3753b7e6's Limit).
+PROJECT_WINDOW_SUBROLE = "AXStandardWindow"
+
+
+def _document_row(index, line):
+    parts = line.split("\t")
+    kind, subrole = parts[0], (parts[1] if len(parts) > 1 else None)
+    row = {"index": index, "line": line, "subrole": subrole}
+    if subrole is None or subrole.startswith("?"):
+        return {**row, "outcome": "unreadable", "cause": "AXSubrole not read"}
+    if kind == "doc" and len(parts) >= 3 and parts[2]:
+        doc = "\t".join(parts[2:])
         path = (urllib.parse.unquote(urllib.parse.urlparse(doc).path)
                 if doc.startswith("file:") else doc)
-        docs.append({"raw": doc, "path": os.path.realpath(path.rstrip("/"))})
-    return obs.readable(docs)
+        return {**row, "outcome": "document", "raw": doc,
+                "path": os.path.realpath(path.rstrip("/"))}
+    if kind in ("none", "absent") and len(parts) == 2:
+        if subrole == PROJECT_WINDOW_SUBROLE:
+            return {**row, "outcome": "unidentified_document", "raw": line}
+        return {**row, "outcome": "no_document"}
+    if kind == "error":
+        return {**row, "outcome": "unreadable", "cause": "AXDocument read failed"}
+    return {**row, "outcome": "unreadable", "cause": "a line of no known shape"}
+
+
+def parse_documents(stdout):
+    """The DOCUMENTS_SCRIPT output -> readable [row per window] or unreadable.
+
+    Unreadable when the header or end marker is missing or the rows are not exactly the counted
+    windows. Each row's `outcome` is `document` (with `path`), `no_document`, `unidentified_document`
+    (a project window with no AXDocument) or `unreadable` (with `cause`).
+    """
+    lines = (stdout or "").strip("\n").split("\n")
+    header = re.fullmatch(r"lpm:windows (\d+)", lines[0].strip()) if lines else None
+    if header is None or lines[-1].strip() != DOCUMENTS_END:
+        return obs.unreadable("the window list has no header or did not complete", raw=stdout)
+    body = lines[1:-1]
+    if len(body) != int(header.group(1)):
+        return obs.unreadable("the rows are not the counted windows", raw=stdout,
+                              counted=int(header.group(1)), rows=len(body))
+    return obs.readable([_document_row(i, line) for i, line in enumerate(body)], raw=stdout)
+
+
+def open_documents():
+    """Every Logic window's document read outcome (parse_documents); raw osascript kept."""
+    raw = obs.osascript(DOCUMENTS_SCRIPT)
+    if raw["returncode"] != 0:
+        return obs.unreadable("System Events did not answer", raw=raw)
+    reading = parse_documents(raw.get("stdout"))
+    reading["osascript"] = raw
+    return reading
 
 
 def others_than(fixture, docs_reading):
-    """Documents that are not the fixture, or None when the list was not read."""
-    if not docs_reading["readable"]:
+    """Documents that are not the fixture (unidentified project windows included), or None when
+    the list, or any window in it, was not read: an unread document is not an absent one."""
+    if not docs_reading.get("readable"):
+        return None
+    rows = docs_reading["value"]
+    if any(row["outcome"] == "unreadable" for row in rows):
         return None
     target = os.path.realpath(fixture)
-    return [d for d in docs_reading["value"] if d["path"] != target]
+    return [row for row in rows if row["outcome"] == "unidentified_document"
+            or (row["outcome"] == "document" and row["path"] != target)]
 
 
 def quit_logic(fixture=FIXTURE):
@@ -212,8 +278,9 @@ def quit_logic(fixture=FIXTURE):
     record["documents"] = docs
     others = others_than(fixture, docs)
     if others is None or others:
+        # Refused before any quit or save-prompt answer; the raw readings stay in the record.
         record["quit"] = False
-        record["cause"] = ("the open documents could not be read" if others is None else
+        record["cause"] = ("a window's document could not be read" if others is None else
                            "a document other than the fixture is open; not answering its save prompt")
         return record
     record["settle"] = screen.settle_to_clean(timeout_s=8.0)
