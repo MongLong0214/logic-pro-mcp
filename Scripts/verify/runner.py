@@ -26,7 +26,13 @@ THE FLOW, per run (plan-p0b2 section 1)
              full reset (server stopped, fixture reopened,
              server restarted, surface awaited) and a second gate; a row whose gate still fails is
              stored with every step unreadable. A switch that found Logic already in the locale
-             is followed by a reset, so every locale starts from the file on disk.
+             is followed by a reset, so every locale starts from the file on disk. Every reset's
+             record must say "confirmed": a reset that does not -- the one before the rows or the
+             one after a gate miss -- stops the locale: that row and every later one, in every
+             entry, is stored with every step unreadable and the reset's cause (`_unread_row`, so
+             the locale is incomplete and the exit is 3), and nothing else is started or driven
+             there. The baseline must itself be home (setups.baseline_problems): its upper row
+             is matched with the first bank's AX track names, never with itself.
     rest     back to Korean, confirmed by the lifecycle; the lock is released
     produce  the document, serialized once; the attestation over the digest of those bytes
              as parsed back, the same parse `judge` and `record_attested` make
@@ -186,7 +192,9 @@ class Lifecycle:
         raise NotImplementedError
 
     def reset(self, ctx: dict) -> dict:
-        """Put the fixture back as found (Don't Save, reopen). The runner restarts the server."""
+        """Put the fixture back as found (Don't Save, reopen), then read it: {"confirmed": bool,
+        "cause"?: why not, ...}. Only `"confirmed": true` lets the runner go on; the runner then
+        restarts the server."""
         raise NotImplementedError
 
     def settle(self, ctx: dict) -> dict:
@@ -401,13 +409,40 @@ def _start(ctx: dict) -> bool:
     return bool(ready.get("ready"))
 
 
-def _reset(ctx: dict, run: dict) -> bool:
+def _fixture_reset(ctx: dict):
+    """Reset the fixture and log the record: None when the record says it is confirmed, else why
+    not. A reset that raises is not confirmed."""
     life = ctx["life"]
-    _close(ctx, run)
-    record = life.reset(ctx)
+    try:
+        record = life.reset(ctx)
+    except Exception as exc:  # noqa: BLE001 - a failed reset is a cause, not a crash
+        record = {"confirmed": False, "cause": f"the reset raised {type(exc).__name__}: {exc}"}
     ctx["log"].append({"t": life.now(), "event": "reset", "record": record})
+    if isinstance(record, dict) and record.get("confirmed") is True:
+        return None
+    cause = record.get("cause") if isinstance(record, dict) else None
+    return cause or f"the reset's record does not say it is confirmed: {record!r}"
+
+
+def _reset(ctx: dict, run: dict):
+    """(ready, cause): stop the server, reset the fixture, and restart the server only when the
+    reset is confirmed; `cause` is why it is not, else None."""
+    _close(ctx, run)
+    cause = _fixture_reset(ctx)
+    if cause:
+        print(f"  {ctx['lproj']}: the fixture reset was NOT confirmed: {cause}")
+        return False, cause
     print(f"  {ctx['lproj']}: reset the fixture and restarted the server")
-    return _start(ctx)
+    return _start(ctx), None
+
+
+def _stop_locale(ctx: dict, run: dict, rows: list, why: str) -> None:
+    """Store `rows` with every step unreadable for `why`, and log that the locale stopped."""
+    ctx["log"].append({"t": ctx["life"].now(), "event": "stopped", "cause": why})
+    print(f"  {ctx['lproj']}: stopped; no row step runs: {why}")
+    for row in rows:
+        run["rows"][row["id"]] = _unread_row(row, why)
+        _stored(ctx["lproj"], row, run["rows"][row["id"]])
 
 
 def _gate_reading(ctx: dict) -> tuple:
@@ -441,9 +476,11 @@ def _gate(ctx: dict, baseline: dict, ready: bool, extra: dict) -> list:
     return dirty
 
 
-def run_locale(life: Lifecycle, entry: dict, lproj: str, reset_first: bool, baselines: dict):
+def run_locale(life: Lifecycle, entry: dict, lproj: str, reset_first: bool, baselines: dict,
+               stopped: dict):
     """(run, reading) for one entry in one locale; Logic is already switched to it. `baselines`
-    holds each locale's fixture baseline, read once when the fixture was first opened there."""
+    holds each locale's fixture baseline, read once when the fixture was first opened there;
+    `stopped` each locale an unconfirmed reset stopped, with why, for every later entry."""
     spec = entry["spec"]
     reading = normalize(life.reading(lproj))
     log = []
@@ -459,20 +496,32 @@ def run_locale(life: Lifecycle, entry: dict, lproj: str, reset_first: bool, base
     ctx = {"life": life, "lproj": lproj, "decl": entry["decl"], "built": entry["built"],
            "session": None, "row": None, "step": None, "log": log}
     try:
+        if lproj in stopped:
+            _stop_locale(ctx, run, spec["rows"], stopped[lproj])
+            return run, reading
         if reset_first:
-            log.append({"t": life.now(), "event": "reset", "record": life.reset(ctx)})
+            cause = _fixture_reset(ctx)
+            if cause:
+                stopped[lproj] = f"the fixture reset before the rows was not confirmed: {cause}"
+                _stop_locale(ctx, run, spec["rows"], stopped[lproj])
+                return run, reading
         ready = _start(ctx)
         if lproj not in baselines:
             baselines[lproj] = _gate_reading(ctx)[0]
         baseline = baselines[lproj]
         log.append({"t": life.now(), "event": "baseline", "baseline": baseline})
-        for row in spec["rows"]:
+        for n, row in enumerate(spec["rows"]):
             ctx["row"], ctx["step"] = row["id"], None
             log.append({"t": life.now(), "at": row["id"], "settle": life.settle(ctx)})
             dirty = _gate(ctx, baseline, ready, {})
             if dirty:
                 print(f"  {lproj}/{row['id']}: gate missed ({'; '.join(map(str, dirty))}); one reset")
-                ready = _reset(ctx, run)
+                ready, cause = _reset(ctx, run)
+                if cause:
+                    stopped[lproj] = (f"the fixture reset after the gate missed before {row['id']} "
+                                      f"was not confirmed: {cause}")
+                    _stop_locale(ctx, run, spec["rows"][n:], stopped[lproj])
+                    break
                 dirty = _gate(ctx, baseline, ready, {"after_reset": True})
             if dirty:
                 run["rows"][row["id"]] = _unread_row(row, f"fixture not as declared after one reset: "
@@ -561,7 +610,7 @@ def _drive(life: Lifecycle, entries: list, record_dir) -> int:
             print("run: the live lane was not claimed; nothing was driven (exit 2)")
             return engine.EXIT_REFUSED
         try:
-            baselines = {}
+            baselines, stopped = {}, {}
             wanted = sorted({x for entry in entries for x in entry["locales"]})
             for lproj in order(wanted, life.current_locale()):
                 switched = life.switch(lproj)
@@ -570,7 +619,7 @@ def _drive(life: Lifecycle, entries: list, record_dir) -> int:
                 for entry in entries:
                     if lproj not in entry["locales"]:
                         continue
-                    run, reading = run_locale(life, entry, lproj, reset_first, baselines)
+                    run, reading = run_locale(life, entry, lproj, reset_first, baselines, stopped)
                     entry["runs"][lproj], entry["readings"][lproj] = run, reading
                     reset_first = False
         finally:

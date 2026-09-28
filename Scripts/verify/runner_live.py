@@ -275,9 +275,22 @@ class LiveLifecycle(runner.Lifecycle):
             return {"readable": False, "cause": str(exc)}
 
     def reset(self, ctx):
-        record = fixture.reset(ctx["decl"]["live"], ctx["lproj"])
-        return {"fixture": ctx["decl"]["live"], "lproj": ctx["lproj"],
-                "record_sha256": self._kept(record)}
+        """Reset the fixture and judge the reopened file with fixture.fingerprint_matches, the
+        reset predicate: confirmed only when Logic quit, the build found no cause, and the AX
+        fingerprint read after it is the declaration's."""
+        name = ctx["decl"]["live"]
+        record = fixture.reset(name, ctx["lproj"])
+        out = {"fixture": name, "lproj": ctx["lproj"], "record_sha256": self._kept(record)}
+        cause = record.get("cause") or (record.get("build") or {}).get("cause")
+        if not cause:
+            fingerprint = (record.get("read") or {}).get("fingerprint") or {}
+            if not fixture.fingerprint_matches(fixture.FIXTURES[name], fingerprint):
+                cause = (f"the reopened fixture's AX fingerprint is not its declaration: "
+                         f"{json.dumps(fingerprint, ensure_ascii=False, sort_keys=True)[:300]}")
+        out["confirmed"] = not cause
+        if cause:
+            out["cause"] = cause
+        return out
 
     def ready(self, ctx):
         if ctx["decl"].get("ready") is None:

@@ -65,10 +65,12 @@ RUN CASES (`"run": {...}`)
                   answer fixtures_build.READINGS for the spec.
         "dirt":   {"before:<row>/<as>" | "after:<row>/<as>": [dirt, ...]}
         "gate":   {lproj: [[op, ...], ...]}   successive fixture readings in that locale, each as
-                  patch ops over a clean one (FAKE_TRACKS, every flag 0, upper row "home", the
+                  patch ops over a clean one (FAKE_TRACKS, every flag 0, upper row FAKE_HOME_ROW, the
                   passing message FAKE_PASSING); the first is the locale's baseline; after the
                   list, clean. {"times": n, "ops": [op, ...]} in the list stands for n readings
         "readings": {lproj: {key: value}}   merged over fixtures_build.locale_reading(lproj)
+        "reset":  {lproj: [record, ...]}    successive reset() results in that locale; after the
+                                            list, {"confirmed": true}
         "tuple_in_reading": true            the window names come back as a tuple
         "current": lproj                    the locale Logic is in when the run starts
         "poll_limit": n                     the fake raises after n reads of one step, so a wait
@@ -427,17 +429,23 @@ MUTANTS = [
      "new": '        dirty = []\n'},
     {"id": "gate-ignores-upper-row", "file": "setups.py",
      "old": ('    if "mcu_upper_row_is_baseline" in decl["gate"]:\n'
-             '        out += _upper_row_problems(reading, baseline)\n'),
+             '        out += _upper_row_problems(decl, reading, baseline)\n'),
      "new": ('    if False:\n'
-             '        out += _upper_row_problems(reading, baseline)\n')},
+             '        out += _upper_row_problems(decl, reading, baseline)\n')},
     {"id": "gate-ignores-flags", "file": "setups.py",
      "old": ('            elif value != 0:\n'
              '                out.append(f"track {i} {word}")\n'),
      "new": ('            elif False:\n'
              '                out.append(f"track {i} {word}")\n')},
     {"id": "reset-record-inline", "file": "runner_live.py",
-     "old": '                "record_sha256": self._kept(record)}\n\n    def ready',
-     "new": '                "record_sha256": self._kept(record), "record": record}\n\n    def ready'},
+     "old": '        out = {"fixture": name, "lproj": ctx["lproj"], "record_sha256": self._kept(record)}\n',
+     "new": '        out = {"fixture": name, "lproj": ctx["lproj"], "record_sha256": self._kept(record), "record": record}\n'},
+    {"id": "live-reset-confirmed-unjudged", "file": "runner_live.py",
+     "old": '        out["confirmed"] = not cause\n',
+     "new": '        out["confirmed"] = True\n'},
+    {"id": "live-reset-fingerprint-unread", "file": "runner_live.py",
+     "old": "            if not fixture.fingerprint_matches(fixture.FIXTURES[name], fingerprint):\n",
+     "new": "            if False:\n"},
     {"id": "settle-samples-inline", "file": "runner_live.py",
      "old": '"timed_out": record.get("timed_out"), "record_sha256": self._kept(record)}\n',
      "new": '"timed_out": record.get("timed_out"), "record_sha256": self._kept(record), "record": record}\n'},
@@ -466,6 +474,21 @@ MUTANTS = [
     {"id": "passing-message-keeps-its-accents", "file": "setups.py",
      "old": '    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))\n',
      "new": "    return text\n"},
+    {"id": "reset-record-not-read", "file": "runner.py",
+     "old": '    if isinstance(record, dict) and record.get("confirmed") is True:\n',
+     "new": "    if True:\n"},
+    {"id": "initial-reset-unchecked", "file": "runner.py",
+     "old": "            cause = _fixture_reset(ctx)\n            if cause:\n",
+     "new": "            cause = _fixture_reset(ctx)\n            if False:\n"},
+    {"id": "retry-reset-unchecked", "file": "runner.py",
+     "old": "    cause = _fixture_reset(ctx)\n    if cause:\n",
+     "new": "    cause = _fixture_reset(ctx)\n    if False:\n"},
+    {"id": "baseline-home-unchecked", "file": "setups.py",
+     "old": "    return home_problems(baseline)\n",
+     "new": "    return []\n"},
+    {"id": "lcd-cell-matched-on-its-first-letter", "file": "setups.py",
+     "old": "    return all(ch in rest for ch in c[1:])\n",
+     "new": "    return True\n"},
     {"id": "record-written-past-the-canon-guard", "file": "verify.py",
      "old": "        refused = canon_record_guard.refusals(record)\n",
      "new": "        refused = []\n"},
@@ -740,6 +763,9 @@ FAKE_TRACKS = ("Self-test one", "Self-test two")
 #: The passing message every fake gate reading carries (setups.py): made up, with an accent the LCD
 #: drops, so a case's upper row shows it as "Self-test pass message".
 FAKE_PASSING = "Self-test pass m\u00e9ssage"
+#: The upper row a fake gate reading shows unscripted: the first bank of FAKE_TRACKS as the LCD
+#: squeezes their names, so setups.home_problems finds the baseline home.
+FAKE_HOME_ROW = "SlfOne SlfTwo"
 
 
 class FakeLifecycle(runner.Lifecycle):
@@ -817,7 +843,7 @@ class FakeLifecycle(runner.Lifecycle):
         reading = {"declared": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS)},
                    "fingerprint": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS),
                                    "flags": clear},
-                   "upper_row": {"readable": True, "value": "home"},
+                   "upper_row": {"readable": True, "value": FAKE_HOME_ROW},
                    "passing_message": {"readable": True, "value": FAKE_PASSING}}
         scripted = []
         for item in self.script.get("gate", {}).get(ctx["lproj"], []):
@@ -828,7 +854,9 @@ class FakeLifecycle(runner.Lifecycle):
 
     def reset(self, ctx):
         self.events.append(("reset", ctx["lproj"]))
-        return {"fake": True}
+        n = sum(1 for e in self.events if e == ("reset", ctx["lproj"]))
+        scripted = self.script.get("reset", {}).get(ctx["lproj"], [])
+        return scripted[n - 1] if n <= len(scripted) else {"fake": True, "confirmed": True}
 
     def settle(self, ctx):
         return {"fake": True}
@@ -1275,6 +1303,43 @@ def check_live_records_go_to_sidecars(case: dict, where: dict):
     return None
 
 
+def check_live_reset_is_judged(case: dict, where: dict):
+    """#1052 VFY-01: the live lifecycle's reset says "confirmed" only when fixture.reset's record
+    has no cause (Logic quit, the build ran) and the fingerprint read after it is the fixture's
+    declaration (fixture.fingerprint_matches). fixture.reset is stood in for, in process, by the
+    record shapes it returns: the quit refusal kept live in de, and a reopened file that reads as
+    declared, with one track armed, and short a track."""
+    import runner_live
+    decl = runner_live.fixture.FIXTURES["locale_campaign_19"]
+    clean = {"track_count": decl["track_count"], "names": list(decl["names"]),
+             "flags": [{"arm": 0, "mute": 0, "solo": 0} for _ in decl["names"]]}
+    armed = copy.deepcopy(clean)
+    armed["flags"][2]["arm"] = 1
+    short = dict(clean, track_count=decl["track_count"] - 1, names=list(decl["names"][:-1]))
+    wanted = [({"quit": {"quit": False}, "cause": "Logic did not quit"}, False, "Logic did not quit"),
+              ({"quit": {"quit": True}, "build": {"cause": "the fixture file is missing"}},
+               False, "the fixture file is missing"),
+              ({"quit": {"quit": True}, "build": {}, "read": {"fingerprint": clean}}, True, None),
+              ({"quit": {"quit": True}, "build": {}, "read": {"fingerprint": armed}},
+               False, "is not its declaration"),
+              ({"quit": {"quit": True}, "build": {}, "read": {"fingerprint": short}},
+               False, "is not its declaration")]
+    lifecycle = runner_live.LiveLifecycle(repo=ROOT, sidecars=os.path.join(where["tmp"], "reset-sidecars"))
+    ctx = {"decl": {"live": "locale_campaign_19"}, "lproj": "de"}
+    saved = runner_live.fixture.reset
+    try:
+        for n, (record, confirmed, says) in enumerate(wanted):
+            runner_live.fixture.reset = lambda name, lproj, record=record: record
+            got = lifecycle.reset(ctx)
+            if got.get("confirmed") is not confirmed:
+                return f"reset {n}: confirmed is {got.get('confirmed')!r}, wanted {confirmed}: {got}"
+            if says is not None and says not in str(got.get("cause")):
+                return f"reset {n}: its cause {got.get('cause')!r} does not say {says!r}"
+    finally:
+        runner_live.fixture.reset = saved
+    return None
+
+
 def check_run_cli_has_no_life_seam(case: dict, where: dict):
     """`verify.py run` and `batch` reach the live lifecycle and nothing else. Their options are
     exactly the documented ones, so no flag can select another world; verify.py, runner.py and engine.py name
@@ -1537,6 +1602,7 @@ CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
           "pilot_record_passes_the_canon_guard": check_pilot_record_passes_the_canon_guard,
           "run_cli_has_no_life_seam": check_run_cli_has_no_life_seam,
           "live_records_go_to_sidecars": check_live_records_go_to_sidecars,
+          "live_reset_is_judged": check_live_reset_is_judged,
           "nan_not_written": check_nan_not_written,
           "closed_stdout_keeps_the_exit": check_closed_stdout_keeps_the_exit,
           "attestation_built_only_in_process": check_attestation_built_only_in_process,

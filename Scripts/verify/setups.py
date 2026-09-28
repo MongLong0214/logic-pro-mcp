@@ -13,7 +13,13 @@ the id is declared here, once, and nowhere else:
                                             and solo flag 0 (the verifier's own AX reading, D1)
                 "mcu_upper_row_is_baseline" the MCU LCD upper row equals the one read when the
                                             fixture was first opened in this locale: the bank is
-                                            home (the product's reading; nothing else reads the LCD)
+                                            home (the product's reading; nothing else reads the LCD).
+                                            The baseline itself must be home by independent
+                                            evidence: each of its eight cells abbreviates the
+                                            name of the track in the same slot of the first bank,
+                                            as the baseline's own AX fingerprint names them
+                                            (`home_problems`); a reading is never home only
+                                            because it equals itself
 
 A gate reading is {"declared": {"track_count", "names"}, "fingerprint": {"track_count", "names",
 "flags": [{"arm", "mute", "solo"}, ...]}, "upper_row": {"readable", "value" | "cause"},
@@ -116,16 +122,77 @@ def shows_passing_message(reading: dict) -> bool:
                 and message in row["value"])
 
 
-def _upper_row_problems(reading: dict, baseline: dict) -> list:
-    row = reading.get("upper_row") or {}
+#: The MCU LCD upper row: eight cells of seven characters, six of a strip's name and one separator,
+#: each with its trailing spaces trimmed (Sources/LogicProMCP/Channels/MCUChannel.swift
+#: `bankWindowStrips`, which pads or cuts a row to 56 characters first).
+LCD_CELLS = 8
+LCD_CELL_WIDTH = 7
+
+
+def lcd_cells(row: str) -> list:
+    """The eight cells of an MCU upper row, as MCUChannel.bankWindowStrips cuts them."""
+    width = LCD_CELLS * LCD_CELL_WIDTH
+    padded = row.ljust(width)[:width]
+    return [padded[i:i + LCD_CELL_WIDTH].rstrip(" ") for i in range(0, width, LCD_CELL_WIDTH)]
+
+
+def abbreviates(cell: str, name: str) -> bool:
+    """Whether an LCD `cell` is Logic's six-character squeeze of the track `name`: whitespace gone,
+    case folded, the same first letter, and every other letter of the cell found in the name in
+    order. Logic drops letters rather than cutting ("Deluxe Classic" shows as `DelCls`, "Absolute
+    Zero" as `AbsZer`); the rule is Scripts/livekit/live_862_bank_answers_from_the_redrawn_upper_row.py
+    `abbreviates`, measured 2026-09-27, with the name taken as the LCD shows it (`lcd_text`)."""
+    c = "".join(cell.split()).lower()
+    n = "".join(lcd_text(name).split()).lower()
+    if not c or not n or c[0] != n[0]:
+        return False
+    rest = iter(n[1:])
+    return all(ch in rest for ch in c[1:])
+
+
+def home_problems(reading: dict) -> list:
+    """Why the reading's MCU upper row is not the first bank of the tracks its own AX fingerprint
+    names (tracks 0-7): each cell must abbreviate the name in its slot, and a slot past the last
+    track must be empty. Empty when it is home. A row, or names, that cannot be matched is not
+    home: the verdict is never taken from the row alone."""
+    row = (reading or {}).get("upper_row") or {}
+    names = ((reading or {}).get("fingerprint") or {}).get("names")
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        return [f"the baseline's AX track names were not read ({names!r}), so its MCU upper row "
+                f"{row.get('value')!r} cannot be shown to be home"]
+    first = names[:LCD_CELLS]
+    cells = lcd_cells(row.get("value") or "")
+    misses = [i for i, cell in enumerate(cells)
+              if not (abbreviates(cell, first[i]) if i < len(first) else cell == "")]
+    if misses:
+        return [f"the baseline MCU upper row {row.get('value')!r} is not home: cell(s) "
+                f"{', '.join(map(str, misses))} do not abbreviate the first bank's AX track names "
+                f"{first!r}"]
+    return []
+
+
+def baseline_problems(decl: dict, baseline: dict) -> list:
+    """Why a locale's baseline cannot stand for home, as the upper-row gate needs it; empty when it
+    can, or when the declaration has no upper-row gate."""
+    if "mcu_upper_row_is_baseline" not in decl["gate"]:
+        return []
     base = (baseline or {}).get("upper_row") or {}
-    if not row.get("readable"):
-        return [f"the MCU upper row could not be read: {row.get('cause')}"]
     if not base.get("readable"):
         return [f"the baseline MCU upper row was not read: {base.get('cause')}"]
     if shows_passing_message(baseline):
         return [f"the baseline MCU upper row shows Logic's passing message "
                 f"{passing_message(baseline)!r}: {base.get('value')!r}"]
+    return home_problems(baseline)
+
+
+def _upper_row_problems(decl: dict, reading: dict, baseline: dict) -> list:
+    row = reading.get("upper_row") or {}
+    base = (baseline or {}).get("upper_row") or {}
+    if not row.get("readable"):
+        return [f"the MCU upper row could not be read: {row.get('cause')}"]
+    unfit = baseline_problems(decl, baseline)
+    if unfit:
+        return unfit
     if shows_passing_message(reading):
         return [f"the MCU upper row still shows Logic's passing message "
                 f"{passing_message(reading)!r}: {row.get('value')!r}"]
@@ -141,5 +208,5 @@ def gate_problems(decl: dict, reading: dict, baseline: dict) -> list:
     if "fingerprint" in decl["gate"]:
         out += _fingerprint_problems(reading)
     if "mcu_upper_row_is_baseline" in decl["gate"]:
-        out += _upper_row_problems(reading, baseline)
+        out += _upper_row_problems(decl, reading, baseline)
     return out
