@@ -33,7 +33,9 @@ THE FLOW, per run (plan-p0b2 section 1)
              the locale is incomplete and the exit is 3), and nothing else is started or driven
              there. The baseline must itself be home (setups.baseline_problems): its upper row
              is matched with the first bank's AX track names, never with itself.
-    rest     back to Korean, confirmed by the lifecycle; the lock is released
+    rest     back to Korean, by the lifecycle; its result goes into the evidence ("rest") and the
+             attestation, and a restore it does not confirm makes the exit 3 ("restore not
+             confirmed") however clean the rows are; the lock is released
     produce  the document, serialized once; the attestation over the digest of those bytes
              as parsed back, the same parse `judge` and `record_attested` make
     judge    engine.judge(parsed, attestation) -- the exit code is its verdict
@@ -210,7 +212,8 @@ class Lifecycle:
         raise NotImplementedError
 
     def rest(self) -> dict:
-        """Put Logic back in Korean: {"in_locale": bool, "reading": ...}."""
+        """Put Logic back in Korean: {"in_locale": bool, "reading": ...}. It goes into the evidence
+        and the attestation; only `"in_locale": true` confirms the restore."""
         raise NotImplementedError
 
     def sidecar(self, data: bytes) -> str:
@@ -538,27 +541,29 @@ def run_locale(life: Lifecycle, entry: dict, lproj: str, reset_first: bool, base
 # the document, the one Attestation site, the verdict
 # ---------------------------------------------------------------------------------------------
 
-def _attest(built: Built, readings: dict, evidence_sha256: str):
+def _attest(built: Built, readings: dict, evidence_sha256: str, rest: dict):
     """The Attestation of this run: every field measured by this process, none read from a file."""
     return engine.Attestation(binary_sha256=built.sha256, head=built.head, locale_readings=readings,
-                              evidence_sha256=evidence_sha256)
+                              evidence_sha256=evidence_sha256, rest=rest)
 
 
-def _produce(spec: dict, spec_path: str, built: Built, runs: dict, readings: dict):
+def _produce(spec: dict, spec_path: str, built: Built, runs: dict, readings: dict, rest: dict):
     """(data, parsed, attestation): the bytes written, those bytes parsed back, and the
-    attestation over the digest of the parse, the same parse judge and record_attested make."""
+    attestation over the digest of the parse, the same parse judge and record_attested make.
+    `rest` is the lifecycle's rest result, stored in the document and attested."""
     doc = E.new_document(spec, spec_path, built.block())
     doc["runs"] = runs
     doc["verdicts"] = {lproj: engine.evaluate_run(spec, run, lproj) for lproj, run in runs.items()}
+    doc[E.REST] = rest
     data = E.serialize(doc)
     parsed = E.loads(data.decode("utf-8"))
-    return data, parsed, _attest(built, readings, E.sha256_of(parsed))
+    return data, parsed, _attest(built, readings, E.sha256_of(parsed), rest)
 
 
-def _finish(entry: dict, record_dir) -> int:
+def _finish(entry: dict, record_dir, rest: dict) -> int:
     import verify
     data, parsed, att = _produce(entry["spec"], entry["spec_path"], entry["built"], entry["runs"],
-                                entry["readings"])
+                                entry["readings"], rest)
     E.write_bytes_atomic(entry["out"], data)
     print(f"wrote {entry['out']} ({E.sha256_of_bytes(data)})")
     result = engine.judge(parsed, expected_spec=entry["spec"], attestation=att)
@@ -568,6 +573,18 @@ def _finish(entry: dict, record_dir) -> int:
         if code == engine.EXIT_CLEAN and recorded != engine.EXIT_CLEAN:
             code = recorded
     return code
+
+
+def _rest(life: Lifecycle) -> dict:
+    """The lifecycle's rest() result as JSON gives it back. One that raises, or is not an object,
+    is kept as an unconfirmed restore saying so, never dropped."""
+    try:
+        rested = normalize(life.rest())
+    except Exception as exc:  # noqa: BLE001 - a failed restore is evidence, not a crash
+        return {"in_locale": False, "cause": f"rest() raised {type(exc).__name__}: {exc}"}
+    if not isinstance(rested, dict):
+        return {"in_locale": False, "cause": f"rest() returned {rested!r}, not an object"}
+    return rested
 
 
 def worst(codes: list) -> int:
@@ -623,9 +640,10 @@ def _drive(life: Lifecycle, entries: list, record_dir) -> int:
                     entry["runs"][lproj], entry["readings"][lproj] = run, reading
                     reset_first = False
         finally:
-            rested = life.rest()
-            print(f"run: rest in {RESTING}: {'confirmed' if rested.get('in_locale') else 'NOT confirmed'}")
-    return worst([_finish(entry, record_dir) for entry in entries])
+            rested = _rest(life)
+            print(f"run: rest in {RESTING}: "
+                  f"{'confirmed' if rested.get('in_locale') is True else 'NOT confirmed'}")
+    return worst([_finish(entry, record_dir, rested) for entry in entries])
 
 
 def run_spec(spec: dict, spec_path: str, head: str, locales, out_path: str, record_dir=None, *,

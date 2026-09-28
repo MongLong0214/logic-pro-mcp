@@ -34,7 +34,12 @@ FORMAT `lpm-evidence/1`
           }
         }
       },
-      "verdicts": {"<locale>": {"<row id>": {...engine.evaluate_row output...}}}
+      "verdicts": {"<locale>": {"<row id>": {...engine.evaluate_row output...}}},
+      "rest": {"in_locale": true | false, ...}   # the lifecycle's rest() result: Logic put back
+                                         # in Korean after the last locale. Written by `run` and
+                                         # `batch`, held in the attestation too; absent or not
+                                         # `"in_locale": true`, the document is at best
+                                         # incomplete ("restore not confirmed")
     }
 
 The predicates are not copied beside each observation: they are the embedded spec's rows, bound to
@@ -79,6 +84,7 @@ UNBOUND = "unbound"
 # Scripts/verify/live/binary.py build() returns, so P0b stores its result without renaming.
 BINARY_PATH, BINARY_SHA256, HEAD, BINDING = "binary_path", "binary_sha256", "head", "binding"
 LOCALE_READING = "locale_reading"
+REST = "rest"
 
 #: lproj -> the AppleLanguages code Logic is given for it. The same table as
 #: Scripts/verify/live/locale.py CODES (P0b); the engine checks a run's reading against it.

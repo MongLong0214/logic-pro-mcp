@@ -336,7 +336,8 @@ class LiveLifecycle(runner.Lifecycle):
     def rest(self):
         record = live_locale.restore_locale()
         after = record.get("after") or live_locale.reading(runner.RESTING)
-        return {"in_locale": live_locale.in_locale(after), "record": record}
+        return {"in_locale": live_locale.in_locale(after), "reading": after,
+                "record_sha256": self._kept(record)}
 
     def _kept(self, record) -> str:
         """A lifecycle record kept whole in a sidecar (D5); its sha256 is what the evidence holds."""

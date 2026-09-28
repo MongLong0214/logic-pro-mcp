@@ -71,6 +71,7 @@ RUN CASES (`"run": {...}`)
         "readings": {lproj: {key: value}}   merged over fixtures_build.locale_reading(lproj)
         "reset":  {lproj: [record, ...]}    successive reset() results in that locale; after the
                                             list, {"confirmed": true}
+        "rest":   record                    what rest() returns; unscripted {"in_locale": true}
         "tuple_in_reading": true            the window names come back as a tuple
         "current": lproj                    the locale Logic is in when the run starts
         "poll_limit": n                     the fake raises after n reads of one step, so a wait
@@ -413,8 +414,8 @@ MUTANTS = [
      "new": ('        for step in (row["restore"] if all("raw" in e for e in entries.values()) else []):\n'
              '            entries[step["as"]] = execute_step(ctx, step)')},
     {"id": "digest-before-verdicts", "file": "runner.py",
-     "old": "    return data, parsed, _attest(built, readings, E.sha256_of(parsed))",
-     "new": "    return data, parsed, _attest(built, readings, E.sha256_of(dict(parsed, verdicts={})))"},
+     "old": "    return data, parsed, _attest(built, readings, E.sha256_of(parsed), rest)",
+     "new": "    return data, parsed, _attest(built, readings, E.sha256_of(dict(parsed, verdicts={})), rest)"},
     {"id": "reading-not-normalized", "file": "runner.py",
      "old": "    reading = normalize(life.reading(lproj))",
      "new": "    reading = life.reading(lproj)"},
@@ -440,6 +441,9 @@ MUTANTS = [
     {"id": "reset-record-inline", "file": "runner_live.py",
      "old": '        out = {"fixture": name, "lproj": ctx["lproj"], "record_sha256": self._kept(record)}\n',
      "new": '        out = {"fixture": name, "lproj": ctx["lproj"], "record_sha256": self._kept(record), "record": record}\n'},
+    {"id": "rest-record-inline", "file": "runner_live.py",
+     "old": '        return {"in_locale": live_locale.in_locale(after), "reading": after,\n',
+     "new": '        return {"in_locale": live_locale.in_locale(after), "reading": after, "record": record,\n'},
     {"id": "live-reset-confirmed-unjudged", "file": "runner_live.py",
      "old": '        out["confirmed"] = not cause\n',
      "new": '        out["confirmed"] = True\n'},
@@ -489,6 +493,15 @@ MUTANTS = [
     {"id": "lcd-cell-matched-on-its-first-letter", "file": "setups.py",
      "old": "    return all(ch in rest for ch in c[1:])\n",
      "new": "    return True\n"},
+    {"id": "rest-unconfirmed-passes", "file": "engine.py",
+     "old": '    result["incomplete"] += rest_problems(doc)\n',
+     "new": ""},
+    {"id": "attestation-rest-unchecked", "file": "engine.py",
+     "old": "    if not P.same(dict(attestation.rest), doc.get(E.REST)):\n",
+     "new": "    if False:\n"},
+    {"id": "rest-dropped-from-evidence", "file": "runner.py",
+     "old": "    doc[E.REST] = rest\n",
+     "new": ""},
     {"id": "record-written-past-the-canon-guard", "file": "verify.py",
      "old": "        refused = canon_record_guard.refusals(record)\n",
      "new": "        refused = []\n"},
@@ -711,6 +724,7 @@ def attest(doc: dict, spec: dict, label: str, where: dict):
         "locale_readings": {locale: None if lproj is None else fixtures_build.locale_reading(lproj)
                             for locale, lproj in readings.items()},
         "evidence_sha256": E.sha256_of(doc),
+        "rest": spec.get("rest", fixtures_build.RESTED),
     }
     if spec.get("lookalike"):
         return types.SimpleNamespace(**fields)
@@ -870,7 +884,7 @@ class FakeLifecycle(runner.Lifecycle):
 
     def rest(self):
         self.events.append(("rest",))
-        return {"in_locale": True}
+        return self.script.get("rest", {"in_locale": True})
 
     def sidecar(self, data):
         import evidence_doc as E
@@ -1083,8 +1097,8 @@ VERIFY_DIR = "Scripts/verify/"
 UNPICKLERS = {"pickle", "marshal", "shelve", "copyreg", "dill", "cloudpickle", "importlib"}
 #: What `attest` may not do: read a file or parse JSON, or read the document's own binding claims.
 FILE_READS = {"open", "load", "loads", "read", "read_text", "read_bytes", "sha256_of_file"}
-CLAIM_KEYS = {"binary", "binary_path", "binary_sha256", "head", "binding", "locale_reading"}
-CLAIM_ATTRS = {"BINARY_PATH", "BINARY_SHA256", "HEAD", "BINDING", "LOCALE_READING"}
+CLAIM_KEYS = {"binary", "binary_path", "binary_sha256", "head", "binding", "locale_reading", "rest"}
+CLAIM_ATTRS = {"BINARY_PATH", "BINARY_SHA256", "HEAD", "BINDING", "LOCALE_READING", "REST"}
 
 
 def _top_level_sites(tree):
@@ -1269,26 +1283,32 @@ SEAM_VARIABLES = {"LPM_VERIFY_REPO", "LPM_VERIFY_ISSUE_BODIES"}
 
 
 def check_live_records_go_to_sidecars(case: dict, where: dict):
-    """The live lifecycle keeps a reset's record (its whole fixture walk) and a settle's samples
-    in sidecars (D5): what it returns names the sidecar by sha256 and holds none of the record,
-    and the sidecar holds all of it. fixture.reset and screen.settle_to_clean are stood in for, in
-    process, by records carrying a marker the evidence must never contain."""
+    """The live lifecycle keeps a reset's record (its whole fixture walk), a settle's samples and
+    a rest's record (its quit and relaunch) in sidecars (D5): what it returns names the sidecar by
+    sha256 and holds none of the record, and the sidecar holds all of it. fixture.reset,
+    screen.settle_to_clean and locale.restore_locale are stood in for, in process, by records
+    carrying a marker the evidence must never contain."""
+    import fixtures_build
     import runner_live
     marker = "a-row-of-the-walk-" * 40
     records = {"reset": {"read": {"track_flags": {"tracks": [marker]}}, "quit": {"steps": []}},
                "settle": {"initial": {"observation": marker, "dirt": []}, "actions": [],
                           "final": {"observation": marker, "dirt": []}, "timed_out": False,
-                          "escapes_sent": 0}}
+                          "escapes_sent": 0},
+               "rest": {"quit": {"steps": [marker]}, "after": fixtures_build.locale_reading("ko")}}
     sidecars = os.path.join(where["tmp"], "live-sidecars")
     lifecycle = runner_live.LiveLifecycle(repo=ROOT, sidecars=sidecars)
     ctx = {"decl": {"live": "locale_campaign_19"}, "lproj": "ko"}
-    saved = runner_live.fixture.reset, runner_live.screen.settle_to_clean
+    saved = (runner_live.fixture.reset, runner_live.screen.settle_to_clean,
+             runner_live.live_locale.restore_locale)
     runner_live.fixture.reset = lambda name, lproj: records["reset"]
     runner_live.screen.settle_to_clean = lambda **kw: records["settle"]
+    runner_live.live_locale.restore_locale = lambda: records["rest"]
     try:
-        got = {"reset": lifecycle.reset(ctx), "settle": lifecycle.settle(ctx)}
+        got = {"reset": lifecycle.reset(ctx), "settle": lifecycle.settle(ctx), "rest": lifecycle.rest()}
     finally:
-        runner_live.fixture.reset, runner_live.screen.settle_to_clean = saved
+        (runner_live.fixture.reset, runner_live.screen.settle_to_clean,
+         runner_live.live_locale.restore_locale) = saved
     for kind, kept in got.items():
         if marker in json.dumps(kept, default=repr):
             return f"{kind}: the evidence would hold the record itself"
@@ -1300,6 +1320,8 @@ def check_live_records_go_to_sidecars(case: dict, where: dict):
                 return f"{kind}: the sidecar does not hold the whole record"
     if got["settle"].get("dirt") != {"initial": [], "final": []} or got["settle"].get("timed_out") is not False:
         return f"settle keeps {got['settle']}, not its dirt and timed_out"
+    if got["rest"].get("in_locale") is not True or got["rest"].get("reading") != records["rest"]["after"]:
+        return f"rest keeps {got['rest']}, not in_locale true and the reading after it"
     return None
 
 

@@ -861,6 +861,8 @@ def evidence_problems(doc) -> list:
                       ("verdicts", dict)):
         if not isinstance(doc.get(key), kind):
             out.append(f"{key} is missing or not a {kind.__name__}")
+    if E.REST in doc and not isinstance(doc[E.REST], dict):
+        out.append(f"{E.REST} is not an object")
     if out:
         return out
     if E.sha256_of(doc["spec"]) != doc["spec_sha256"]:
@@ -946,6 +948,8 @@ class Attestation:
                          None when the runner took none for that locale
         evidence_sha256  sha256 of evidence_doc.canonical_bytes(document) at the moment the runner
                          produced it
+        rest             the lifecycle's rest() result the runner took after the last locale
+                         (normalized JSON); the document stores it under evidence_doc.REST
 
     `judge` grants clean only when every one of these equals the document under judgement.
     """
@@ -953,6 +957,7 @@ class Attestation:
     head: str
     locale_readings: dict
     evidence_sha256: str
+    rest: dict
 
     def __post_init__(self):
         for name, pattern in (("binary_sha256", HEX64), ("head", HEX40), ("evidence_sha256", HEX64)):
@@ -961,6 +966,9 @@ class Attestation:
                 raise ValueError(f"Attestation.{name} {value!r} is not a digest the runner measured")
         if not isinstance(self.locale_readings, collections.abc.Mapping):
             raise ValueError("Attestation.locale_readings maps each locale run to the reading taken")
+        if not isinstance(self.rest, collections.abc.Mapping):
+            raise ValueError("Attestation.rest is the rest() result the runner took")
+        object.__setattr__(self, "rest", types.MappingProxyType(copy.deepcopy(dict(self.rest))))
         # A snapshot: the runner's dicts may change after the attestation is taken; this may not.
         object.__setattr__(self, "locale_readings",
                            types.MappingProxyType(copy.deepcopy(dict(self.locale_readings))))
@@ -990,12 +998,30 @@ def attestation_problems(attestation, doc: dict) -> list:
             out.append(f"attestation: {locale}: the runner ran this locale and the evidence has no run")
         elif not P.same(attestation.locale_readings[locale], runs[locale].get(E.LOCALE_READING)):
             out.append(f"attestation: {locale}: the stored locale reading is not the one the runner took")
+    if not P.same(dict(attestation.rest), doc.get(E.REST)):
+        out.append(f"attestation: the evidence's rest {str(doc.get(E.REST))[:80]} is not the rest "
+                   f"result the runner took")
     digest = E.sha256_of(doc)
     if attestation.evidence_sha256 != digest:
         out.append(f"attestation: the evidence's canonical bytes hash to {digest[:12]}, not the "
                    f"{attestation.evidence_sha256[:12]} the runner produced; it changed after the "
                    f"attestation was taken")
     return out
+
+
+RESTORE_NOT_CONFIRMED = "restore not confirmed"
+
+
+def rest_problems(doc: dict) -> list:
+    """Why the evidence does not show Logic put back in Korean after the run: its rest() result is
+    absent or does not say `"in_locale": true`. A restore that is not confirmed keeps the document
+    at best incomplete, however clean its rows are."""
+    rest = doc.get(E.REST)
+    if isinstance(rest, dict) and rest.get("in_locale") is True:
+        return []
+    why = "the evidence carries no rest result" if rest is None else \
+        f"rest is {json.dumps(rest, ensure_ascii=False, sort_keys=True)[:200]}"
+    return [f"{RESTORE_NOT_CONFIRMED}: {why}"]
 
 
 def run_locale_status(locale: str, run: dict):
@@ -1080,6 +1106,7 @@ def judge(doc, schema: dict = None, resolve_canon=resolve_canon_offline, expecte
     result["mismatches"] = compare_verdicts(counted, recomputed)
     unattested = attestation_problems(attestation, doc)
     result["incomplete"] += unattested
+    result["incomplete"] += rest_problems(doc)
     binary = doc["binary"]
     if binary.get(E.BINDING) != E.BOUND:
         result["provenance"] = E.UNBOUND
