@@ -59,6 +59,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   I/O-label rename reads `unclassified` rather than as a bus and `main_output` says so; the
   strip-to-track attribution is still positional; bus-to-aux input edges are `not_observed`;
   which bus a send goes to is not read; `no_output` and `unclassified` were seen in fixtures only.
+- **An internal intent model and one main-output rule for the project audit (#966 P1, ADR-021;
+  refs #966).** `ProjectSessionAudit.parseIntentPolicy` reads a
+  `logic_pro_mcp_repair_policy.v1` object (exact keys, `trk_` targets, an optional `prj_`
+  `project_ref`, proposed roles, and per-subject main outputs of `bus: n` or
+  `output: "no_output"`), and `assessIntent` checks it against one #965 capture and the #291 R1
+  graph published from it (`SessionPopulationObservation.routingGraph(capture:)`, which
+  `inspect_session`'s routing section now also builds from, unchanged on the wire). `compliant`
+  and `violation` need the `main_output` and `strip_track_association` domains both `complete`;
+  otherwise the finding is `unverified` with `main_output_coverage_incomplete` /
+  `strip_track_association_incomplete` and the domains' own reasons copied as evidence. A capture
+  that moved, a graph from another capture, a graph whose project reference is not the one the
+  capture issued, an inconsistent graph, no document, occlusion, a stale reference snapshot or an
+  unissued project reference is `unverified` with its own token; a policy for another project or a
+  target outside the snapshot is `outside_scope`. A role with no accepted member is a
+  `needs_input` question only when the checks a direct target reads before it looks for its node
+  pass, through the same functions: those checks, the capture's track references on and current,
+  and the graph's epoch. The domains are read more narrowly: a direct target's verdict is about
+  routing and needs both domains `complete`, but the question is about which captured track fills
+  the role, so only an `unstable` domain stops it and a `partial` one does not. Otherwise its
+  finding carries the failing check's status and token and nothing is asked; a capture whose
+  project reference went stale is published with every domain `unstable`, so it stops at the
+  domain check. Its
+  candidates are the proposed members whose references the capture issued for exactly one row, in
+  the policy's order. When none is, the role carries the tokens a direct target with those
+  references gets (`target_not_in_snapshot`, `target_ambiguous_in_snapshot`), it is
+  `outside_scope` only when every candidate is outside the snapshot, and nothing is asked. The
+  source is found by reference, never by name; a node id, destination bus number or captured
+  reference that more than one node or row carries is `unverified` rather than decided by order;
+  and send and input edges, levels, enabled flags and automation are never read. Limits:
+  `publish` leaves both domains `partial` on every read today, so every real assessment of a
+  direct target is `unverified`, while a role with no accepted member still asks; no command,
+  resource or documented surface exposes this yet.
 
 ### Fixed
 - MCU button presses now send the button release: bank left/right (`mixer.bank` and the bank walk behind every strip-relative MCU operation), track select, automation mode, the mute / solo / arm / select strip buttons, and the MCU transport buttons (play, stop, record, rewind, fast forward, cycle). Before, each press was a Note On with no release, so Logic saw every button as held, and it auto-repeats held bank buttons: after one bank walk left and one press right, the LCD kept redrawing between two bank windows for seconds. The `enabled: false` branch of `track.set_mute` / `set_solo` / `set_arm`, which sent a single release with no press, is replaced under #1020 below. (#862)

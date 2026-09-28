@@ -233,11 +233,11 @@ def _literals_named_in_records() -> set:
         record = _json(os.path.join(root, name), None)
         if not isinstance(record, dict):
             continue
-        # NOT `_observation_strings`: that applies `NOT_APPLICABLE_MIN`, an eight-character floor
-        # written for rule 13, where a short fragment is too weak to REFUSE a declaration on. Here
-        # the question is the opposite one -- has somebody measured this literal -- and `Utility`
-        # is seven characters, `유틸리티` four. A floor built to avoid false refusals became a
-        # floor that caused one.
+        # NOT `_observation_strings`: that applies rule 13's floors -- eight characters, or two for
+        # a string holding a CJK character -- written where a short fragment is too weak to REFUSE
+        # a declaration on. Here the question is the opposite one -- has somebody measured this
+        # literal -- and `Utility` is seven characters. A floor built to avoid false refusals
+        # became a floor that caused one.
         for text in _every_string_in(record):
             named.add(canon.normalize(text))
     return named
@@ -505,9 +505,60 @@ BINDING_RECORD_FIELDS = ("observations", "conclusion", "method", "question", "su
                          "canon_absent", "evidence")
 
 
-#: The shortest observation string worth testing for citability. Below this a value is a role name,
-#: a number or a fragment, and a corpus hit means nothing.
+#: The shortest observation string worth testing for citability. Below this a Latin-script value is
+#: a role name, a number or a fragment, and a corpus hit means nothing.
 NOT_APPLICABLE_MIN = 8
+
+#: The same floor for a string holding a Han, Hangul, Hiragana or Katakana character (#1037). A
+#: whole Logic label in those scripts is often two to four characters -- `트랙`, a Korean one, is
+#: two -- so the Latin floor hid whole words there, not fragments. A single character stays below
+#: this floor; that was chosen, not measured.
+NOT_APPLICABLE_MIN_CJK = 2
+
+#: The letter blocks of the four scripts above, one row per block. Every boundary is copied from
+#: Unicode 18.0.0 `Blocks.txt` (dated 2026-07-08); the two halfwidth rows are subheadings of the
+#: Halfwidth and Fullwidth Forms block, copied from `NamesList-18.0.0.txt`. Explicit ranges rather
+#: than `unicodedata` names, so that the Python a runner happens to have cannot change the answer:
+#: 3.14 carries Unicode 16.0, which has no Extension J. The first version stopped at U+3134F and
+#: left out both Hangul Jamo Extended blocks, Extensions H and J, the kana supplements and
+#: halfwidth Hangul (review round 1 of #1047). Enclosed, squared and radical forms are left out on
+#: purpose, and so are the iteration marks in CJK Symbols and Punctuation, such as \u3005: a word
+#: spelled with one also holds a letter from a block listed here.
+_CJK_BLOCKS = (
+    (0x1100, 0x11FF, "Hangul Jamo"),
+    (0x3040, 0x309F, "Hiragana"),
+    (0x30A0, 0x30FF, "Katakana"),
+    (0x3130, 0x318F, "Hangul Compatibility Jamo"),
+    (0x31F0, 0x31FF, "Katakana Phonetic Extensions"),
+    (0x3400, 0x4DBF, "CJK Unified Ideographs Extension A"),
+    (0x4E00, 0x9FFF, "CJK Unified Ideographs"),
+    (0xA960, 0xA97F, "Hangul Jamo Extended-A"),
+    (0xAC00, 0xD7AF, "Hangul Syllables"),
+    (0xD7B0, 0xD7FF, "Hangul Jamo Extended-B"),
+    (0xF900, 0xFAFF, "CJK Compatibility Ideographs"),
+    (0xFF65, 0xFF9F, "Halfwidth Katakana variants"),
+    (0xFFA0, 0xFFDC, "Halfwidth Hangul variants"),
+    (0x1AFF0, 0x1AFFF, "Kana Extended-B"),
+    (0x1B000, 0x1B0FF, "Kana Supplement"),
+    (0x1B100, 0x1B12F, "Kana Extended-A"),
+    (0x1B130, 0x1B16F, "Small Kana Extension"),
+    (0x20000, 0x2A6DF, "CJK Unified Ideographs Extension B"),
+    (0x2A700, 0x2B73F, "CJK Unified Ideographs Extension C"),
+    (0x2B740, 0x2B81F, "CJK Unified Ideographs Extension D"),
+    (0x2B820, 0x2CEAF, "CJK Unified Ideographs Extension E"),
+    (0x2CEB0, 0x2EBEF, "CJK Unified Ideographs Extension F"),
+    (0x2EBF0, 0x2EE5F, "CJK Unified Ideographs Extension I"),
+    (0x2F800, 0x2FA1F, "CJK Compatibility Ideographs Supplement"),
+    (0x30000, 0x3134F, "CJK Unified Ideographs Extension G"),
+    (0x31350, 0x323AF, "CJK Unified Ideographs Extension H"),
+    (0x323B0, 0x3347F, "CJK Unified Ideographs Extension J"),
+)
+_CJK = re.compile("[" + "".join(f"{chr(lo)}-{chr(hi)}" for lo, hi, _ in _CJK_BLOCKS) + "]")
+
+
+def _contains_cjk(text: str) -> bool:
+    """Whether `text` holds at least one Han, Hangul, Hiragana or Katakana character."""
+    return _CJK.search(text) is not None
 
 
 #: The fields rule 13's bound reads. `observations` alone was not enough: moving the citable
@@ -542,7 +593,7 @@ def _every_string_in(record: dict) -> list:
 
 
 def _observation_strings(record: dict) -> list:
-    """Every string in the record's substantive fields, flattened."""
+    """Every string in the record's substantive fields long enough to test, flattened."""
     out = []
 
     def walk(node):
@@ -552,7 +603,9 @@ def _observation_strings(record: dict) -> list:
         elif isinstance(node, list):
             for value in node:
                 walk(value)
-        elif isinstance(node, str) and len(node) >= NOT_APPLICABLE_MIN:
+        elif isinstance(node, str) and (
+                len(node) >= NOT_APPLICABLE_MIN
+                or (len(node) >= NOT_APPLICABLE_MIN_CJK and _contains_cjk(node))):
             out.append(node)
 
     for field in NOT_APPLICABLE_FIELDS:

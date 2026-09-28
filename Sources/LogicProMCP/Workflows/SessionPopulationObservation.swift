@@ -714,10 +714,10 @@ enum SessionPopulationObservation {
         )
     }
 
-    /// Built by the same `RoutingGraphPublication.publish` `logic://mixer` calls, over this capture.
-    /// A project reference that went stale during issuance is a moved capture here: `build` cannot
-    /// throw the way the resource does.
-    static func routingSection(capture: Capture, moved: Bool) -> RoutingSection {
+    /// The graph of this capture, by the same `RoutingGraphPublication.publish` `logic://mixer`
+    /// calls. A project reference that went stale during issuance is a moved capture here: a
+    /// reader that cannot throw the way the resource does publishes it as every domain `unstable`.
+    static func routingGraph(capture: Capture) -> RoutingGraph {
         let project: RoutingProjectBinding
         switch capture.projectIssuance {
         case .issued(let reference)?:
@@ -730,7 +730,12 @@ enum SessionPopulationObservation {
             // With references off nothing was issued, which is not a movement.
             project = capture.referencesEnabled ? .moved : .referencesUnavailable
         }
-        let graph = RoutingGraphPublication.publish(capture: capture, project: project)
+        return RoutingGraphPublication.publish(capture: capture, project: project)
+    }
+
+    /// The routing section `build` reports, over `routingGraph(capture:)`.
+    static func routingSection(capture: Capture, moved: Bool) -> RoutingSection {
+        let graph = routingGraph(capture: capture)
 
         let coverage: Coverage
         let reasons: [Reason]

@@ -318,6 +318,8 @@ actor AccessibilityChannel: Channel {
         // MARK: - Transport reads
         case "transport.get_state":
             return runtime.transportState()
+        case "transport.get_tempo":
+            return Self.defaultGetObservedTempo(runtime: runtime.logicRuntime)
 
         // MARK: - Transport mutations
         case "transport.toggle_cycle":
@@ -342,9 +344,20 @@ actor AccessibilityChannel: Channel {
         case "transport.stop":
             return runtime.toggleTransportButton("Stop")
         case "transport.pause":
-            // Logic has no distinct pause control; the Stop button halts the
-            // playhead in place, which is exactly the verified pause target.
-            return runtime.toggleTransportButton("Stop")
+            // Logic's control bar has no pause control, and Stop is not pause: Pause leaves Play on
+            // with the playhead held, Stop turns Play off and clears Record. This case used to press
+            // Stop, so a pause that fell through to it stopped the transport (#1029 review, R-01).
+            // It refuses instead, so no route or caller reaches Stop through "pause". Not terminal:
+            // a later rung that posts Pause may still run.
+            return .error(HonestContract.encodeStateC(
+                error: .notSupported,
+                hint: "Logic's control bar has no pause control, and Stop is not pause, so the Accessibility channel sent nothing. Pause is the CGEvent Pause key (keypad Period).",
+                extras: [
+                    "operation": "transport.pause",
+                    "write_attempted": false,
+                    "safe_to_retry": true,
+                ]
+            ))
         case "transport.record":
             return runtime.toggleTransportButton("Record")
 

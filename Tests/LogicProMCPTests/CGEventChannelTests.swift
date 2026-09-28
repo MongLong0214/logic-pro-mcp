@@ -221,21 +221,21 @@ func testCGEventProductionRuntimeSmokeExecutesWithoutCrash() {
     // event tap); this smoke test asserts the production runtime drives the full
     // path without crashing.
     _ = runtime.postKeyEvent(0, [], getpid())
+    // #1039: the real TIS read runs to completion; its value depends on the host.
+    _ = runtime.currentInputSource()
 }
 
-// MARK: - T1: project.new via CGEvent Cmd+N
+// MARK: - T1: project.new has no CGEvent keystroke (#1029)
 
-@Test func testProjectNewCGEventPostsCmdN() async {
+// project.new routes [.accessibility] only, and Command-N is Apple's `New from Template`, not
+// `New Empty Project`. Kills: `"project.new": .cmd(45)` restored to keyMap.
+@Test func testProjectNewCGEventPostsNothing() async {
     let recorder = CGEventRecorder()
     let channel = CGEventChannel(runtime: makeCGEventRuntime(recorder: recorder))
 
     let result = await channel.execute(operation: "project.new", params: [:])
-    #expect(result.isSuccess)
-
-    let events = recorder.snapshot()
-    #expect(events.count == 1)
-    #expect(events[0].keyCode == 45)  // N key = Cmd+N
-    #expect(events[0].flags == .maskCommand)
+    #expect(!result.isSuccess)
+    #expect(recorder.snapshot().isEmpty)
 }
 
 @Test func testProjectNewRoutingHasOnlyExactQualifiedAX() {

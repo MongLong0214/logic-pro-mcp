@@ -707,21 +707,43 @@ class DriftInStatus(unittest.TestCase):
 
 class TheGeneratedTableSaysNotLocalized(unittest.TestCase):
     """Against the committed canon, offline. `AXLocaleValues.swift` shipped the English
-    `Toggle Track Record Enable` as it-IT, pt-BR and zh-TW; the generator now leaves those out and
-    says why, and guesses nothing in their place."""
+    `Toggle Track Record Enable` as it-IT, pt-BR and zh-TW, taken from QuickHelp files that ARE the
+    English file. The generator leaves such locales out and says why, and guesses nothing in their
+    place. Since #1028 P1b the table derives from `Localizable.strings`, which Apple translates in
+    all ten, so the three carry their own spelling; QuickHelp is still not credited for them."""
 
-    def test_record_arm_is_not_english_in_italian(self):
+    @staticmethod
+    def _labels():
         spec = importlib.util.spec_from_file_location("locale_labels_corrections",
                                                       os.path.join(HERE, "locale_labels.py"))
         labels = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(labels)
-        swift = labels.render_swift({})
+        return labels
+
+    def test_quickhelp_is_not_credited_in_italian(self):
+        labels = self._labels()
+        with open(labels.SWIFT, encoding="utf-8") as handle:
+            members = {name: m for name, m, _ref in labels._derived_declarations(handle.read())}
+        not_localized = set()
+        # The QuickHelp title row. Its en value is quoted on the next line, as a citation needs.
+        # value: Toggle Track Record Enable
+        values = labels._locale_values(members["recordArmKeyCommandName"],
+                                       "logic-canon://quickhelp/QuickHelp/en/KCE_390_ToggTrackRec#Title",
+                                       not_localized=not_localized)
+        for locale in ("it-IT", "pt-BR", "zh-TW"):
+            with self.subTest(locale=locale):
+                self.assertIn(locale, not_localized)
+                self.assertNotIn(locale, values)
+        self.assertEqual(values.get("en-US"), "Toggle Track Record Enable", "the control: English stays")
+
+    def test_record_arm_is_not_english_in_italian(self):
+        swift = self._labels().render_swift({})
         block = swift[swift.index("static let recordArmKeyCommandName"):]
         block = block[: block.index("\n    ]")]
         for locale in ("it-IT", "pt-BR", "zh-TW"):
             with self.subTest(locale=locale):
                 self.assertNotIn(f'"{locale}": "Toggle Track Record Enable"', block)
-                self.assertIn(f'// "{locale}": not localized', block)
+                self.assertIn(f'"{locale}": "', block, "each carries Apple's own spelling")
         self.assertIn('"en-US": "Toggle Track Record Enable"', block, "the control: English stays")
 
 

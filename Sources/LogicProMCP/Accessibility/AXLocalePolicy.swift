@@ -1248,31 +1248,51 @@ enum AXLocalePolicy {
     )
 
     static let keyCommandsWindowTitle = LabelSet(
-        canonical: "Key Command",
-        variants: ["키 명령", "キーコマンド", "Befehlstaste", "Comando de teclado", "Raccourci clavier",
-                   "Comando da tastiera", "键盘命令", "按鍵指令"],
+        canonical: "Key Command Assignments",
+        variants: [
+            "키 명령 할당",
+            "キーコマンドの割り当て", "Tastaturkurzbefehlzuweisungen",
+            "Asignaciones de comandos de teclado", "Assignations de raccourcis clavier",
+            "Assegnazioni comandi da tastiera", "Atribuições de Comandos de Teclado",
+            "键盘命令分配", "按鍵指令指定"
+        ],
         rationale: "Identifies the Key Commands window by title substring. The window Logic opened for"
-            + " Option+K was titled `키 명령 할당 – U.S. – 편집됨` when it was read live 2026-09-14; only"
-            + " the head is matched because the preset name and the edited marker vary. Apple's row"
-            + " is ControllerAssignments `2163.title`, ANCHORED AT ko because the row has no `en` on"
-            + " the `strings` side -- English lives in `nibstrings`, the split #895 established --"
-            + " so `Key Command` itself is the one member this derivation does not verify. Apple's pt value `Comando de Teclado` is NOT stored: it differs from the es value only by case, and `check-probe-product-drift.py` refuses two members a case-folded match would merge. Every comparison here is case-insensitive, so the es spelling matches a Portuguese reading and nothing is lost -- but the set is one member short of Apple's row for that reason and not by oversight.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FControllerAssignments.strings/ko/2163.title#value"
+            + " Option+K was titled `키 명령 할당 – U.S. – 편집됨` when it was read live 2026-09-14 and"
+            + " `Assegnazioni comandi da tastiera – U.S. – Modificato` on an Italian Logic 2026-09-28;"
+            + " only the head is matched because the preset name and the edited marker vary. Apple's"
+            + " row is Localizable `Key Command Assignments`, and KeyCommands `5.title` (the nib's own"
+            + " title) carries the same values, differing only by case in pt. Until #1028 P1b the"
+            + " set held ControllerAssignments `2163.title` (`Key Command`, `Comando da tastiera`):"
+            + " a row the ten-locale derivation check passed and the window does not show. Its"
+            + " German, Spanish, French, Italian and Portuguese values are not substrings of this"
+            + " title, so the setup reported that the window had not opened when it had.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Key%20Command%20Assignments#value",
+        alsoDerivedFrom: ["logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/5.title#value"]
     )
 
     static let recordArmKeyCommandName = LabelSet(
         canonical: "Toggle Track Record Enable",
-        variants: ["트랙 녹음 활성화 토글", "トラックの録音可能を切り替える",
+        variants: ["트랙 녹음 활성화 토글", "トラックの録音可能を切り替え", "トラックの録音可能を切り替える",
+                   "Spur für die Aufnahme aktivieren ein-/aus",
                    "Spur für die Aufnahme aktivieren ein-/ausschalten",
                    "Activar/desactivar grabación de pista",
-                   "Activer/Désactiver l’enregistrement sur piste", "开关轨道录音启用"],
-        rationale: "The Key Commands entry `system.setup_arm_key` assigns a chord to. Apple keys it in"
-            + " QuickHelp as `KCE_390_ToggTrackRec`; the ko value is what was read live 2026-09-14"
-            + " alongside the two sibling commands it must not be confused with. Italian, Portuguese"
-            + " and Traditional Chinese leave it in English, so six distinct members cover ten"
-            + " languages. Apple's French value carries a trailing space; `.exact` trims surrounding"
-            + " whitespace, so it is stored without one.",
-        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/KCE_390_ToggTrackRec#Title"
+                   "Activer/Désactiver l’enregistrement sur piste", "开关轨道录音启用",
+                   "Attiva/disattiva abilitazione registrazione traccia",
+                   "Ativar/Desativar Gravação das Pistas", "切換音軌錄音啟用"],
+        rationale: "The Key Commands entry `system.setup_arm_key` assigns a chord to. Apple names it"
+            + " twice: `Localizable.strings` keys the command by its English name, and QuickHelp"
+            + " titles it `KCE_390_ToggTrackRec`. The Key Commands list reads the first: the ko"
+            + " search read live 2026-09-14 returned `채널 스트립 녹음 활성화 토글` and"
+            + " `퍼포먼스 녹음 활성화 켬/끔` beside this command, and both are values of that file and"
+            + " of no QuickHelp title. QuickHelp is English in Italian, Portuguese and Traditional"
+            + " Chinese (the file is byte-identical to English, #1028); `Localizable.strings` is"
+            + " translated in all ten, so it is the row the typed query derives from (#1028 P1b)."
+            + " The two rows differ in German (`ein-/aus` against `ein-/ausschalten`) and Japanese"
+            + " (`切り替え` against `切り替える`); both spellings are members so a reading of either"
+            + " matches. Apple's French QuickHelp value carries a trailing no-break space; `.exact`"
+            + " trims surrounding whitespace, so it is stored without one.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Toggle%20Track%20Record%20Enable#value",
+        alsoDerivedFrom: ["logic-canon://quickhelp/QuickHelp/en/KCE_390_ToggTrackRec#Title"]
     )
 
     static let learnByKeyLabelCheckbox = LabelSet(
@@ -1284,7 +1304,7 @@ enum AXLocalePolicy {
         rationale: "The Key Commands checkbox `system.setup_arm_key` toggles before posting its chord,"
             + " distinguished from `키 위치로 학습` and `새로운 할당 학습` when it was read live 2026-09-14."
             + " Apple's row is KeyCommands `300557.title`, ANCHORED AT ko for the same reason as the"
-            + " window title: the row has no `en` on the `strings` side.",
+            + " window title's KeyCommands `5.title`: the row has no `en` on the `strings` side.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/300557.title#value"
     )
 
@@ -1438,11 +1458,17 @@ enum AXLocalePolicy {
     )
 
     static let transportRecordControl = LabelSet(
-        canonical: "record",
-        variants: ["녹음", "録音", "Aufnahme", "grabar", "enregistrer", "registra", "gravar", "录音", "錄製"],
+        canonical: "Record",
+        variants: ["녹음", "録音", "Aufnahme", "Grabar", "Enregistrement", "Registra", "Grava", "录音", "錄音"],
         rationale: "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMALiveLoopsUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/record#value"
+            + " Apple's row is Localizable `StrTransportBtns|||Record`, the label the control bar draws:"
+            + " it was read live on 2026-09-28 as `Enregistrement`, `Grava` and `錄音` on a French,"
+            + " Portuguese and Traditional Chinese Logic 12.3. Until #1028 P1b the set held MALiveLoopsUI"
+            + " `record` (`enregistrer`, `gravar`, `錄製`), a row the ten-locale derivation check passed and"
+            + " the control bar does not show in those three languages, so the record-arm setup read the"
+            + " transport as unreadable there and answered verify_environment_unavailable. The other seven"
+            + " values equal the old members up to case, and every comparison is case-insensitive.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTransportBtns%7C%7C%7CRecord#value"
     )
 
     static let transportCycleControl = LabelSet(
