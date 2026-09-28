@@ -16,20 +16,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   titled as that dialog, with no Logic menu above it and Logic holding the keyboard, read up to 30
   times 0.1 s apart. Otherwise it refuses as State C `dialog_not_found` with `write_attempted:
   false`; once the opening key went out, the refusal is also `safe_to_retry: false` and
-  `fallback_unsafe: true`, since the dialog can still open later. Driven in ko and de with a Logic
-  menu open first: the opening key was the only event posted, and the position did not move.
+  `fallback_unsafe: true`, since the dialog can still open later. Driven in the ten languages
+  Logic ships: goto moved the position only after that language's dialog appeared, and with a
+  Logic menu open first the opening key was the only event posted and the position did not move.
 - **A toggle press that was delivered is not pressed again by a later rung (#1042).**
   `toggle_cycle`, `toggle_metronome` and `toggle_count_in` used to go on to AXConfirm, a second
   press, when the readback had not changed within 0.6 s, and the router then handed the same
   toggle to the MIDI key command, a third. A lagging readback let the later presses turn the
   control back. They now stop at the first delivered press: the mismatch carries
   `write_attempted: true`, `safe_to_retry: false` and `fallback_unsafe: true`, and reports a fresh
-  read as observed. `edit.toggle_step_input` carries the same marker.
+  read as observed. `edit.toggle_step_input` carries the same marker. Driven in the ten
+  languages: `toggle_cycle` pressed the Cycle checkbox once each way.
 - **In Portuguese, `transport.play` and `transport.stop` find the control bar's Play checkbox
   (#1060).** A Portuguese Logic describes it `Reproduz`, which the Play label set did not carry,
-  so both fell through to the MCU rung: `play` answered State B and Logic did not play. A playing
-  transport did not read as playing either. The set now also derives from the control bar's own
-  row, `StrTransportBtns|||Play`, and the derivation check holds it to that row in every locale.
+  so `play` fell through to the MCU rung, answered State B and Logic did not play; `stop` and the
+  playing read use the same set. The set now also derives from the control bar's own row,
+  `StrTransportBtns|||Play`, and the derivation check holds it to that row in every locale.
+  Driven in the ten languages: `play` pressed the checkbox through AX and answered State A in
+  each, `Reproduz` included, and a playing transport read as playing.
 
 ### Removed
 - **`logic://transport` no longer declares `isPaused` (#1041).** Nothing that reads Logic ever
