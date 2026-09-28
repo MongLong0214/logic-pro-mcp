@@ -1,0 +1,39 @@
+Limit: the swift-sdk type is unchanged upstream, so a client's non-string experimental capabilities are dropped rather than carried
+Limit: the desktop app named in #1048 was not run; the captured request came from the same vendor's command-line client 0.156.1
+Limit: the test fixtures replace the captured clients' names, titles and experimental-key prefix; the structure and every other value are as captured
+Ruled-out: upgrading swift-sdk | 0.12.1 is the latest tag and upstream main is the same commit, still typing the field [String: String]
+Ruled-out: forking or vendoring the SDK | the repair fits at our own transport boundary, before the SDK decodes
+Warn: the filter is removable only once the pinned swift-sdk decodes an object-valued experimental capability; sdkRejectsTheUnfilteredFrame turns red when it does
+Provenance: inherited 0f1ef8d8170f9cadf2f517b6319cbdc9272a3cd6
+
+Limit: the roadmap row is ahead of GitHub until the pull request carrying it merges
+Provenance: inherited 8d1a21d4da41586655cb12a3100ab6ec3d888266
+
+Limit: the desktop app has not been run against the build after the change
+Warn: the fix relies on swift-sdk ignoring capability keys it does not declare; sdkIgnoresUndeclaredCapabilityKeys turns red if that changes
+Provenance: inherited 59617f7846a48c87cf2e4d687286a974a72b0a20
+
+Limit: neither entry says anything yet about the desktop app against the build after the change
+Provenance: inherited fc8ade4069e669572bbf0c17592351bfb5150322
+
+Limit: the desktop runs show the handshake and tools/list; no tool call was made
+Provenance: inherited 3607b96f997680cd90b70100cef1baeb121e27de
+
+Limit: the logger writes every line to stderr synchronously, so a client that never drains stderr can still stall any logged path; that is not new here, and this change removes only the client-controlled size of this line
+Limit: the report is logged at info level, so it is absent under LOG_LEVEL=warn or error
+Ruled-out: logging the report from another task or queue | speculative machinery; bounding the line closes the hole
+Ruled-out: replacing Log.output in the test | other tests replace it too, so two tests running at once take each other's lines (#1003)
+Warn: a Character can be any number of bytes, so the Character limit alone does not bound a key; keep the byte limit when changing the cut
+Provenance: inherited 2b84c5cbf38a8e7f395869c1d0ff5034c54ad200
+
+Limit: the logger writes every line to stderr synchronously, so a client that never reads stderr can still stall any logged path; this change removes only the client-controlled size of this line
+Provenance: inherited 220a7cb109b11cc9c0f5b7fcfad9196b4da3f524
+
+Limit: every Logger call writes to stderr synchronously, so a client that stops reading stderr can still stall the server at its next logged line, as it could in 3.17.0; only initialize is now free of writes
+Ruled-out: bounding the line's size | a write to a full pipe blocks whatever its size; the round-2 review showed it with the 306-byte line
+Ruled-out: writing the line from another task or queue | adds concurrency to the read path for a line no behaviour depends on
+Provenance: inherited 0e983488f7273b25c1941f11651c80eb2ef02c25
+
+Limit: every Logger call writes to stderr synchronously, so a client that stops reading stderr can still stall the server at its next logged line; a pipe already full at startup blocks the first startup line
+Limit: the desktop app's run was against a build that still wrote the line, and it has not been repeated on the final build
+Provenance: inherited 73588608f88f009784f95a80c9d9c7b6459520d2
