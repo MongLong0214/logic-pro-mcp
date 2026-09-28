@@ -4,25 +4,32 @@ Limit: the pilot's clamped row stays UNREADABLE until a live run takes the off-h
 Ruled-out: host-file provenance as the binding | Scripts/verify/engine.py with its real sha256 and an existing commit as head was accepted as built-by-verifier; a host check shows only that a file with that digest exists.
 Ruled-out: an invariant over a reading taken after the operation | it exempted a claim about the operation from the counterexample rule.
 Ruled-out: exit 3 for the command-line record | exit 3 says more observations could make the evidence clean; no content of a file can make record write.
+Record-Id: r-inhf2c0440b6434f0
 Provenance: inherited 0b6434f0c22d00d2c7c4af9f2890802ec1c7ea35
 
 Limit: the ADR paragraph is added, not a replacement; ADR-027 stated no order rules before.
 Ruled-out: host-file provenance as the binding, in the documents as in the engine | a host check shows only that a file with the recorded digest exists, not that the verifier built it
 Ruled-out: an invariant over a reading taken after the operation | a reading after the operation is a claim about the operation, and so is an effect
+Record-Id: r-inhf2c044f4ac86bf
 Provenance: inherited f4ac86bf9e68bbb5363cd42da94821dcc6b65fcd
 
 Limit: a restore check is not yet shown to be falsifiable; a restoring call that changes nothing, a no-op or a re-run of the operation, passes these rules, and closing that needs a counterexample for restore checks, which this change does not add.
+Record-Id: r-inhf2c04465cc9668
 Provenance: inherited 65cc96687808a57ed8271267912b2c55257b1b24
 
 Limit: in-process forgery; code the verifier runs, or a script that imports the engine, can build an Attestation without naming it outside Scripts/verify (a computed attribute name, for one), and only review and CI stand against it (#816).
 Ruled-out: runtime secrets and signatures inside one Python process | they protect nothing against code in that process.
+Record-Id: r-inhf2c044b20f8e63
 Provenance: inherited b20f8e632dfdde0213489c5b2d7512d42343b100
 
 Limit: in P0a no command writes a record; the recording logic runs only in the self-test until run exists in P0b-2.
+Record-Id: r-inhf2c04439981a27
 Provenance: inherited 39981a27c48ce4fef869dddbd0866aae3ad77cb6
 
 Ruled-out: a second pre-operation probe in the pilot rows as the changed witness | the pilot evidence is a recorded live run with no such reading, so the new step would have no observation.
+Record-Id: r-inhf2c044f85d1e93
 Provenance: inherited f85d1e93cf5c7f7792c0a7766e5f3ced7b884ce4
 
 Limit: a restore check that cannot fail is still admissible: ne against a string a boolean reading never equals (V2) and two post-restore readings compared with each other (V3) pass these rules, under the recorded limit that a restore check is not yet shown to be falsifiable.
+Record-Id: r-inhf2c044cf105cd1
 Provenance: inherited cf105cd198d1a497b17ddb7d28053205154263a0
