@@ -83,7 +83,8 @@
       "2026-09-28-zh-CN-track-header-toggles-publish-what-was-read",
       "2026-09-28-zh-CN-track-header-toggles-without-the-mute-led-writer",
       "2026-09-28-zh-TW-track-header-toggles-publish-what-was-read",
-      "2026-09-28-zh-TW-track-header-toggles-without-the-mute-led-writer"
+      "2026-09-28-zh-TW-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-29-1038-transport-goto-gate-toggle-and-pause-ten-languages"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
@@ -528,30 +529,11 @@
   "note": "What the ledger does not know, as SETS of identities. A member may leave; a new member fails CI. Sets rather than counts because a count is defeated by a swap — add one undocumented variant, document a different one, and the total is unchanged while the ledger knows strictly less about a new string. The guard also compares against the MERGE BASE, so raising the file in the same commit as the regression does not help. Raising requires a dated reason under `raised`. ADR-019 D8. Live: observations-status.py --unproven",
   "raised": {
     "manual_reverify": {
-      "date": "2026-09-28",
+      "date": "2026-09-29",
       "members": [
-        "2026-09-28-de-DE-track-header-toggles-publish-what-was-read",
-        "2026-09-28-de-DE-track-header-toggles-without-the-mute-led-writer",
-        "2026-09-28-en-US-track-header-toggles-publish-what-was-read",
-        "2026-09-28-en-US-track-header-toggles-without-the-mute-led-writer",
-        "2026-09-28-es-ES-track-header-toggles-publish-what-was-read",
-        "2026-09-28-es-ES-track-header-toggles-without-the-mute-led-writer",
-        "2026-09-28-fr-FR-track-header-toggles-publish-what-was-read",
-        "2026-09-28-fr-FR-track-header-toggles-without-the-mute-led-writer",
-        "2026-09-28-it-IT-track-header-toggles-publish-what-was-read",
-        "2026-09-28-it-IT-track-header-toggles-without-the-mute-led-writer",
-        "2026-09-28-ja-JP-track-header-toggles-publish-what-was-read",
-        "2026-09-28-ja-JP-track-header-toggles-without-the-mute-led-writer",
-        "2026-09-28-ko-KR-track-header-toggles-publish-what-was-read",
-        "2026-09-28-ko-KR-track-header-toggles-without-the-mute-led-writer",
-        "2026-09-28-pt-BR-track-header-toggles-publish-what-was-read",
-        "2026-09-28-pt-BR-track-header-toggles-without-the-mute-led-writer",
-        "2026-09-28-zh-CN-track-header-toggles-publish-what-was-read",
-        "2026-09-28-zh-CN-track-header-toggles-without-the-mute-led-writer",
-        "2026-09-28-zh-TW-track-header-toggles-publish-what-was-read",
-        "2026-09-28-zh-TW-track-header-toggles-without-the-mute-led-writer"
+        "2026-09-29-1038-transport-goto-gate-toggle-and-pause-ten-languages"
       ],
-      "reason": "#1040: the ten per-locale track-header toggle records reverify by hand. The run that produced them used a harness kept with the evidence outside this repository (live1040_run.py with its AX walker and the Input Monitoring press; each evidence file carries their sha256), because it presses a checkbox the product has no write for and was written for this one ten-locale reading; porting it into Scripts/livekit would make the committed harness a different program from the one whose output the records cite. The reverify block carries the steps, the expected reading and the cost. Registered in the same commit as the records; the member of the previous raise is in the base and is no longer growth. The second ten (track-header-toggles-without-the-mute-led-writer) are the same reading by the same harness on the head whose MCU parser no longer writes the Mute LED into isMuted (review round 1 of #1040); each supersedes its locale's first record and reverifies by hand for the same reason."
+      "reason": "#1038, #1041, #1042 and #1060: the ten-language transport record reverifies by hand. The run drove Logic through a harness kept with the evidence outside this repository (live.py, and Issue1038LiveHarness.swift copied into the test target only for the run), because the goto cases run CGEventChannel directly against a running Logic from a test harness that CI must not build, and the menu case opens a Logic menu before the call. The reverify block carries the steps, the expected reading and the cost. Registered in the same commit as the record; the members of the previous raise are in the base and are no longer growth."
     },
     "records_without_evidence": {
       "date": "2026-09-19",

@@ -1,0 +1,2793 @@
+{
+ "id": "2026-09-29-1038-transport-goto-gate-toggle-and-pause-ten-languages",
+ "date": "2026-09-29",
+ "schema": 3,
+ "subject": "transport.goto_position's CGEvent fallback, toggle_cycle and logic://transport/state after a pause, in the ten languages Logic ships",
+ "question": "In each of de, en, es, fr, it, ja, ko, pt, zh_CN and zh_TW: does the CGEvent goto_position route type the position only once the Go To Position dialog it identified is on screen, and refuse without typing when a Logic menu keeps the dialog from opening; does toggle_cycle press the Cycle checkbox once and report it; does play press the control bar's Play checkbox, including Portuguese's Reproduz (#1060); and does logic://transport/state publish a paused transport as the control bar reads it, without an isPaused field?",
+ "verdict": "works",
+ "issues": [
+  1038,
+  1041,
+  1042,
+  1060
+ ],
+ "surface": "arrange.transport",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "swift build --build-tests in a worktree at the branch head with the harness Tests/LogicProMCPTests/Issue1038LiveHarness.swift copied in, and a debug build of the head copied to a new path. Under LIVE.lock, with the lpm-routing-aux fixture open, for each language: switch Logic to it; run the harness to goto 5.1.1.1 and then 1.1.1.1; open Logic's application menu by AXPress on its menu-bar item, run the harness to goto 7.1.1.1 and press Escape; call logic_transport toggle_cycle twice through the server; play, pause, read logic://transport/state and stop. Relaunch Logic in Korean.",
+  "expected": "both gotos succeed with dialog identified_ours and the control bar moves to 5 and back to 1; with the menu open the reply is dialog_not_found with events_posted 1 and fallback_unsafe true and the position stays 1; the Cycle checkbox goes 0 to 1 and back with one axpress each; after the pause the Play checkbox reads 1, the position holds, and the resource says isPlaying true with no isPaused",
+  "cost": "about 2 minutes per language, most of it Logic relaunching; needs Logic, the fixture and LIVE.lock"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Channels/CGEventChannel.swift:openGotoPositionDialog",
+  "Sources/LogicProMCP/Channels/CGEventChannel.swift:gotoDialogRefusal",
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:goToPositionDialogTitle",
+  "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift:setControlBarCheckboxValue",
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:transportCycleControl",
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:transportPlayControl",
+  "Sources/LogicProMCP/State/StateModels.swift:TransportState"
+ ],
+ "evidence": [
+  "evidence/2026-09-29-1038-transport-goto-gate-toggle-and-pause-ten-languages.json"
+ ],
+ "canon": [
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/de/5.title#value",
+   "value": "Zu Position",
+   "used_for": "the de title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://nibstrings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/en/5.title#value",
+   "value": "Go To Position",
+   "used_for": "the en title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/es/5.title#value",
+   "value": "Ir a la posición",
+   "used_for": "the es title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/fr/5.title#value",
+   "value": "Aller à la position",
+   "used_for": "the fr title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/it/5.title#value",
+   "value": "Vai a posizione",
+   "used_for": "the it title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/ja/5.title#value",
+   "value": "位置の移動",
+   "used_for": "the ja title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/ko/5.title#value",
+   "value": "위치로 이동",
+   "used_for": "the ko title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/pt/5.title#value",
+   "value": "Ir para a posição",
+   "used_for": "the pt title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/zh_CN/5.title#value",
+   "value": "前往位置",
+   "used_for": "the zh_CN title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/zh_TW/5.title#value",
+   "value": "前往位置",
+   "used_for": "the zh_TW title of the Go To Position dialog the gate identified before typing; the product matches it through AXLocalePolicy.goToPositionDialogTitle",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/de/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "Wiedergabe",
+   "used_for": "the de description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "Play",
+   "used_for": "the en description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/es/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "Reproducir",
+   "used_for": "the es description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "Lecture",
+   "used_for": "the fr description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/it/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "Riproduci",
+   "used_for": "the it description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ja/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "再生",
+   "used_for": "the ja description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "재생",
+   "used_for": "the ko description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/pt/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "Reproduz",
+   "used_for": "the pt description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/zh_CN/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "播放",
+   "used_for": "the zh_CN description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/zh_TW/StrTransportBtns%7C%7C%7CPlay#value",
+   "value": "播放",
+   "used_for": "the zh_TW description of the control-bar Play checkbox play pressed and the state read took as playing; the product finds it through AXLocalePolicy.transportPlayControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/de/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "Cycle",
+   "used_for": "the de description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "Cycle",
+   "used_for": "the en description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/es/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "Ciclo",
+   "used_for": "the es description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "Cycle",
+   "used_for": "the fr description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/it/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "Ciclo",
+   "used_for": "the it description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ja/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "サイクル",
+   "used_for": "the ja description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "사이클",
+   "used_for": "the ko description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/pt/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "Repetição",
+   "used_for": "the pt description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/zh_CN/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "循环",
+   "used_for": "the zh_CN description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  },
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/zh_TW/StrTransportBtns%7C%7C%7CCycle#value",
+   "value": "循環",
+   "used_for": "the zh_TW description of the control-bar Cycle checkbox toggle_cycle pressed; the product finds it through AXLocalePolicy.transportCycleControl",
+   "binding": {
+    "kind": "record",
+    "field": "observations"
+   }
+  }
+ ],
+ "method": "Runs under LIVE.lock between 2026-09-29T01:42:48+0900 and 2026-09-29T01:51:02+0900, the latest per language and case. The goto cases ran the head's CGEventChannel through a test harness (swift test --skip-build --filter Issue1038LiveHarness) against the running Logic; toggle_cycle and the pause case went through a debug build of 97e3accc (sha256 278de258c95a654e0d6217dcb81b75564a8060784a0882cbb326d105fbf0afaa) copied to a new path and driven over MCP. Sources are unchanged from 97e3accc to the head that carries this record. Before and after each case the harness read Logic's windows off the CoreGraphics window list and the control bar's checkboxes and bar/beat fields off AX. Each language was switched to by quitting Logic, writing its AppleLanguages and reopening the fixture, and the main window's title was read in that language before any case ran.",
+ "observations": [
+  {
+   "at": "2026-09-29T01:43:49+0900",
+   "lproj": "de",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Spuren",
+   "position_before": {
+    "Takt": 1.0,
+    "Schlag": 1.0,
+    "Tempo": 120.0
+   },
+   "position_after": {
+    "Takt": 5.0,
+    "Schlag": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Zu Position",
+       "number": 24942
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:43:56+0900",
+   "lproj": "de",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Spuren",
+   "position_before": {
+    "Takt": 5.0,
+    "Schlag": 1.0,
+    "Tempo": 120.0
+   },
+   "position_after": {
+    "Takt": 1.0,
+    "Schlag": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Zu Position",
+       "number": 24942
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:44:07+0900",
+   "lproj": "de",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 16881,
+    "logic": [
+     {
+      "n": 24945,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 24940,
+      "layer": 0,
+      "name": "lpm-routing-aux - Spuren"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "Takt": 1.0,
+    "Schlag": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "Takt": 1.0,
+    "Schlag": 1.0,
+    "Tempo": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 16881,
+    "logic": [
+     {
+      "n": 24940,
+      "layer": 0,
+      "name": "lpm-routing-aux - Spuren"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "Takt": 1.0,
+    "Schlag": 1.0,
+    "Tempo": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:44:21+0900",
+   "lproj": "de",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "Cycle": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:44:17+0900",
+   "lproj": "de",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "Wiedergabe": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "Takt": 2.0,
+    "Schlag": 3.0,
+    "Tempo": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "Wiedergabe": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "Takt": 2.0,
+    "Schlag": 3.0,
+    "Tempo": 120.0
+   },
+   "seconds_between_the_two_readings": 1.34,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  },
+  {
+   "at": "2026-09-29T01:44:43+0900",
+   "lproj": "en",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Tracks",
+   "position_before": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "Tempo": 120.0
+   },
+   "position_after": {
+    "bar": 5.0,
+    "beat": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Go To Position",
+       "number": 24973
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:44:50+0900",
+   "lproj": "en",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Tracks",
+   "position_before": {
+    "bar": 5.0,
+    "beat": 1.0,
+    "Tempo": 120.0
+   },
+   "position_after": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Go To Position",
+       "number": 24973
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:45:02+0900",
+   "lproj": "en",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 19162,
+    "logic": [
+     {
+      "n": 24976,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 24971,
+      "layer": 0,
+      "name": "lpm-routing-aux - Tracks"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "Tempo": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 19162,
+    "logic": [
+     {
+      "n": 24971,
+      "layer": 0,
+      "name": "lpm-routing-aux - Tracks"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "Tempo": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:45:17+0900",
+   "lproj": "en",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "Cycle": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:45:12+0900",
+   "lproj": "en",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "Play": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "bar": 2.0,
+    "beat": 3.0,
+    "Tempo": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "Play": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "bar": 2.0,
+    "beat": 3.0,
+    "Tempo": 120.0
+   },
+   "seconds_between_the_two_readings": 1.34,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  },
+  {
+   "at": "2026-09-29T01:45:31+0900",
+   "lproj": "es",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Pistas",
+   "position_before": {
+    "compás": 1.0,
+    "tiempo": 1.0,
+    "Tempo": 120.0
+   },
+   "position_after": {
+    "compás": 5.0,
+    "tiempo": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Ir a la posición",
+       "number": 25004
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:45:39+0900",
+   "lproj": "es",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Pistas",
+   "position_before": {
+    "compás": 5.0,
+    "tiempo": 1.0,
+    "Tempo": 120.0
+   },
+   "position_after": {
+    "compás": 1.0,
+    "tiempo": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Ir a la posición",
+       "number": 25004
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:45:50+0900",
+   "lproj": "es",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 20967,
+    "logic": [
+     {
+      "n": 25007,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 25002,
+      "layer": 0,
+      "name": "lpm-routing-aux - Pistas"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "compás": 1.0,
+    "tiempo": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "compás": 1.0,
+    "tiempo": 1.0,
+    "Tempo": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 20967,
+    "logic": [
+     {
+      "n": 25002,
+      "layer": 0,
+      "name": "lpm-routing-aux - Pistas"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "compás": 1.0,
+    "tiempo": 1.0,
+    "Tempo": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:46:04+0900",
+   "lproj": "es",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "Ciclo": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:45:59+0900",
+   "lproj": "es",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "Reproducir": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "compás": 2.0,
+    "tiempo": 3.0,
+    "Tempo": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "Reproducir": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "compás": 2.0,
+    "tiempo": 3.0,
+    "Tempo": 120.0
+   },
+   "seconds_between_the_two_readings": 1.34,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  },
+  {
+   "at": "2026-09-29T01:46:18+0900",
+   "lproj": "fr",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Pistes",
+   "position_before": {
+    "mesure": 1.0,
+    "temps": 1.0,
+    "Tempo": 120.0
+   },
+   "position_after": {
+    "mesure": 5.0,
+    "temps": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Aller à la position",
+       "number": 25035
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:46:25+0900",
+   "lproj": "fr",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Pistes",
+   "position_before": {
+    "mesure": 5.0,
+    "temps": 1.0,
+    "Tempo": 120.0
+   },
+   "position_after": {
+    "mesure": 1.0,
+    "temps": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Aller à la position",
+       "number": 25035
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:46:37+0900",
+   "lproj": "fr",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 22819,
+    "logic": [
+     {
+      "n": 25038,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 25033,
+      "layer": 0,
+      "name": "lpm-routing-aux - Pistes"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "mesure": 1.0,
+    "temps": 1.0,
+    "Tempo": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "mesure": 1.0,
+    "temps": 1.0,
+    "Tempo": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 22819,
+    "logic": [
+     {
+      "n": 25033,
+      "layer": 0,
+      "name": "lpm-routing-aux - Pistes"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "mesure": 1.0,
+    "temps": 1.0,
+    "Tempo": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:46:51+0900",
+   "lproj": "fr",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "Cycle": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:46:46+0900",
+   "lproj": "fr",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "Lecture": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "mesure": 2.0,
+    "temps": 3.0,
+    "Tempo": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "Lecture": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "mesure": 2.0,
+    "temps": 3.0,
+    "Tempo": 120.0
+   },
+   "seconds_between_the_two_readings": 1.34,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  },
+  {
+   "at": "2026-09-29T01:47:05+0900",
+   "lproj": "it",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Tracce",
+   "position_before": {
+    "misura": 1.0,
+    "battito": 1.0,
+    "Ritmo": 120.0
+   },
+   "position_after": {
+    "misura": 5.0,
+    "battito": 1.0,
+    "Ritmo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Vai a posizione",
+       "number": 25066
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:47:12+0900",
+   "lproj": "it",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Tracce",
+   "position_before": {
+    "misura": 5.0,
+    "battito": 1.0,
+    "Ritmo": 120.0
+   },
+   "position_after": {
+    "misura": 1.0,
+    "battito": 1.0,
+    "Ritmo": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Vai a posizione",
+       "number": 25066
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:47:24+0900",
+   "lproj": "it",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 24613,
+    "logic": [
+     {
+      "n": 25069,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 25064,
+      "layer": 0,
+      "name": "lpm-routing-aux - Tracce"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "misura": 1.0,
+    "battito": 1.0,
+    "Ritmo": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "misura": 1.0,
+    "battito": 1.0,
+    "Ritmo": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 24613,
+    "logic": [
+     {
+      "n": 25064,
+      "layer": 0,
+      "name": "lpm-routing-aux - Tracce"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "misura": 1.0,
+    "battito": 1.0,
+    "Ritmo": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:47:38+0900",
+   "lproj": "it",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "Ciclo": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:47:33+0900",
+   "lproj": "it",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "Riproduci": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "misura": 2.0,
+    "battito": 3.0,
+    "Ritmo": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "Riproduci": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "misura": 2.0,
+    "battito": 3.0,
+    "Ritmo": 120.0
+   },
+   "seconds_between_the_two_readings": 1.35,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  },
+  {
+   "at": "2026-09-29T01:47:53+0900",
+   "lproj": "ja",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - トラック",
+   "position_before": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "テンポ": 120.0
+   },
+   "position_after": {
+    "bar": 5.0,
+    "beat": 1.0,
+    "テンポ": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "位置の移動",
+       "number": 25097
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:48:00+0900",
+   "lproj": "ja",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - トラック",
+   "position_before": {
+    "bar": 5.0,
+    "beat": 1.0,
+    "テンポ": 120.0
+   },
+   "position_after": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "テンポ": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "位置の移動",
+       "number": 25097
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:48:11+0900",
+   "lproj": "ja",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 26607,
+    "logic": [
+     {
+      "n": 25100,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 25095,
+      "layer": 0,
+      "name": "lpm-routing-aux - トラック"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "テンポ": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "テンポ": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 26607,
+    "logic": [
+     {
+      "n": 25095,
+      "layer": 0,
+      "name": "lpm-routing-aux - トラック"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "bar": 1.0,
+    "beat": 1.0,
+    "テンポ": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:48:25+0900",
+   "lproj": "ja",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "サイクル": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:48:21+0900",
+   "lproj": "ja",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "再生": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "bar": 2.0,
+    "beat": 3.0,
+    "テンポ": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "再生": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "bar": 2.0,
+    "beat": 3.0,
+    "テンポ": 120.0
+   },
+   "seconds_between_the_two_readings": 1.34,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  },
+  {
+   "at": "2026-09-29T01:42:48+0900",
+   "lproj": "ko",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - 트랙",
+   "position_before": {
+    "마디": 1.0,
+    "비트": 1.0,
+    "템포": 120.0
+   },
+   "position_after": {
+    "마디": 5.0,
+    "비트": 1.0,
+    "템포": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "위치로 이동",
+       "number": 24911
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:42:58+0900",
+   "lproj": "ko",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - 트랙",
+   "position_before": {
+    "마디": 5.0,
+    "비트": 1.0,
+    "템포": 120.0
+   },
+   "position_after": {
+    "마디": 1.0,
+    "비트": 1.0,
+    "템포": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "위치로 이동",
+       "number": 24911
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:43:12+0900",
+   "lproj": "ko",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 14168,
+    "logic": [
+     {
+      "n": 24914,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 24909,
+      "layer": 0,
+      "name": "lpm-routing-aux - 트랙"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "마디": 1.0,
+    "비트": 1.0,
+    "템포": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "마디": 1.0,
+    "비트": 1.0,
+    "템포": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 14168,
+    "logic": [
+     {
+      "n": 24909,
+      "layer": 0,
+      "name": "lpm-routing-aux - 트랙"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "마디": 1.0,
+    "비트": 1.0,
+    "템포": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:43:27+0900",
+   "lproj": "ko",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "사이클": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:43:22+0900",
+   "lproj": "ko",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "재생": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "마디": 2.0,
+    "비트": 3.0,
+    "템포": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "재생": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "마디": 2.0,
+    "비트": 3.0,
+    "템포": 120.0
+   },
+   "seconds_between_the_two_readings": 1.31,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  },
+  {
+   "at": "2026-09-29T01:48:40+0900",
+   "lproj": "pt",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Pistas",
+   "position_before": {
+    "compasso": 1.0,
+    "batida": 1.0,
+    "Andamento": 120.0
+   },
+   "position_after": {
+    "compasso": 5.0,
+    "batida": 1.0,
+    "Andamento": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Ir para a posição",
+       "number": 25128
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:48:47+0900",
+   "lproj": "pt",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - Pistas",
+   "position_before": {
+    "compasso": 5.0,
+    "batida": 1.0,
+    "Andamento": 120.0
+   },
+   "position_after": {
+    "compasso": 1.0,
+    "batida": 1.0,
+    "Andamento": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "Ir para a posição",
+       "number": 25128
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:48:59+0900",
+   "lproj": "pt",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 28467,
+    "logic": [
+     {
+      "n": 25131,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 25126,
+      "layer": 0,
+      "name": "lpm-routing-aux - Pistas"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "compasso": 1.0,
+    "batida": 1.0,
+    "Andamento": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "compasso": 1.0,
+    "batida": 1.0,
+    "Andamento": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 28467,
+    "logic": [
+     {
+      "n": 25126,
+      "layer": 0,
+      "name": "lpm-routing-aux - Pistas"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "compasso": 1.0,
+    "batida": 1.0,
+    "Andamento": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:49:13+0900",
+   "lproj": "pt",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "Repetição": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:49:08+0900",
+   "lproj": "pt",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "Reproduz": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "compasso": 2.0,
+    "batida": 3.0,
+    "Andamento": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "Reproduz": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "compasso": 2.0,
+    "batida": 3.0,
+    "Andamento": 120.0
+   },
+   "seconds_between_the_two_readings": 1.34,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  },
+  {
+   "at": "2026-09-29T01:49:34+0900",
+   "lproj": "zh_CN",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - 轨道",
+   "position_before": {
+    "小节": 1.0,
+    "节拍": 1.0,
+    "速度": 120.0
+   },
+   "position_after": {
+    "小节": 5.0,
+    "节拍": 1.0,
+    "速度": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "前往位置",
+       "number": 25159
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:49:42+0900",
+   "lproj": "zh_CN",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - 轨道",
+   "position_before": {
+    "小节": 5.0,
+    "节拍": 1.0,
+    "速度": 120.0
+   },
+   "position_after": {
+    "小节": 1.0,
+    "节拍": 1.0,
+    "速度": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "前往位置",
+       "number": 25159
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:49:53+0900",
+   "lproj": "zh_CN",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 30295,
+    "logic": [
+     {
+      "n": 25162,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 25157,
+      "layer": 0,
+      "name": "lpm-routing-aux - 轨道"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "小节": 1.0,
+    "节拍": 1.0,
+    "速度": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "小节": 1.0,
+    "节拍": 1.0,
+    "速度": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 30295,
+    "logic": [
+     {
+      "n": 25157,
+      "layer": 0,
+      "name": "lpm-routing-aux - 轨道"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "小节": 1.0,
+    "节拍": 1.0,
+    "速度": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:50:08+0900",
+   "lproj": "zh_CN",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "循环": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:50:03+0900",
+   "lproj": "zh_CN",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "播放": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "小节": 2.0,
+    "节拍": 3.0,
+    "速度": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "播放": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "小节": 2.0,
+    "节拍": 3.0,
+    "速度": 120.0
+   },
+   "seconds_between_the_two_readings": 1.35,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  },
+  {
+   "at": "2026-09-29T01:50:29+0900",
+   "lproj": "zh_TW",
+   "case": "goto 5.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - 音軌",
+   "position_before": {
+    "小節": 1.0,
+    "節拍": 1.0,
+    "拍速": 120.0
+   },
+   "position_after": {
+    "小節": 5.0,
+    "節拍": 1.0,
+    "拍速": 120.0
+   },
+   "dialog_reading": {
+    "polls": 2,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "前往位置",
+       "number": 25190
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:50:36+0900",
+   "lproj": "zh_TW",
+   "case": "goto 1.1.1.1 through the CGEvent route",
+   "main_window": "lpm-routing-aux - 音軌",
+   "position_before": {
+    "小節": 5.0,
+    "節拍": 1.0,
+    "拍速": 120.0
+   },
+   "position_after": {
+    "小節": 1.0,
+    "節拍": 1.0,
+    "拍速": 120.0
+   },
+   "dialog_reading": {
+    "polls": 1,
+    "read": {
+     "appeared_windows": [
+      {
+       "layer": 8,
+       "name": "前往位置",
+       "number": 25190
+      }
+     ],
+     "dialog": "identified_ours",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    }
+   },
+   "reply": {
+    "success": true,
+    "state": "B",
+    "sent": true,
+    "reason": "readback_unavailable",
+    "method": "cgevent",
+    "verified": false
+   }
+  },
+  {
+   "at": "2026-09-29T01:50:47+0900",
+   "lproj": "zh_TW",
+   "case": "goto 7.1.1.1 with a Logic menu open first",
+   "menu_pressed": "Logic Pro",
+   "screen_with_menu_open": {
+    "readable": true,
+    "pid": 32095,
+    "logic": [
+     {
+      "n": 25193,
+      "layer": 101,
+      "name": ""
+     },
+     {
+      "n": 25188,
+      "layer": 0,
+      "name": "lpm-routing-aux - 音軌"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 1
+   },
+   "position_with_menu_open": {
+    "小節": 1.0,
+    "節拍": 1.0,
+    "拍速": 120.0
+   },
+   "dialog_reading": {
+    "appeared_windows": [],
+    "dialog": "absent",
+    "keyboard_owner": "logic",
+    "menu": "open",
+    "menu_count": 1
+   },
+   "reply": {
+    "success": false,
+    "state": "C",
+    "error": "dialog_not_found",
+    "dialog_opener_posted": true,
+    "events_posted": 1,
+    "write_attempted": false,
+    "safe_to_retry": false,
+    "fallback_unsafe": true
+   },
+   "position_after_reply": {
+    "小節": 1.0,
+    "節拍": 1.0,
+    "拍速": 120.0
+   },
+   "screen_after_escape": {
+    "readable": true,
+    "pid": 32095,
+    "logic": [
+     {
+      "n": 25188,
+      "layer": 0,
+      "name": "lpm-routing-aux - 音軌"
+     }
+    ],
+    "first_layer0_owner_is_logic": true,
+    "popup_count": 0
+   },
+   "position_after_escape": {
+    "小節": 1.0,
+    "節拍": 1.0,
+    "拍速": 120.0
+   }
+  },
+  {
+   "at": "2026-09-29T01:51:02+0900",
+   "lproj": "zh_TW",
+   "case": "toggle_cycle, then toggle_cycle again to restore",
+   "reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": false,
+    "observed": true,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after": {
+    "循環": [
+     0,
+     1
+    ]
+   },
+   "restore_reply": {
+    "success": true,
+    "verified": true,
+    "state": "A",
+    "action": "axpress",
+    "attempts": [
+     "axpress"
+    ],
+    "previous": true,
+    "observed": false,
+    "control": "Cycle"
+   },
+   "control_bar_changed_after_restore": {}
+  },
+  {
+   "at": "2026-09-29T01:50:57+0900",
+   "lproj": "zh_TW",
+   "case": "play, pause, read logic://transport/state, stop",
+   "play_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true,
+    "poll_attempts": 1,
+    "write_result": {
+     "action": "axpress",
+     "attempts": [
+      "axpress"
+     ],
+     "control": "Play",
+     "state": "A"
+    }
+   },
+   "pause_reply": {
+    "success": true,
+    "state": "A",
+    "verified": true
+   },
+   "control_bar_changed_after_pause": {
+    "播放": [
+     0,
+     1
+    ]
+   },
+   "position_after_pause": {
+    "小節": 2.0,
+    "節拍": 3.0,
+    "拍速": 120.0
+   },
+   "control_bar_changed_second_reading": {
+    "播放": [
+     0,
+     1
+    ]
+   },
+   "position_second_reading": {
+    "小節": 2.0,
+    "節拍": 3.0,
+    "拍速": 120.0
+   },
+   "seconds_between_the_two_readings": 1.35,
+   "resource_while_stopped": {
+    "source": "ax_live",
+    "isPlaying": false,
+    "position": "1.1",
+    "declares_isPaused": false
+   },
+   "resource_while_paused": {
+    "source": "ax_live",
+    "isPlaying": true,
+    "position": "2.3",
+    "declares_isPaused": false
+   },
+   "stop_reply": {
+    "success": true,
+    "state": "A"
+   },
+   "control_bar_changed_after_stop": {}
+  }
+ ],
+ "conclusion": "In all ten languages the CGEvent route typed a position only after one new Logic window titled as that language's Go To Position dialog appeared, and the bar moved from 1.0 to 5.0 and back. With a Logic menu open the dialog never appeared: the opening key was the only event posted, the reply was dialog_not_found with fallback_unsafe true, and the bar stayed at 1.0. toggle_cycle pressed the Cycle checkbox once each way (one axpress, verified) and the control bar followed. play pressed the Play checkbox through AX (one axpress, State A) in every language, Portuguese's Reproduz included. After play then pause the Play checkbox read 1 at two readings between 1.31 and 1.35 s apart with the bar holding, and logic://transport/state published isPlaying true with no isPaused field.",
+ "limits": [
+  "One host, one Logic build and one small fixture project (lpm-routing-aux); other projects, a second screen holding the keyboard and a dialog that opens slowly under load were not driven.",
+  "The goto cases drove CGEventChannel through a test harness, not through the router; the router's ordering is covered by unit tests only.",
+  "toggle_metronome was also called and never observed pressing: this control bar has no Metronome checkbox in any language, and the MIDI key command's reply is readback_mismatch between values neither read. That is #1058, not a claim of this record. toggle_count_in was not driven.",
+  "The menu case opened one Logic menu. A menu of another app, or a system panel, holding the keyboard is a different shape and was not driven."
+ ],
+ "supersedes": null
+}
