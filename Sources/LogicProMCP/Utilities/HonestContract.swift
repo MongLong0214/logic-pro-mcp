@@ -139,6 +139,14 @@ enum HonestContract {
         /// pressed. A strip whose input would not read is counted beside the refusal, never read
         /// as "not a receiver".
         case busHasNoReceiver = "bus_has_no_receiver"
+        /// #291 R2 — the strip reads a bus as its input, and the bus it was asked to output to
+        /// reaches that bus through the strips that receive it, so the assignment would close a
+        /// loop. Nothing was pressed.
+        case routingCycle = "routing_cycle"
+        /// #291 R2 — a strip the loop check had to follow did not say where its signal goes: its
+        /// input, its output or its sends did not read, or it has an occupied send, whose
+        /// destination R1's reader does not read. A loop cannot be ruled out; nothing was pressed.
+        case routingDependencyUnknown = "routing_dependency_unknown"
         /// #291 R2 — an output assignment landed and something else changed with it; the envelope's
         /// `unexpected_side_effect` names what (`strip_created` when the Mixer gained a strip).
         /// Reported, never cleaned up: removing an aux is #967's job.
@@ -497,6 +505,8 @@ enum HonestContract {
         // #291 R2: `mixer.set_output_verified` routes to `[.accessibility]` alone, so these change
         // no fallback; they are listed because no other channel could observe what they report.
         FailureError.busHasNoReceiver.rawValue,
+        FailureError.routingCycle.rawValue,
+        FailureError.routingDependencyUnknown.rawValue,
         FailureError.unexpectedSideEffect.rawValue,
         FailureError.trackSelectionFailed.rawValue,
         FailureError.staleSnapshot.rawValue,

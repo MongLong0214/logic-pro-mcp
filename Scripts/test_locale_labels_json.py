@@ -120,8 +120,11 @@ def main():
     U = {loc: "unmeasured" for loc in LOCALES}
     ko_measured = dict(U, **{"ko-KR": "measured"})
 
-    def pp(e): return guard.provenance_problems("inputSlotHelpKeyword", e)
-    def cp(e, name="inputSlotHelpKeyword"): return guard.coverage_problems(name, e, LOCALES, VALUES)
+    # Not a real label, so the Swift can never speak about it: these cases test the declared mode.
+    # `inputSlotHelpKeyword` served until the product read it with `containsAny` directly (#291 R2),
+    # and every case that declares `exact` then failed on the derived mode instead.
+    def pp(e): return guard.provenance_problems("syntheticUnderivedLabel", e)
+    def cp(e, name="syntheticUnderivedLabel"): return guard.coverage_problems(name, e, LOCALES, VALUES)
 
     # 1. A fully backed entry: the record has an AXButton whose help carried the keyword.
     e = _entry(["입력 슬롯"], {"입력 슬롯": _prov()}, ko_measured,
@@ -182,8 +185,8 @@ def main():
          any("one label, one rule" in x for x in pp(e)), pp(e))
 
     # `cancelButton` IS read with containsAny at a call site, so the Swift can contradict the claim.
-    # `inputSlotHelpKeyword` is passed to a helper and cannot be derived, which is why the block
-    # declares the mode rather than the guard inferring it everywhere.
+    # A set that is only passed to a helper (`outputSlotHelpKeyword`) cannot be derived, which is why
+    # the block declares the mode rather than the guard inferring it everywhere.
     guard.OBS = _ledger({"2026-09-05-c": ("ko-KR", [_row("AXButton", help="취소 하시겠습니까")])})
     cancel = _entry(["취소"], {"취소": _prov(record="2026-09-05-c", observed="취소 하시겠습니까",
                                             role="AXButton", attribute="help", match="exact")}, ko_measured,

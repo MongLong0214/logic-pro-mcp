@@ -484,6 +484,51 @@ extension AXLogicProElements {
         slotDescription(in: strip, matching: AXLocalePolicy.inputSlotHelpKeyword, runtime: runtime)
     }
 
+    /// The three answers `inputSlotSource` folds into `nil`, kept apart (#291 R2).
+    enum InputSlotReading: Equatable, Sendable {
+        /// The slot's description, as `inputSlotSource` returns it.
+        case source(String)
+        /// Every element in the walk read and no button's help named the input slot: a software
+        /// instrument strip, or a strip on a locale whose help string is not measured.
+        case noSlot
+        /// A children, role or help read in the walk failed, or the slot was found and named nothing.
+        case unreadable
+    }
+
+    /// `inputSlotSource` with "no input slot" told apart from "did not read", for a caller whose
+    /// safety depends on the difference: `set_output_verified` treats a strip with no input slot
+    /// as one no bus can feed, which it may do only when that absence was read.
+    ///
+    /// The walk, depth and first match of `slotButton`, taken through `preOrderDescendants` and
+    /// `slotDecidingString`, so -25205 and -25212 are answers and any other failed read makes the
+    /// reading `.unreadable` instead of passing the element over.
+    static func inputSlotReading(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> InputSlotReading {
+        guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else {
+            return .unreadable
+        }
+        for visit in walk {
+            guard case let .success(role) = slotDecidingString(
+                visit.element, kAXRoleAttribute as String, runtime: runtime
+            ) else { return .unreadable }
+            guard role == (kAXButtonRole as String) else { continue }
+            guard case let .success(help) = slotDecidingString(
+                visit.element, kAXHelpAttribute as String, runtime: runtime
+            ) else { return .unreadable }
+            guard AXLocalePolicy.inputSlotHelpKeyword.containsAny(in: (help ?? "").lowercased()) else {
+                continue
+            }
+            guard let description = AXHelpers.getDescription(visit.element, runtime: runtime),
+                  !description.isEmpty else {
+                return .unreadable
+            }
+            return .source(description)
+        }
+        return .noSlot
+    }
+
     // MARK: - Send slots (#291)
 
     /// Each send slot on a channel strip and whether it is OCCUPIED, or `nil` when the strip's

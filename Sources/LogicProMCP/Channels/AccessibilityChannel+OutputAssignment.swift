@@ -35,6 +35,9 @@ extension AccessibilityChannel {
         case notOffered(offered: [String])
         /// Several entries under the owning parent name the destination. Never resolved by order.
         case repeated(count: Int)
+        /// The menu at `path` (the root when empty) was not read whole, so no entry in it can be
+        /// shown to be the only one: an entry passed over could be the second of two.
+        case menuUnread(path: [String])
 
         var failureLabel: String {
             switch self {
@@ -43,6 +46,7 @@ extension AccessibilityChannel {
             case .parentRepeated: "submenu_title_repeated"
             case .notOffered: "destination_not_offered"
             case .repeated: "destination_title_repeated"
+            case .menuUnread: "menu_not_read"
             }
         }
     }
@@ -62,6 +66,17 @@ extension AccessibilityChannel {
         guard let destination = params["destination"].flatMap(OutputAssignment.init(token:)) else {
             return .error(HonestContract.encodeStateC(
                 error: .invalidParams, hint: "\(operation) requires a valid 'destination'"
+            ))
+        }
+        // No Output has no way back through this command: after it was selected, pressing the slot
+        // opened no menu on three attempts, nor 0, 5, 15 or 30 seconds later (docs/observations/
+        // 2026-09-11-routing-slots-open-their-menus-and-a-destination-can-be-selected.json). It is
+        // a value this reads, never one it sets.
+        guard destination != .noOutput else {
+            return .error(HonestContract.encodeStateC(
+                error: .invalidParams, hint: "\(operation) does not set No Output: a strip set to it "
+                    + "was measured to open no output menu, so this command could not set it back. "
+                    + "'no_output' is accepted only as 'expected_current'."
             ))
         }
         var expected: OutputAssignment?
@@ -138,6 +153,13 @@ extension AccessibilityChannel {
             extras["verify_source"] = "ax_output_slot"
             return .success(HonestContract.encodeStateA(extras: extras))
         }
+        // The same measurement as the refusal of `no_output` above: this strip's slot is not
+        // expected to open a menu, and a press on it is not one this command can account for.
+        if before == .noOutput {
+            return refusal(.unsupportedState, "The strip's output is No Output, and a slot set to No "
+                + "Output was measured to open no menu when pressed, so this command cannot change it. "
+                + "Choose its output in Logic; nothing was pressed.")
+        }
 
         // Stopped, as a reading. Either checkbox unread refuses: it cannot be shown stopped.
         let playing = AXLogicProElements.readControlBarCheckboxValue(
@@ -157,27 +179,39 @@ extension AccessibilityChannel {
                 + "retry. Nothing was pressed.", ["transport": state])
         }
 
-        // A bus needs a receiver that already exists: Logic creates an aux for an unused bus, and
-        // this operation has no creation authority (#967). An input that did not read is listed,
-        // never counted as "not a receiver" — the refusal stands either way.
         if case .bus(let number) = destination {
-            var receivers: [Int] = []
-            var inputsNotRead: [Int] = []
+            var inputs: [Int: AXLogicProElements.InputSlotReading] = [:]
             for (ordinal, other) in strips.enumerated() where ordinal != index {
-                guard let input = AXLogicProElements.inputSlotSource(in: other, runtime: runtime.ax) else {
-                    inputsNotRead.append(ordinal)
-                    continue
-                }
-                let (classification, bus) = RoutingGraphPublication.classifyOutputLabel(input)
-                if classification == .bus, bus == number {
-                    receivers.append(ordinal)
-                }
+                inputs[ordinal] = AXLogicProElements.inputSlotReading(in: other, runtime: runtime.ax)
             }
+            // The loop check comes first: a strip that is the only reader of its own input bus has
+            // no other receiver, and would otherwise be refused as if no strip read that bus.
+            switch busLoop(into: number, from: index, strips: strips, inputs: inputs, runtime: runtime.ax) {
+            case .clear:
+                break
+            case .closes(let feed):
+                let path = feed == number ? "that is the bus it was asked to output to"
+                    : "Bus \(number) reaches Bus \(feed) through the strips that receive it"
+                return refusal(.routingCycle, "This strip reads Bus \(feed) as its input, and \(path), "
+                    + "so the assignment would close a loop; nothing was pressed.", ["input_bus": feed])
+            case .unknown(let ordinal, let part):
+                let unread = ordinal == index ? "This strip's input did not read"
+                    : "This strip reads a bus as its input, and the strip at index \(ordinal), which the "
+                        + "check had to follow from Bus \(number), did not say where its signal goes (\(part))"
+                return refusal(.routingDependencyUnknown, "\(unread). A loop cannot be ruled out; nothing "
+                    + "was pressed.",
+                    ["dependency_strip": ordinal, "dependency_unread": part])
+            }
+            // A bus needs a receiver that already exists: Logic creates an aux for an unused bus, and
+            // this operation has no creation authority (#967). An input that did not read is listed,
+            // never counted as "not a receiver" — the refusal stands either way.
+            let ordinals = inputs.keys.sorted()
+            let receivers = ordinals.filter { busNumber(feeding: inputs[$0]) == number }
             guard !receivers.isEmpty else {
-                return refusal(.busHasNoReceiver, "No strip in the Mixer reads Bus \(number) as its input. "
-                    + "Logic creates an aux when a strip is sent to an unused bus, and this operation "
-                    + "may not create one (#967); nothing was pressed.",
-                    ["bus": number, "strips_with_input_not_read": inputsNotRead])
+                return refusal(.busHasNoReceiver, "No other strip in the Mixer reads Bus \(number) as its "
+                    + "input. Logic creates an aux when a strip is sent to an unused bus, and this "
+                    + "operation may not create one (#967); nothing was pressed.",
+                    ["bus": number, "strips_with_input_not_read": ordinals.filter { inputs[$0] == .unreadable }])
             }
             extras["bus_receivers"] = receivers
         }
@@ -221,12 +255,17 @@ extension AccessibilityChannel {
             switch choice {
             case .notOffered(let offered): more["offered"] = offered
             case .repeated(let count), .parentRepeated(_, let count): more["matching_entries"] = count
+            case .menuUnread(let path): more["menu_path"] = path
             default: break
             }
             let error: HonestContract.FailureError
             if case .repeated = choice { error = .ambiguousTargetName }
             else if case .parentRepeated = choice { error = .ambiguousTargetName }
             else { error = .elementNotFound }
+            if case .menuUnread = choice {
+                return refusal(error, "A menu on the way to this destination did not read whole, so no "
+                    + "entry in it can be shown to be the only one; nothing was selected.", more)
+            }
             return refusal(error, "The output popup does not offer this destination as exactly one "
                 + "entry under the submenu that owns it (\(choice.failureLabel)); nothing was selected.",
                 more)
@@ -301,32 +340,34 @@ extension AccessibilityChannel {
     /// Picks the popup entry for `destination` by structure: the parent submenu that owns it, then
     /// exactly one entry under that parent. The root's checked entry echoes the CURRENT output
     /// (measured ko, 2026-09-28: `Stereo Output` before a change, `버스 1 → Aux 1` after one), so it is
-    /// never a destination: `Stereo Output` and the pairs come from the Output submenu, the buses
-    /// from the Bus submenu, and only `No Output` from the root. A title repeated under the same
-    /// parent is refused. Nothing is chosen by position.
+    /// never a destination: `Stereo Output` and the pairs come from the Output submenu, and the
+    /// buses from the Bus submenu. A title repeated under the same parent is refused, and so is a
+    /// menu on the way that was not read whole. Nothing is chosen by position.
     static func outputMenuChoice(
         for destination: OutputAssignment,
         in root: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> OutputMenuChoice {
-        let rootItems = titledMenuItems(of: root, runtime: runtime)
+        guard let rootItems = titledMenuItems(of: root, runtime: runtime) else { return .menuUnread(path: []) }
         switch destination {
         case .noOutput:
-            let matches = rootItems.filter { AXLocalePolicy.noOutputLabel.matches($0.title, mode: .exact) && !$0.hasSubmenu }
-            let offered = rootItems.filter { !$0.hasSubmenu }
-                .compactMap { OutputAssignment.observed(slotLabel: $0.title)?.token }
-            return single(matches.map { ($0.element, [$0.title]) }, offered: offered)
+            // Never asked: `setOutputVerified` refuses No Output before any popup opens.
+            return .notOffered(offered: [])
         case .stereoOutput:
             let parent = submenu(titled: AXLocalePolicy.outputPopupOutputSubmenuTitle, among: rootItems, runtime: runtime)
             guard case .found(let title, let submenu) = parent else { return parent.choice }
-            let items = titledMenuItems(of: submenu, runtime: runtime).filter { !$0.hasSubmenu }
+            guard let items = titledMenuItems(of: submenu, runtime: runtime)?.filter({ !$0.hasSubmenu }) else {
+                return .menuUnread(path: [title])
+            }
             let matches = items.filter { AXLocalePolicy.stereoOutputLabel.matches($0.title, mode: .exact) }
             let offered = items.compactMap { OutputAssignment.observed(slotLabel: $0.title)?.token }
             return single(matches.map { ($0.element, [title, $0.title]) }, offered: offered)
         case .bus(let number):
             let parent = submenu(titled: AXLocalePolicy.outputPopupBusSubmenuTitle, among: rootItems, runtime: runtime)
             guard case .found(let title, let submenu) = parent else { return parent.choice }
-            let leaves = leafItems(under: submenu, path: [title], depth: 0, runtime: runtime)
+            guard let leaves = leafItems(under: submenu, path: [title], depth: 0, runtime: runtime) else {
+                return .menuUnread(path: [title])
+            }
             let matches = leaves.filter { OutputAssignment.busNumber(ofMenuItemTitle: $0.title) == number }
             let offered = leaves.compactMap { OutputAssignment.busNumber(ofMenuItemTitle: $0.title) }
                 .map { OutputAssignment.bus($0).token }
@@ -334,7 +375,9 @@ extension AccessibilityChannel {
         case .physical(let first, let second):
             let parent = submenu(titled: AXLocalePolicy.outputPopupOutputSubmenuTitle, among: rootItems, runtime: runtime)
             guard case .found(let title, let submenu) = parent else { return parent.choice }
-            let items = titledMenuItems(of: submenu, runtime: runtime).filter { !$0.hasSubmenu }
+            guard let items = titledMenuItems(of: submenu, runtime: runtime)?.filter({ !$0.hasSubmenu }) else {
+                return .menuUnread(path: [title])
+            }
             let matches = items.filter {
                 OutputAssignment.pairPorts(ofRuntimeLabel: $0.title).map { $0 == (first, second) } ?? false
             }
@@ -385,35 +428,141 @@ extension AccessibilityChannel {
         return .found(parent.title, menu)
     }
 
-    /// Every entry under `menu` that opens no further submenu, with the titles leading to it. The
-    /// Bus submenu nests its higher buses one level down (`33 - 64 >`), so this descends.
+    /// Every entry under `menu` that opens no further submenu, with the titles leading to it, or
+    /// `nil` when any menu on the way was not read whole or nests deeper than it looks. The Bus
+    /// submenu nests its higher buses one level down (`33 - 64 >`), so this descends.
     private static func leafItems(
         under menu: AXUIElement,
         path: [String],
         depth: Int,
         runtime: AXHelpers.Runtime
-    ) -> [(element: AXUIElement, title: String, path: [String])] {
-        guard depth <= 3 else { return [] }
-        return titledMenuItems(of: menu, runtime: runtime).flatMap { item in
-            if let submenu = item.submenu {
-                return leafItems(under: submenu, path: path + [item.title], depth: depth + 1, runtime: runtime)
+    ) -> [(element: AXUIElement, title: String, path: [String])]? {
+        guard depth <= 3, let items = titledMenuItems(of: menu, runtime: runtime) else { return nil }
+        var leaves: [(element: AXUIElement, title: String, path: [String])] = []
+        for item in items {
+            guard let submenu = item.submenu else {
+                leaves.append((item.element, item.title, path + [item.title]))
+                continue
             }
-            return [(item.element, item.title, path + [item.title])]
+            guard let below = leafItems(
+                under: submenu, path: path + [item.title], depth: depth + 1, runtime: runtime
+            ) else { return nil }
+            leaves += below
+        }
+        return leaves
+    }
+
+    /// Every titled entry of `menu`, with its submenu when it has one, or `nil` when the menu was
+    /// not read whole: its children, an entry's role, title or children did not read, or an entry
+    /// holds more than one submenu. -25205 and -25212 are answers (no children, no role, no
+    /// title), and an entry with no title or a blank one is a separator. Nothing that failed to
+    /// read is passed over, because it could be the second of two entries with the same title.
+    private static func titledMenuItems(of menu: AXUIElement, runtime: AXHelpers.Runtime) -> [TitledMenuItem]? {
+        guard let children = menuChildren(of: menu, runtime: runtime) else { return nil }
+        var items: [TitledMenuItem] = []
+        for child in children {
+            guard case let .success(role) = menuString(child, kAXRoleAttribute as String, runtime: runtime) else {
+                return nil
+            }
+            guard role == (kAXMenuItemRole as String) else { continue }
+            guard case let .success(title) = menuString(child, kAXTitleAttribute as String, runtime: runtime) else {
+                return nil
+            }
+            guard let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            guard let below = menuChildren(of: child, runtime: runtime) else { return nil }
+            var submenus: [AXUIElement] = []
+            for element in below {
+                guard case let .success(role) = menuString(element, kAXRoleAttribute as String, runtime: runtime) else {
+                    return nil
+                }
+                if role == (kAXMenuRole as String) { submenus.append(element) }
+            }
+            guard submenus.count <= 1 else { return nil }
+            items.append(TitledMenuItem(element: child, title: title, submenu: submenus.first))
+        }
+        return items
+    }
+
+    private static func menuChildren(of element: AXUIElement, runtime: AXHelpers.Runtime) -> [AXUIElement]? {
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case .success(let children): children
+        case .failure(let error): error.isDefinitiveAbsence ? [] : nil
         }
     }
 
-    private static func titledMenuItems(of menu: AXUIElement, runtime: AXHelpers.Runtime) -> [TitledMenuItem] {
-        AXHelpers.getChildren(menu, runtime: runtime).compactMap { child in
-            guard AXHelpers.getRole(child, runtime: runtime) == (kAXMenuItemRole as String),
-                  let title = AXHelpers.getTitle(child, runtime: runtime),
-                  !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return nil
-            }
-            let submenus = AXHelpers.getChildren(child, runtime: runtime).filter {
-                AXHelpers.getRole($0, runtime: runtime) == (kAXMenuRole as String)
-            }
-            return TitledMenuItem(element: child, title: title, submenu: submenus.first)
+    /// A role or title with the two statuses that are answers read as "has none", so `.failure` is
+    /// only ever a read that did not happen.
+    private static func menuString(
+        _ element: AXUIElement,
+        _ attribute: String,
+        runtime: AXHelpers.Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        let read: Result<String?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(element, attribute, runtime: runtime)
+        if case let .failure(error) = read, error.isDefinitiveAbsence { return .success(nil) }
+        return read
+    }
+
+    /// A strip's input as a bus number, or `nil` when it is anything else or did not read.
+    private static func busNumber(feeding reading: AXLogicProElements.InputSlotReading?) -> Int? {
+        guard case .source(let label) = reading else { return nil }
+        let (classification, bus) = RoutingGraphPublication.classifyOutputLabel(label)
+        return classification == .bus ? bus : nil
+    }
+
+    /// What routing the strip at `index` to a bus would close, read before anything is pressed.
+    enum BusLoop: Equatable {
+        case clear
+        /// The strip reads Bus `feed` as its input, and the destination bus reaches it.
+        case closes(feed: Int)
+        /// The strip at `ordinal` had to be followed, and its `part` (`input`, `output`, `sends`
+        /// or `send`) did not say where its signal goes.
+        case unknown(ordinal: Int, part: String)
+    }
+
+    /// A loop needs a way back into the strip, and the only one is its input slot reading a bus:
+    /// a strip with no input slot, or one fed by anything else, closes nothing. Otherwise every bus
+    /// reached from `bus` is followed through the strips that read it, by each one's output and
+    /// sends, and reaching the strip's own input bus is a loop. A strip that cannot be followed
+    /// stops the check: an input that did not read could be any bus's receiver, and an occupied
+    /// send goes to a destination R1's reader does not read. `inputs` holds every other strip.
+    static func busLoop(
+        into bus: Int,
+        from index: Int,
+        strips: [AXUIElement],
+        inputs: [Int: AXLogicProElements.InputSlotReading],
+        runtime: AXHelpers.Runtime
+    ) -> BusLoop {
+        let own = AXLogicProElements.inputSlotReading(in: strips[index], runtime: runtime)
+        if own == .unreadable { return .unknown(ordinal: index, part: "input") }
+        guard let feed = busNumber(feeding: own) else { return .clear }
+        let ordinals = inputs.keys.sorted()
+        if let unread = ordinals.first(where: { inputs[$0] == .unreadable }) {
+            return .unknown(ordinal: unread, part: "input")
         }
+        var reached: Set<Int> = [bus]
+        var queue = [bus]
+        while !queue.isEmpty {
+            let current = queue.removeFirst()
+            if current == feed { return .closes(feed: feed) }
+            for ordinal in ordinals where busNumber(feeding: inputs[ordinal]) == current {
+                let receiver = strips[ordinal]
+                guard let label = AXLogicProElements.outputSlotDestination(in: receiver, runtime: runtime),
+                      let output = OutputAssignment.observed(slotLabel: label) else {
+                    return .unknown(ordinal: ordinal, part: "output")
+                }
+                guard let sends = AXLogicProElements.sendSlotObservations(in: receiver, runtime: runtime) else {
+                    return .unknown(ordinal: ordinal, part: "sends")
+                }
+                if sends.contains(where: { $0.state != .observedEmpty }) {
+                    return .unknown(ordinal: ordinal, part: "send")
+                }
+                if case .bus(let next) = output, reached.insert(next).inserted {
+                    queue.append(next)
+                }
+            }
+        }
+        return .clear
     }
 
     private static func popupMenus(in mixer: AXUIElement, runtime: AXHelpers.Runtime) -> [AXUIElement] {

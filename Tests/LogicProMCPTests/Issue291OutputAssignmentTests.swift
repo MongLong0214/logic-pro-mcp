@@ -15,6 +15,7 @@ import Testing
 
 private let r2PID: pid_t = 4291
 private let r2InvalidElement = AXHelpers.AXStatusError(raw: -25202)
+private let r2CannotComplete = AXHelpers.AXStatusError(raw: -25204)
 
 /// The labels one Logic language draws in the output popup and on the slot.
 struct R2PopupLanguage: Sendable, CustomStringConvertible {
@@ -55,11 +56,19 @@ struct R2PopupLanguage: Sendable, CustomStringConvertible {
 private final class R2Fixture: @unchecked Sendable {
     enum CurrentOutput { case stereo, bus(Int), label(String), blank }
     enum AfterPress { case applies, doesNothing, slotGoesBlank }
+    enum AuxSend { case none, empty, occupied }
+    /// A read that fails with -25204, which is not an answer.
+    enum FailingRead { case sourceInputRole, thirdStripChildren, secondBusOneTitle, nestedBusItemChildren }
 
     struct Options {
         var language = R2PopupLanguage.en
         var current = CurrentOutput.stereo
+        /// Strip 0's input. A bus here is what lets an output assignment close a loop.
+        var sourceInput = "Input 1"
         var auxInput: String?
+        var auxOutput: String?
+        var auxSend = AuxSend.none
+        var failingRead: FailingRead?
         var afterPress = AfterPress.applies
         /// Logic adds an aux for a bus no strip receives; `always` makes any press add one.
         var alwaysCreatesStrip = false
@@ -81,6 +90,8 @@ private final class R2Fixture: @unchecked Sendable {
     private var resultLabel: [Int: String] = [:]
     private var stripChildren: [Int: [AXUIElement]] = [:]
     private var invalidated: Set<Int> = []
+    private var failingAttribute: [Int: String] = [:]
+    private var failingChildren: Set<Int> = []
     private var replacedStrips = 0
 
     private(set) var app: AXUIElement!
@@ -115,14 +126,20 @@ private final class R2Fixture: @unchecked Sendable {
         case .label(let label): current = label
         case .blank: current = ""
         }
-        let (audio, audioOutput) = strip(output: current, input: "Input 1")
+        let (audio, audioOutput) = strip(output: current, input: options.sourceInput)
         outputButton = audioOutput
-        let (aux, _) = strip(output: language.stereoOutput, input: options.auxInput ?? language.bus(1))
+        let (aux, _) = strip(output: options.auxOutput ?? language.stereoOutput,
+                             input: options.auxInput ?? language.bus(1), send: options.auxSend)
         let (stereoOut, _) = strip(output: nil, input: nil)
         strips = [audio, aux, stereoOut]
         b.setChildren(mixer, strips)
         b.setChildren(window, [controlBar, mixer])
         buildPopup(current: current)
+        switch options.failingRead {
+        case .sourceInputRole: failingAttribute[id(stripChildren[id(audio)]![0])] = kAXRoleAttribute as String
+        case .thirdStripChildren: failingChildren.insert(id(stereoOut))
+        case .secondBusOneTitle, .nestedBusItemChildren, nil: break
+        }
     }
 
     var runtime: AXLogicProElements.Runtime {
@@ -130,9 +147,15 @@ private final class R2Fixture: @unchecked Sendable {
             pid: r2PID,
             appElement: app,
             attributeValueHandler: { [self] element, _ -> AnyObject?? in isGone(element) ? .some(nil) : .none },
-            attributeValueResultHandler: { [self] element, _ in isGone(element) ? .failure(r2InvalidElement) : nil },
+            attributeValueResultHandler: { [self] element, attribute in
+                if isGone(element) { return .failure(r2InvalidElement) }
+                return failingAttribute[id(element)] == attribute ? .failure(r2CannotComplete) : nil
+            },
             childrenHandler: { [self] element in isGone(element) ? [] : nil },
-            childrenResultHandler: { [self] element in isGone(element) ? .failure(r2InvalidElement) : nil },
+            childrenResultHandler: { [self] element in
+                if isGone(element) { return .failure(r2InvalidElement) }
+                return failingChildren.contains(id(element)) ? .failure(r2CannotComplete) : nil
+            },
             setAttributeHandler: nil,
             performActionHandler: { [self] element, action in press(element, action) }
         )
@@ -160,7 +183,7 @@ private final class R2Fixture: @unchecked Sendable {
         return element
     }
 
-    private func strip(output: String?, input: String?) -> (AXUIElement, AXUIElement?) {
+    private func strip(output: String?, input: String?, send: AuxSend = .none) -> (AXUIElement, AXUIElement?) {
         let strip = make(role: kAXLayoutItemRole as String)
         var children: [AXUIElement] = []
         var outputSlot: AXUIElement?
@@ -168,6 +191,17 @@ private final class R2Fixture: @unchecked Sendable {
             let slot = make(role: kAXButtonRole as String, description: input)
             b.setAttribute(slot, kAXHelpAttribute as String, "Input slot. Click and hold to choose the channel strip input.")
             children.append(slot)
+        }
+        if send != .none {
+            // Measured shape: an occupied send is a send-slot button followed by its level knob.
+            let slot = make(role: kAXButtonRole as String, description: "send button")
+            b.setAttribute(slot, kAXHelpAttribute as String, "Send slot. Click to choose a send destination.")
+            children.append(slot)
+            if send == .occupied {
+                let knob = make(role: kAXSliderRole as String, description: "send level")
+                b.setAttribute(knob, kAXHelpAttribute as String, "Send Level knob. Drag to set the send level.")
+                children.append(knob)
+            }
         }
         if let output {
             let slot = make(role: kAXButtonRole as String, description: output)
@@ -186,7 +220,7 @@ private final class R2Fixture: @unchecked Sendable {
         let old = strips[0]
         invalidated.insert(id(old))
         for child in stripChildren[id(old)] ?? [] { invalidated.insert(id(child)) }
-        strips[0] = strip(output: output, input: "Input 1").0
+        strips[0] = strip(output: output, input: options.sourceInput).0
         replacedStrips += 1
     }
 
@@ -225,10 +259,14 @@ private final class R2Fixture: @unchecked Sendable {
         rootItems.append(item(language.outputSubmenu, submenu: outputItems))
         var busItems = [busOne!]
         if options.duplicateBusOne {
-            busItems.append(item(language.bus(1), result: language.bus(1)))
+            let second = item(language.bus(1), result: language.bus(1))
+            if options.failingRead == .secondBusOneTitle { failingAttribute[id(second)] = kAXTitleAttribute as String }
+            busItems.append(second)
         }
         busItems += (2...3).map { item(language.bus($0), result: language.bus($0)) }
-        busItems.append(item("33 - 64", submenu: [item(language.bus(33), result: language.bus(33))]))
+        let nested = item("33 - 64", submenu: [item(language.bus(33), result: language.bus(33))])
+        if options.failingRead == .nestedBusItemChildren { failingChildren.insert(id(nested)) }
+        busItems.append(nested)
         rootItems.append(item(language.busSubmenu, submenu: busItems))
         rootItems += [item(""), item(language.pan)]
         root = make(role: kAXMenuRole as String)
@@ -467,9 +505,122 @@ func outputAssignmentRefusesABusWithoutReceiver() async throws {
     #expect(envelope["state"] as? String == "C")
     #expect(envelope["error"] as? String == "bus_has_no_receiver")
     #expect(envelope["bus"] as? Int == 2)
-    // The Stereo Out strip has no input slot: listed, not counted as "not a receiver".
-    #expect(envelope["strips_with_input_not_read"] as? [Int] == [2])
+    // The Stereo Out strip was read whole and has no input slot. That is an answer, not a gap.
+    #expect(envelope["strips_with_input_not_read"] as? [Int] == [])
     #expect(envelope["strip_count_before"] as? Int == 3)
+    #expect(fixture.presses.isEmpty)
+}
+
+@Test("a strip whose input did not read is listed beside bus_has_no_receiver, never counted")
+func outputAssignmentListsAnUnreadInputBesideTheRefusal() async throws {
+    var options = R2Fixture.Options()
+    options.failingRead = .thirdStripChildren
+    let fixture = R2Fixture(options)
+    let envelope = try await runChannel(fixture, destination: .bus(2))
+
+    #expect(envelope["error"] as? String == "bus_has_no_receiver")
+    #expect(envelope["strips_with_input_not_read"] as? [Int] == [2])
+    #expect(fixture.presses.isEmpty)
+}
+
+/// R2-01: after No Output was selected, pressing the slot opened no menu (three presses, and again
+/// at 0, 5, 15 and 30 seconds), so this command could not set the strip back.
+@Test("no_output is refused as a destination, nothing pressed")
+func outputAssignmentRefusesNoOutputAsADestination() async throws {
+    let fixture = R2Fixture()
+    let envelope = try await runChannel(fixture, destination: .noOutput)
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "invalid_params")
+    #expect(fixture.presses.isEmpty)
+}
+
+@Test("a strip already at No Output refuses unsupported_state, nothing pressed")
+func outputAssignmentRefusesAStripAtNoOutput() async throws {
+    var options = R2Fixture.Options()
+    options.current = .label(R2PopupLanguage.en.noOutput)
+    let fixture = R2Fixture(options)
+    let envelope = try await runChannel(fixture, destination: .stereoOutput)
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "unsupported_state")
+    #expect(fixture.presses.isEmpty)
+}
+
+/// R2-02, the reviewer's topology: strip 0 receives Bus 1 and outputs Stereo Output, the aux
+/// receives Bus 2 and outputs Bus 1. Both buses have a receiver, and strip 0 to Bus 2 would close
+/// strip 0 → aux → strip 0.
+@Test("an assignment that closes a loop through a receiver refuses routing_cycle, nothing pressed")
+func outputAssignmentRefusesALoop() async throws {
+    var options = R2Fixture.Options()
+    options.sourceInput = R2PopupLanguage.en.bus(1)
+    options.auxInput = R2PopupLanguage.en.bus(2)
+    options.auxOutput = R2PopupLanguage.en.bus(1)
+    let fixture = R2Fixture(options)
+    let envelope = try await runChannel(fixture, destination: .bus(2))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "routing_cycle")
+    #expect(envelope["input_bus"] as? Int == 1)
+    #expect(fixture.presses.isEmpty)
+}
+
+/// Strip 0 is the only reader of Bus 1 and is sent to Bus 1. No other strip receives that bus,
+/// but the reason to refuse is the loop, not a missing receiver.
+@Test("a strip sent to the bus it alone reads refuses routing_cycle, not bus_has_no_receiver")
+func outputAssignmentRefusesASelfLoop() async throws {
+    var options = R2Fixture.Options()
+    options.sourceInput = R2PopupLanguage.en.bus(1)
+    options.auxInput = R2PopupLanguage.en.bus(2)
+    let fixture = R2Fixture(options)
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "routing_cycle")
+    #expect(envelope["input_bus"] as? Int == 1)
+    #expect(fixture.presses.isEmpty)
+}
+
+/// The same strip fed by Bus 1, sent to Bus 2 whose receiver goes on to Bus 3 with an empty send:
+/// a chain that never reaches Bus 1 is not a loop.
+@Test("a chain that does not reach the strip's input bus is not a loop, and the assignment lands")
+func outputAssignmentAllowsAChainThatDoesNotLoop() async throws {
+    var options = R2Fixture.Options()
+    options.sourceInput = R2PopupLanguage.en.bus(1)
+    options.auxInput = R2PopupLanguage.en.bus(2)
+    options.auxOutput = R2PopupLanguage.en.bus(3)
+    options.auxSend = .empty
+    let fixture = R2Fixture(options)
+    let envelope = try await runChannel(fixture, destination: .bus(2))
+
+    #expect(envelope["state"] as? String == "A")
+    #expect(envelope["after"] as? NSDictionary == json(.bus(2)))
+    #expect(envelope["bus_receivers"] as? [Int] == [1])
+}
+
+enum R2Dependency: String, CaseIterable, Sendable { case ownInput, otherInput, receiverOutput, occupiedSend }
+
+@Test("a strip the loop check must follow that does not say where its signal goes refuses, nothing pressed",
+      arguments: R2Dependency.allCases)
+func outputAssignmentRefusesAnUnfollowableDependency(_ dependency: R2Dependency) async throws {
+    var options = R2Fixture.Options()
+    options.sourceInput = R2PopupLanguage.en.bus(1)
+    options.auxInput = R2PopupLanguage.en.bus(2)
+    let strip: Int
+    let part: String
+    switch dependency {
+    case .ownInput: options.failingRead = .sourceInputRole; (strip, part) = (0, "input")
+    case .otherInput: options.failingRead = .thirdStripChildren; (strip, part) = (2, "input")
+    case .receiverOutput: options.auxOutput = ""; (strip, part) = (1, "output")
+    case .occupiedSend: options.auxSend = .occupied; (strip, part) = (1, "send")
+    }
+    let fixture = R2Fixture(options)
+    let envelope = try await runChannel(fixture, destination: .bus(2))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "routing_dependency_unknown")
+    #expect(envelope["dependency_strip"] as? Int == strip)
+    #expect(envelope["dependency_unread"] as? String == part)
     #expect(fixture.presses.isEmpty)
 }
 
@@ -540,6 +691,31 @@ func outputAssignmentRefusesARepeatedTitle(_ repeated: R2Repeat) async throws {
     #expect(envelope["error"] as? String == "ambiguous_target_name")
     #expect(envelope["menu_failure"] as? String == "destination_title_repeated")
     #expect(envelope["matching_entries"] as? Int == 2)
+    #expect(fixture.presses == [fixture.id(fixture.outputButton)])
+}
+
+enum R2MenuRead: String, CaseIterable, Sendable { case secondTitle, nestedSubmenu }
+
+/// R2-03: an entry whose title or submenu did not read could be the second of two, so passing it
+/// over would make the other look unique. The Bus submenu was not read whole; nothing is selected.
+@Test("a menu entry whose title or submenu did not read refuses menu_not_read, nothing selected",
+      arguments: R2MenuRead.allCases)
+func outputAssignmentRefusesAMenuNotReadWhole(_ read: R2MenuRead) async throws {
+    var options = R2Fixture.Options()
+    switch read {
+    case .secondTitle:
+        options.duplicateBusOne = true
+        options.failingRead = .secondBusOneTitle
+    case .nestedSubmenu:
+        options.failingRead = .nestedBusItemChildren
+    }
+    let fixture = R2Fixture(options)
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "element_not_found")
+    #expect(envelope["menu_failure"] as? String == "menu_not_read")
+    #expect(envelope["menu_path"] as? [String] == [options.language.busSubmenu])
     #expect(fixture.presses == [fixture.id(fixture.outputButton)])
 }
 
