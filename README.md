@@ -65,7 +65,7 @@ Counts below are read from the current source tree with the command shown; re-ru
 | Resource templates | 12 templates — operation catalog, track, region, mixer-strip, stock plugin detail/search, stock instrument detail/search, Session Player detail, session-plan dry run, workflow detail/search | `awk '/private static let baseTemplates/,/^\]/' Sources/LogicProMCP/Resources/ResourceProvider.swift \| grep -c 'uriTemplate:'` |
 | Control channels | **7** — CoreMIDI, Accessibility, CGEvent, AppleScript, MCU, MIDIKeyCommands, Scripter | `grep -n 'case .* = "' Sources/LogicProMCP/Channels/Channel.swift` |
 | Locales Logic ships | **10** — de-DE en-US es-ES fr-FR it-IT ja-JP ko-KR pt-BR zh-CN zh-TW | `python3 -c "import json; print(json.load(open('docs/locale/ui-labels.json'))['supported_locales'])"` |
-| Supported Logic Pro | **Latest Logic Pro first** — desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`) and Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`). Logic Pro 12.3 is the actively-validated target (macOS 15.6+); older versions down to the 12.0.1 floor are best-effort |
+| Supported Logic Pro | **Latest Logic Pro first** — desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`) and Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`). Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), so it is the only one this server claims to control. Creator Studio's bundle ID is recognised so that a machine with both installed is not targeted by accident and so the server can say which one it found — recognising a variant is not the same as qualifying it, and no qualification evidence exists for Creator Studio. Set `LOGIC_PRO_BUNDLE_ID` to pin the desktop variant when both are installed. Logic Pro 12.3 is the actively-validated target (macOS 15.6+); older versions down to the 12.0.1 floor are best-effort |
 | Release state | **Current stable**: `v3.18.0` — [v3.18.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.18.0) |
 
 If this project helps you make music with Claude, Cursor, Codex, or any MCP client, star the repo. It helps the project reach more Logic Pro users and maintainers.
@@ -116,20 +116,20 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 
 Logic Pro ships ten UI locales, and this server tracks all ten as the default scope (not just en/ko): `de-DE`, `en-US`, `es-ES`, `fr-FR`, `it-IT`, `ja-JP`, `ko-KR`, `pt-BR`, `zh-CN`, `zh-TW`. UI-string matching (menu items, header labels, dialog buttons) lives in [`docs/locale/ui-labels.json`](docs/locale/ui-labels.json), the canon index every locale-sensitive locator derives from.
 
-Each of the 203 canon labels carries a per-locale `coverage`: `measured` (read from a live, running Logic window and recorded with the host, date, and AX role/attribute), `derived` (computed from Apple's own `.strings` tables by `Scripts/derive_label_variants.py`, not read from a live window), or `unmeasured`. Measured counts per locale, out of 203 canon labels (`python3 -c "import json,collections; d=json.load(open('docs/locale/ui-labels.json')); c=collections.Counter(); [c.update([(l,v) for l,v in e['coverage'].items() if v=='measured']) for e in d['labels'].values()]; print(c)"`):
+Each of the 203 canon labels carries a per-locale `coverage`: `measured` (read from a live, running Logic window and recorded with the host, date, and AX role/attribute), `derived` (computed from Apple's own `.strings` tables by `Scripts/derive_label_variants.py`, not read from a live window), `unmeasured`, or `retired` (one label, `headerPanHint`, superseded by `sliderPanHint` and kept in the canon with its reason). Measured counts per locale, out of 203 canon labels (`python3 -c "import json,collections; d=json.load(open('docs/locale/ui-labels.json')); c=collections.Counter(); [c.update([(l,v) for l,v in e['coverage'].items() if v=='measured']) for e in d['labels'].values()]; print(c)"`):
 
-| Locale | Measured | Derived | Unmeasured |
-|--------|----------|---------|------------|
-| en-US | 45 | 156 | 1 |
-| ko-KR | 50 | 147 | 5 |
-| ja-JP | 37 | 154 | 11 |
-| de-DE | 44 | 144 | 14 |
-| es-ES | 7 | 177 | 18 |
-| fr-FR | 6 | 175 | 21 |
-| it-IT | 6 | 175 | 21 |
-| pt-BR | 5 | 178 | 19 |
-| zh-CN | 7 | 169 | 26 |
-| zh-TW | 6 | 166 | 30 |
+| Locale | Measured | Derived | Unmeasured | Retired |
+|--------|----------|---------|------------|---------|
+| en-US | 45 | 156 | 1 | 1 |
+| ko-KR | 50 | 147 | 5 | 1 |
+| ja-JP | 37 | 154 | 11 | 1 |
+| de-DE | 44 | 144 | 14 | 1 |
+| es-ES | 7 | 177 | 18 | 1 |
+| fr-FR | 6 | 175 | 21 | 1 |
+| it-IT | 6 | 175 | 21 | 1 |
+| pt-BR | 5 | 178 | 19 | 1 |
+| zh-CN | 7 | 169 | 26 | 1 |
+| zh-TW | 6 | 166 | 30 | 1 |
 
 A `derived` label has not been read from a running Logic in that locale; it is Apple's own string for that key, which is a strong signal but not a live observation. The roadmap ([`docs/roadmap/README.md`](docs/roadmap/README.md)) tracks per-feature live locale campaigns (mixer routing graph, MCU bank walk, record-arm key-command setup, and others) as they are driven against real Logic sessions in each language.
 
@@ -250,10 +250,10 @@ Because release binaries are ad-hoc signed, every new build or reinstall is a ne
 ### Forcing a Logic Pro variant
 
 ```bash
-LOGIC_PRO_BUNDLE_ID=com.apple.mobilelogic LogicProMCP
+LOGIC_PRO_BUNDLE_ID=com.apple.logic10 LogicProMCP
 ```
 
-Valid values: `com.apple.logic10` (desktop), `com.apple.mobilelogic` (Creator Studio).
+Valid values: `com.apple.logic10` (desktop) and `com.apple.mobilelogic` (Creator Studio). Only desktop Logic Pro is qualified for this release. Forcing `com.apple.mobilelogic` points the server at Creator Studio anyway, with no qualification evidence behind it, and on a machine where Creator Studio is the only Logic installed, `LogicProMCP doctor` fails `logic.installation` with reason `unshipped_variant_only`.
 
 ## Using LogicProMCP as a library
 
@@ -263,6 +263,7 @@ The public surface is small and deliberate. Almost all of the module, including 
 
 - `PluginInspector` (in `Accessibility/PluginInspector.swift`): the plug-in window Setting-menu inspector. Static entry points `enumerateMenuTree`, `parsePath`, `encodePath`, `resolveMenuPath`, `selectMenuPath`, `decodeAUVersion`, `findPluginWindow`, `identifyPlugin`, `openPluginWindow`, and `closePluginWindow`. Every entry point that touches a window or a menu takes a caller-supplied `PluginPresetProbe` or `PluginWindowRuntime` of closures; the module ships no public production runtime, so nothing here reaches Logic on its own.
 - The data types those entry points use: `PluginPresetNodeKind`, `PluginPresetNode`, `PluginPresetCache`, `PluginPresetInventory`, `MenuHop`, `PluginMenuItemInfo`, `ScannerWindowRecord`, `PluginPresetProbe`, `PluginWindowRuntime`, `PluginError`, `AXUIElementSendable`, and the constant `maxPluginMenuDepth`.
+- `AXPluginInstanceIdentity` (in `Accessibility/AXPluginInstanceIdentity.swift`, #972): a read-only census for plug-in hosts. `census(pluginName:identifierPrefix:)` returns an `AXSnapshot` of the Mixer strips whose insert slot names the plug-in (ordinal, name, slot positions) and of the open plug-in editor windows (title, and the first `kAXIdentifier` under the given prefix), plus `Diagnostics` saying what was found. It issues no actions. Three outcomes are distinguishable: an empty snapshot with a note, a partial strip read (`stripsReadWhole` is false, so ordinals are not trustworthy), and a failed editor-window read, which throws `CensusError.windowsReadFailed` instead of returning zero windows. The #972 measurement was on Logic Pro 12.3.1 with the Mixer docked in the main window (X).
 - The Library inventory data model (in `Accessibility/LibraryAccessor.swift`): `LibraryNodeKind`, `LibraryNode`, `LibraryRoot`, and `TreeProbe`. The `LibraryAccessor` enum that scans and selects patches is `internal`, so only its data model is reachable.
 
 ### Dependency setup

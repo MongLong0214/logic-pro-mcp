@@ -5,7 +5,7 @@ Minimal install and Logic Pro integration guide for Logic Pro MCP v3.18.0.
 ## Requirements
 
 - macOS 14+
-- Logic Pro — **latest release prioritized (currently 12.3)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variants: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`) and Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`). They use different process names for System Events automation.
+- Logic Pro — **latest release prioritized (currently 12.3)**; works down to the 12.0.1 floor on a best-effort basis. Recognised Mac variants: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`) and Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`). They use different process names for System Events automation. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), so it is the only one this server claims to control. Creator Studio's bundle ID is recognised so that a machine with both installed is not targeted by accident and so the server can say which one it found — recognising a variant is not the same as qualifying it, and no qualification evidence exists for Creator Studio. Set `LOGIC_PRO_BUNDLE_ID` to pin the desktop variant when both are installed.
 - Claude Code, Claude Desktop, Cursor, or another MCP client
 - Homebrew, or Xcode/Swift if building from source
 
@@ -71,13 +71,13 @@ LogicProMCP doctor
 
 ### Forcing a Logic Pro variant
 
-When both desktop Logic Pro and Creator Studio Logic Pro are installed, the server auto-detects the frontmost running instance, otherwise prefers the desktop install. To force a specific variant:
+When both desktop Logic Pro and Creator Studio Logic Pro are installed, the server auto-detects the frontmost running instance, otherwise prefers the desktop install. To pin the desktop variant:
 
 ```bash
-LOGIC_PRO_BUNDLE_ID=com.apple.mobilelogic LogicProMCP
+LOGIC_PRO_BUNDLE_ID=com.apple.logic10 LogicProMCP
 ```
 
-Valid values: `com.apple.logic10` (desktop), `com.apple.mobilelogic` (Creator Studio).
+Valid values: `com.apple.logic10` (desktop) and `com.apple.mobilelogic` (Creator Studio). Only desktop Logic Pro is qualified for this release. Forcing `com.apple.mobilelogic` points the server at Creator Studio anyway, with no qualification evidence behind it, and on a machine where Creator Studio is the only Logic installed, `LogicProMCP doctor` fails `logic.installation` with reason `unshipped_variant_only`.
 
 ## Logic Pro Setup
 
