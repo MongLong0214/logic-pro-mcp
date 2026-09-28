@@ -67,9 +67,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   differs, when the transport is running or unreadable, and when a bus has no receiver
   (`bus_has_no_receiver`: Logic would create an aux, which is #967's to do). A destination
   already in place is State A `changed: false` with nothing pressed. The popup entry is chosen
-  under the submenu that owns it and refused when missing or repeated under one parent. State A
-  needs the same strip's slot to read back the destination and the strip count to hold; a count
-  that grew is State C `unexpected_side_effect: "strip_created"`, left as it is. The reply
+  under the submenu that owns it (the root's checked entry only echoes the current output) and
+  refused when missing or repeated under one parent. State A needs the same strip, found again at
+  its ordinal because Logic replaces a strip's elements when its output changes, to read back the
+  destination and the strip count to hold; a count that grew is State C `unexpected_side_effect: "strip_created"`, left as it is. The reply
   carries the observed `before` for the inverse call. `set_output` stays not-exposed. Registry
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 - **An internal intent model and one main-output rule for the project audit (#966 P1, ADR-021;

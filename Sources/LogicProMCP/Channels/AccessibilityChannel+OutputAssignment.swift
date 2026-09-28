@@ -246,13 +246,26 @@ extension AccessibilityChannel {
                                             cleaner: popupCleaner)
         extras.merge(closed) { _, new in new }
 
-        // The committed output of the SAME strip element, by R1's reader. The request and the menu
-        // entry are never the evidence.
+        // The committed output, by R1's reader, from the strip at the SAME ordinal, found again on
+        // every poll the way the before-read found it. Logic replaces a strip's elements when its
+        // output changes (measured ko, 2026-09-28: the held slot and its strip answer -25202 from
+        // about 0.6 s after the press, while a fresh lookup reads the new output), so the element
+        // read before the press cannot be read after it. The ordinal names the same strip only
+        // while every Mixer child reads and the strip count has not moved; when it moved, nothing
+        // is read from it. The request and the menu entry are never the evidence.
         var afterLabel: String?
         var after: OutputAssignment?
+        var countAfter: Int?
         let deadline = Date().addingTimeInterval(Double(timing.readbackTimeoutMs) / 1000.0)
         repeat {
-            afterLabel = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
+            let enumeration = AXLogicProElements.getMixerArea(runtime: runtime)
+                .flatMap { AXLogicProElements.stripEnumeration(in: $0, runtime: runtime.ax) }
+                .flatMap { $0.unreadableChildren == 0 ? $0 : nil }
+            countAfter = enumeration?.strips.count
+            afterLabel = nil
+            if let enumeration, enumeration.strips.count == strips.count {
+                afterLabel = AXLogicProElements.outputSlotDestination(in: enumeration.strips[index], runtime: runtime.ax)
+            }
             after = afterLabel.flatMap(OutputAssignment.observed(slotLabel:))
             if after == destination { break }
             if timing.pollIntervalMs > 0 { try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs)) }
@@ -260,22 +273,20 @@ extension AccessibilityChannel {
         extras["after"] = after?.json ?? NSNull()
         extras["verify_source"] = "ax_output_slot"
         extras["changed"] = after.map { $0 != before } ?? NSNull()
-
-        let countAfter: Int? = AXLogicProElements.getMixerArea(runtime: runtime)
-            .flatMap { AXLogicProElements.stripEnumeration(in: $0, runtime: runtime.ax) }
-            .flatMap { $0.unreadableChildren == 0 ? $0.strips.count : nil }
         extras["strip_count_after"] = countAfter ?? NSNull()
 
         if let countAfter, countAfter != strips.count {
             let sideEffect = countAfter > strips.count ? "strip_created" : "strip_removed"
             return refusal(.unexpectedSideEffect, "The output was pressed and the Mixer's strip count "
-                + "moved from \(strips.count) to \(countAfter). Nothing was cleaned up: removing a "
+                + "moved from \(strips.count) to \(countAfter), so strip \(index) may no longer be "
+                + "this track and its output was not read back. Nothing was cleaned up: removing a "
                 + "strip is #967's job. Re-read the Mixer before any dependent write.",
                 ["unexpected_side_effect": sideEffect, "write_attempted": true])
         }
         guard afterLabel != nil else {
-            extras["hint"] = "The output was pressed and the strip's output did not read back. The "
-                + "assignment is unverified; stop dependent writes and re-read the strip."
+            extras["hint"] = "The output was pressed and the strip's output did not read back (the "
+                + "Mixer's strips or the strip's output slot did not read). The assignment is "
+                + "unverified; stop dependent writes and re-read the strip."
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
         }
         guard after == destination else {
@@ -284,18 +295,15 @@ extension AccessibilityChannel {
                 + "destination. Stop dependent writes and re-read the strip."
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
         }
-        guard countAfter != nil else {
-            extras["hint"] = "The strip reads back the destination, but the Mixer's strip count did not "
-                + "read afterwards, so nothing else changing cannot be shown."
-            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
-        }
         return .success(HonestContract.encodeStateA(extras: extras))
     }
 
     /// Picks the popup entry for `destination` by structure: the parent submenu that owns it, then
-    /// exactly one entry under that parent. A title repeated elsewhere in the popup (the root's
-    /// `Stereo Output` and the Output submenu's) is told apart by its parent; a title repeated under
-    /// the same parent is refused. Nothing is chosen by position.
+    /// exactly one entry under that parent. The root's checked entry echoes the CURRENT output
+    /// (measured ko, 2026-09-28: `Stereo Output` before a change, `버스 1 → Aux 1` after one), so it is
+    /// never a destination: `Stereo Output` and the pairs come from the Output submenu, the buses
+    /// from the Bus submenu, and only `No Output` from the root. A title repeated under the same
+    /// parent is refused. Nothing is chosen by position.
     static func outputMenuChoice(
         for destination: OutputAssignment,
         in root: AXUIElement,
@@ -303,12 +311,18 @@ extension AccessibilityChannel {
     ) -> OutputMenuChoice {
         let rootItems = titledMenuItems(of: root, runtime: runtime)
         switch destination {
-        case .stereoOutput, .noOutput:
-            let labels = destination == .stereoOutput ? AXLocalePolicy.stereoOutputLabel : AXLocalePolicy.noOutputLabel
-            let matches = rootItems.filter { labels.matches($0.title, mode: .exact) && !$0.hasSubmenu }
+        case .noOutput:
+            let matches = rootItems.filter { AXLocalePolicy.noOutputLabel.matches($0.title, mode: .exact) && !$0.hasSubmenu }
             let offered = rootItems.filter { !$0.hasSubmenu }
                 .compactMap { OutputAssignment.observed(slotLabel: $0.title)?.token }
             return single(matches.map { ($0.element, [$0.title]) }, offered: offered)
+        case .stereoOutput:
+            let parent = submenu(titled: AXLocalePolicy.outputPopupOutputSubmenuTitle, among: rootItems, runtime: runtime)
+            guard case .found(let title, let submenu) = parent else { return parent.choice }
+            let items = titledMenuItems(of: submenu, runtime: runtime).filter { !$0.hasSubmenu }
+            let matches = items.filter { AXLocalePolicy.stereoOutputLabel.matches($0.title, mode: .exact) }
+            let offered = items.compactMap { OutputAssignment.observed(slotLabel: $0.title)?.token }
+            return single(matches.map { ($0.element, [title, $0.title]) }, offered: offered)
         case .bus(let number):
             let parent = submenu(titled: AXLocalePolicy.outputPopupBusSubmenuTitle, among: rootItems, runtime: runtime)
             guard case .found(let title, let submenu) = parent else { return parent.choice }

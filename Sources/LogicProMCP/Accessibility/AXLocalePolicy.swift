@@ -2862,9 +2862,10 @@ enum AXLocalePolicy {
     //
     // The two parents `logic_mixer set_output_verified` walks through in a channel strip's output
     // popup. Measured 2026-09-28 on Logic 12.3 (6674), ko and de, on the same strip: the root menu
-    // holds `Stereo Output`, `No Output`, an OUTPUT submenu (`출력` / `Ausgang`) and a BUS submenu
-    // (`버스` / `Bus`); the output submenu repeats `Stereo Output`, so the parent is what tells
-    // the two apart. Both are matched whole.
+    // holds a checked echo of the CURRENT output (`Stereo Output` before a change, `버스 1 → Aux 1`
+    // after one), `No Output`, an OUTPUT submenu (`출력` / `Ausgang`) that holds `Stereo Output` and
+    // the pairs, and a BUS submenu (`버스` / `Bus`). The echo is never a destination, so the parent
+    // is what finds `Stereo Output`. Both are matched whole.
 
     /// The output popup's Bus submenu title (#291 R2).
     ///

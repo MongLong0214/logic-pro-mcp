@@ -6,12 +6,15 @@ import Testing
 
 // #291 R2 — `logic_mixer set_output_verified`. The fixture is the output popup as measured on
 // Logic 12.3 in ko and de on 2026-09-28: pressing a strip's output slot parents one AXMenu to the
-// Mixer's AXLayoutArea; its root holds `Stereo Output`, `No Output`, an Output submenu that repeats
-// `Stereo Output` and lists `Output 3-4`, and a Bus submenu whose first entry reads `Bus 1 → Aux 1`
-// because an aux already takes Bus 1. Pressing an entry closes the menu and rewrites the slot's
-// description; a bus nothing receives makes Logic add an aux strip, which the fixture models too.
+// Mixer's AXLayoutArea; its root holds a checked echo of the CURRENT output, `No Output`, an Output
+// submenu that holds `Stereo Output` and `Output 3-4`, and a Bus submenu whose first entry reads
+// `Bus 1 → Aux 1` because an aux already takes Bus 1. Pressing an entry closes the menu and
+// REPLACES the strip: the held strip and its slots answer -25202 from then on, and a new strip at
+// the same ordinal carries the new output (measured ko: invalid from about 0.6 s after the press).
+// A bus nothing receives makes Logic add an aux strip, which the fixture models too.
 
 private let r2PID: pid_t = 4291
+private let r2InvalidElement = AXHelpers.AXStatusError(raw: -25202)
 
 /// The labels one Logic language draws in the output popup and on the slot.
 struct R2PopupLanguage: Sendable, CustomStringConvertible {
@@ -62,7 +65,7 @@ private final class R2Fixture: @unchecked Sendable {
         var alwaysCreatesStrip = false
         var play: Bool? = false
         var record: Bool? = false
-        var duplicateRootStereoOutput = false
+        var duplicateSubmenuStereoOutput = false
         var duplicateBusOne = false
         /// False: the press puts a popup-level window up, but no AXMenu appears under the Mixer.
         var menuAppearsUnderMixer = true
@@ -76,13 +79,16 @@ private final class R2Fixture: @unchecked Sendable {
     private var pressLog: [Int] = []
     private var escapes = 0
     private var resultLabel: [Int: String] = [:]
+    private var stripChildren: [Int: [AXUIElement]] = [:]
+    private var invalidated: Set<Int> = []
+    private var replacedStrips = 0
 
     private(set) var app: AXUIElement!
     private(set) var mixer: AXUIElement!
     private(set) var strips: [AXUIElement] = []
     private(set) var outputButton: AXUIElement!
     private(set) var root: AXUIElement!
-    private(set) var rootStereoOutput: AXUIElement!
+    private(set) var rootEcho: AXUIElement!
     private(set) var submenuStereoOutput: AXUIElement!
     private(set) var busOne: AXUIElement!
     private(set) var pair34: AXUIElement!
@@ -116,13 +122,17 @@ private final class R2Fixture: @unchecked Sendable {
         strips = [audio, aux, stereoOut]
         b.setChildren(mixer, strips)
         b.setChildren(window, [controlBar, mixer])
-        buildPopup()
+        buildPopup(current: current)
     }
 
     var runtime: AXLogicProElements.Runtime {
         let base = b.makeLogicRuntime(
             pid: r2PID,
             appElement: app,
+            attributeValueHandler: { [self] element, _ -> AnyObject?? in isGone(element) ? .some(nil) : .none },
+            attributeValueResultHandler: { [self] element, _ in isGone(element) ? .failure(r2InvalidElement) : nil },
+            childrenHandler: { [self] element in isGone(element) ? [] : nil },
+            childrenResultHandler: { [self] element in isGone(element) ? .failure(r2InvalidElement) : nil },
             setAttributeHandler: nil,
             performActionHandler: { [self] element, action in press(element, action) }
         )
@@ -138,7 +148,9 @@ private final class R2Fixture: @unchecked Sendable {
 
     var presses: [Int] { lock.withLock { pressLog } }
     var escapeCount: Int { lock.withLock { escapes } }
+    var stripsReplaced: Int { lock.withLock { replacedStrips } }
     func id(_ element: AXUIElement) -> Int { b.elementID(element) }
+    func isGone(_ element: AXUIElement) -> Bool { lock.withLock { invalidated.contains(id(element)) } }
 
     private func make(role: String? = nil, description: String? = nil) -> AXUIElement {
         nextID += 1
@@ -164,7 +176,18 @@ private final class R2Fixture: @unchecked Sendable {
             outputSlot = slot
         }
         b.setChildren(strip, children)
+        stripChildren[id(strip)] = children
         return (strip, outputSlot)
+    }
+
+    /// Logic replaces the audio strip's elements when its output changes: the old strip and its
+    /// slots answer -25202, and a new strip at the same ordinal carries the new output.
+    private func replaceAudioStrip(output: String) {
+        let old = strips[0]
+        invalidated.insert(id(old))
+        for child in stripChildren[id(old)] ?? [] { invalidated.insert(id(child)) }
+        strips[0] = strip(output: output, input: "Input 1").0
+        replacedStrips += 1
     }
 
     private func item(_ title: String, result: String? = nil, submenu: [AXUIElement]? = nil) -> AXUIElement {
@@ -180,21 +203,26 @@ private final class R2Fixture: @unchecked Sendable {
         return item
     }
 
-    private func buildPopup() {
+    private func buildPopup(current: String) {
         let language = options.language
-        rootStereoOutput = item(language.stereoOutput, result: language.stereoOutput)
+        // Measured: the root's checked entry echoes the current output, and a bus that an aux takes
+        // is drawn with the aux's name.
+        let echoTitle: String
+        if case .bus(1) = options.current { echoTitle = "\(language.bus(1)) \u{2192} Aux 1" } else { echoTitle = current }
+        rootEcho = item(echoTitle, result: current)
         submenuStereoOutput = item(language.stereoOutput, result: language.stereoOutput)
         pair34 = item(language.pair34, result: language.pair34)
         busOne = item("\(language.bus(1)) \u{2192} Aux 1", result: language.bus(1))
-        var rootItems = [item(""), rootStereoOutput!]
-        if options.duplicateRootStereoOutput {
-            rootItems.append(item(language.stereoOutput, result: language.stereoOutput))
+        var outputItems = [submenuStereoOutput!]
+        if options.duplicateSubmenuStereoOutput {
+            outputItems.append(item(language.stereoOutput, result: language.stereoOutput))
         }
-        rootItems += [item(""), item(language.noOutput, result: language.noOutput), item("")]
-        rootItems.append(item(language.outputSubmenu, submenu: [
-            submenuStereoOutput, pair34, item(language.surround), item(""),
+        outputItems += [
+            pair34, item(language.surround), item(""),
             item(language.monoSubmenu, submenu: language.monoEntries.map { item($0, result: $0) }),
-        ]))
+        ]
+        var rootItems = [item(""), rootEcho!, item(""), item(language.noOutput, result: language.noOutput), item("")]
+        rootItems.append(item(language.outputSubmenu, submenu: outputItems))
         var busItems = [busOne!]
         if options.duplicateBusOne {
             busItems.append(item(language.bus(1), result: language.bus(1)))
@@ -219,12 +247,12 @@ private final class R2Fixture: @unchecked Sendable {
             }
             guard menuOpen, let label = resultLabel[pressed] else { return true }
             menuOpen = false
-            b.setChildren(mixer, strips)
             switch options.afterPress {
-            case .applies: b.setAttribute(outputButton, kAXDescriptionAttribute as String, label)
+            case .applies: replaceAudioStrip(output: label)
             case .doesNothing: break
-            case .slotGoesBlank: b.setAttribute(outputButton, kAXDescriptionAttribute as String, "")
+            case .slotGoesBlank: replaceAudioStrip(output: "")
             }
+            b.setChildren(mixer, strips)
             let receivedBus = options.auxInput ?? options.language.bus(1)
             let busWithoutReceiver = label.hasPrefix(options.language.busWord) && label != receivedBus
             if options.alwaysCreatesStrip || busWithoutReceiver {
@@ -322,7 +350,8 @@ func outputAssignmentReadsSlotDescriptions(_ language: R2PopupLanguage) {
 // MARK: - State A
 
 /// Kills M03 (red-on-revert): removing the entry press. The slot then never changes and the
-/// after-read says so, State B.
+/// after-read says so, State B. And M21: re-reading the slot element held from before the press,
+/// which Logic has replaced by then, so it answers -25202 and the reply is State B.
 @Test("Audio 1 to Bus 1 reads back Bus 1 with the strip count unchanged")
 func outputAssignmentBusSetsAndReadsBack() async throws {
     let fixture = R2Fixture()
@@ -343,11 +372,17 @@ func outputAssignmentBusSetsAndReadsBack() async throws {
     #expect(envelope["verify_source"] as? String == "ax_output_slot")
     #expect(fixture.presses == [fixture.id(fixture.outputButton), fixture.id(fixture.busOne)])
     #expect(fixture.escapeCount == 0)
+    // The seam fired: the slot that was pressed is gone, so the read-back came from the new strip.
+    #expect(fixture.stripsReplaced == 1)
+    let pressedSlotGone = fixture.isGone(fixture.outputButton)
+    #expect(pressedSlotGone)
 }
 
-/// The root's `Stereo Output` and the Output submenu's carry the same title; the parent tells
-/// them apart. Kills M05: matching the title anywhere in the popup, which finds two and refuses;
-/// and M04: parsing pairs with R1's physical prefix, which reads no `Ausgang 3-4`.
+/// `Stereo Output` is taken from the Output submenu. The root's checked entry echoes the current
+/// output (here the pair), so once the output is not Stereo Output the root has none. Kills M05:
+/// looking for `Stereo Output` at the root, which refuses destination_not_offered (the defect the
+/// first live run hit in ko and de); and M04: parsing pairs with R1's physical prefix, which reads
+/// no `Ausgang 3-4`.
 @Test("a physical pair sets and Stereo Output restores, by parent, in en, ko and de",
       arguments: [R2PopupLanguage.en, .ko, .de])
 func outputAssignmentPhysicalSetsAndRestores(_ language: R2PopupLanguage) async throws {
@@ -363,8 +398,9 @@ func outputAssignmentPhysicalSetsAndRestores(_ language: R2PopupLanguage) async 
     #expect(restoreEnvelope["state"] as? String == "A")
     #expect(dictionary(restoreEnvelope["before"]) == json(.physical(3, 4)))
     #expect(dictionary(restoreEnvelope["after"]) == json(.stereoOutput))
-    #expect(restore.presses.last == restore.id(restore.rootStereoOutput))
-    #expect(!restore.presses.contains(restore.id(restore.submenuStereoOutput)))
+    #expect(restoreEnvelope["menu_path"] as? [String] == [language.outputSubmenu, language.stereoOutput])
+    #expect(restore.presses.last == restore.id(restore.submenuStereoOutput))
+    #expect(!restore.presses.contains(restore.id(restore.rootEcho)))
 }
 
 /// Kills M06: dropping the equal-already check, which opens the popup and presses anyway.
@@ -480,7 +516,7 @@ func outputAssignmentRefusesMissingPorts() async throws {
     #expect(envelope["popup_menu_state"] as? String == "dismissed")
 }
 
-enum R2Repeat: String, CaseIterable, Sendable { case rootStereoOutput, busOne }
+enum R2Repeat: String, CaseIterable, Sendable { case stereoOutput, busOne }
 
 /// Kills M13: first match. Two entries with the same meaning under the same parent cannot be
 /// told apart, and pressing either would be a guess.
@@ -489,8 +525,8 @@ func outputAssignmentRefusesARepeatedTitle(_ repeated: R2Repeat) async throws {
     var options = R2Fixture.Options()
     let destination: OutputAssignment
     switch repeated {
-    case .rootStereoOutput:
-        options.duplicateRootStereoOutput = true
+    case .stereoOutput:
+        options.duplicateSubmenuStereoOutput = true
         options.current = .label("Output 3-4")
         destination = .stereoOutput
     case .busOne:
@@ -550,7 +586,8 @@ func outputAssignmentMismatchedAfterReadIsStateB() async throws {
     #expect(envelope["observed_label"] as? String == "Stereo Output")
 }
 
-/// Kills M17: ignoring the strip count after the press.
+/// Kills M17: ignoring the strip count after the press. Once the count moved the ordinal may name
+/// another strip, so no output is read back from it.
 @Test("a strip count that grew is State C unexpected_side_effect strip_created, nothing cleaned up")
 func outputAssignmentStripCreatedIsStateC() async throws {
     let fixture = R2Fixture(.init(alwaysCreatesStrip: true))
@@ -563,7 +600,7 @@ func outputAssignmentStripCreatedIsStateC() async throws {
     #expect(envelope["strip_count_after"] as? Int == 4)
     let written = try #require(envelope["write_attempted"] as? Bool)
     #expect(written)
-    #expect(dictionary(envelope["after"]) == json(.bus(1)))
+    #expect(envelope["after"] is NSNull)
     // Exactly the slot and the entry: no undo, no removal.
     #expect(fixture.presses.count == 2)
 }
