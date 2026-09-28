@@ -196,6 +196,7 @@ Also open, outside the ADR set:
 | #1040 | OPEN | Filed 2026-09-27 from #291 R1: the Input Monitoring checkbox has no LabelSet, and three track-header reads turn an unreadable value into false. |
 | #1041 | OPEN | Filed 2026-09-27 from the #1029 pause work: `logic://transport` declares `isPaused`, but nothing that reads Logic ever writes it. |
 | #1042 | OPEN | Filed 2026-09-27 from the #1029 pause work, by reading the code; Logic has not been driven for it yet. A cycle or metronome readback mismatch is not marked unsafe to fall back from, so the key-command fallback can press the checkbox a second time. |
+| #1048 | OPEN | Filed 2026-09-27 as an outside report: Logic Pro MCP 3.17.0, installed through Homebrew, fails to initialize as a Codex Desktop STDIO server, before any Logic command runs. The pull request carrying this row adds the row only; it did not examine the report. |
 
 ### Three reopen reasons, checked rather than inferred
 
