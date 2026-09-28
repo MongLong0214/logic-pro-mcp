@@ -1,0 +1,23 @@
+Limit: logic://tracks changes shape for an unread toggle (key absent, where it was false); a client that indexed the key without a default now fails on that row instead of reading a false nobody observed
+Limit: the MCU rows still publish Logic's MCU Mute LED, which lights on every strip a solo silences; in the same read seven unmuted tracks were published isMuted: true
+Limit: logic://tracks labels MCU-created rows source "ax_live"; the refresh that read the headers did not replace them in that read, and why is not measured here
+Provenance: inherited acb3e098b7c776c64aa1b6caca2bf4bcd64f966b
+
+Limit: the LabelSet is a claim about Apple's strings; that AX describes the checkbox with them was read live in en and ko before this change, and the ten-locale live reading is its own record
+Limit: read only; there is no Input Monitoring write, and neither the project audit nor the track-creation signature consults the field
+Provenance: inherited 693c02fddefeff2a3a100c0ba62cc80bc2678a78
+
+Limit: in six locales no read taken while a solo was engaged served a header read; logic://tracks answered with the rows MCU feedback creates, and why system.refresh_cache did not replace them is not measured
+Limit: a track a solo silences publishes Mute true from the MCU Mute LED rather than from its header checkbox; that is the MCU feedback path, not the header read this issue changed
+Limit: the Mute checkbox of a track a solo silences reads -1 in some walks and 0 in others, so those cells are counted apart and not compared
+Limit: one host, one fixture, one build of Logic; hidden or collapsed headers and other track types are not measured
+Provenance: inherited 83495571bd18738b918602b849f439d41089b9a1
+
+Limit: a mute set by a control surface is published only once the poller's header read runs; the rows MCU feedback creates carry no Mute at all
+Limit: the Solo LED still writes isSoloed; if Logic lights it for anything but the track's own solo, the same class of mismatch returns for Solo
+Provenance: inherited c5a391cc0fcd91c534ba4bbcee67387d33a229c0
+
+Limit: the drop in reads served from MCU-created rows fits the Mute LED's writes advancing the tracks revision so that StateCache.applyTracks refused the poller's header read, but neither run recorded the revision or the refused writes
+Limit: no read in this run served MCU-created rows, so what such a row publishes while a solo lights the Mute LED is shown by Issue1040MCUMuteLEDTests, not by this reading
+Limit: which value the product's read met for ja-JP's silenced Mute is not recorded; the harness walks the header before and after the read, not during it
+Provenance: inherited efe3e1f51de19360923839c30325d26a1b1effe4
