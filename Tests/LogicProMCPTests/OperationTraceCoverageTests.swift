@@ -211,8 +211,8 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 116)   // #965 registered project.inspect_session
-        #expect(mutatingSpecs.count == 92)   // #884 system.setup_control_surface, #862 mixer.bank
+        #expect(OperationRegistry.specs.count == 117)   // #291 registered mixer.set_output_verified
+        #expect(mutatingSpecs.count == 93)   // #291 mixer.set_output_verified
 
         // A mutating op that refuses BEFORE dispatch starts its trace starts no trace with the
         // coverage params (which carry no consent), so it is asserted to claim NO trace coverage
@@ -330,9 +330,9 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 116)   // #965 registered project.inspect_session
+        #expect(OperationRegistry.specs.count == 117)   // #291 registered mixer.set_output_verified
         #expect(readOnlySpecs.count == 24)
-        // Mutability is total: the mutating census (92) and this inverse gate
+        // Mutability is total: the mutating census (93) and this inverse gate
         // (24) together account for every registered spec, so a new operation
         // cannot land outside both gates.
         #expect(readOnlySpecs.count + mutatingSpecs.count == OperationRegistry.specs.count)
@@ -691,6 +691,8 @@ private func operationTraceCoverageParams(
         return ["value": .double(0.5)]
     case .mixerBank:
         return ["direction": .string("right")]
+    case .mixerSetOutputVerified:
+        return ["track": .int(0), "destination": .object(["kind": .string("bus"), "number": .int(1)])]
     case .mixerSetPluginParam:
         return ["track": .int(0), "insert": .int(0), "param": .int(0), "value": .double(0.5)]
     case .mixerInsertPlugin:

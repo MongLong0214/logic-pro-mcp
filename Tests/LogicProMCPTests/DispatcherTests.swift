@@ -1321,7 +1321,10 @@ private func liveTransportJSON(
     _ = tool.inputSchema
     #expect(description.contains("set_master_volume"))
     #expect(description.contains("bank -> { direction"))
-    #expect(!description.contains("set_output"))
+    #expect(description.contains("set_output_verified"))
+    // The public `set_output_verified` (#291 R2) contains the not-exposed name, so it is taken out
+    // before the not-exposed `set_output` is looked for.
+    #expect(!description.replacingOccurrences(of: "set_output_verified", with: "").contains("set_output"))
     #expect(!description.contains("set_input"))
     #expect(!description.contains("set_send"))
 }

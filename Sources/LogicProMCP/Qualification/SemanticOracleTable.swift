@@ -324,6 +324,15 @@ enum SemanticOracleTable {
             "live State-A contract pending — State A is a fresh, changed MCU LCD upper row; "
             + "live records from ten Logic languages exist, but no oracle pinning "
             + "verify_source mcu_lcd_upper_row has been written yet",
+        .mixerSetOutputVerified:
+            // #291 R2. Post-closure like mixer.bank, and for the same reason NOT back-dated into a
+            // phase set. Its State A is the same strip's output slot read back by R1's reader
+            // (verify_source ax_output_slot) with an unmoved strip count -- an independent
+            // readback, so the exclusion is pending, not structural. No oracle pinning that
+            // envelope exists yet, and until one does this keeps the op out of the covered set.
+            "live State-A contract pending — State A is the same strip's output slot read back "
+            + "(verify_source ax_output_slot) with an unmoved strip count; no oracle pinning that "
+            + "envelope has been written yet",
         .pluginsSetEQBandVerified:
             "live 2026-08-30 evidence establishes the Channel EQ raw AXValue ranges and "
             + "one-step increment-walk behavior only; no end-to-end write/readback round "

@@ -519,7 +519,7 @@ enum WorkflowSkillCatalog {
         ],
         "logic_mixer": [
             "set_volume", "set_pan", "set_master_volume",
-            "insert_plugin", "set_plugin_param", "bank",
+            "insert_plugin", "set_plugin_param", "bank", "set_output_verified",
         ],
         "logic_plugins": [
             "get_inventory", "set_param_verified", "set_eq_band_verified", "insert_verified",

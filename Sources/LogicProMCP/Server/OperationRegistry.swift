@@ -18,6 +18,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case mixerSetPluginParam = "mixer.set_plugin_param"
     case mixerInsertPlugin = "mixer.insert_plugin"
     case mixerBank = "mixer.bank"
+    case mixerSetOutputVerified = "mixer.set_output_verified"
     case navigateGotoBar = "navigate.goto_bar"
     case navigateGotoMarker = "navigate.goto_marker"
     case navigateCreateMarker = "navigate.create_marker"
@@ -295,6 +296,7 @@ enum OperationRegistry {
         ToolID.logicMixer.rawValue: [
             "mixer.set_volume", "mixer.set_pan", "mixer.set_master_volume",
             "mixer.set_plugin_param", "mixer.insert_plugin", "mixer.bank",
+            "mixer.set_output_verified",
         ],
         ToolID.logicNavigate.rawValue: [
             "navigate.goto_bar", "navigate.goto_marker", "navigate.create_marker",
@@ -354,7 +356,7 @@ enum OperationRegistry {
         ],
         ToolID.logicMixer.rawValue: [
             "set_volume", "set_pan", "set_master_volume", "set_plugin_param", "insert_plugin",
-            "bank",
+            "bank", "set_output_verified",
         ],
         ToolID.logicNavigate.rawValue: [
             "goto_bar", "goto_marker", "create_marker", "delete_marker", "rename_marker",
@@ -575,6 +577,18 @@ enum OperationRegistry {
         // #862: relative banking on the Mackie Control surface. `direction` and `count` only --
         // no track target, because the operation moves the eight-strip window, not a strip.
         (.mixerBank, "bank", .none, .none, ["count", "direction"]),
+        // #291 R2: one strip's output to one exact destination, read back from the same strip.
+        // Target-bearing (`target_ref` from logic://tracks or logic://mixer, or `track`), and a
+        // reversible write -- the reply carries the observed `before` -- so it joins the
+        // `.legacyIndexAllowed` tier with its census entry. `destination` and `expected_current`
+        // are `{kind, number|ports}` objects; no localized string is a parameter.
+        (
+            .mixerSetOutputVerified,
+            "set_output_verified",
+            .none,
+            .acceptsStableTarget,
+            ["destination", "expected_current", "index", "track"]
+        ),
     ] as [(OperationID, String, ConfirmationPolicy, TargetPolicy, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,

@@ -30,6 +30,7 @@ struct OperationRegistryTests {
         (.mixerSetPluginParam, "set_plugin_param"),
         (.mixerInsertPlugin, "insert_plugin"),
         (.mixerBank, "bank"),
+        (.mixerSetOutputVerified, "set_output_verified"),
     ]
 
     private static let navigateCommands: [(String, String)] = [
@@ -164,7 +165,7 @@ struct OperationRegistryTests {
     @Test("all mixer metadata matches current runtime truth")
     func mixerMetadata() throws {
         let mixerSpecs = OperationRegistry.specs.filter { $0.tool == .logicMixer }
-        let targetBearingCommands: Set<String> = ["set_volume", "set_pan"]
+        let targetBearingCommands: Set<String> = ["set_volume", "set_pan", "set_output_verified"]
         #expect(Set(Self.mixerCommands.map(\.1)) == Set(mixerSpecs.map(\.command)))
 
         for (id, command) in Self.mixerCommands {

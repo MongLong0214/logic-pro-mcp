@@ -611,6 +611,8 @@ actor AccessibilityChannel: Channel {
             return runtime.setMixerValue(params, .volume)
         case "mixer.set_pan":
             return runtime.setMixerValue(params, .pan)
+        case "mixer.set_output_verified":
+            return await AccessibilityChannel.setOutputVerified(params: params, runtime: runtime.logicRuntime)
         // #592: `mixer.set_send` routes `[.mcu]` and MCUChannel implements it, so this arm was
         // unreachable — a reader who grepped the operation found a refusal that is not what it does.
 

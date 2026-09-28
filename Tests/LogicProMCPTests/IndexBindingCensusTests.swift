@@ -98,6 +98,7 @@ struct IndexBindingCensusTests {
         let expectedLegacy: Set<OperationID> = [
             .mixerSetVolume,           // reversible level write
             .mixerSetPan,              // reversible pan write
+            .mixerSetOutputVerified,   // reversible: the reply carries the observed `before` (#291 R2)
             .pluginsSetParamVerified,  // reversible param write (verified readback)
             .pluginsSetEQBandVerified, // reversible named-EQ parameter write
             .tracksSelect,             // selection only; no persistent state change

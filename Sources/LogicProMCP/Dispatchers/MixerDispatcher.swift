@@ -10,7 +10,7 @@ struct MixerDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_mixer",
-        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin, bank. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); bank -> { direction: \"left\"|\"right\" (required), count?: Int (1..31, default 1) } moves the MCU fader-bank window by eight strips per step and is MCU-only; each step is one press followed by its own readback, the MCU LCD upper row that names the eight visible strips, and the walk stops at the first step that did not move (banks_moved/banks_requested/bank_presses_sent/step_windows): State A (verify_source:mcu_lcd_upper_row, window_before/window_after/strips) only when every step got a fresh upper-row write that differs from that step's snapshot, State B noop_unobservable when the first step redraws unchanged (identical six-character names cannot confirm a move) or echo_timeout when no redraw arrives, State B readback_mismatch when some steps moved and the next redrew unchanged (the end of the mixer in that direction), and State C readback_unavailable with write_attempted:false BEFORE any press when the upper row has never been received on this server; set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true, configuration?: String } via AX mixer slot with readback. The last segment of Logic's plug-in menu is the CHANNEL CONFIGURATION (Stereo, Mono, Mono->Stereo, Dual Mono), which belongs to the strip and not to the request, so it is read off the menu this call opens: the spec's preference wins when the strip offers it, a menu with exactly one entry has no choice to make, and several entries with none preferred are REFUSED rather than picking a channel layout on the operator's behalf. Supply `configuration` to choose in that case — it is honoured only when the strip actually offers it, and a value the strip lacks fails closed instead of silently falling back. The refusal lists what the strip offered, so the legal values come back from the failure. ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_volume and set_pan ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic://mixer (mix_…) that resolves to the addressed mixer strip in place of explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit track/index path.",
+        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin, bank, set_output_verified. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); bank -> { direction: \"left\"|\"right\" (required), count?: Int (1..31, default 1) } moves the MCU fader-bank window by eight strips per step and is MCU-only; each step is one press followed by its own readback, the MCU LCD upper row that names the eight visible strips, and the walk stops at the first step that did not move (banks_moved/banks_requested/bank_presses_sent/step_windows): State A (verify_source:mcu_lcd_upper_row, window_before/window_after/strips) only when every step got a fresh upper-row write that differs from that step's snapshot, State B noop_unobservable when the first step redraws unchanged (identical six-character names cannot confirm a move) or echo_timeout when no redraw arrives, State B readback_mismatch when some steps moved and the next redrew unchanged (the end of the mixer in that direction), and State C readback_unavailable with write_attempted:false BEFORE any press when the upper row has never been received on this server; set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true, configuration?: String } via AX mixer slot with readback. The last segment of Logic's plug-in menu is the CHANNEL CONFIGURATION (Stereo, Mono, Mono->Stereo, Dual Mono), which belongs to the strip and not to the request, so it is read off the menu this call opens: the spec's preference wins when the strip offers it, a menu with exactly one entry has no choice to make, and several entries with none preferred are REFUSED rather than picking a channel layout on the operator's behalf. Supply `configuration` to choose in that case — it is honoured only when the strip actually offers it, and a value the strip lacks fails closed instead of silently falling back. The refusal lists what the strip offered, so the legal values come back from the failure. set_output_verified -> { track: Int (>= 0) or target_ref: String (trk_/mix_), destination: {kind:\"bus\", number:1..256} | {kind:\"physical\", ports:[a,b]} | {kind:\"stereo_output\"} | {kind:\"no_output\"}, expected_current?: same shape } sets one visible Mixer strip's output through its output popup and reads the SAME strip's output slot back: State A (verify_source ax_output_slot, before, after, changed, strip_count_before/after, menu_path, popup_menu_state) only when the slot reads the destination and the strip count did not move; already there is State A changed:false with nothing pressed. Refused with nothing pressed (State C): current output unreadable or unclassifiable (readback_unavailable), expected_current differs (stale_snapshot), transport playing/recording (unsupported_state) or unreadable (transport_state_unknown), a bus no other strip reads as its input (bus_has_no_receiver: Logic would create an aux, and this command has no creation authority), a destination the popup does not offer as exactly one entry under its own submenu (element_not_found destination_not_offered, or ambiguous_target_name when a title repeats). After the press: slot unreadable is State B readback_unavailable, a different destination State B readback_mismatch, and a strip count that moved State C unexpected_side_effect (strip_created) with nothing cleaned up. There is no undo: restore by calling again with the reply's before as destination and its after as expected_current. ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_volume and set_pan ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic://mixer (mix_…) that resolves to the addressed mixer strip in place of explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit track/index path.",
         commandDescription: "Mixer command to execute"
     )
 
@@ -146,7 +146,65 @@ struct MixerDispatcher: OperationTraceDispatching {
             )
 
         case "set_output":
+            // #291 R2 keeps this answering not-exposed rather than aliasing it: the verified command
+            // takes a typed `destination` object this one never had, so an alias would give an old
+            // name a new contract instead of a working implementation of the old one.
             return notExposedCommandResult(operation: "mixer.set_output")
+
+        case "set_output_verified":
+            guard let rawDestination = params["destination"] else {
+                return toolInvalidParamsResult(
+                    "set_output_verified requires 'destination': {kind:\"bus\", number:N}, "
+                        + "{kind:\"physical\", ports:[a,b]}, {kind:\"stereo_output\"} or {kind:\"no_output\"}"
+                )
+            }
+            let parsedDestination = Self.outputAssignmentParam(rawDestination, field: "destination")
+            guard let destination = parsedDestination.assignment else {
+                return toolInvalidParamsResult(parsedDestination.problem ?? "invalid 'destination'")
+            }
+            var routedParams = ["destination": destination.token]
+            if let rawExpected = params["expected_current"] {
+                let parsedExpected = Self.outputAssignmentParam(rawExpected, field: "expected_current")
+                guard let expected = parsedExpected.assignment else {
+                    return toolInvalidParamsResult(parsedExpected.problem ?? "invalid 'expected_current'")
+                }
+                routedParams["expected_current"] = expected.token
+            }
+            let index: Int
+            let resolvedReference: TargetReference?
+            let resolvedFingerprint: String?
+            switch await TargetRefResolver.resolveMutationIndex(
+                params,
+                targetRegistry: targetRegistry,
+                cache: cache,
+                operation: "mixer.set_output_verified",
+                indexKeys: ["track", "index"],
+                invalidIndexResult: toolInvalidParamsResult(
+                    "set_output_verified requires explicit 'track' or non-conflicting 'index' (Int >= 0), "
+                        + "or a 'target_ref'"
+                ),
+                acceptedKinds: [.track, .mixerStrip],
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
+            ) {
+            case .success(let resolved):
+                index = resolved.index
+                resolvedReference = resolved.reference
+                resolvedFingerprint = resolved.binding?.observedFingerprint
+            case .failure(let result):
+                return result
+            }
+            routedParams["index"] = String(index)
+            let traceID = await startTraceIfEnabled(command: command)
+            let routed = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "mixer.set_output_verified", params: routedParams)
+            }
+            let result = TargetRefResolver.addEvidence(
+                resolvedReference,
+                fingerprint: resolvedFingerprint,
+                to: routed
+            )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "set_input":
             return notExposedCommandResult(operation: "mixer.set_input")
@@ -367,4 +425,45 @@ struct MixerDispatcher: OperationTraceDispatching {
         }
     }
 
+    /// #291 R2 — a `{kind, number|ports}` object as an `OutputAssignment`, or what is wrong with it.
+    /// Unknown keys are refused rather than ignored, so a misspelt `ports` is not read as a bus.
+    static func outputAssignmentParam(
+        _ value: Value,
+        field: String
+    ) -> (assignment: OutputAssignment?, problem: String?) {
+        guard let object = value.objectValue else {
+            return (nil, "'\(field)' must be an object: {kind, number} or {kind, ports}")
+        }
+        let unknown = Set(object.keys).subtracting(["kind", "number", "ports"])
+        guard unknown.isEmpty else {
+            return (nil, "'\(field)' has unknown key(s): \(unknown.sorted().joined(separator: ", "))")
+        }
+        guard let kind = object["kind"]?.stringValue else {
+            return (nil, "'\(field)' needs a string 'kind'")
+        }
+        func integer(_ raw: Value) -> Int? {
+            if let int = raw.intValue { return int }
+            if let double = raw.doubleValue, double.isFinite { return Int(exactly: double) }
+            return nil
+        }
+        var number: Int?
+        if let raw = object["number"] {
+            guard let parsed = integer(raw) else { return (nil, "'\(field).number' must be an integer") }
+            number = parsed
+        }
+        var ports: [Int]?
+        if let raw = object["ports"] {
+            guard let array = raw.arrayValue else { return (nil, "'\(field).ports' must be an array") }
+            let parsed = array.compactMap(integer)
+            guard parsed.count == array.count else {
+                return (nil, "'\(field).ports' must hold integers only")
+            }
+            ports = parsed
+        }
+        let made = OutputAssignment.make(kind: kind, number: number, ports: ports)
+        if let problem = made.problem {
+            return (nil, "'\(field)': \(problem)")
+        }
+        return (made.value, nil)
+    }
 }
