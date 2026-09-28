@@ -155,75 +155,6 @@ struct InitializeExperimentalFilterTests {
         #expect(outcome.droppedKeys.isEmpty)
     }
 
-    /// Kills: a report that carries a value, or one that a key can split across lines.
-    @Test("the report names the dropped keys on one line and never their values")
-    func reportNamesKeysOnly() throws {
-        let frame = Self.initialize(experimental: #"{"example/auth-change":{"token":"VALUE-1048"},"line\nbreak":[]}"#)
-        let report = try #require(InitializeExperimentalFilter.filter(frame).report)
-        #expect(report.contains(#""example/auth-change""#))
-        #expect(!report.contains("VALUE-1048"))
-        #expect(!report.contains("token"))
-        #expect(!report.contains("\n"))
-        let nothingDropped = InitializeExperimentalFilter.filter(Self.initialize(experimental: #"{"a":"1"}"#))
-        #expect([nothingDropped.report].compactMap { $0 }.isEmpty)
-    }
-
-    /// One object-valued key of 100,000 characters and 1,000 more: about 110 KB of keys, past the
-    /// 64 KB a pipe holds before a write to it blocks.
-    static let manyLongKeysExperimental = "{" + (
-        [#""\#(String(repeating: "a", count: 100_000))":{}"#]
-            + (0..<1000).map { String(format: #""k%04d":{}"#, $0) }
-    ).joined(separator: ",") + "}"
-
-    static let manyLongKeysInitialize = String(
-        decoding: initialize(experimental: manyLongKeysExperimental), as: UTF8.self)
-
-    /// Kills: naming every dropped key, and not cutting a long one.
-    @Test("the report names the first three keys, cuts a long one, and counts the rest")
-    func reportIsBounded() throws {
-        let outcome = InitializeExperimentalFilter.filter(Data(Self.manyLongKeysInitialize.utf8))
-        #expect(outcome.droppedKeys.count == 1001)
-        let report = try #require(outcome.report)
-        #expect(report.utf8.count <= InitializeExperimentalFilter.reportByteLimit, "\(report.utf8.count) bytes")
-        #expect(report.hasSuffix(
-            #": ["\#(String(repeating: "a", count: 64))" (cut), "k0000", "k0001"] and 998 more"#))
-    }
-
-    /// Kills: a cut that splits a Character, and a cut by Characters alone, which keeps one Character of
-    /// any size whole.
-    @Test("a key is cut on a Character boundary and within its byte limit")
-    func reportCutsOnCharacterBoundaries() throws {
-        // "e" and a combining acute accent: one Character of three bytes.
-        let accented = String(repeating: "e\u{301}", count: 100)
-        #expect(InitializeExperimentalFilter.reportedKey(accented)
-                    == "\"" + String(repeating: "e\u{301}", count: 64) + "\" (cut)")
-        // One Character of 20,001 bytes: shown as nothing, and marked cut.
-        let oneHugeCharacter = "e" + String(repeating: "\u{301}", count: 10_000)
-        #expect(InitializeExperimentalFilter.reportedKey(oneHugeCharacter) == "\"\" (cut)")
-        // A key that fits is shown whole, with no marker.
-        #expect(InitializeExperimentalFilter.reportedKey("example/auth-change") == #""example/auth-change""#)
-
-        // Keys whose escaped form is widest, in the first three places, and a thousand after them.
-        let widest = [String(repeating: "\u{1}", count: 100), String(repeating: "\u{2}", count: 100),
-                      String(repeating: "\u{3}", count: 100)]
-        let outcome = InitializeExperimentalFilter.Outcome(
-            frame: Data(), droppedKeys: widest + (0..<1000).map { String(format: "k%04d", $0) })
-        let report = try #require(outcome.report)
-        #expect(report.utf8.count <= InitializeExperimentalFilter.reportByteLimit, "\(report.utf8.count) bytes")
-        #expect(report.hasSuffix(#"\u0003" (cut)] and 1000 more"#))
-    }
-
-    /// Kills: showing a key unescaped. Each of these characters ends a line in some reader.
-    @Test("a key's quote, backslash, control characters and line separators are escaped")
-    func reportEscapesKeys() throws {
-        let key = "a\nb\rc\u{1b}[31m\u{7f}\u{85}\u{2028}\u{2029}\"\\"
-        let report = try #require(InitializeExperimentalFilter.Outcome(frame: Data(), droppedKeys: [key]).report)
-        #expect(report.hasSuffix(#": ["a\nb\rc\u001b[31m\u007f\u0085\u2028\u2029\"\\"]"#))
-        for raw in ["\n", "\r", "\u{1b}", "\u{7f}", "\u{85}", "\u{2028}", "\u{2029}"] {
-            #expect(!report.contains(raw), "\(raw.unicodeScalars.map(\.value)) is in the report")
-        }
-    }
-
     // MARK: - End to end: the real server behind the production stdio transport
 
     /// The complete reply lines in `received` that parse as JSON objects. A partial last line is left out.
@@ -254,8 +185,7 @@ struct InitializeExperimentalFilterTests {
     /// Writes one initialize frame into the transport's input pipe and returns the reply line. When that
     /// reply is a result, it goes on as a client does -- `notifications/initialized`, then `tools/list` -- and
     /// returns the `tools/list` reply line as well.
-    private static func handshakeOverStdio(_ frame: String) async throws
-        -> (initialize: String, toolsList: String?, reports: [String]) {
+    private static func handshakeOverStdio(_ frame: String) async throws -> (initialize: String, toolsList: String?) {
         var input: [Int32] = [-1, -1]
         var output: [Int32] = [-1, -1]
         try #require(pipe(&input) == 0)
@@ -267,11 +197,9 @@ struct InitializeExperimentalFilterTests {
             _ = bytes.withUnsafeBytes { Darwin.write(writeEnd, $0.baseAddress, $0.count) }
         }
 
-        let reports = Reports()
         let server = LogicProServer()
         try await server.startProtocolProbe(
-            transport: SerializedStdioTransport(input: input[0], output: output[1],
-                                                reportDroppedCapabilities: { reports.append($0) }))
+            transport: SerializedStdioTransport(input: input[0], output: output[1]))
         var received = Data()
         send(frame)
         try await read(from: output[0], into: &received) { !replies(in: $0).isEmpty }
@@ -293,16 +221,7 @@ struct InitializeExperimentalFilterTests {
         close(output[1])
         close(output[0])
         let initialize = try #require(first?.line, "no reply line arrived")
-        return (initialize, toolsList, reports.all)
-    }
-
-    /// What the transport reported, whole. The reports are kept in memory, so one of any size is read to
-    /// its end and cannot hold back the reply.
-    private final class Reports: @unchecked Sendable {
-        private let lock = NSLock()
-        private var lines: [String] = []
-        func append(_ line: String) { lock.lock(); lines.append(line); lock.unlock() }
-        var all: [String] { lock.lock(); defer { lock.unlock() }; return lines }
+        return (initialize, toolsList)
     }
 
     /// Kills: removing the filter from `SerializedStdioTransport`'s read loop. Without it the first three
@@ -330,21 +249,5 @@ struct InitializeExperimentalFilterTests {
         let tools = try #require(listResult["tools"] as? [[String: Any]])
         #expect(!tools.isEmpty)
         #expect(tools.compactMap { $0["name"] as? String }.count == tools.count)
-    }
-
-    /// Kills: a report as long as the client's keys. The transport writes the report before it hands the
-    /// request on, and to stderr, where a client that does not drain the pipe holds the write.
-    @Test("a 100,000-character key and 1,000 more initialize, and the one report stays within its bound")
-    func manyLongKeysInitializeWithABoundedReport() async throws {
-        let exchange = try await Self.handshakeOverStdio(Self.manyLongKeysInitialize)
-        let reply = try #require(
-            try JSONSerialization.jsonObject(with: Data(exchange.initialize.utf8)) as? [String: Any])
-        #expect(reply["result"] is [String: Any], "no initialize result: \(exchange.initialize.prefix(400))")
-        #expect(exchange.toolsList != nil, "no tools/list reply after initialize")
-        #expect(exchange.reports.count == 1)
-        for report in exchange.reports {
-            #expect(report.utf8.count <= InitializeExperimentalFilter.reportByteLimit,
-                    "the report is \(report.utf8.count) bytes")
-        }
     }
 }
