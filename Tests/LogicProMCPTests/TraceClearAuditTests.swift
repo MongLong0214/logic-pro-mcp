@@ -3,6 +3,11 @@ import MCP
 import Testing
 @testable import LogicProMCP
 
+// Nested in `OperationTraceTests`, which is `.serialized`, so this suite never runs beside another
+// test that clears or counts the shared trace store or sets LOGIC_MCP_ADR005_OPERATION_TRACE or the
+// audit-log root, all process-wide: beside the trace suites, a clear there changed this suite's
+// counts and wrote into its receipt root (#1045 review round 2).
+extension OperationTraceTests {
 /// PRD-015 (ADR-005 #288): `clear_traces` destroys the in-process trace
 /// evidence store, so every SUCCESSFUL clear must leave a durable, append-only
 /// audit receipt OUTSIDE the cleared store, and a receipt that cannot be
@@ -373,4 +378,5 @@ struct TraceClearAuditTests {
             #expect(await OperationTraceStore.shared.recent(limit: 128).count == 2)
         }
     }
+}
 }

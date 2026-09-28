@@ -32,8 +32,7 @@ struct TransportDispatcher: OperationTraceDispatching {
         switch command {
         case "play":
             let traceID = await startTraceIfEnabled(command: command)
-            let result = await handleVerifiedTransportCommand(
-                action: .play,
+            let result = await verifiedPlayResult(
                 router: router,
                 sleep: sleep,
                 traceID: traceID
@@ -351,91 +350,293 @@ struct TransportDispatcher: OperationTraceDispatching {
         ), isError: true)
     }
 
-    /// Verified `pause` mirroring `verifiedStopResult`: a pause that does not
-    /// actually halt the playhead must NEVER report bare success. Logic's pause
-    /// stops the running transport, so the verified target is the same as stop —
-    /// `isPlaying == false`. Read state first, send pause, then poll
-    /// `readTransportState` up to 12x for the playhead to settle; State A only on
-    /// a verified stop, State C `readback_mismatch` if it keeps playing.
+    /// Verified `pause`. Logic's Pause (keypad Period) is a TOGGLE, and it does not turn Play off.
+    /// Measured 2026-09-27 on Logic 12 in ko: while playing, Pause freezes the playhead and leaves
+    /// the Play control on, and a second Pause resumes playback. From stopped, Pause turns Play on
+    /// with the playhead still. So a paused transport reads Play on, playhead still.
+    ///
+    /// Two things follow:
+    /// - Pause is never pressed blind. The transport is read twice first; an already-paused
+    ///   transport (Play on, the two positions equal) gets no keystroke.
+    /// - State A is Play still on AND two playhead readings a gap apart that are equal. A mismatch
+    ///   after the keystroke is NOT safe to retry: the retry is another toggle, and it resumed
+    ///   playback when it was tried.
     private static func verifiedPauseResult(
         router: ChannelRouter,
         cache: StateCache,
         sleep: @escaping (UInt64) async -> Void,
         traceID: TraceID?
     ) async -> CallTool.Result {
-        if let beforeState = await readTransportState(router: router),
-           beforeState.isPlaying == false {
-            return toolTextResult(.success(HonestContract.encodeStateA(
-                extras: [
-                    "operation": "transport.pause",
-                    "requested_state": "paused",
-                    "verify_source": "transport_state",
-                    "write_attempted": false,
-                    "unchanged": true,
-                    "observed_before": transportStateSummary(beforeState),
-                    "observed_after": transportStateSummary(beforeState)
-                ]
-            )))
-        }
-
-        let writeResult = await withWriteBoundaryArmed(traceID) {
-            await router.route(operation: "transport.pause")
-        }
-        let writePayload = jsonValue(from: writeResult.message)
-
-        var attempts = 0
-        var afterState: TransportState?
-        for _ in 0..<12 {
-            attempts += 1
-            if let observed = await readTransportState(router: router) {
-                afterState = observed
-                await cache.updateTransport(observed)
-                if observed.isPlaying == false {
-                    return toolTextResult(.success(HonestContract.encodeStateA(extras: [
-                        "operation": "transport.pause",
-                        "requested_state": "paused",
-                        "verify_source": "transport_state",
-                        "write_attempted": true,
-                        "poll_attempts": attempts,
-                        "observed_isPlaying": observed.isPlaying,
-                        "observed_isRecording": observed.isRecording,
-                        "observed_position": observed.position,
-                        "observed_time_position": observed.timePosition,
-                        "write_result": writePayload
-                    ])))
-                }
-            }
-            await sleep(100_000_000)
-        }
-
-        guard writeResult.isSuccess else {
-            return toolTextResult(writeResult)
-        }
-
         var extras: [String: Any] = [
             "operation": "transport.pause",
             "requested_state": "paused",
             "verify_source": "transport_state",
-            "write_attempted": true,
-            "poll_attempts": attempts,
-            "write_result": writePayload
         ]
-        guard let afterState else {
+        // Every refusal before the keystroke has sent nothing, so it can be retried as it stands.
+        func refusalBeforeWrite(_ hint: String) -> CallTool.Result {
+            extras["write_attempted"] = false
+            extras["safe_to_retry"] = true
             return toolTextResult(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: "transport.pause executed, but live transport state could not be refreshed. Focus Logic's Tracks window, dismiss modal or plugin dialogs, then retry or run logic_system refresh_cache.",
+                hint: hint,
                 extras: extras
             ), isError: true)
         }
+        func notPlaying(_ state: TransportState) -> CallTool.Result {
+            extras["write_attempted"] = false
+            extras["unchanged"] = true
+            // Nothing was sent because Play is off. From stopped, Logic's Pause key would turn Play on
+            // with the playhead still (measured), so this answer is a choice, and it says so.
+            extras["not_playing"] = true
+            extras["observed_before"] = transportStateSummary(state)
+            extras["observed_after"] = transportStateSummary(state)
+            return toolTextResult(.success(HonestContract.encodeStateA(extras: extras)))
+        }
 
-        extras["observed_isPlaying"] = afterState.isPlaying
-        extras["observed_isRecording"] = afterState.isRecording
-        extras["observed_position"] = afterState.position
-        extras["observed_time_position"] = afterState.timePosition
-        extras["safe_to_retry"] = true
+        guard let first = await liveTransportState(router: router, cache: cache) else {
+            return refusalBeforeWrite("transport.pause is a toggle and the transport state could not be read, so nothing was sent. Focus Logic's Tracks window, dismiss modal or plugin dialogs, then retry.")
+        }
+        if first.isPlaying == false {
+            return notPlaying(first)
+        }
+        guard let tempo = await observedTempo(router: router) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_unreadable",
+                hint: "Play is on, but the tempo was not read, so the gap that tells a paused playhead from a playing one could not be sized. Nothing was sent, and the transport was not called paused or playing.",
+                extras: extras
+            )
+        }
+        extras["observed_tempo"] = tempo
+        guard let gap = pauseStillnessGapNanoseconds(tempo: tempo) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_too_slow_to_measure",
+                hint: "Play is on, but at this tempo a beat lasts too long for two readings within the command deadline to tell a paused playhead from a playing one. Nothing was sent.",
+                extras: extras
+            )
+        }
+        extras["stillness_gap_ms"] = Int(gap / 1_000_000)
+        await sleep(gap)
+        guard let second = await liveTransportState(router: router, cache: cache) else {
+            return refusalBeforeWrite("transport.pause is a toggle and the second transport reading failed, so nothing was sent. Retry.")
+        }
+        if second.isPlaying == false {
+            return notPlaying(second)
+        }
+        guard let stillBefore = playheadStill(first, second) else {
+            return refusalBeforeWrite("transport.pause is a toggle and the playhead position was not read, so a paused transport could not be told from a playing one and nothing was sent.")
+        }
+        if stillBefore {
+            extras["write_attempted"] = false
+            extras["unchanged"] = true
+            extras["already_paused"] = true
+            extras["observed_before"] = [transportStateSummary(first), transportStateSummary(second)]
+            extras["observed_after"] = transportStateSummary(second)
+            return toolTextResult(.success(HonestContract.encodeStateA(extras: extras)))
+        }
+        extras["observed_before"] = [transportStateSummary(first), transportStateSummary(second)]
+
+        let writeResult = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "transport.pause")
+        }
+        guard writeResult.isSuccess else {
+            return toolTextResult(writeResult)
+        }
+        extras["write_attempted"] = true
+        extras["write_result"] = jsonValue(from: writeResult.message)
+
+        await sleep(pauseSettleNanoseconds)
+        let settled = await liveTransportState(router: router, cache: cache)
+        await sleep(gap)
+        let confirming = await liveTransportState(router: router, cache: cache)
+        guard let settled, let confirming, let stillAfter = playheadStill(settled, confirming) else {
+            extras["safe_to_retry"] = false
+            return toolTextResult(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "transport.pause was sent, but the transport could not be read twice afterwards. Do not resend pause: it is a toggle. Read the transport state first.",
+                extras: extras
+            ), isError: true)
+        }
+        extras["observed_after"] = [transportStateSummary(settled), transportStateSummary(confirming)]
+        extras["observed_isPlaying"] = confirming.isPlaying
+        extras["observed_position"] = confirming.position
+        if settled.isPlaying, confirming.isPlaying, stillAfter {
+            return toolTextResult(.success(HonestContract.encodeStateA(extras: extras)))
+        }
+        extras["safe_to_retry"] = false
         return toolTextResult(HonestContract.encodeStateC(
             error: .readbackMismatch,
-            hint: "transport.pause executed, but live transport state still reports playback",
+            hint: "transport.pause was sent, but the transport does not read as paused (Play on with the playhead still). Do not resend pause: it is a toggle, and a second press resumes playback. Read the transport state first.",
+            extras: extras
+        ), isError: true)
+    }
+
+    /// How long to wait after the Pause or Play key before the first reading. Measured for Pause:
+    /// 0.3 s after the post the playhead already read still, twice, one second apart.
+    static let pauseSettleNanoseconds: UInt64 = 300_000_000
+
+    /// The control bar shows bar and beat only (measured: `12.4`, components bar and beat), so a
+    /// playing transport can read the same position for up to one beat. Two readings can call the
+    /// playhead still only when they are more than a beat apart: 1.25 beats at the observed tempo,
+    /// and never under the one second the measurement used (120 BPM: 1000 ms, 60 BPM: 1250 ms,
+    /// 20 BPM: 3750 ms). Above five seconds (under 15 BPM) there is no gap, and pause and play
+    /// answer `tempo_too_slow_to_measure` without waiting. Five seconds keeps the two waits and the
+    /// settle at 10.3 s of the 25 s command deadline, which leaves room for the reads.
+    /// Play uses the same gap to tell a moving playhead from a paused one.
+    static func pauseStillnessGapNanoseconds(tempo: Double) -> UInt64? {
+        guard tempo.isFinite, tempo > 0 else { return nil }
+        let seconds = max(1.0, 1.25 * 60.0 / tempo)
+        guard seconds <= 5.0 else { return nil }
+        return UInt64(seconds * 1_000_000_000)
+    }
+
+    /// The tempo the stillness gap is sized from, read in the same measurement, or nil when it was
+    /// not read. A reading's own `tempo` is not used: `TransportState.tempo` keeps the model's 120
+    /// default when its tempo read fails, and a gap sized from 120 during slow playback reads a
+    /// moving playhead as still (#1029 review, R-02).
+    static func observedTempo(router: ChannelRouter) async -> Double? {
+        let result = await router.route(operation: "transport.get_tempo")
+        guard result.isSuccess,
+              let object = jsonValue(from: result.message) as? [String: Any],
+              let tempo = object["tempo"] as? Double,
+              tempo.isFinite, tempo > 0 else {
+            return nil
+        }
+        return tempo
+    }
+
+    /// State C before any write, for pause and play: the stillness check could not be made, so
+    /// nothing was sent and the transport is called neither paused nor playing. State B would say
+    /// an action was attempted, and none was (round 2, R-04). The shape is the pre-write refusal's
+    /// (`refusalBeforeWrite`): `readback_unavailable`, `write_attempted` false, `safe_to_retry`
+    /// true, and `reason` names why (`tempo_unreadable`, `tempo_too_slow_to_measure`).
+    private static func stillnessUnmeasuredResult(
+        reason: String,
+        hint: String,
+        extras: [String: Any]
+    ) -> CallTool.Result {
+        var extras = extras
+        extras["reason"] = reason
+        extras["write_attempted"] = false
+        extras["safe_to_retry"] = true
+        return toolTextResult(
+            HonestContract.encodeStateC(error: .readbackUnavailable, hint: hint, extras: extras),
+            isError: true
+        )
+    }
+
+    /// Whether two readings show the same playhead. nil when either position was not read from
+    /// Logic: the model's default `1.1.1.1` is not a reading, and two defaults would compare equal.
+    static func playheadStill(_ first: TransportState, _ second: TransportState) -> Bool? {
+        guard let a = first.positionReadback, !a.observedComponents.isEmpty,
+              let b = second.positionReadback, !b.observedComponents.isEmpty else {
+            return nil
+        }
+        return a.value == b.value
+    }
+
+    /// Verified `play`. A paused transport reads Play ON with the playhead still (measured
+    /// 2026-09-27 on Logic 12 in ko), so Play on alone is not "playing": already playing means Play
+    /// on AND the playhead moving, told apart with pause's gap and `playheadStill`.
+    ///
+    /// - Play off, or the transport unreadable: the verified play path, unchanged.
+    /// - Play on and moving: already playing, State A, nothing sent.
+    /// - Play on and still: paused. The Accessibility Play control already reads on and would do
+    ///   nothing, so Logic's Play key (keypad Enter, measured to resume a paused transport) is sent
+    ///   through `transport.resume`, and State A needs Play on with two playhead readings that
+    ///   differ. A mismatch after the key is not safe to retry, as for pause.
+    ///
+    /// `observed_after` stays one reading, the later one, because the play oracle reads
+    /// `observed_after.isPlaying`.
+    private static func verifiedPlayResult(
+        router: ChannelRouter,
+        sleep: @escaping (UInt64) async -> Void,
+        traceID: TraceID?
+    ) async -> CallTool.Result {
+        let first = await readTransportState(router: router)
+        guard let first, first.isPlaying else {
+            return await routeAndVerifyTransportCommand(
+                action: .play, beforeState: first, router: router, sleep: sleep, traceID: traceID
+            )
+        }
+        var extras: [String: Any] = [
+            "operation": "transport.play",
+            "verify_source": "transport_state",
+        ]
+        func refusalBeforeWrite(_ hint: String) -> CallTool.Result {
+            extras["write_attempted"] = false
+            extras["safe_to_retry"] = true
+            return toolTextResult(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: hint,
+                extras: extras
+            ), isError: true)
+        }
+        guard let tempo = await observedTempo(router: router) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_unreadable",
+                hint: "Play is on, but the tempo was not read, so the gap that tells a moving playhead from a paused one could not be sized. Nothing was sent, and the transport was not called paused or playing.",
+                extras: extras
+            )
+        }
+        extras["observed_tempo"] = tempo
+        guard let gap = pauseStillnessGapNanoseconds(tempo: tempo) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_too_slow_to_measure",
+                hint: "Play is on, but at this tempo a beat lasts too long for two readings within the command deadline to tell a moving playhead from a paused one. Nothing was sent.",
+                extras: extras
+            )
+        }
+        extras["stillness_gap_ms"] = Int(gap / 1_000_000)
+        await sleep(gap)
+        guard let second = await readTransportState(router: router) else {
+            return refusalBeforeWrite("Play is on, but the second transport reading failed, so a paused transport could not be told from a playing one and nothing was sent. Retry.")
+        }
+        if second.isPlaying == false {
+            return await routeAndVerifyTransportCommand(
+                action: .play, beforeState: second, router: router, sleep: sleep, traceID: traceID
+            )
+        }
+        guard let stillBefore = playheadStill(first, second) else {
+            return refusalBeforeWrite("Play is on, but the playhead position was not read, so a paused transport could not be told from a playing one and nothing was sent.")
+        }
+        extras["observed_before"] = [transportStateSummary(first), transportStateSummary(second)]
+        if stillBefore == false {
+            extras["write_attempted"] = false
+            extras["unchanged"] = true
+            extras["already_playing"] = true
+            extras["observed_after"] = transportStateSummary(second)
+            return toolTextResult(.success(HonestContract.encodeStateA(extras: extras)))
+        }
+        extras["resumed_from_pause"] = true
+        let writeResult = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "transport.resume")
+        }
+        guard writeResult.isSuccess else {
+            return toolTextResult(writeResult)
+        }
+        extras["write_attempted"] = true
+        extras["write_result"] = jsonValue(from: writeResult.message)
+        await sleep(pauseSettleNanoseconds)
+        let settled = await readTransportState(router: router)
+        await sleep(gap)
+        let confirming = await readTransportState(router: router)
+        guard let settled, let confirming, let stillAfter = playheadStill(settled, confirming) else {
+            extras["safe_to_retry"] = false
+            return toolTextResult(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "The play key was sent to a paused transport, but the transport could not be read twice afterwards. Do not resend play; read the transport state first.",
+                extras: extras
+            ), isError: true)
+        }
+        extras["observed_settled"] = transportStateSummary(settled)
+        extras["observed_after"] = transportStateSummary(confirming)
+        if settled.isPlaying, confirming.isPlaying, stillAfter == false {
+            return toolTextResult(.success(HonestContract.encodeStateA(extras: extras)))
+        }
+        extras["safe_to_retry"] = false
+        return toolTextResult(HonestContract.encodeStateC(
+            error: .readbackMismatch,
+            hint: "The play key was sent to a paused transport, but the playhead does not move with Play on. Do not resend play; read the transport state first.",
             extras: extras
         ), isError: true)
     }
@@ -787,7 +988,25 @@ struct TransportDispatcher: OperationTraceDispatching {
                 ]
             )))
         }
+        return await routeAndVerifyTransportCommand(
+            action: action,
+            beforeState: beforeState,
+            router: router,
+            sleep: sleep,
+            traceID: traceID
+        )
+    }
 
+    /// The write half of `handleVerifiedTransportCommand`: route the action, then poll until the
+    /// transport matches it. `beforeState` is the reading the caller already took, so no second
+    /// pre-read consumes a reading the caller did not intend.
+    private static func routeAndVerifyTransportCommand(
+        action: VerifiedTransportAction,
+        beforeState: TransportState?,
+        router: ChannelRouter,
+        sleep: @escaping (UInt64) async -> Void,
+        traceID: TraceID?
+    ) async -> CallTool.Result {
         let writeResult = await withWriteBoundaryArmed(traceID) {
             await router.route(operation: action.operation)
         }
@@ -860,6 +1079,10 @@ struct TransportDispatcher: OperationTraceDispatching {
         if let isMetronomeEnabled = dict["isMetronomeEnabled"] as? Bool { state.isMetronomeEnabled = isMetronomeEnabled }
         if let tempo = dict["tempo"] as? Double { state.tempo = tempo }
         if let position = dict["position"] as? String { state.position = position }
+        if let readback = dict["positionReadback"] as? [String: Any],
+           let data = try? JSONSerialization.data(withJSONObject: readback) {
+            state.positionReadback = try? JSONDecoder().decode(TransportPositionReadback.self, from: data)
+        }
         if let timePosition = dict["timePosition"] as? String { state.timePosition = timePosition }
         if let sampleRate = dict["sampleRate"] as? Int { state.sampleRate = sampleRate }
         return state
