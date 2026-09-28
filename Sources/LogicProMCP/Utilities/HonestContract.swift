@@ -133,6 +133,16 @@ enum HonestContract {
         /// This includes a hidden sibling restored by the press.
         case duplicatePluginEditorCountMismatch = "duplicate_plugin_editor_count_mismatch"
         case slotOccupied = "slot_occupied"
+        /// #291 R2 — `logic_mixer set_output_verified` was asked for a bus that no other strip in
+        /// the Mixer reads as its input. Logic creates an aux when a strip is sent to an unused
+        /// bus, and this operation has no creation authority (#967 owns that), so nothing was
+        /// pressed. A strip whose input would not read is counted beside the refusal, never read
+        /// as "not a receiver".
+        case busHasNoReceiver = "bus_has_no_receiver"
+        /// #291 R2 — an output assignment landed and something else changed with it; the envelope's
+        /// `unexpected_side_effect` names what (`strip_created` when the Mixer gained a strip).
+        /// Reported, never cleaned up: removing an aux is #967's job.
+        case unexpectedSideEffect = "unexpected_side_effect"
         case trackSelectionFailed = "track_selection_failed"
         case staleSnapshot = "stale_snapshot"
         case staleTargetReference = "stale_target_reference"
@@ -484,6 +494,10 @@ enum HonestContract {
         FailureError.duplicatePluginEditorAlreadyOpen.rawValue,
         FailureError.duplicatePluginEditorCountMismatch.rawValue,
         FailureError.slotOccupied.rawValue,
+        // #291 R2: `mixer.set_output_verified` routes to `[.accessibility]` alone, so these change
+        // no fallback; they are listed because no other channel could observe what they report.
+        FailureError.busHasNoReceiver.rawValue,
+        FailureError.unexpectedSideEffect.rawValue,
         FailureError.trackSelectionFailed.rawValue,
         FailureError.staleSnapshot.rawValue,
         FailureError.staleTargetReference.rawValue,

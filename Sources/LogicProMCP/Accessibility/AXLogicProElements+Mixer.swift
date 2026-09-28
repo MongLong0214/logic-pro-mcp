@@ -419,6 +419,32 @@ extension AXLogicProElements {
         slotDescription(in: strip, matching: AXLocalePolicy.outputSlotHelpKeyword, runtime: runtime)
     }
 
+    /// The output slot's button itself (#291 R2): the element `logic_mixer set_output_verified`
+    /// presses to open the strip's output popup.
+    ///
+    /// Found by the same walk and help match `outputSlotDestination` reads through, so the button
+    /// that is pressed is the button whose description the before and after reads come from. A
+    /// second search for "the output button" would be a second place to pick a different one.
+    static func outputSlotButton(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> AXUIElement? {
+        slotButton(in: strip, matching: AXLocalePolicy.outputSlotHelpKeyword, runtime: runtime)
+    }
+
+    /// The first button under the strip whose help matches, or nil.
+    private static func slotButton(
+        in strip: AXUIElement,
+        matching keyword: AXLocalePolicy.LabelSet,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        AXHelpers.findAllDescendants(
+            of: strip, role: kAXButtonRole, maxDepth: 4, runtime: runtime
+        ).first { button in
+            keyword.containsAny(in: (AXHelpers.getHelp(button, runtime: runtime) ?? "").lowercased())
+        }
+    }
+
     /// The description of the first slot button whose help matches, or nil.
     ///
     /// Shared by the input and output readers so the two cannot drift apart — a second copy of this
@@ -428,21 +454,16 @@ extension AXLogicProElements {
         matching keyword: AXLocalePolicy.LabelSet,
         runtime: AXHelpers.Runtime
     ) -> String? {
-        let buttons = AXHelpers.findAllDescendants(
-            of: strip, role: kAXButtonRole, maxDepth: 4, runtime: runtime
-        )
-        for button in buttons {
-            let help = AXHelpers.getHelp(button, runtime: runtime) ?? ""
-            guard keyword.containsAny(in: help.lowercased()) else { continue }
-            guard let description = AXHelpers.getDescription(button, runtime: runtime),
-                  !description.isEmpty else {
-                // The slot was found and did not name anything. That is a gap, not an empty route,
-                // so it reads the same as not finding the slot at all.
-                return nil
-            }
-            return description
+        guard let button = slotButton(in: strip, matching: keyword, runtime: runtime) else {
+            return nil
         }
-        return nil
+        guard let description = AXHelpers.getDescription(button, runtime: runtime),
+              !description.isEmpty else {
+            // The slot was found and did not name anything. That is a gap, not an empty route,
+            // so it reads the same as not finding the slot at all.
+            return nil
+        }
+        return description
     }
 
     /// What a channel strip's input slot says its source is (#291).

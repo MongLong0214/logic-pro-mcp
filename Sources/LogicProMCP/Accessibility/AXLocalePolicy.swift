@@ -2858,6 +2858,52 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Region#value"
     )
 
+    // MARK: - Output popup submenus (#291 R2)
+    //
+    // The two parents `logic_mixer set_output_verified` walks through in a channel strip's output
+    // popup. Measured 2026-09-28 on Logic 12.3 (6674), ko and de, on the same strip: the root menu
+    // holds `Stereo Output`, `No Output`, an OUTPUT submenu (`출력` / `Ausgang`) and a BUS submenu
+    // (`버스` / `Bus`); the output submenu repeats `Stereo Output`, so the parent is what tells
+    // the two apart. Both are matched whole.
+
+    /// The output popup's Bus submenu title (#291 R2).
+    ///
+    /// Logic.framework's row and not MAMixer's: MAMixer keeps English `Bus` for ko, and the ko
+    /// popup draws `버스`. The entries inside are not matched against this set; they are `Bus %d`
+    /// labels, read by `RoutingGraphPublication.classifyOutputLabel`.
+    static let outputPopupBusSubmenuTitle = LabelSet(
+        canonical: "Bus",
+        variants: ["버스", "バス", "总线", "匯流排"],
+        rationale: "Names the output popup's Bus submenu, the parent a bus entry is chosen under by"
+            + " `logic_mixer set_output_verified`; a same-titled item elsewhere in the popup is never"
+            + " a candidate. Ten locales derived on 2026-09-28 from Apple's row; ko and de measured"
+            + " the same day. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Bus#value"
+    )
+
+    /// The output popup's Output submenu title (#291 R2): `출력` in ko, `Ausgang` in de.
+    ///
+    /// NOT `physicalOutputLabelPrefix`'s row. That set cites `Output#mix`, whose German value is
+    /// `Output`; the German popup draws `Ausgang` for this submenu AND for the pair entries inside
+    /// it (`Ausgang 3-4`), and a German strip routed to that pair describes its output slot the
+    /// same way. MAMixer's `Output` row and Logic.framework's agree in all ten locales; the
+    /// Mixer's is cited because the popup is the Mixer's. The pair entries are not matched as text
+    /// at all: Apple ships no `Ausgang %d-%d`, so Logic builds them at run time and they are parsed
+    /// for their port numbers instead (`OutputAssignment.pairPorts(ofRuntimeLabel:)`).
+    static let outputPopupOutputSubmenuTitle = LabelSet(
+        canonical: "Output",
+        variants: ["Ausgang", "Salida", "Sortie", "Uscita", "出力", "출력", "Saída", "输出", "輸出"],
+        rationale: "Names the output popup's Output submenu, the parent a physical output pair is"
+            + " chosen under by `logic_mixer set_output_verified`; the root menu's own"
+            + " `Stereo Output` is never a candidate. Ten locales derived on 2026-09-28 from Apple's"
+            + " row, which Logic.framework's `Output` row equals in every locale; ko and de"
+            + " measured the same day. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMixer.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output#value",
+        alsoDerivedFrom: [
+            "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output#value",
+        ]
+    )
+
     static let showMixerMenuPath = MenuPath(bar: viewMenuBar, item: showMixerMenuItem)
     static let hidePluginWindowsMenuPath = MenuPath(bar: windowMenuBar, item: hideAllPluginWindowsMenuItem)
     static let showStepInputKeyboardMenuPath = MenuPath(
@@ -3281,5 +3327,7 @@ enum AXLocalePolicy {
         eventListItemCountHelp,
         eventListRegionPathHelp,
         regionHelpKeyword,
+        outputPopupBusSubmenuTitle,
+        outputPopupOutputSubmenuTitle,
     ]
 }

@@ -4091,6 +4091,57 @@
     "en-US": "title"
    }
   },
+  "outputPopupBusSubmenuTitle": {
+   "canonical": "Bus",
+   "variants": [
+    "버스",
+    "バス",
+    "总线",
+    "匯流排"
+   ],
+   "rationale": "Names the output popup's Bus submenu, the parent a bus entry is chosen under by",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "outputPopupOutputSubmenuTitle": {
+   "canonical": "Output",
+   "variants": [
+    "Ausgang",
+    "Salida",
+    "Sortie",
+    "Uscita",
+    "出力",
+    "출력",
+    "Saída",
+    "输出",
+    "輸出"
+   ],
+   "rationale": "Names the output popup's Output submenu, the parent a physical output pair is",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "outputSlotHelpKeyword": {
    "canonical": "output slot",
    "variants": [
