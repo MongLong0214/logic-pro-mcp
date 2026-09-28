@@ -71,7 +71,7 @@ import Testing
         windowInitiallyOpen: Bool = true,
         // The Key Commands window's TITLE. Logic localizes it, and the matcher used to hold an
         // English literal, so a test that only ever builds an English title cannot see that bug.
-        windowTitle: String = "Key Commands",
+        windowTitle: String = "Key Command Assignments",
         // Arrange windows carry AXDocument; the Key Commands utility window does not.
         documentURL: String? = nil,
         // A read of AXDocument that FAILS rather than answering. Distinct from `documentURL: nil`,
@@ -83,6 +83,11 @@ import Testing
         // reaches cleanup and its assertion holds for the wrong reason — measured 2026-09-15 when
         // exactly that case survived the mutation it was written to catch.
         documentReadFailsAfter: Int? = nil,
+        // What the AXDocument read of a window WITHOUT a document answers. Logic 12.3 answers
+        // kAXErrorNoValue (-25212) for the Key Commands window, read raw 2026-09-28; the builder's
+        // own answer for an unset attribute is success-with-nil, which AX never returns, and a
+        // fixture that answered it hid a lookup that failed on every running Logic.
+        documentAbsence: AXError = .noValue,
         // The Learn checkbox's TITLE, for the same reason as `windowTitle`: Logic localizes it.
         learnTitle: String = ArmKeyCommandSetup.learnCheckboxTitle,
         // What Logic reports its UI language as. nil models a reading that failed.
@@ -207,9 +212,12 @@ import Testing
         let ax = builder.makeAXRuntime(
             appElement: app,
             attributeValueHandler: nil,
-            attributeValueResultHandler: (documentReadFails || documentReadFailsAfter != nil)
-                ? Self.documentReadThatFails(after: documentReadFailsAfter)
-                : nil,
+            attributeValueResultHandler: Self.documentRead(
+                hasDocument: documentURL != nil,
+                absence: documentAbsence,
+                failsAlways: documentReadFails && documentReadFailsAfter == nil,
+                failsAfter: documentReadFailsAfter
+            ),
             setAttributeHandler: { element, attribute, value in
                 if CFEqual(element, search), attribute == (kAXFocusedAttribute as String),
                    !focusSetSucceeds {
@@ -1208,7 +1216,33 @@ import Testing
     /// on every non-English Logic — and with it `tracks.arm`'s only coordinate-free setup path.
     @Test("the Key Commands window is found by its localized title")
     func keyCommandsWindowIsFoundWhenLogicLocalizesItsTitle() {
-        for title in ["키 명령 할당 – U.S. – 편집됨", "키 명령 할당", "Key Commands"] {
+        for title in ["키 명령 할당 – U.S. – 편집됨", "키 명령 할당", "Key Command Assignments"] {
+            let fixture = Self.fixture(windowTitle: title)
+            #expect(
+                ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) != nil,
+                "a window titled \(title) is the Key Commands window"
+            )
+        }
+    }
+
+    /// Measured 2026-09-28 on an Italian Logic 12.3: Option+K opened
+    /// `Assegnazioni comandi da tastiera – U.S. – Modificato`, and setup answered State C at stage
+    /// `open_key_commands` saying the window did not open. The set held ControllerAssignments
+    /// `2163.title` (`Comando da tastiera`), a row whose de, es, fr, it and pt values are not
+    /// substrings of the title Logic draws, though its ko, ja and zh values happen to be. The titles
+    /// here are Apple's `Key Command Assignments` row in each language, plus the Italian reading.
+    ///
+    /// Kills: the set derived from `2163.title` again (the five European titles are not found).
+    @Test("the Key Commands window is found by its title in every language Logic ships")
+    func keyCommandsWindowIsFoundInEveryShippedLanguage() {
+        let titles = [
+            "Key Command Assignments", "Tastaturkurzbefehlzuweisungen",
+            "Asignaciones de comandos de teclado", "Assignations de raccourcis clavier",
+            "Assegnazioni comandi da tastiera", "Assegnazioni comandi da tastiera – U.S. – Modificato",
+            "キーコマンドの割り当て", "키 명령 할당", "Atribuições de comandos de teclado",
+            "键盘命令分配", "按鍵指令指定",
+        ]
+        for title in titles {
             let fixture = Self.fixture(windowTitle: title)
             #expect(
                 ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) != nil,
@@ -1222,7 +1256,8 @@ import Testing
     /// assignment GUI against something else entirely.
     @Test("an unrelated window title is not mistaken for the Key Commands window")
     func unrelatedWindowTitleIsNotTheKeyCommandsWindow() {
-        for title in ["lpm-locale-campaign - 트랙", "Absolute Zero", "마커 목록", ""] {
+        for title in ["lpm-locale-campaign - 트랙", "Absolute Zero", "마커 목록",
+                      "lpm-locale-campaign - Elenco marcatori", ""] {
             let fixture = Self.fixture(windowTitle: title)
             #expect(
                 ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil,
@@ -1231,21 +1266,23 @@ import Testing
         }
     }
 
-    /// A reader whose AXDocument read FAILS. Every other attribute falls through to the builder,
-    /// so the fixture is unchanged apart from the one status this case is about.
-    /// A reader whose AXDocument read fails — immediately, or only after `after` successful reads.
-    /// Every other attribute falls through to the builder.
-    private static func documentReadThatFails(after: Int?)
-        -> @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>? {
+    /// The AXDocument reader. A read that FAILS answers cannotComplete -- immediately, or only
+    /// after `failsAfter` answered reads. Otherwise a window with a document falls through to the
+    /// builder, which serves the URL, and a window without one answers `absence`, the status a
+    /// running Logic returns. Every other attribute falls through to the builder.
+    private static func documentRead(
+        hasDocument: Bool, absence: AXError, failsAlways: Bool, failsAfter: Int?
+    ) -> @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>? {
         let seen = Counter()
         return { _, attribute in
             guard attribute == (kAXDocumentAttribute as String) else { return nil }
-            guard let after else {
+            if failsAlways {
                 return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
             }
-            return seen.next() > after
-                ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
-                : nil          // nil = fall through to the builder, which answers honestly
+            if let failsAfter, seen.next() > failsAfter {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            }
+            return hasDocument ? nil : .failure(AXHelpers.AXStatusError(raw: absence.rawValue))
         }
     }
 
@@ -1272,7 +1309,7 @@ import Testing
         // case below already covers. With no URL stored, the old path answers nil (no document,
         // title matches, so it IS the Key Commands window) and the new path answers undetermined.
         let fixture = Self.fixture(
-            windowTitle: "내 키 명령 프로젝트 - 트랙",
+            windowTitle: "내 키 명령 할당 프로젝트 - 트랙",
             documentURL: nil,
             documentReadFails: true
         )
@@ -1284,11 +1321,30 @@ import Testing
         }
     }
 
+    /// Read raw 2026-09-28 on a Korean Logic 12.3: the Key Commands window's AXDocument answers
+    /// kAXErrorNoValue (-25212). The lookup counted every non-success read as unclassifiable, so it
+    /// answered undetermined for the window it was looking at and the setup reported
+    /// `open_key_commands` ("did not open") on every running Logic, in every language, while the
+    /// fixture -- which answered success-with-nil -- kept the suite green. Both absence statuses
+    /// are the answer "no document"; cannotComplete stays a failed read (the case above).
+    ///
+    /// Kills: the lookup treating -25212 / -25205 as a failed read again.
+    @Test("a Key Commands window whose AXDocument answers noValue or attributeUnsupported is found")
+    func documentAbsenceStatusMeansNoDocument() {
+        for absence in [AXError.noValue, AXError.attributeUnsupported] {
+            let fixture = Self.fixture(documentAbsence: absence)
+            #expect(
+                ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) != nil,
+                "AXDocument answering \(absence.rawValue) is a window without a document"
+            )
+        }
+    }
+
     @Test("a Korean project name containing the Key Commands token is not selected")
     func koreanDocumentWindowIsNotTheKeyCommandsWindow() {
         let fixture = Self.fixture(
-            windowTitle: "내 키 명령 프로젝트 - 트랙",
-            documentURL: "file:///Users/test/Music/내%20키%20명령%20프로젝트.logicx/"
+            windowTitle: "내 키 명령 할당 프로젝트 - 트랙",
+            documentURL: "file:///Users/test/Music/내%20키%20명령%20할당%20프로젝트.logicx/"
         )
 
         #expect(ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil)
@@ -1336,18 +1392,59 @@ import Testing
         }
     }
 
+    /// The record-arm command's cell as each language's Key Commands list DISPLAYS it: the
+    /// `match_identity` the setup read back on a live Logic 12.3 (6674) in each of the ten
+    /// languages on 2026-09-28, one matching row each, from the release build of 1d1db130 (sha256
+    /// 0170e59f...0195a7). The readings are the record
+    /// `docs/observations/2026-09-28-1028-the-arm-key-setup-types-each-languages-own-command-name.json`.
+    /// Each hashes to the `value` digest that `docs/canon/index/strings.tsv` records for
+    /// `Toggle Track Record Enable` in that language's `Logic.framework` `Localizable.strings`.
+    ///
+    /// Written as literals on purpose, unlike the rest of this file. The table the product types
+    /// from is generated, so a case that takes its expectation from that table, or builds its
+    /// fixture from the product's own answer, passes whichever row the generator picked -- German
+    /// could type the Korean member and still pass. These strings came from Logic's screen rather than
+    /// from the generator. If Apple renames the command, this table changes only with a new reading.
+    static let displayedRecordArmCell: [(locale: String, cell: String)] = [
+        ("en-US", "Toggle Track Record Enable"),
+        ("ko-KR", "트랙 녹음 활성화 토글"),
+        ("ja-JP", "トラックの録音可能を切り替え"),
+        ("de-DE", "Spur für die Aufnahme aktivieren ein-/aus"),
+        ("es-ES", "Activar/desactivar grabación de pista"),
+        ("fr-FR", "Activer/Désactiver l’enregistrement sur piste"),
+        ("it-IT", "Attiva/disattiva abilitazione registrazione traccia"),
+        ("pt-BR", "Ativar/Desativar Gravação das Pistas"),
+        ("zh-CN", "开关轨道录音启用"),
+        ("zh-TW", "切換音軌錄音啟用"),
+    ]
+
+    /// The pinned cell for a table key: an identifier names itself, a bare subtag the one
+    /// identifier that starts with it.
+    static func displayedCell(for key: String) -> String? {
+        displayedRecordArmCell.first { $0.locale == key || $0.locale.hasPrefix(key + "-") }?.cell
+    }
+
     /// What gets TYPED is chosen by the host's language; what gets MATCHED is the whole label set.
     ///
     /// The ten spellings are Apple's own, projected into `AXLocaleValues` by
-    /// `Scripts/locale_labels.py --write` from the LabelSet's row. This case is written against
-    /// that table rather than against literals for the same reason the bounce tests are: the
-    /// count and the spellings are what the generator decides, and a literal here turns Apple
-    /// renaming a command into a failing test that says nothing about the product.
+    /// `Scripts/locale_labels.py --write` from the LabelSet's row. That `searchQuery` reads the
+    /// table is checked against the table; that the table holds the row Logic displays is checked
+    /// against `displayedRecordArmCell`, because the table cannot vouch for its own row choice.
+    ///
+    /// Kills a table entry that holds another language's member (the German key given the Korean
+    /// spelling): `searchQuery` still agrees with the table, the displayed cell does not.
     @Test("the typed query is Apple's own spelling for the host's language, in every language Logic ships")
     func searchQueryFollowsTheHostLanguage() {
         for (locale, expected) in AXLocaleValues.recordArmKeyCommandName {
             #expect(ArmKeyCommandSetup.searchQuery(locale: locale) == expected,
                     "\(locale) must type Apple's own spelling")
+            let displayed = Self.displayedCell(for: locale)
+            #expect(expected == displayed,
+                    "\(locale): the table holds \(expected), Logic displays \(displayed ?? "nothing pinned")")
+        }
+        for (locale, cell) in Self.displayedRecordArmCell {
+            #expect(AXLocaleValues.recordArmKeyCommandName[locale] == cell,
+                    "\(locale): Logic displays \(cell) and the table must carry it")
         }
         // Ten identifiers plus the bare subtags that name exactly one of them. `zh` names two, so
         // it is deliberately absent -- a table that picked one would answer Simplified on a
@@ -1359,15 +1456,147 @@ import Testing
                 == ArmKeyCommandSetup.commandName)
     }
 
-    /// The fallback, and it is the whole safety story: a host whose language was not read, or one
-    /// Logic does not ship, types the English canonical and fails closed exactly as before.
-    @Test("an unread or unknown locale types the English canonical")
-    func searchQueryFallsBackToEnglish() {
-        for unknown in ["zh", "unknown", "xx-YY", "", nil] {
-            #expect(ArmKeyCommandSetup.searchQuery(locale: unknown)
-                        == ArmKeyCommandSetup.commandName,
-                    "\(unknown ?? "nil") names no table entry and must type the canonical")
+    /// An unread language keeps the English canonical, and so does English itself.
+    ///
+    /// Kills the mutation `guard let locale else { return nil }` in `searchQuery`: an unread
+    /// reading would then refuse a host that is most often English.
+    @Test("an unread language, or English, types the English canonical")
+    func searchQueryKeepsEnglishForEnglishOrUnread() {
+        for locale in [nil, "en", "en-US"] as [String?] {
+            let query: String? = ArmKeyCommandSetup.searchQuery(locale: locale)
+            #expect(query == ArmKeyCommandSetup.commandName,
+                    "\(locale ?? "nil") must type the English canonical")
         }
+    }
+
+    /// A language that WAS read and has no Apple spelling in the table gets no query at all.
+    /// English typed into a translated Key Commands search is not a fallback; it is a guess.
+    ///
+    /// Kills the mutation that restores the fallback in `searchQuery`
+    /// (`?? commandName` / `return commandName` for a locale the table lacks).
+    @Test("a language with no Apple spelling gets no search query, never the English name")
+    func searchQueryRefusesALanguageItCannotSpell() {
+        // `zh` names two languages, so the table deliberately has no bare entry; `nl-NL` is a
+        // language Logic does not ship. Both are readings, and neither may become English.
+        for locale in ["zh", "nl-NL", "xx-YY", ""] {
+            let query: String? = ArmKeyCommandSetup.searchQuery(locale: locale)
+            #expect(query == nil, "\(locale) has no Apple spelling and must not type \(query ?? "nil")")
+        }
+    }
+
+    /// #1028 P1b. Italian, Portuguese and Traditional Chinese Logic were typed the English name
+    /// while the table had no entry for them, because the query fell back to English. A language
+    /// the table does not carry must refuse with its own reason BEFORE the Key Commands window is
+    /// opened: no Option+K, nothing typed, no Learn press, no configuration write. The three now
+    /// have Apple's spelling (below), so the case is driven with readings the table still lacks.
+    ///
+    /// Kills two mutations: the fallback restored in `searchQuery` (English is typed and the run
+    /// reaches the GUI), and the refusal moved below the Option+K post (a chord is recorded).
+    @Test("a Logic whose language has no Apple spelling refuses before Key Commands opens",
+          arguments: ["zh", "nl-NL", "xx-YY"])
+    func unknownSpellingRefusesBeforeTheWindowOpens(locale: String) throws {
+        let fixture = Self.fixture(
+            windowInitiallyOpen: false,
+            uiLocale: locale,
+            firstVerify: .unmapped,
+            verify: .verified
+        )
+        let outcome = Self.run(fixture)
+        guard case .failed(let stage, let hint, let evidence) = outcome else {
+            Issue.record("\(locale): expected a refusal, got \(outcome)")
+            return
+        }
+        #expect(stage == "key_command_name_unknown_for_locale")
+        #expect(hint.contains(locale), "the refusal must name the language it read")
+        #expect(fixture.probe.typed.isEmpty, "\(locale) typed \(fixture.probe.typed)")
+        #expect(fixture.probe.chords.isEmpty, "no Option+K and no assignment chord")
+        #expect(fixture.probe.learnPresses == 0)
+        #expect(!evidence.windowOpened)
+        #expect(!evidence.searchTyped)
+        #expect(!evidence.configurationWriteAttempted)
+        #expect(evidence.writeSource == ArmKeyCommandSetup.WriteSource.none)
+        #expect(evidence.safeToRetry)
+        // Verify-first still ran: a host whose chord already works is not refused for its language.
+        #expect(fixture.probe.verifyCalls == 1)
+    }
+
+    /// The same hosts, already configured: verify-first proves the chord works and nothing needs
+    /// to be typed, so the missing spelling is irrelevant and the run must not refuse.
+    ///
+    /// Kills the mutation that moves the refusal above verify-first.
+    @Test("an already-configured Logic is not refused for its language")
+    func alreadyConfiguredHostIsNotRefusedForItsLanguage() {
+        let fixture = Self.fixture(uiLocale: "nl-NL", firstVerify: .verified)
+        guard case .alreadyConfigured = Self.run(fixture) else {
+            Issue.record("an already-working chord must be reported as configured")
+            return
+        }
+        #expect(fixture.probe.typed.isEmpty)
+    }
+
+    /// English and Korean are unchanged by the refusal: each completes the setup and types the
+    /// spelling it typed before.
+    ///
+    /// Kills a refusal widened to every locale that is not bare English (for example a check on
+    /// `locale == nil` alone), which would refuse `en-US` and `ko-KR`.
+    @Test("an English or Korean Logic still completes the setup and types its own spelling",
+          arguments: [
+              ("en-US", ArmKeyCommandSetup.commandName),
+              ("en", ArmKeyCommandSetup.commandName),
+              ("ko-KR", "트랙 녹음 활성화 토글"),
+              ("ko", "트랙 녹음 활성화 토글"),
+          ])
+    func englishAndKoreanAreUnchanged(locale: String, typed: String) {
+        let fixture = Self.fixture(
+            commandValues: [typed],
+            uiLocale: locale,
+            firstVerify: .unmapped,
+            verify: .verified
+        )
+        guard case .configuredAndVerified = Self.run(fixture) else {
+            Issue.record("\(locale): expected a completed assignment")
+            return
+        }
+        #expect(fixture.probe.typed == [typed])
+    }
+
+    /// #1028 P1b. Every language Logic ships has a spelling to type, and none but English types
+    /// the English name. Italian, Portuguese and Traditional Chinese lost theirs when QuickHelp
+    /// (byte-identical to English in those three) stopped counting as a translation; the table now
+    /// derives from `Localizable.strings`, which Apple translates in all ten.
+    ///
+    /// The fixture's command cell and the expected keystrokes are the cell Logic displayed in that
+    /// language (`displayedRecordArmCell`), never the product's own answer: a fixture built from
+    /// `searchQuery` would complete whichever row the lookup chose.
+    ///
+    /// Kills the table losing any of the ten again (for example the pre-P1b `AXLocaleValues.swift`,
+    /// derived from QuickHelp, restored): that language then refuses instead of completing. Kills
+    /// a lookup that answers with another language's member: it types a string other than the cell.
+    @Test("every language Logic ships types its own spelling and completes the setup",
+          arguments: ArmKeyCommandSetupTests.displayedRecordArmCell.map { $0.locale })
+    func everyShippedLanguageTypesItsOwnSpelling(locale: String) throws {
+        let cell = try #require(Self.displayedCell(for: locale))
+        let query = try #require(ArmKeyCommandSetup.searchQuery(locale: locale),
+                                 "\(locale) has no spelling to type")
+        #expect(query == cell, "\(locale) types \(query); its Key Commands list displays \(cell)")
+        if !locale.hasPrefix("en") {
+            #expect(query != ArmKeyCommandSetup.commandName,
+                    "\(locale) would type the English name into a translated search")
+        }
+        let fixture = Self.fixture(
+            commandValues: [cell],
+            uiLocale: locale,
+            firstVerify: .unmapped,
+            verify: .verified
+        )
+        guard case .configuredAndVerified(let evidence) = Self.run(fixture) else {
+            Issue.record("\(locale): expected a completed assignment")
+            return
+        }
+        #expect(fixture.probe.typed == [cell])
+        // The envelope names what went into the search, so a live run records it rather than
+        // inferring it. Kills `search_query` left unset or not emitted.
+        #expect(evidence.extras["search_query"] as? String == cell)
     }
 
 }
