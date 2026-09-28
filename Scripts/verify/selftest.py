@@ -54,8 +54,9 @@ RUN CASES (`"run": {...}`)
     and judges it; the case requires its exit code and a substring of its output. `events` counts
     what the lifecycle was asked to do ({"switch": 0}); `start_env` requires every server start to
     carry those variables; `recheck` then rechecks the written file from the command line;
-    `"record": true` passes a records directory, as `run --record` does, and `"record_readings":
-    {row: [path, ...]}` requires every record's readings for that row to be exactly those paths.
+    `"record": true` passes a records directory, as `run --record` does, `"record_readings":
+    {row: [name, ...]}` requires every record's readings for that row to be exactly those step
+    names, and `"records_written": n` requires exactly n records in that directory afterwards.
     `"entries": [{"spec",
     "spec_ops"?, "head"?, "locales"?}, ...]` in place of `spec` runs them as one
     `runner.run_batch`. The script:
@@ -527,13 +528,19 @@ MUTANTS = [
     {"id": "record-written-past-the-canon-guard", "file": "verify.py",
      "old": "        refused = canon_record_guard.refusals(record)\n",
      "new": "        refused = []\n"},
-    {"id": "record-keeps-every-reading", "file": "verify.py",
-     "old": ("        for path in checked_paths(row):\n"
-             "            value = lookup(path)\n"
-             "            readings[path] ="),
-     "new": ("        for path, entry in entries.items():\n"
-             "            value = engine.observation_value(entry)\n"
-             "            readings[path] =")},
+    {"id": "record-keeps-only-the-steps-its-checks-read", "file": "verify.py",
+     "old": ("        for name, entry in entries.items():\n"
+             "            value = engine.observation_value(entry)\n"),
+     "new": ("        for name, entry in entries.items():\n"
+             "            if not any(e[\"path\"].split(\".\")[0] == name for e in row[\"expect\"]):\n"
+             "                continue\n"
+             "            value = engine.observation_value(entry)\n")},
+    {"id": "record-drops-the-fields-no-check-reads", "file": "verify.py",
+     "old": "            readings[name] = value.value if isinstance(value, P.Found) else",
+     "new": ("            if isinstance(value, P.Found) and isinstance(value.value, dict):\n"
+             "                value = P.Found({k: v for k, v in value.value.items()\n"
+             "                                 if not k.startswith(\"fallback_from\")})\n"
+             "            readings[name] = value.value if isinstance(value, P.Found) else")},
     {"id": "armed-false-when-unread", "file": "live/spec_probes.py",
      "old": '        raise Unreadable(f"track_armed: {why}")\n',
      "new": '        return {"track": index, "armed": False, "name": None}\n'},
@@ -984,6 +991,10 @@ def _run_fake(case: dict, where: dict):
         short = [env for env in envs if any(env.get(k) != v for k, v in run["start_env"].items())]
         if not envs or short:
             return f"the servers were started with {envs}, each wanted to carry {run['start_env']}", text
+    if "records_written" in run:
+        kept = sorted(n for n in os.listdir(records) if n.endswith(".json")) if os.path.isdir(records) else []
+        if len(kept) != run["records_written"]:
+            return f"{len(kept)} record(s) written ({kept}), wanted {run['records_written']}", text
     for row_id, wanted in run.get("record_readings", {}).items():
         kept = []
         for name in sorted(os.listdir(records)) if records and os.path.isdir(records) else []:
@@ -1113,11 +1124,12 @@ def check_records_cite_their_bytes(case: dict, where: dict):
 PILOT_EVIDENCE = "docs/acceptance/evidence/1020-ko-4b036d93.json"
 
 
-def check_pilot_record_passes_the_canon_guard(case: dict, where: dict):
-    """#1052 VFY-03: a record built from the pilot evidence keeps only the readings its checks read,
-    so the reply's fallback rung is not in it and check-canon-citations accepts it. The pilot stores
-    no host block or date (convert_1020.py says why); the fixtures' ko host and date stand in, since
-    neither is a reading. The control: the stored reply does carry that field."""
+def check_pilot_full_record_is_declined(case: dict, where: dict):
+    """#1052 REG-02: a record built from the pilot evidence keeps every reading whole, the reply's
+    fallback rung included, and check-canon-citations refuses it, so `record_attested` would
+    decline it rather than write a trimmed one. The pilot stores no host block or date
+    (convert_1020.py says why); the fixtures' ko host and date stand in, since neither is a
+    reading. The control: the stored reply does carry that field."""
     import canon_record_guard
     import engine
     import fixtures_build
@@ -1129,10 +1141,13 @@ def check_pilot_record_passes_the_canon_guard(case: dict, where: dict):
         return "control: the pilot's arm-unarmed-sets reply no longer names a fallback rung"
     doc["runs"]["ko"]["host"], doc["runs"]["ko"]["date"] = fixtures_build.host("ko"), fixtures_build.DATE
     record = verify.build_record(doc, "ko", engine.judge(doc)["verdicts"]["ko"], "evidence/pilot.json")
-    if "fallback_from_channel" in json.dumps(record["observations"], ensure_ascii=False):
-        return "the pilot's record keeps the reply's fallback rung, which no check reads"
+    kept = next(o for o in record["observations"] if o["row"] == "arm-unarmed-sets")["readings"]
+    if kept.get("reply", {}).get("fallback_from_channel") != "Accessibility":
+        return f"the pilot's record does not keep the reply whole: its reply reading is {kept.get('reply')!r}"
     refused = canon_record_guard.refusals(record)
-    return f"check-canon-citations refuses the pilot's record: {refused[0]}" if refused else None
+    if not refused:
+        return "check-canon-citations accepts the pilot's full record, so this case no longer shows a decline"
+    return None if "Accessibility" in refused[0] else f"refused, but not for the fallback rung: {refused[0]}"
 
 
 #: Where an `engine.Attestation` may be named, as (repo-relative file, top-level definition): the
@@ -1683,7 +1698,7 @@ def check_live_fixtures(case: dict, where: dict):
 
 
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
-          "pilot_record_passes_the_canon_guard": check_pilot_record_passes_the_canon_guard,
+          "pilot_full_record_is_declined": check_pilot_full_record_is_declined,
           "run_cli_has_no_life_seam": check_run_cli_has_no_life_seam,
           "live_records_go_to_sidecars": check_live_records_go_to_sidecars,
           "live_reset_is_judged": check_live_reset_is_judged,

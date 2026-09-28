@@ -398,14 +398,14 @@ record. Every record cites that file, and its reverify command is `verify.py rec
 later run can never overwrite what an earlier record points at. That recheck exits 3 at best: it
 reads a file. It skips a locale that is not measured or that stored no host block or date.
 
-A record's `readings` for a row are the values its checks read and nothing else: every `path` and
-`ref.obs` of the row's `expect` and `restore_expect`, each under its path (`post.armed`), or
-`{"unreadable": why}`. Every other field of a step stays in the evidence the record cites. Before
-anything is published, each record is put to the repository's canon guard
+A record's `readings` for a row are every step's reading, whole, under the step's name (`post`),
+or `{"unreadable": why}`: raw readings, as the observation record schema requires, never only the
+fields a check reads. Before anything is published, each record is put to the repository's canon guard
 (`Scripts/canon_record_guard.py` runs `check_record` of `Scripts/check-canon-citations.py`, rule 13
-among its rules); a record it would refuse is not written, the locale is reported as skipped with
-the guard's message, and the recording exits 3. A `matches_canon` citation is bound to the record
-(`{"kind": "record"}`): the value it cites is the reading kept under that check's path.
+among its rules); a record it would refuse is declined: it is not written and not trimmed, the
+locale is reported as skipped with the guard's message, and the recording exits 3. A decline
+decides publication only; the row verdicts are the engine's either way. A `matches_canon` citation is bound to the record
+(`{"kind": "record"}`): the value it cites is the value that check's path reads.
 
 ## The pilot
 

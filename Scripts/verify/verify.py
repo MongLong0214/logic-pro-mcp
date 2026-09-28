@@ -202,22 +202,13 @@ def _axis_locale(code: str):
     return observation_host.axis_locale(code.replace("_", "-"), observation_host.axis_locales())
 
 
-def checked_paths(row: dict) -> list:
-    """The paths a row's checks read, each once, in the order the checks name them: every `path`
-    and `ref.obs` of `expect` and `restore_expect`. A record keeps these readings and no others; the
-    rest of each step's text stays in the evidence it cites. A field no check reads (a track's
-    name, the channel a reply fell back from) is not what the record is about, and a string Logic
-    ships among them made canon rule 13 refuse all ten step-11 records."""
-    out = []
-    for e in row["expect"] + row["restore_expect"]:
-        for path in [e["path"]] + ([e["ref"]["obs"]] if "obs" in (e.get("ref") or {}) else []):
-            if path not in out:
-                out.append(path)
-    return out
-
-
 def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> dict:
-    """One observation record for one locale's run. Every value is read from the evidence."""
+    """One observation record for one locale's run. Every value is read from the evidence.
+
+    A row's `readings` are every step's reading, whole, under the step's name, as the observation
+    record schema requires raw readings rather than a summary. Nothing is trimmed to get past the
+    canon guard: a record the guard refuses is declined by `record_attested`, and its bytes stay in
+    the evidence."""
     spec, run, binary = doc["spec"], doc["runs"][locale], doc["binary"]
     evidence_sha = os.path.splitext(os.path.basename(evidence_rel))[0]
     host = dict(run["host"])
@@ -232,11 +223,10 @@ def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> d
     observations, citations = [], []
     for row in rows:
         entries = run["rows"].get(row["id"], {}).get("observations", {})
-        lookup = engine._lookup({k: engine.observation_value(v) for k, v in entries.items()})
         readings = {}
-        for path in checked_paths(row):
-            value = lookup(path)
-            readings[path] = value.value if isinstance(value, P.Found) else {"unreadable": value.reason}
+        for name, entry in entries.items():
+            value = engine.observation_value(entry)
+            readings[name] = value.value if isinstance(value, P.Found) else {"unreadable": value.reason}
         observations.append({"row": row["id"], "verdict": verdicts[row["id"]]["verdict"],
                              "reasons": verdicts[row["id"]]["reasons"], "readings": readings})
         for i, e in enumerate(row["expect"]):
