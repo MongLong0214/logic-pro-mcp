@@ -61,14 +61,22 @@ actor SerializedStdioTransport: Transport {
     /// the stderr sink while the other was still waiting for its report (#1003).
     private let reportMidFrameStall: @Sendable (Int, TimeInterval) -> Void
 
+    /// Where this transport reports the experimental capabilities it dropped from an `initialize`
+    /// (#1048). Per instance for the reason above: a test reads the report without replacing
+    /// `Log.output`, which other tests running beside it replace too.
+    private let reportDroppedCapabilities: @Sendable (String) -> Void
+
     init(input: Int32 = STDIN_FILENO, output: Int32 = STDOUT_FILENO, logger: Logger? = nil,
          writeDeadline: TimeInterval = 30,
          reportMidFrameStall: @escaping @Sendable (Int, TimeInterval) -> Void
-            = SerializedStdioTransport.reportMidFrameStallToStderr) {
+            = SerializedStdioTransport.reportMidFrameStallToStderr,
+         reportDroppedCapabilities: @escaping @Sendable (String) -> Void
+            = SerializedStdioTransport.logDroppedCapabilities) {
         self.inputFD = input
         self.outputFD = output
         self.writeDeadline = writeDeadline
         self.reportMidFrameStall = reportMidFrameStall
+        self.reportDroppedCapabilities = reportDroppedCapabilities
         self.logger = logger ?? Logger(label: "logic-pro-mcp.serialized-stdio") { _ in
             SwiftLogNoOpLogHandler()
         }
@@ -83,8 +91,10 @@ actor SerializedStdioTransport: Transport {
         let fd = inputFD
         let cont = continuation
         let flag = running
+        let report = reportDroppedCapabilities
         let thread = Thread {
-            SerializedStdioTransport.readLoop(fd: fd, continuation: cont, running: flag)
+            SerializedStdioTransport.readLoop(fd: fd, continuation: cont, running: flag,
+                                              reportDroppedCapabilities: report)
         }
         thread.name = "logic-pro-mcp.stdio.read"
         thread.stackSize = 1 << 20
@@ -169,6 +179,12 @@ actor SerializedStdioTransport: Transport {
         }
     }
 
+    /// Where the dropped-capability report goes unless a caller supplies another sink: the server log,
+    /// at info level, so it is absent under `LOG_LEVEL=warn` or `error`.
+    static let logDroppedCapabilities: @Sendable (String) -> Void = { report in
+        Log.info(report, subsystem: .server)
+    }
+
     /// Where the mid-frame stall report goes unless a caller supplies another sink: one line on
     /// stderr, which is the operator's channel while stdout carries the protocol.
     static let reportMidFrameStallToStderr: @Sendable (Int, TimeInterval) -> Void = { bytes, seconds in
@@ -238,7 +254,8 @@ actor SerializedStdioTransport: Transport {
     private static func readLoop(
         fd: Int32,
         continuation: AsyncThrowingStream<Data, Swift.Error>.Continuation,
-        running: RunFlag
+        running: RunFlag,
+        reportDroppedCapabilities: @Sendable (String) -> Void
     ) {
         let bufferSize = 65536
         var buffer = [UInt8](repeating: 0, count: bufferSize)
@@ -263,9 +280,11 @@ actor SerializedStdioTransport: Transport {
                 if !frame.isEmpty {
                     // Before the SDK decodes it: an `initialize` whose experimental capabilities follow
                     // the MCP schema fails the SDK's decode (#1048). Every other frame is unchanged.
+                    // The report is bounded: it is written before the request is yielded, and the
+                    // logger's stderr write blocks while the client leaves that pipe full.
                     let admitted = InitializeExperimentalFilter.filter(Data(frame))
                     if let report = admitted.report {
-                        Log.info(report, subsystem: .server)
+                        reportDroppedCapabilities(report)
                     }
                     continuation.yield(admitted.frame)
                 }
