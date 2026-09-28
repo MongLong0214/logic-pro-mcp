@@ -1,0 +1,454 @@
+{
+  "id": "2026-09-28-1028-the-arm-key-setup-types-each-languages-own-command-name",
+  "date": "2026-09-28",
+  "schema": 3,
+  "subject": "logic_system setup_arm_key in all ten languages Logic ships: what it typed, the row it matched, and the one Key Commands entry it changed",
+  "question": "On a Logic running in each of the ten languages it ships, does the arm-key setup type that language's own name for Toggle Track Record Enable, match exactly one row in the Key Commands list, reach State A with a verified arm flip, and change no Key Commands entry but the record-arm one?",
+  "verdict": "works",
+  "issues": [
+    1028
+  ],
+  "surface": "system.preferences",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Build `swift build -c release --product LogicProMCP` and copy the binary to a new path. Under LIVE.lock, for each language: quit Logic; `defaults write com.apple.logic10 AppleLanguages -array <code>`; write the KeyCommands table back without entry 593; launch a disposable project and close every window but its Tracks window; select the ABC input source; call logic_system setup_arm_key {consent: \"true\"} through the copied binary; quit Logic and diff `defaults export com.apple.logic10` KeyCommands against the table written before launch. Write the original KeyCommands and AppleLanguages back at the end and read them.",
+    "expected": "Every language answers state A with success, verified and arm_flip_observed true and match_count 1; search_query and match_identity both equal that language's `cell` in observations; the only KeyCommands entry that differs from the pre-launch table is 593, absent before and {Modifier 5, Key 101, CharCode 101, Flags 0} after.",
+    "cost": "34 to 59 s per language in this run, from quitting Logic to reading the restored table back; it rewrites the KeyCommands and AppleLanguages preferences, so it needs LIVE.lock and a restore that is read back"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/ArmKeyCommandSetup.swift:searchQuery",
+    "Sources/LogicProMCP/Accessibility/AXLocaleValues.swift:recordArmKeyCommandName",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:keyCommandsWindowTitle",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:transportRecordControl",
+    "Tests/LogicProMCPTests/ArmKeyCommandSetupTests.swift:displayedRecordArmCell"
+  ],
+  "evidence": [
+    "evidence/2026-09-28-1028-arm-key-setup-ten-languages.json"
+  ],
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Toggle%20Track%20Record%20Enable#value",
+      "value": "Toggle Track Record Enable",
+      "used_for": "the en-US Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Toggle%20Track%20Record%20Enable#value",
+      "value": "트랙 녹음 활성화 토글",
+      "used_for": "the ko-KR Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ja/Toggle%20Track%20Record%20Enable#value",
+      "value": "トラックの録音可能を切り替え",
+      "used_for": "the ja-JP Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/de/Toggle%20Track%20Record%20Enable#value",
+      "value": "Spur für die Aufnahme aktivieren ein-/aus",
+      "used_for": "the de-DE Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/es/Toggle%20Track%20Record%20Enable#value",
+      "value": "Activar/desactivar grabación de pista",
+      "used_for": "the es-ES Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/Toggle%20Track%20Record%20Enable#value",
+      "value": "Activer/Désactiver l’enregistrement sur piste",
+      "used_for": "the fr-FR Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/it/Toggle%20Track%20Record%20Enable#value",
+      "value": "Attiva/disattiva abilitazione registrazione traccia",
+      "used_for": "the it-IT Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/pt/Toggle%20Track%20Record%20Enable#value",
+      "value": "Ativar/Desativar Gravação das Pistas",
+      "used_for": "the pt-BR Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/zh_CN/Toggle%20Track%20Record%20Enable#value",
+      "value": "开关轨道录音启用",
+      "used_for": "the zh-CN Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/zh_TW/Toggle%20Track%20Record%20Enable#value",
+      "value": "切換音軌錄音啟用",
+      "used_for": "the zh-TW Key Commands row the setup typed and matched",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    }
+  ],
+  "method": "One harness run under LIVE.lock, 2026-09-28 06:59:51 to 07:13:04 KST, through a release build of 1d1db130 copied to a new path. The user's KeyCommands table was read first; every language then started from that table with entry 593 removed, read back equal before launch, so the setup had to assign the chord rather than find it working. For each language the harness quit Logic, wrote AppleLanguages, launched the fixture project and confirmed its Tracks window title in that language, closed every other project window, selected the ABC input source, called logic_system setup_arm_key {consent: \"true\"}, quit Logic, exported the preferences and diffed KeyCommands against the pre-launch table, then wrote that table back and read it. After the last language the original KeyCommands and AppleLanguages were written back and read, and Logic was relaunched in Korean. typed and cell are the setup's own search_query and match_identity; key_commands_changed is the harness's diff of the exported preferences, not the setup's claim.",
+  "observations": [
+    {
+      "what": "the run",
+      "binary_sha256": "0170e59ff1657373990f76ae829a6b8c5da87740355c4d380e98cb2a8d0195a7",
+      "built_head": "1d1db13025cb4cd14e49200292e9d55348f89856",
+      "started": "2026-09-28T06:59:51+0900",
+      "finished": "2026-09-28T07:13:04+0900",
+      "key_commands_original": {
+        "entries": 870,
+        "entry_593": {
+          "Flags": 0,
+          "Modifier": 5,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "apple_languages": [
+          "ko"
+        ]
+      },
+      "key_commands_pre_launch": {
+        "entries": 869,
+        "entry_593": null,
+        "read_back_equal_before_every_launch": true
+      }
+    },
+    {
+      "what": "each language, one setup call",
+      "rows": [
+        {
+          "locale": "en-US",
+          "apple_languages": [
+            "en"
+          ],
+          "typed": "Toggle Track Record Enable",
+          "cell": "Toggle Track Record Enable",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        },
+        {
+          "locale": "ko-KR",
+          "apple_languages": [
+            "ko"
+          ],
+          "typed": "트랙 녹음 활성화 토글",
+          "cell": "트랙 녹음 활성화 토글",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        },
+        {
+          "locale": "ja-JP",
+          "apple_languages": [
+            "ja"
+          ],
+          "typed": "トラックの録音可能を切り替え",
+          "cell": "トラックの録音可能を切り替え",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        },
+        {
+          "locale": "de-DE",
+          "apple_languages": [
+            "de"
+          ],
+          "typed": "Spur für die Aufnahme aktivieren ein-/aus",
+          "cell": "Spur für die Aufnahme aktivieren ein-/aus",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        },
+        {
+          "locale": "es-ES",
+          "apple_languages": [
+            "es"
+          ],
+          "typed": "Activar/desactivar grabación de pista",
+          "cell": "Activar/desactivar grabación de pista",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        },
+        {
+          "locale": "fr-FR",
+          "apple_languages": [
+            "fr"
+          ],
+          "typed": "Activer/Désactiver l’enregistrement sur piste",
+          "cell": "Activer/Désactiver l’enregistrement sur piste",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        },
+        {
+          "locale": "it-IT",
+          "apple_languages": [
+            "it"
+          ],
+          "typed": "Attiva/disattiva abilitazione registrazione traccia",
+          "cell": "Attiva/disattiva abilitazione registrazione traccia",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        },
+        {
+          "locale": "pt-BR",
+          "apple_languages": [
+            "pt-BR"
+          ],
+          "typed": "Ativar/Desativar Gravação das Pistas",
+          "cell": "Ativar/Desativar Gravação das Pistas",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        },
+        {
+          "locale": "zh-CN",
+          "apple_languages": [
+            "zh-CN"
+          ],
+          "typed": "开关轨道录音启用",
+          "cell": "开关轨道录音启用",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        },
+        {
+          "locale": "zh-TW",
+          "apple_languages": [
+            "zh-TW"
+          ],
+          "typed": "切換音軌錄音啟用",
+          "cell": "切換音軌錄音啟用",
+          "match_count": 1,
+          "state": "A",
+          "success": true,
+          "verified": true,
+          "arm_flip_observed": true,
+          "learn_restored": true,
+          "window_closed": true,
+          "key_commands_changed": {
+            "593": {
+              "before": null,
+              "after": {
+                "Modifier": 5,
+                "Flags": 0,
+                "Key": 101,
+                "CharCode": 101
+              }
+            }
+          },
+          "restored_to_pre_launch": true
+        }
+      ]
+    },
+    {
+      "what": "the host after the run",
+      "locale": "ko-KR",
+      "apple_languages": [
+        "ko"
+      ],
+      "key_commands_equal_original": true,
+      "entry_593": {
+        "Flags": 0,
+        "Modifier": 5,
+        "Key": 101,
+        "CharCode": 101
+      },
+      "tracks_window_title_in_locale": true
+    }
+  ],
+  "conclusion": "In every language the setup typed that language's own name for the command, matched 1 row whose cell equals it, and reached State A with a verified arm flip. The only Key Commands entry it changed was 593. Each cell equals the Localizable.strings row the canon block cites, and ArmKeyCommandSetupTests.displayedRecordArmCell pins the same strings.",
+  "limits": [
+    "One host, one Logic build (12.3 / 6674), one run: each language was driven once, so this is not a rate.",
+    "host.locale is ko-KR because the host was in Korean before and after the run; each row names the language it was read in.",
+    "Every language started with entry 593 removed, so this drives the assignment path only. The already-configured path, where verify-first finds the chord working, was not driven here.",
+    "The ABC input source was selected around each call. Under a composing source such as 2-Set Korean, Option+K opens nothing, and the setup's hint for that stage does not say so.",
+    "The harness that drove this is not in the repository. The evidence file is its output with local file paths removed, and a re-run follows reverify.command by hand.",
+    "The binary was built at 1d1db130. The branch moved after it by test and record commits only."
+  ],
+  "supersedes": null
+}

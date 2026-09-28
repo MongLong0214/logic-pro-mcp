@@ -1,0 +1,1008 @@
+{
+  "record": "2026-09-28-1028-the-arm-key-setup-types-each-languages-own-command-name",
+  "what": "logic_system setup_arm_key driven once in each of the ten languages Logic ships; the harness output with local file paths removed",
+  "started": "2026-09-28T06:59:51+0900",
+  "finished": "2026-09-28T07:13:04+0900",
+  "binary_sha256": "0170e59ff1657373990f76ae829a6b8c5da87740355c4d380e98cb2a8d0195a7",
+  "built_head": "1d1db13025cb4cd14e49200292e9d55348f89856",
+  "key_commands_original": {
+    "entries": 870,
+    "digest": "7fd36a31072a2262a3daec8994eba9cb7c766fdc2e7e0f52b3a7d93d4c19755a",
+    "entry_593": {
+      "Flags": 0,
+      "Modifier": 5,
+      "Key": 101,
+      "CharCode": 101
+    },
+    "apple_languages": [
+      "ko"
+    ]
+  },
+  "key_commands_pre_launch": {
+    "entries": 869,
+    "digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+    "how": "the original table with entry 593 removed, written before each launch and read back"
+  },
+  "per_locale": {
+    "de-DE": {
+      "lproj": "de",
+      "prefs_pre": {
+        "apple_languages": [
+          "de"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "de"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - Marker-Liste",
+        "lpm-locale-campaign - Spuren"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - Spuren"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 25.519,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "Spur für die Aufnahme aktivieren ein-/aus",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "Spur für die Aufnahme aktivieren ein-/aus",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_255A4A76-01AF-4863-8D08-83CC74457094",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - Spuren"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "de"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    },
+    "en-US": {
+      "lproj": "en",
+      "prefs_pre": {
+        "apple_languages": [
+          "en"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "en"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - Marker List",
+        "lpm-locale-campaign - Tracks"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - Tracks"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 26.59,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "Toggle Track Record Enable",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "Toggle Track Record Enable",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_C783BB72-587C-43F1-BE0B-8EBACE03808A",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - Tracks"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "en"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    },
+    "es-ES": {
+      "lproj": "es",
+      "prefs_pre": {
+        "apple_languages": [
+          "es"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "es"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - Lista marcadores",
+        "lpm-locale-campaign - Pistas"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - Pistas"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 23.51,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "Activar/desactivar grabación de pista",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "Activar/desactivar grabación de pista",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_9F8001EF-6146-464D-A1E9-4A7C24CE1642",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - Pistas"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "es"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    },
+    "fr-FR": {
+      "lproj": "fr",
+      "prefs_pre": {
+        "apple_languages": [
+          "fr"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "fr"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - Liste des marqueurs",
+        "lpm-locale-campaign - Pistes"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - Pistes"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 24.33,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "Activer/Désactiver l’enregistrement sur piste",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "Activer/Désactiver l’enregistrement sur piste",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_E6443D47-A647-48BC-BA02-F2DD6F1F5B4A",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - Pistes"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "fr"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    },
+    "it-IT": {
+      "lproj": "it",
+      "prefs_pre": {
+        "apple_languages": [
+          "it"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "it"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - Elenco marcatori",
+        "lpm-locale-campaign - Tracce"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - Tracce"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 24.565,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "Attiva/disattiva abilitazione registrazione traccia",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "Attiva/disattiva abilitazione registrazione traccia",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_1674AC67-8B8A-4878-9045-CDF08F5F2C19",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - Tracce"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "it"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    },
+    "ja-JP": {
+      "lproj": "ja",
+      "prefs_pre": {
+        "apple_languages": [
+          "ja"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "ja"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - マーカーリスト",
+        "lpm-locale-campaign - トラック"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - トラック"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 24.51,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "トラックの録音可能を切り替え",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "トラックの録音可能を切り替え",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_545E6105-64F3-4F9D-A339-348487706252",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - トラック"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "ja"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    },
+    "ko-KR": {
+      "lproj": "ko",
+      "prefs_pre": {
+        "apple_languages": [
+          "ko"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "ko"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - 마커 목록",
+        "lpm-locale-campaign - 트랙"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - 트랙"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 24.943,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "트랙 녹음 활성화 토글",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "트랙 녹음 활성화 토글",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_281AD79A-5F94-4357-A855-2B6701F532AF",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - 트랙"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "ko"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    },
+    "pt-BR": {
+      "lproj": "pt",
+      "prefs_pre": {
+        "apple_languages": [
+          "pt-BR"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "pt-BR"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - Lista de Marcadores",
+        "lpm-locale-campaign - Pistas"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - Pistas"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 24.747,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "Ativar/Desativar Gravação das Pistas",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "Ativar/Desativar Gravação das Pistas",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_72CF37FF-FF58-4671-AA83-C058A365F5DE",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - Pistas"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "pt-BR"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    },
+    "zh-CN": {
+      "lproj": "zh_CN",
+      "prefs_pre": {
+        "apple_languages": [
+          "zh-CN"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "zh-CN"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - 标记列表",
+        "lpm-locale-campaign - 轨道"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - 轨道"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 26.481,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "开关轨道录音启用",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "开关轨道录音启用",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_15B6A442-6C6E-42FA-9DCA-550E0FEC78A0",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - 轨道"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "zh-CN"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    },
+    "zh-TW": {
+      "lproj": "zh_TW",
+      "prefs_pre": {
+        "apple_languages": [
+          "zh-TW"
+        ],
+        "key_commands_equal_written": true,
+        "key_commands_digest": "ce7923c1644ad8a685be891e8e6d31d365bf55766826398773c49b24f10cffd9",
+        "arm_entry": null
+      },
+      "in_locale": true,
+      "language_setting": [
+        "zh-TW"
+      ],
+      "window_names_after_launch": [
+        "lpm-locale-campaign - 標記列表",
+        "lpm-locale-campaign - 音軌"
+      ],
+      "windows_before_setup": [
+        "lpm-locale-campaign - 音軌"
+      ],
+      "input_source": {
+        "before": "com.apple.inputmethod.Korean.2SetKorean",
+        "selected": "com.apple.keylayout.ABC",
+        "restored": "com.apple.inputmethod.Korean.2SetKorean",
+        "after": "com.apple.inputmethod.Korean.2SetKorean"
+      },
+      "setup_call": {
+        "tool": "logic_system",
+        "command": "setup_arm_key",
+        "params": {
+          "consent": "true"
+        },
+        "elapsed_s": 37.765,
+        "timed_out": false,
+        "isError": false,
+        "structuredContent": {
+          "arm_flip_observed": true,
+          "chord": "⌃⇧E",
+          "chord_posted": true,
+          "close_confirmed": true,
+          "command": "Toggle Track Record Enable",
+          "configuration_write_attempted": true,
+          "conflict_observed": false,
+          "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip.",
+          "learn_after": true,
+          "learn_before": false,
+          "learn_restored": true,
+          "match_count": 1,
+          "match_identity": "切換音軌錄音啟用",
+          "restored": true,
+          "safe_to_retry": true,
+          "search_query": "切換音軌錄音啟用",
+          "search_typed": true,
+          "selection_readback": true,
+          "state": "A",
+          "success": true,
+          "trace_id": "lpmcp_D377AC6A-5723-4D56-A5BD-67798D5A1457",
+          "verification_mutation_attempted": true,
+          "verified": true,
+          "verify_restored": true,
+          "window_closed": true,
+          "window_opened": true,
+          "write_source": "gui_assignment"
+        }
+      },
+      "windows_after_setup": [
+        "lpm-locale-campaign - 音軌"
+      ],
+      "prefs_post": {
+        "apple_languages": [
+          "zh-TW"
+        ],
+        "arm_entry": {
+          "Modifier": 5,
+          "Flags": 0,
+          "Key": 101,
+          "CharCode": 101
+        },
+        "key_commands_changed": {
+          "593": {
+            "before": null,
+            "after": {
+              "Modifier": 5,
+              "Flags": 0,
+              "Key": 101,
+              "CharCode": 101
+            }
+          }
+        }
+      },
+      "restore": {
+        "key_commands_equal_pre_launch": true,
+        "arm_entry": null
+      }
+    }
+  },
+  "final_restore": {
+    "key_commands_equal_original": true,
+    "entry_593": {
+      "Flags": 0,
+      "Modifier": 5,
+      "Key": 101,
+      "CharCode": 101
+    },
+    "apple_languages": [
+      "ko"
+    ],
+    "in_locale": true,
+    "language_setting": [
+      "ko"
+    ],
+    "window_names": [
+      "lpm-locale-campaign - 마커 목록",
+      "lpm-locale-campaign - 트랙"
+    ]
+  }
+}
