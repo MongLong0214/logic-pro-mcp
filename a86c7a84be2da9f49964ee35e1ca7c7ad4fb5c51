@@ -1,0 +1,18 @@
+Limit: kCGWindowName reaches the server only when its host holds Screen Recording, which is unmeasured for the server process; without it the dialog reads unidentified and the call refuses rather than types.
+Limit: a dialog that opens after the 3 s bound is left on screen and named only in the hint.
+Provenance: inherited d3f42259cb1e81853302e0eecbc93cf5fbdc36dc
+
+Limit: an action that reports failure is still followed by the next strategy without a re-read, and AX return codes are known to disagree with what Logic did.
+Limit: setControlBarCheckboxValue (play, stop, record, and the record-clear inside stop) presses a toggle checkbox too, and still goes on to AXConfirm after a delivered press whose readback did not reach the desired value; those are set operations, not in the toggle list, and are left for their own issue.
+Provenance: inherited 7bf3123ced05dd043484ecef1090cccc7777dd5c
+
+Limit: the metronome half of #1042 was not observed live; the control bar in lpm-routing-aux has no Metronome box, and the server's own readback of it is the defect filed as #1058.
+Limit: the de pass is one run per case on one host; the other eight locales were not driven.
+Ruled-out: reading the de control bar through axw.control_bar_checkboxes | it matches only 컨트롤 막대 and Control Bar; the harness now takes the bar's label in each locale from Logic's StrTabBtnLabel Control Bar row, the row the product's controlBarGroupLabel is derived from.
+Provenance: inherited b49e225a2efdd01dad4d7bb2649e1c7e24fe7a42
+
+Limit: the #1042 entry describes the code; live, only toggle_cycle was observed pressing once, since the ko control bar has no Metronome box (#1058).
+Provenance: inherited 783bc2e2c3eba210b28ff497ad787a4e75f4ff7a
+
+Limit: #1059 was filed by reading the code; no live run has shown the readback of Play or Record lagging past the wait.
+Provenance: inherited f5e965b9b56d8bc8a2e96b77a43e6c84abf049ed
