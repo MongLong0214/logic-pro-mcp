@@ -1,0 +1,5 @@
+Limit: release-stable.sh on a Mac whose first python3 is Apple's still stops at the guards; it now says why and what to put on PATH, it does not pass
+Limit: the end-to-end case skips where /usr/bin/python3 is missing or already 3.10+; whether GitHub's macOS runner runs or skips it is read from this PR's CI log, not assumed
+Ruled-out: pinning release-stable.sh to /opt/homebrew/bin/python3 | a machine-specific path in a shared script, and the guards would still crash when run any other way
+Ruled-out: a 3.9 fallback inside the two guards | 3.9 has no stdlib list that is the running interpreter's own answer, and a hand-kept list is the drift those guards exist to catch
+Provenance: inherited cf8136a979241364d5e968fb675e2493a7ae1171
