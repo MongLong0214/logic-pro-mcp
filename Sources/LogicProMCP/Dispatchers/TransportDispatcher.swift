@@ -1074,7 +1074,6 @@ struct TransportDispatcher: OperationTraceDispatching {
         var state = TransportState()
         if let isPlaying = dict["isPlaying"] as? Bool { state.isPlaying = isPlaying }
         if let isRecording = dict["isRecording"] as? Bool { state.isRecording = isRecording }
-        if let isPaused = dict["isPaused"] as? Bool { state.isPaused = isPaused }
         if let isCycleEnabled = dict["isCycleEnabled"] as? Bool { state.isCycleEnabled = isCycleEnabled }
         if let isMetronomeEnabled = dict["isMetronomeEnabled"] as? Bool { state.isMetronomeEnabled = isMetronomeEnabled }
         if let tempo = dict["tempo"] as? Double { state.tempo = tempo }

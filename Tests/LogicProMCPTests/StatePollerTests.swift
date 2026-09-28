@@ -267,7 +267,7 @@ private func makeStatePollerAccessibilityRuntime(
 @Test func testStatePollerRefreshNowPopulatesTransportTracksAndMixerFallbackState() async throws {
     let cache = StateCache()
     let transportPayload = """
-    {"isPlaying":true,"isRecording":false,"isPaused":false,"isCycleEnabled":true,"isMetronomeEnabled":false,"tempo":123.5,"sampleRate":48000,"position":"3.1.1.1","timePosition":"00:00:12.000","lastUpdated":"2026-04-12T00:00:00Z"}
+    {"isPlaying":true,"isRecording":false,"isCycleEnabled":true,"isMetronomeEnabled":false,"tempo":123.5,"sampleRate":48000,"position":"3.1.1.1","timePosition":"00:00:12.000","lastUpdated":"2026-04-12T00:00:00Z"}
     """
     let tracksPayload = """
     [

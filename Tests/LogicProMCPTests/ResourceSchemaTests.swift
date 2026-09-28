@@ -62,7 +62,7 @@ private actor LiveTransportStateChannel: Channel {
 
     init(isPlaying: Bool = false, tempo: Double = 90.5, isCycleEnabled: Bool) {
         self.json = """
-            {"isPlaying":\(isPlaying),"isRecording":false,"isPaused":false,"tempo":\(tempo),"position":"1.1.1.1","timePosition":"00:00:00.000","sampleRate":44100,"isCycleEnabled":\(isCycleEnabled),"isMetronomeEnabled":true,"lastUpdated":"2026-06-19T02:17:42.000Z"}
+            {"isPlaying":\(isPlaying),"isRecording":false,"tempo":\(tempo),"position":"1.1.1.1","timePosition":"00:00:00.000","sampleRate":44100,"isCycleEnabled":\(isCycleEnabled),"isMetronomeEnabled":true,"lastUpdated":"2026-06-19T02:17:42.000Z"}
             """
     }
 
