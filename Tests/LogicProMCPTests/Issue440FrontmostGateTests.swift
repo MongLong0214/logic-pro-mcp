@@ -45,15 +45,18 @@ private final class PostRecorder: @unchecked Sendable {
         return activationsRequested
     }
 
-    func runtime() -> CGEventChannel.Runtime {
-        CGEventChannel.Runtime(
+    /// goto_position also reads the window list before and after its opener (#1038); `screen`
+    /// shows it the dialog, and a runtime without one refuses before the first key.
+    func runtime(screen: GotoDialogScreen? = nil) -> CGEventChannel.Runtime {
+        let post: @Sendable (CGKeyCode, CGEventFlags, pid_t) -> Bool = { [self] code, flags, _ in
+            lock.lock(); defer { lock.unlock() }
+            posts.append((code, flags))
+            return true
+        }
+        return CGEventChannel.Runtime(
             isLogicProRunning: { true },
             logicProPID: { 4242 },
-            postKeyEvent: { [self] code, flags, _ in
-                lock.lock(); defer { lock.unlock() }
-                posts.append((code, flags))
-                return true
-            },
+            postKeyEvent: screen.map { $0.observing(post) } ?? post,
             sleepMicros: { _ in },
             isLogicFrontmost: { [self] in
                 lock.lock(); defer { lock.unlock() }
@@ -64,7 +67,8 @@ private final class PostRecorder: @unchecked Sendable {
                 lock.lock(); defer { lock.unlock() }
                 activationsRequested += 1
                 return activationSucceeds
-            }
+            },
+            onScreenWindowList: { screen?.windows() }
         )
     }
 }
@@ -97,7 +101,7 @@ struct Issue440FrontmostGateTests {
     @Test("a goto_position sequence posts zero events when Logic never becomes frontmost")
     func sequencePostsNothingWhenBackground() async {
         let recorder = PostRecorder(frontmostReadings: [false], frontmostAfterActivation: false)
-        let channel = CGEventChannel(runtime: recorder.runtime())
+        let channel = CGEventChannel(runtime: recorder.runtime(screen: GotoDialogScreen(pid: 4242)))
 
         let result = await channel.execute(
             operation: "transport.goto_position",
@@ -147,7 +151,7 @@ struct Issue440FrontmostGateTests {
     @Test("a background Logic is activated and then receives the full sequence")
     func activatedThenPostsFullSequence() async {
         let recorder = PostRecorder(frontmostReadings: [false], frontmostAfterActivation: true)
-        let channel = CGEventChannel(runtime: recorder.runtime())
+        let channel = CGEventChannel(runtime: recorder.runtime(screen: GotoDialogScreen(pid: 4242)))
 
         let result = await channel.execute(
             operation: "transport.goto_position",
