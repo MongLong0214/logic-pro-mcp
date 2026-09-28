@@ -1751,8 +1751,9 @@ def load_cases() -> list:
     return cases
 
 
-def run_cases(cases: list) -> tuple:
-    """(names passed, [(name, why)] failed)."""
+def run_cases(cases: list, first_failure: bool = False) -> tuple:
+    """(names passed, [(name, why)] failed). With first_failure, stop after the first failed case:
+    a caller that only wants to know whether the copy is killed does not need the rest named."""
     passed, failed = [], []
     saved = os.environ.get("LPM_VERIFY_ISSUE_BODIES")
     os.environ["LPM_VERIFY_ISSUE_BODIES"] = os.path.join(FIXTURES, "issues")
@@ -1762,6 +1763,8 @@ def run_cases(cases: list) -> tuple:
             for case in cases:
                 why = run_case(case, where)
                 (failed.append((case["name"], why)) if why else passed.append(case["name"]))
+                if why and first_failure:
+                    break
     finally:
         if saved is None:
             os.environ.pop("LPM_VERIFY_ISSUE_BODIES", None)
@@ -1799,6 +1802,9 @@ def _mutated_tree(mutant: dict, tmp: str) -> str:
 
 
 def run_mutant(mutant: dict) -> dict:
+    # A mutant is killed by its first failing case, so running the remaining cases only named more
+    # cases. On a 3-core CI runner that took this guard past its 600 s deadline. Measured: 157
+    # mutants reached their first failure after 46% of the cases on average.
     with tempfile.TemporaryDirectory(prefix=f"lpm-verify-mutant-{mutant['id']}-") as tmp:
         try:
             target = _mutated_tree(mutant, tmp)
@@ -1807,7 +1813,8 @@ def run_mutant(mutant: dict) -> dict:
         env = dict(os.environ, LPM_VERIFY_REPO=os.environ.get("LPM_VERIFY_REPO") or ROOT,
                    PYTHONDONTWRITEBYTECODE="1")
         proc = subprocess.run([sys.executable, os.path.join(target, "verify.py"), "self-test",
-                               "--cases-only"], env=env, capture_output=True, text=True, timeout=600)
+                               "--cases-only", "--first-failure"], env=env, capture_output=True,
+                              text=True, timeout=600)
     by = list(dict.fromkeys(line.split()[1].rstrip(":") for line in proc.stdout.splitlines()
                             if line.startswith("FAIL ")))
     if proc.returncode == 0:
@@ -1824,9 +1831,9 @@ def run_mutant(mutant: dict) -> dict:
 # entry
 # ---------------------------------------------------------------------------------------------
 
-def main(cases_only: bool = False) -> int:
+def main(cases_only: bool = False, first_failure: bool = False) -> int:
     cases = load_cases()
-    passed, failed = run_cases(cases)
+    passed, failed = run_cases(cases, first_failure=first_failure)
     failed += [("coverage", why) for why in coverage_problems(cases)]
     for name, why in failed:
         print(f"FAIL {name}: {why}")
