@@ -30,7 +30,8 @@ import Foundation
     let transport = MockMCUTransport()
     let cache = StateCache()
     // #1020: the strip button reads the track before pressing and confirms after; the reading
-    // follows the press onto the wire. The LED echo below still lands in the cache on its own.
+    // follows the press onto the wire. The LED echo below is not a header reading and does not
+    // land in the cache's `isMuted` (#1040): the confirmation is the AX read, not the LED.
     let mutePress = MCUProtocol.encodeButton(.mute, strip: 3, on: true)
     let channel = MCUChannel(
         transport: transport,
@@ -46,12 +47,16 @@ import Foundation
     let result = await channel.execute(operation: "track.set_mute", params: ["index": "3", "enabled": "true"])
     #expect(result.isSuccess)
 
+    let answer = sharedJSONObject(result.message)
+    #expect(answer?["state"] as? String == "A")
+    #expect(answer?["verification_source"] as? String == "ax_value")
+
     // Simulate mute feedback
     await channel.handleFeedback(.noteOn(channel: 0, note: 0x13, velocity: 0x7F))
 
     let tracks = await cache.getTracks()
-    let track3Muted = try #require(tracks[3].isMuted)
-    #expect(track3Muted)
+    let track3Unread = tracks[3].isMuted.map { _ in false } ?? true
+    #expect(track3Unread)
 }
 
 @Test func testMCUFeedbackSeedsTrackStateWithoutAXBootstrap() async throws {
@@ -59,12 +64,13 @@ import Foundation
     let cache = StateCache()
     let channel = MCUChannel(transport: transport, cache: cache)
 
-    await channel.handleFeedback(.noteOn(channel: 0, note: 0x13, velocity: 0x7F))
+    // Strip 3's Solo LED (note 0x0B). The Mute LED would seed nothing: it writes no track state (#1040).
+    await channel.handleFeedback(.noteOn(channel: 0, note: 0x0B, velocity: 0x7F))
 
     let tracks = await cache.getTracks()
     #expect(tracks.count >= 4)
-    let track3Muted = try #require(tracks[3].isMuted)
-    #expect(track3Muted)
+    let track3Soloed = try #require(tracks[3].isSoloed)
+    #expect(track3Soloed)
     #expect(tracks[3].name == "Track 4")
 }
 

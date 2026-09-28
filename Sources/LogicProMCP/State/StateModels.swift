@@ -70,6 +70,10 @@ struct TrackState: Sendable, Codable, Identifiable {
     /// default, `logic://tracks` answered `isArmed: false` for a track whose Record Enable checkbox
     /// read 1: measured 2026-09-28 in ko on Logic 12.3, in the read taken right after arming, when
     /// the refresh had not replaced the MCU-created rows (#1040's ten-locale observation records).
+    ///
+    /// MCU feedback does not write `isMuted` either: Logic lights the MCU Mute LED on every strip a
+    /// solo silences, so the LED said "muted" for a track whose checkbox read 0 (es-ES, 2026-09-28).
+    /// `isSoloed` is the one toggle an MCU LED still writes.
     var isMuted: Bool?
     var isSoloed: Bool?
     var isArmed: Bool?

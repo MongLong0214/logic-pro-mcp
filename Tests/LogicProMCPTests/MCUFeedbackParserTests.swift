@@ -14,18 +14,24 @@ import Testing
     #expect(abs(strips[2].volume - 0.5) < 0.01)
 }
 
-@Test func testFeedbackParserUpdatesMuteState() async throws {
+/// #1040: the MCU Mute LED is not the track header's Mute checkbox (Logic lights it on a track a
+/// solo silences), so it writes no track state: a Mute read off stays off, an unread one stays unread.
+@Test func testFeedbackParserLeavesMuteToTheHeader() async throws {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)
     await cache.updateChannelStrips((0..<8).map { ChannelStripState(trackIndex: $0) })
-    await cache.updateTracks((0..<8).map { TrackState(id: $0, name: "Track \($0)", type: .audio) })
+    var rows = (0..<8).map { TrackState(id: $0, name: "Track \($0)", type: .audio) }
+    rows[2].isMuted = false
+    await cache.updateTracks(rows)
 
-    let event = MIDIFeedback.Event.noteOn(channel: 0, note: 0x12, velocity: 0x7F)
-    await parser.handle(event)
+    await parser.handle(MIDIFeedback.Event.noteOn(channel: 0, note: 0x12, velocity: 0x7F))
+    await parser.handle(MIDIFeedback.Event.noteOn(channel: 0, note: 0x13, velocity: 0x7F))
 
     let tracks = await cache.getTracks()
     let track2Muted = try #require(tracks[2].isMuted)
-    #expect(track2Muted)
+    #expect(!track2Muted)
+    let track3Unread = tracks[3].isMuted.map { _ in false } ?? true
+    #expect(track3Unread)
 }
 
 @Test func testFeedbackParserUpdatesSoloState() async throws {
@@ -80,15 +86,16 @@ import Testing
     await cache.updateTracks((0..<16).map { TrackState(id: $0, name: "Track \($0)", type: .audio, isMuted: false, isSoloed: false, isArmed: false) })
     await parser.setBankOffsetProvider { 1 } // bank 1 → offset 8
 
-    // Mute strip 0 should map to track 8 (not track 0)
-    let event = MIDIFeedback.Event.noteOn(channel: 0, note: 0x10, velocity: 0x7F)
+    // Solo strip 0 should map to track 8 (not track 0). Solo, because the Mute LED writes no
+    // track state (#1040).
+    let event = MIDIFeedback.Event.noteOn(channel: 0, note: 0x08, velocity: 0x7F)
     await parser.handle(event)
 
     let tracks = await cache.getTracks()
-    let track0Muted = try #require(tracks[0].isMuted)
-    #expect(!track0Muted) // track 0 untouched
-    let track8Muted = try #require(tracks[8].isMuted)
-    #expect(track8Muted)  // track 8 muted
+    let track0Soloed = try #require(tracks[0].isSoloed)
+    #expect(!track0Soloed) // track 0 untouched
+    let track8Soloed = try #require(tracks[8].isSoloed)
+    #expect(track8Soloed)  // track 8 soloed
 }
 
 @Test func testFeedbackParserFaderBankOffset() async {

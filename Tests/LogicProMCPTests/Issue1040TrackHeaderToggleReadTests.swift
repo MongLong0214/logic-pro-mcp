@@ -112,6 +112,30 @@ struct Issue1040TrackHeaderToggleReadTests {
     }
 }
 
+/// The project audit over `tracks`, with every other section read and fresh, so a finding comes from
+/// the tracks alone.
+private func auditOf(_ tracks: [TrackState]) -> ProjectSessionAudit.AuditReport {
+    let now = Date(timeIntervalSince1970: 1_730_000_000)
+    var project = ProjectInfo()
+    project.name = "Fixture Session"
+    project.filePath = "/tmp/Fixture Session.logicx"
+    project.source = "ax_live"
+    project.trackCount = tracks.count
+    var transport = TransportState()
+    transport.tempo = 126
+    transport.lastUpdated = now
+    return ProjectSessionAudit.buildAudit(snapshot: ProjectSessionAudit.Snapshot(
+        now: now, hasDocument: true, axOccluded: false,
+        project: project, projectFetchedAt: now,
+        transport: transport,
+        tracks: tracks, tracksFetchedAt: now,
+        regions: [], regionsFetchedAt: now, regionsComplete: true,
+        markers: [], markersFetchedAt: now,
+        channelStrips: [], mixerFetchedAt: now,
+        fileTrackCount: nil, blockingDialogButtons: nil
+    ))
+}
+
 /// The consumers of an unread toggle (#1040). Each decides something from Mute, Solo or Record
 /// Enable, and each must take `nil` as "nobody read it", not as off.
 @Suite("Issue1040 consumers take an unread toggle as unread")
@@ -182,28 +206,6 @@ struct Issue1040UnreadToggleConsumerTests {
         #expect(await channel.writes == ["1:true"])
     }
 
-    private func audit(_ tracks: [TrackState]) -> ProjectSessionAudit.AuditReport {
-        let now = Date(timeIntervalSince1970: 1_730_000_000)
-        var project = ProjectInfo()
-        project.name = "Fixture Session"
-        project.filePath = "/tmp/Fixture Session.logicx"
-        project.source = "ax_live"
-        project.trackCount = tracks.count
-        var transport = TransportState()
-        transport.tempo = 126
-        transport.lastUpdated = now
-        return ProjectSessionAudit.buildAudit(snapshot: ProjectSessionAudit.Snapshot(
-            now: now, hasDocument: true, axOccluded: false,
-            project: project, projectFetchedAt: now,
-            transport: transport,
-            tracks: tracks, tracksFetchedAt: now,
-            regions: [], regionsFetchedAt: now, regionsComplete: true,
-            markers: [], markersFetchedAt: now,
-            channelStrips: [], mixerFetchedAt: now,
-            fileTrackCount: nil, blockingDialogButtons: nil
-        ))
-    }
-
     /// Kills: dropping `track_toggles_unread`, or filling its lists with anything but nil. Without
     /// it an unread Solo passes as "no track is soloed" and the export reads `review_ready`.
     @Test("the audit names an unread toggle and holds the export for review")
@@ -213,11 +215,11 @@ struct Issue1040UnreadToggleConsumerTests {
             readTrack(1, "Bass"),
             readTrack(2, "Keys"),
         ]
-        let control = audit(read)
+        let control = auditOf(read)
         #expect(control.evidence.exportReadiness.status == "review_ready")
         #expect(!control.findings.contains { $0.id == "track_toggles_unread" })
 
-        let report = audit([read[0], unreadTrack(1, "Bass", solo: true), unreadTrack(2, "Keys", mute: true, arm: true)])
+        let report = auditOf([read[0], unreadTrack(1, "Bass", solo: true), unreadTrack(2, "Keys", mute: true, arm: true)])
         let finding = try #require(report.findings.first { $0.id == "track_toggles_unread" })
         #expect(finding.evidence.target == "1,2")
         #expect(finding.evidence.values == [
@@ -407,14 +409,18 @@ struct Issue1040RowsWithoutHeaderReadTests {
     )
 
     /// Kills: `= false` restored as the default of `isMuted`, `isSoloed` or `isArmed` in
-    /// `TrackState`. The row MCU feedback creates then carries that `false` onto the wire.
+    /// `TrackState`. The row MCU feedback creates then carries that `false` onto the wire. Also
+    /// kills the MCU Mute LED written into `isMuted` (`$0.isMuted = button.on` in
+    /// `MCUFeedbackParser`), which puts `isMuted: true` on row 2.
     @Test("a row MCU feedback creates carries only what the feedback reported")
     func mcuCreatedRowPublishesOnlyWhatItHeard() async throws {
         let cache = StateCache()
         let parser = MCUFeedbackParser(cache: cache)
         // Strip 2's Solo LED on (note 0x0A), into a cache no header read has filled: the parser
-        // creates rows 0, 1 and 2 to hold it.
+        // creates rows 0, 1 and 2 to hold it. Then strip 2's Mute LED on (note 0x12), which is not
+        // the header's Mute and is not written.
         await parser.handle(.noteOn(channel: 0, note: 0x0A, velocity: 0x7F))
+        await parser.handle(.noteOn(channel: 0, note: 0x12, velocity: 0x7F))
 
         let tracks = await cache.getTracks()
         #expect(tracks.count == 3)
@@ -439,5 +445,91 @@ struct Issue1040RowsWithoutHeaderReadTests {
         #expect(!row0.keys.contains("isMuted"))
         #expect(!row0.keys.contains("isSoloed"))
         #expect(!row0.keys.contains("isArmed"))
+    }
+}
+
+/// #1040 review round 1 (R1-1040-01): `MCUFeedbackParser` wrote the MCU Mute LED into
+/// `TrackState.isMuted`, which is the track header's Mute checkbox. Logic lights that LED on every
+/// strip a solo silences, so on 2026-09-28 in es-ES a silenced track whose checkbox read 0 was
+/// published `isMuted: true`. The LED no longer writes `isMuted` at all.
+@Suite("Issue1040 a solo-induced MCU Mute LED is not the header's Mute")
+struct Issue1040MCUMuteLEDTests {
+    private let headlessFileReader = LogicProjectFileReader.Runtime(
+        currentDocumentPath: { nil },
+        now: Date.init,
+        readPlistData: { _ in nil },
+        mtime: { _ in nil },
+        sleep: { _ in }
+    )
+
+    /// Track 3 as a header read leaves it: Mute reads `muteValue`, Solo and Record Enable read 0.
+    private func headerRead(muteValue: Int) -> TrackState {
+        let b = FakeAXRuntimeBuilder()
+        let header = b.element(1)
+        b.setAttribute(header, kAXRoleAttribute, "AXLayoutItem")
+        let controls: [(String, Int)] = [
+            (AXLocalePolicy.trackMuteButton.canonical, muteValue),
+            (AXLocalePolicy.trackSoloButton.canonical, 0),
+            ("Record Enable", 0),
+        ]
+        var children: [AXUIElement] = []
+        for (offset, control) in controls.enumerated() {
+            let e = b.element(10 + offset)
+            b.setAttribute(e, kAXRoleAttribute, "AXCheckBox")
+            b.setAttribute(e, kAXDescriptionAttribute, control.0)
+            b.setAttribute(e, kAXValueAttribute, control.1)
+            children.append(e)
+        }
+        b.setChildren(header, children)
+        return AXValueExtractors.extractTrackState(from: header, index: 3, runtime: b.makeAXRuntime())
+    }
+
+    /// Track 3's Mute checkbox reads 0 (the solo silences it without muting it) or -1 (what the
+    /// walks in de, en, it, pt and zh_CN read on the silenced track at least once), and 1 as the
+    /// control: a Mute the header did read on still reaches `logic://tracks` and the audit.
+    ///
+    /// Kills: the LED write restored (`$0.isMuted = button.on`), red on the 0 and -1 cases; and the
+    /// LED filling only an unread Mute (`$0.isMuted = $0.isMuted ?? button.on`), red on -1.
+    @Test("the Mute LED lit by another track's solo leaves the header's reading as it was",
+          arguments: [0, -1, 1])
+    func soloInducedMuteLEDIsNotPublished(_ muteValue: Int) async throws {
+        let cache = StateCache()
+        let parser = MCUFeedbackParser(cache: cache)
+        var rows = (0..<3).map {
+            TrackState(id: $0, name: "Track \($0 + 1)", type: .audio, isMuted: false, isSoloed: false, isArmed: false)
+        }
+        rows.append(headerRead(muteValue: muteValue))
+        await cache.updateTracks(rows)
+
+        // Track 2 soloed: Logic lights its Solo LED (note 0x0A) and the Mute LED of the strips the
+        // solo silences, here strip 3 (note 0x13).
+        await parser.handle(.noteOn(channel: 0, note: 0x0A, velocity: 0x7F))
+        await parser.handle(.noteOn(channel: 0, note: 0x13, velocity: 0x7F))
+
+        let result = try await ResourceHandlers.readTracks(
+            cache: cache, uri: "logic://tracks", fileReader: headlessFileReader
+        )
+        let document = try #require(sharedJSONObject(sharedResourceText(result)))
+        let published = try #require(document["data"] as? [[String: Any]])
+        let row3 = try #require(published.first { ($0["id"] as? Int) == 3 })
+        let report = auditOf(await cache.getTracks())
+
+        switch muteValue {
+        case 1:
+            let muted = try #require(row3["isMuted"] as? Bool)
+            #expect(muted)
+            #expect(report.evidence.tracks.mutedIndices == [3])
+        case 0:
+            let muted = try #require(row3["isMuted"] as? Bool, "\(row3)")
+            #expect(!muted, "\(row3)")
+            #expect(report.evidence.tracks.mutedIndices == [])
+        default:
+            #expect(!row3.keys.contains("isMuted"), "\(row3)")
+            #expect(report.evidence.tracks.mutedIndices == [])
+        }
+        // The Solo LED is still written: track 2 reads soloed.
+        let row2 = try #require(published.first { ($0["id"] as? Int) == 2 })
+        let soloed = try #require(row2["isSoloed"] as? Bool)
+        #expect(soloed)
     }
 }
