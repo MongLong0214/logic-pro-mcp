@@ -57,14 +57,21 @@ extension AccessibilityChannel {
             usleep(50_000)
         }
 
+        // #1042: the menu item was pressed and the window did not read as changed. It toggles, so
+        // a press that landed with the window list lagging and the next channel's key command
+        // would close what the first opened. No other channel may press it.
         return .error(HonestContract.encodeStateC(
             error: .readbackMismatch,
-            hint: "Step Input Keyboard window state did not change after the menu action.",
+            hint: "Step Input Keyboard window state did not change after the menu action. The item was "
+                + "pressed and may have landed with the window list lagging, so no other channel may press "
+                + "it: read Logic's windows before retrying.",
             extras: [
                 "operation": "edit.toggle_step_input",
                 "previous_open": previousOpen,
                 "observed_open": previousOpen,
-                "safe_to_retry": true,
+                "write_attempted": true,
+                "safe_to_retry": false,
+                "fallback_unsafe": true,
             ]
         ))
     }
