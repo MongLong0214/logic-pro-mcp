@@ -59,6 +59,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   I/O-label rename reads `unclassified` rather than as a bus and `main_output` says so; the
   strip-to-track attribution is still positional; bus-to-aux input edges are `not_observed`;
   which bus a send goes to is not read; `no_output` and `unclassified` were seen in fixtures only.
+- **`logic_mixer set_output_verified`: one strip's output to one exact destination, read back
+  from the same strip (#291 R2).** `destination` is `{kind:"bus", number}`, `{kind:"physical",
+  ports:[a,b]}`, `{kind:"stereo_output"}` or `{kind:"no_output"}`; the strip is `track` or
+  `target_ref`; `expected_current` is optional. No parameter is a localized label. It refuses
+  before any press when the current output does not read or classify, when `expected_current`
+  differs, when the transport is running or unreadable, and when a bus has no receiver
+  (`bus_has_no_receiver`: Logic would create an aux, which is #967's to do). A destination
+  already in place is State A `changed: false` with nothing pressed. The popup entry is chosen
+  under the submenu that owns it and refused when missing or repeated under one parent. State A
+  needs the same strip's slot to read back the destination and the strip count to hold; a count
+  that grew is State C `unexpected_side_effect: "strip_created"`, left as it is. The reply
+  carries the observed `before` for the inverse call. `set_output` stays not-exposed. Registry
+  censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 - **An internal intent model and one main-output rule for the project audit (#966 P1, ADR-021;
   refs #966).** `ProjectSessionAudit.parseIntentPolicy` reads a
   `logic_pro_mcp_repair_policy.v1` object (exact keys, `trk_` targets, an optional `prj_`
