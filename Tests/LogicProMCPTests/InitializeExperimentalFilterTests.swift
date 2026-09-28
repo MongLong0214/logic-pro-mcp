@@ -11,6 +11,10 @@ struct InitializeExperimentalFilterTests {
     /// The request behind #1048, captured 2026-09-28 by a stub MCP server that logged its stdin. Only the
     /// client's name, its title and the experimental key's prefix are replaced; the rest is the capture.
     static let capturedObjectValuedInitialize = #"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"experimental":{"example/auth-change":{}},"elicitation":{"form":{},"url":{}}},"clientInfo":{"name":"example-mcp-client","title":"Example","version":"0.156.1"}}}"#
+    /// The request the desktop app in #1048 (26.924.22138) sent when a thread started its MCP servers, taken
+    /// off the wire 2026-09-28 in front of the 3.17.0 release binary, which answered it `-32603`. The same
+    /// three client-naming strings are replaced; `extensions` and every other byte are the capture's.
+    static let capturedDesktopInitialize = #"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"experimental":{"example/auth-change":{}},"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app","text/html+skybridge"]},"openai/elicitation":{"form":{}},"openai/form":{}},"elicitation":{"form":{},"url":{}}},"clientInfo":{"name":"example-mcp-client","title":"Example","version":"0.158.0-alpha.2.1"}}}"#
     /// A second client's request, captured the same way, with no `experimental`. Only its name, title,
     /// description and website are replaced.
     static let capturedNoExperimentalInitialize = #"{"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{"roots":{"listChanged":true},"elicitation":{}},"clientInfo":{"name":"example-code","title":"Example Code","version":"2.1.283","description":"An example client","websiteUrl":"https://example.com/client"}},"jsonrpc":"2.0","id":0}"#
@@ -35,6 +39,35 @@ struct InitializeExperimentalFilterTests {
         #expect(throws: DecodingError.self) { try Self.decodedInitialize(raw) }
         let request = try Self.decodedInitialize(InitializeExperimentalFilter.filter(raw).frame)
         #expect(request.params.clientInfo.name == "example-mcp-client")
+    }
+
+    private static func capabilities(of frame: Data) throws -> [String: Any] {
+        let message = try #require(try JSONSerialization.jsonObject(with: frame) as? [String: Any])
+        let params = try #require(message["params"] as? [String: Any])
+        return try #require(params["capabilities"] as? [String: Any])
+    }
+
+    /// The desktop app also sends `capabilities.extensions`, a key swift-sdk 0.12.1 does not declare. The filter
+    /// leaves it in the frame, so the fix holds only while the SDK ignores keys it does not declare; this pins
+    /// that it does, and that the rewrite carries `extensions` over as the same JSON value.
+    /// Kills: a filter that drops or alters `extensions`. If a later SDK refuses keys it does not declare,
+    /// this turns red.
+    @Test("the SDK ignores an undeclared capability key such as extensions, and the rewrite keeps it")
+    func sdkIgnoresUndeclaredCapabilityKeys() throws {
+        let raw = Data(Self.capturedDesktopInitialize.utf8)
+        #expect(throws: DecodingError.self) { try Self.decodedInitialize(raw) }
+        let filtered = InitializeExperimentalFilter.filter(raw).frame
+        let request = try Self.decodedInitialize(filtered)
+        #expect(request.params.capabilities.experimental == [:])
+        let sent = try #require(try Self.capabilities(of: raw)["extensions"] as? NSDictionary)
+        let kept = try #require(try Self.capabilities(of: filtered)["extensions"] as? NSDictionary)
+        #expect(kept == sent)
+        #expect(sent.count == 3)
+
+        let extensionsOnly = Data(#"{"jsonrpc":"2.0","id":3,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}}},"clientInfo":{"name":"t","version":"1"}}}"#.utf8)
+        #expect(InitializeExperimentalFilter.filter(extensionsOnly).frame == extensionsOnly)
+        let decoded = try Self.decodedInitialize(extensionsOnly)
+        #expect(decoded.params.clientInfo.name == "t")
     }
 
     /// Kills: keeping an object value (and keeping any other non-string value).
@@ -137,59 +170,97 @@ struct InitializeExperimentalFilterTests {
 
     // MARK: - End to end: the real server behind the production stdio transport
 
-    /// Writes one initialize frame into the transport's input pipe and returns the first reply line.
-    private static func initializeOverStdio(_ frame: String) async throws -> String {
-        var input: [Int32] = [-1, -1]
-        var output: [Int32] = [-1, -1]
-        try #require(pipe(&input) == 0)
-        try #require(pipe(&output) == 0)
-        // Polled from this task instead of a reader thread, so nothing outlives the test but the read end
-        // below.
-        _ = fcntl(output[0], F_SETFL, fcntl(output[0], F_GETFL) | O_NONBLOCK)
+    /// The complete reply lines in `received` that parse as JSON objects. A partial last line is left out.
+    private static func replies(in received: Data) -> [(line: String, message: [String: Any])] {
+        received.split(separator: UInt8(ascii: "\n")).compactMap { line in
+            guard let message = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any] else {
+                return nil
+            }
+            return (String(decoding: line, as: UTF8.self), message)
+        }
+    }
 
-        let server = LogicProServer()
-        try await server.startProtocolProbe(
-            transport: SerializedStdioTransport(input: input[0], output: output[1]))
-        let bytes = Data((frame + "\n").utf8)
-        _ = bytes.withUnsafeBytes { Darwin.write(input[1], $0.baseAddress, $0.count) }
-
-        var received = Data()
+    /// Reads from `fd` into `received` until `done` holds, polling from this task so nothing outlives the
+    /// test but the read end.
+    private static func read(from fd: Int32, into received: inout Data,
+                             until done: (Data) -> Bool) async throws {
         var buffer = [UInt8](repeating: 0, count: 65536)
-        for _ in 0..<2000 where !received.contains(UInt8(ascii: "\n")) {
-            let n = buffer.withUnsafeMutableBytes { Darwin.read(output[0], $0.baseAddress, $0.count) }
+        for _ in 0..<2000 where !done(received) {
+            let n = buffer.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, $0.count) }
             if n > 0 {
                 received.append(contentsOf: buffer[0..<n])
             } else {
                 try await Task.sleep(nanoseconds: 5_000_000)
             }
         }
+    }
+
+    /// Writes one initialize frame into the transport's input pipe and returns the reply line. When that
+    /// reply is a result, it goes on as a client does -- `notifications/initialized`, then `tools/list` -- and
+    /// returns the `tools/list` reply line as well.
+    private static func handshakeOverStdio(_ frame: String) async throws -> (initialize: String, toolsList: String?) {
+        var input: [Int32] = [-1, -1]
+        var output: [Int32] = [-1, -1]
+        try #require(pipe(&input) == 0)
+        try #require(pipe(&output) == 0)
+        _ = fcntl(output[0], F_SETFL, fcntl(output[0], F_GETFL) | O_NONBLOCK)
+        let writeEnd = input[1]
+        func send(_ text: String) {
+            let bytes = Data((text + "\n").utf8)
+            _ = bytes.withUnsafeBytes { Darwin.write(writeEnd, $0.baseAddress, $0.count) }
+        }
+
+        let server = LogicProServer()
+        try await server.startProtocolProbe(
+            transport: SerializedStdioTransport(input: input[0], output: output[1]))
+        var received = Data()
+        send(frame)
+        try await read(from: output[0], into: &received) { !replies(in: $0).isEmpty }
+        let first = replies(in: received).first
+        var toolsList: String?
+        if let first, first.message["result"] != nil {
+            send(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
+            send(#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
+            let isToolsList: ((line: String, message: [String: Any])) -> Bool = { $0.message["id"] as? Int == 2 }
+            try await read(from: output[0], into: &received) { replies(in: $0).contains(where: isToolsList) }
+            toolsList = replies(in: received).first(where: isToolsList)?.line
+        }
         await server.stopProtocolProbe()
         // EOF ends the transport's read thread. `input[0]` stays open: that thread may still be inside
         // `read` on it, and nothing here can observe it return (#995).
         close(input[1])
-        // The reply was read whole, so the write that carried it is finished, and a stopped server
-        // sends nothing more.
+        // Every reply awaited was read whole, so the writes that carried them are finished, and a stopped
+        // server sends nothing more.
         close(output[1])
         close(output[0])
-        let line = try #require(received.split(separator: UInt8(ascii: "\n")).first,
-                                "no reply line arrived")
-        return String(decoding: line, as: UTF8.self)
+        let initialize = try #require(first?.line, "no reply line arrived")
+        return (initialize, toolsList)
     }
 
-    /// Kills: removing the filter from `SerializedStdioTransport`'s read loop. Without it the first two
-    /// payloads get `-32603 ... isn't in the correct format`.
-    @Test("the real server completes initialize over stdio for each client shape", arguments: [
+    /// Kills: removing the filter from `SerializedStdioTransport`'s read loop. Without it the first three
+    /// payloads get `-32603 ... isn't in the correct format`, and no `tools/list` follows.
+    @Test("the real server completes initialize and tools/list over stdio for each client shape", arguments: [
         InitializeExperimentalFilterTests.objectExperimentalInitialize,
+        InitializeExperimentalFilterTests.capturedDesktopInitialize,
         InitializeExperimentalFilterTests.capturedObjectValuedInitialize,
         InitializeExperimentalFilterTests.capturedNoExperimentalInitialize,
         InitializeExperimentalFilterTests.specExampleInitialize,
     ])
     func serverInitializesOverStdio(_ payload: String) async throws {
-        let line = try await Self.initializeOverStdio(payload)
+        let exchange = try await Self.handshakeOverStdio(payload)
+        let line = exchange.initialize
         let reply = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
         #expect(!reply.keys.contains("error"), "initialize was refused: \(line)")
         let result = try #require(reply["result"] as? [String: Any], "no result: \(line)")
         let serverInfo = try #require(result["serverInfo"] as? [String: Any])
         #expect(serverInfo["name"] as? String == ServerConfig.serverName)
+
+        let listLine = try #require(exchange.toolsList, "no tools/list reply after initialize")
+        let list = try #require(try JSONSerialization.jsonObject(with: Data(listLine.utf8)) as? [String: Any])
+        #expect(!list.keys.contains("error"), "tools/list was refused: \(listLine.prefix(400))")
+        let listResult = try #require(list["result"] as? [String: Any], "no result: \(listLine.prefix(400))")
+        let tools = try #require(listResult["tools"] as? [[String: Any]])
+        #expect(!tools.isEmpty)
+        #expect(tools.compactMap { $0["name"] as? String }.count == tools.count)
     }
 }
