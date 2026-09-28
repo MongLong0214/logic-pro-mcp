@@ -12,11 +12,17 @@ This file explains both. Where it and the code disagree, the code is what runs.
 ```
 python3 Scripts/verify/verify.py check-spec docs/acceptance/<issue>.json   # admissible?
 python3 Scripts/verify/verify.py recheck <evidence.json> [--spec <doc>]    # recompute every verdict
-python3 Scripts/verify/verify.py record <evidence.json> --out docs/observations   # refused, exit 2: `run` (P0b-2) produces records
+python3 Scripts/verify/verify.py record <evidence.json> --out docs/observations   # refused, exit 2: `run --record` produces records
 python3 Scripts/verify/verify.py self-test                                 # fixtures + mutants
+python3 Scripts/verify/verify.py run docs/acceptance/<issue>.json --head <40-hex> --out <evidence.json> [--locales ko,de] [--record docs/observations]
+python3 Scripts/verify/verify.py batch --queue <queue.json> --out-dir <dir> [--record docs/observations]
 ```
 
-`verify.py run` and `verify.py batch`, the live lifecycle, are P0b. Until then they exit 2 and run nothing.
+`verify.py run` and `verify.py batch` drive the live lifecycle (P0b-2): they build `head` from a
+clean detached checkout, hold the live lock, switch each locale, gate the fixture before each row
+(resetting it once when the gate misses), run every row, and restore Korean. `batch` runs a queue
+(`lpm-queue/1`) of specs and heads with one switch per locale. They are the only commands that can
+certify clean or write a record.
 
 ## Exit codes
 
@@ -27,7 +33,8 @@ python3 Scripts/verify/verify.py self-test                                 # fix
 | 2 | refused | shape, a refusal rule, a key given twice in one object, or a quote that is not in its source | the evidence is malformed (an observation entry included, or a key given twice in one object), its `spec_sha256` is not the digest of its spec, `--spec` names a different document, or a run's locale reading names another locale |
 | 3 | incomplete | a source could not be fetched, so its quote is unchecked | the best a file can reach. Also: a row is UNREADABLE, a required locale was not run or carries no readable locale reading, the binary is `unbound`, or this host disagrees with the binary block |
 
-`record` of a file is refused with exit 2 (below). In P0a no command writes a record: the producer is `run`, in P0b-2.
+`record` of a file is refused with exit 2 (below). Records are written only by `run --record` and
+`batch --record`, from the evidence they produced.
 
 A failure outranks incompleteness: evidence with one FAIL and nine missing locales exits 1.
 
@@ -62,8 +69,8 @@ each other, or with the host, does not show that the verifier produced them. So:
   builder measured it, the head the verifier checked out itself, the locale reading the runner took
   for each locale, and the sha256 of the evidence's canonical bytes when the runner produced them.
   The engine grants clean only when every one of these equals the document it judges.
-- Nothing builds an attestation from JSON or from a file. `verify.py run` (P0b-2) builds one in the
-  process that ran the rows; in P0a only the self-test does.
+- Nothing builds an attestation from JSON or from a file. `verify.py run` and `verify.py batch`
+  (P0b-2) build one in the process that ran the rows; the self-test builds its own in process.
 - A worker cannot hand the verifier a verdict. This is the design, not a gap in it.
 
 The trust boundary, in plain words:
@@ -380,11 +387,11 @@ Writes are atomic: a temporary file in the destination directory, `fsync`, then 
 
 `verify.py record <file>` is refused with exit 2, not 3. Exit 3 says the evidence could still
 become clean with more observations; no content of a file can make `record` write, so the command
-itself is refused, as `run` and `batch` are in P0a. The refusal names the producer of records:
-`verify.py run`, in P0b-2. Until it exists, no command writes a record.
+itself is refused. The refusal names the producer of records: `verify.py run` (and `batch`), given
+`--record`.
 
 The recording logic is `verify.record_attested(bytes, attestation, out)`, called in process by the
-process that produced the bytes (`run`, P0b-2; in P0a, the self-test). It judges the bytes with
+process that produced the bytes (`run` or `batch`; the self-test's own runs). It judges the bytes with
 that attestation and writes nothing unless provenance is `measured`. It then publishes the bytes
 as `docs/observations/evidence/<sha256>.json`, named by their own digest, before it writes any
 record. Every record cites that file, and its reverify command is `verify.py recheck` on it, so a

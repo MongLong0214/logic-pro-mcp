@@ -379,8 +379,8 @@ MUTANTS = [
      "old": "(exit {result['exit']})\")\n    return result[\"exit\"]",
      "new": "(exit {result['exit']})\")\n    return 0"},
     {"id": "record-refusal-names-no-producer", "file": "verify.py",
-     "old": 'f"`verify.py run` (P0b-2), which records the evidence it produced; until it exists, "',
-     "new": 'f"a later command, which records the evidence it produced; until it exists, "'},
+     "old": 'f"`verify.py run` (P0b-2), which records the evidence it produced when given --record. "',
+     "new": 'f"a later command, which records the evidence it produced when given --record. "'},
     {"id": "evidence-not-content-addressed", "file": "verify.py",
      "old": 'name = E.publish_content_addressed(os.path.join(out, "evidence"), data)',
      "new": ('name = "evidence.json"; '

@@ -284,8 +284,8 @@ def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> d
 def cmd_record(args) -> int:
     """Refused: a file cannot attest to how it was made. See the module docstring for why exit 2."""
     print(f"REFUSED record {args.evidence}: {engine.UNATTESTED_WHY}. The producer of records is "
-          f"`verify.py run` (P0b-2), which records the evidence it produced; until it exists, "
-          f"nothing writes a record. `recheck` shows a file's verdicts.")
+          f"`verify.py run` (P0b-2), which records the evidence it produced when given --record. "
+          f"`recheck` shows a file's verdicts.")
     print("record: 0 record(s) written (exit 2)")
     return engine.EXIT_REFUSED
 
