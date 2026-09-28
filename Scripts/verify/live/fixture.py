@@ -119,11 +119,9 @@ def product_tracks(server):
     return {"source": "product logic://tracks", "refresh": refresh, "tracks": tracks}
 
 
-def read(name, lproj, server=None):
-    """The fixture's fingerprint now: raw probe output plus the derived fingerprint."""
-    fx = FIXTURES[name]
-    flags = probes.run("track_flags_ax", {"lproj": lproj, "fixture": fx["path"]})
-    observation = flags.get("observation") or {}
+def fingerprint_of(observation):
+    """The fingerprint one track_flags_ax observation gives: every field None when it did not read.
+    The runner's gate (runner_live.gate_reading_of) derives through this too."""
     fingerprint = {"track_count": None, "names": None, "flags": None, "types": None,
                    "mixer_strips": None}
     if observation.get("readable"):
@@ -131,6 +129,14 @@ def read(name, lproj, server=None):
             track_count=observation["track_count"],
             names=[t["name"] for t in observation["tracks"]],
             flags=[{f: t[f] for f in ("arm", "mute", "solo")} for t in observation["tracks"]])
+    return fingerprint
+
+
+def read(name, lproj, server=None):
+    """The fixture's fingerprint now: raw probe output plus the derived fingerprint."""
+    fx = FIXTURES[name]
+    flags = probes.run("track_flags_ax", {"lproj": lproj, "fixture": fx["path"]})
+    fingerprint = fingerprint_of(flags.get("observation") or {})
     record = {"fixture": name, "lproj": lproj, "track_flags": flags, "fingerprint": fingerprint}
     if fx["mixer_strips"]:
         mixer = mixer_reading(lproj)

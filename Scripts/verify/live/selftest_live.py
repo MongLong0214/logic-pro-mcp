@@ -5,7 +5,8 @@ Usage:  /usr/bin/python3 Scripts/verify/live/selftest_live.py [--head <sha>] [--
                                                              [--evidence-root <dir>]
 
 `--locales` must name ko and at least one distinct other locale (space or comma separated); any
-other set is refused with exit 2 before anything is built or driven.
+other set is refused with exit 2 before anything is built or driven. `LPM_LIVE_LOCK` must name the
+live lock's absolute path (exclusive.lock_path has no default); unset, the exclusivity step fails.
 
 Steps, each recorded raw with the predicate that judged it (its source text is stored beside it):
 

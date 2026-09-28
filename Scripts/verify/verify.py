@@ -4,7 +4,10 @@
     verify.py check-spec <spec>                  is this acceptance document admissible?
     verify.py recheck <evidence> [--spec <spec>] recompute every verdict from stored observations
     verify.py record <evidence> --out <dir>      refused (exit 2): a file cannot attest; see below
-    verify.py run ... / verify.py batch ...      P0b: the live lifecycle (stubs; exit 2)
+    verify.py run <spec> --head H --out F [--locales L] [--record DIR]
+                                                 build H, drive the spec in Logic, judge it
+    verify.py batch --queue Q --out-dir D [--record DIR]
+                                                 every queued spec and head, one switch per locale
     verify.py self-test                          fixtures and engine mutants, offline
 
 EXIT CODES
@@ -32,9 +35,16 @@ script that calls `engine.judge` with an attestation it built, is not evidence (
 
 `record` of a file is refused with exit 2, not 3. Exit 3 says the evidence could still become
 clean with more observations; no content of a file can make `record` write, so the command itself
-is refused, as `run` and `batch` are in P0a. The recording logic is `record_attested`, which takes
-an attestation in process; `run` will call it, and the self-test exercises it that way. In P0a,
-then, no command writes a record: the producer of records is `run`, in P0b-2.
+is refused. The recording logic is `record_attested`, which takes an attestation in process:
+`run --record DIR` and `batch --record DIR` call it with the attestation of the run that produced
+the bytes, and they are the only commands that write records. The self-test exercises it the same
+way.
+
+`run` and `batch` always drive the live world: they call `runner.run_spec` and `runner.run_batch`
+without a lifecycle, so the runner builds `runner_live.LiveLifecycle`. No flag and no environment
+variable selects another one; the
+self-test's fake is reached only by passing `_life=` in process, which the self-test refuses in
+every tracked file but its own.
 
 This file does I/O and printing only. Every verdict comes from `engine.py`.
 
@@ -48,6 +58,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -56,6 +67,7 @@ SCRIPTS = os.path.dirname(HERE)
 sys.path.insert(0, SCRIPTS)
 sys.path.insert(0, HERE)
 
+import canon_record_guard  # noqa: E402
 import engine  # noqa: E402
 import evidence_doc as E  # noqa: E402
 import predicates as P  # noqa: E402
@@ -191,7 +203,12 @@ def _axis_locale(code: str):
 
 
 def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> dict:
-    """One observation record for one locale's run. Every value is read from the evidence."""
+    """One observation record for one locale's run. Every value is read from the evidence.
+
+    A row's `readings` are every step's reading, whole, under the step's name, as the observation
+    record schema requires raw readings rather than a summary. Nothing is trimmed to get past the
+    canon guard: a record the guard refuses is declined by `record_attested`, and its bytes stay in
+    the evidence."""
     spec, run, binary = doc["spec"], doc["runs"][locale], doc["binary"]
     evidence_sha = os.path.splitext(os.path.basename(evidence_rel))[0]
     host = dict(run["host"])
@@ -220,7 +237,8 @@ def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> d
                 code = locale if ref["locale"] == "$locale" else ref["locale"]
                 cited = engine.logic_canon.CanonRef(parsed.source, parsed.unit, code, parsed.key, parsed.field)
                 citations.append({"ref": str(cited), "value": found.value,
-                                  "used_for": f"{row['id']}: expect[{i}] {e['path']} matches_canon"})
+                                  "used_for": f"{row['id']}: expect[{i}] {e['path']} matches_canon",
+                                  "binding": {"kind": "record"}})
     listing = "; ".join(f"{o}: {', '.join(ids) if ids else 'none'}" for o, ids in by_verdict.items())
     record = {
         "id": f"{run['date']}-{host.get('locale')}-acceptance-{spec['issue']}-{evidence_sha[:12]}",
@@ -273,8 +291,8 @@ def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> d
 def cmd_record(args) -> int:
     """Refused: a file cannot attest to how it was made. See the module docstring for why exit 2."""
     print(f"REFUSED record {args.evidence}: {engine.UNATTESTED_WHY}. The producer of records is "
-          f"`verify.py run` (P0b-2), which records the evidence it produced; until it exists, "
-          f"nothing writes a record. `recheck` shows a file's verdicts.")
+          f"`verify.py run` (P0b-2), which records the evidence it produced when given --record. "
+          f"`recheck` shows a file's verdicts.")
     print("record: 0 record(s) written (exit 2)")
     return engine.EXIT_REFUSED
 
@@ -309,13 +327,23 @@ def record_attested(data: bytes, attestation, out: str) -> int:
             skipped.append(f"{locale}: the run stored no host block or date")
         else:
             ready.append(locale)
-    written = []
-    if ready:
-        name = E.publish_content_addressed(os.path.join(out, "evidence"), data)
-        evidence_rel = f"evidence/{name}"
+    # Every record is built and put to the canon guard before anything is published, citing the
+    # name the evidence bytes are then published under.
+    written, accepted = [], []
+    name = E.content_name(data)
+    evidence_rel = f"evidence/{name}"
+    for locale in ready:
+        record = build_record(doc, locale, result["verdicts"][locale], evidence_rel)
+        refused = canon_record_guard.refusals(record)
+        if refused:
+            skipped.append(f"{locale}: the canon guard would refuse its record, so it is not "
+                           f"written: {refused[0]}")
+        else:
+            accepted.append(record)
+    if accepted:
+        E.publish(os.path.join(out, "evidence"), name, data)
         print(f"wrote {os.path.join(out, evidence_rel)}")
-        for locale in ready:
-            record = build_record(doc, locale, result["verdicts"][locale], evidence_rel)
+        for record in accepted:
             path = os.path.join(out, f"{record['id']}.json")
             E.write_atomic(path, record)
             written.append(path)
@@ -329,19 +357,97 @@ def record_attested(data: bytes, attestation, out: str) -> int:
 
 
 # ---------------------------------------------------------------------------------------------
-# P0b stubs
+# run
 # ---------------------------------------------------------------------------------------------
 
-def cmd_p0b(args) -> int:
-    print(f"verify.py {args.command}: P0b. The live lifecycle (build from a clean detached checkout, "
-          f"locale switch, fixture reset, probes) is the next ticket; see Scripts/verify/runner.py "
-          f"for the interfaces it implements. Nothing was run. (exit 2)")
-    return engine.EXIT_REFUSED
+HEAD_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def cmd_run(args) -> int:
+    """Build --head, drive the spec in Logic in its locales, write the evidence to --out, judge it
+    with this process's attestation, and record it under --record. Refusals (exit 2) come before
+    the build and the live lock: the head, the spec, the locales, the fixture (runner._drive)."""
+    import runner
+    if not HEAD_RE.match(args.head):
+        print(f"REFUSED --head {args.head!r}: not a full 40-hex commit")
+        print("run: refused before anything was built or driven (exit 2)")
+        return engine.EXIT_REFUSED
+    try:
+        spec = E.load(args.spec)
+    except (OSError, ValueError) as exc:
+        print(f"REFUSED {args.spec}: {exc}")
+        print("run: refused before anything was built or driven (exit 2)")
+        return engine.EXIT_REFUSED
+    locales = args.locales.split(",") if args.locales else None
+    spec_path = os.path.relpath(os.path.abspath(args.spec), repo())
+    return runner.run_spec(spec, spec_path, args.head, locales, args.out, args.record)
+
+
+# ---------------------------------------------------------------------------------------------
+# batch
+# ---------------------------------------------------------------------------------------------
+
+QUEUE_FORMAT = "lpm-queue/1"
+QUEUE_ENTRY_KEYS = {"spec", "head", "locales"}
+
+
+def queue_problems(queue) -> list:
+    """Why `queue` is not a queue: {"format": "lpm-queue/1", "entries": [{"spec": a path relative
+    to the repository, "head": 40 hex, "locales"?: [lproj, ...]}, ...]}, at least one entry."""
+    if not isinstance(queue, dict) or queue.get("format") != QUEUE_FORMAT:
+        given = queue.get("format") if isinstance(queue, dict) else type(queue).__name__
+        return [f"not an {QUEUE_FORMAT} queue (its format is {given!r})"]
+    out = [f"unknown key {key!r}" for key in sorted(set(queue) - {"format", "entries"})]
+    entries = queue.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return out + ["entries is not a non-empty list"]
+    for n, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            out.append(f"entries[{n}] is not an object")
+            continue
+        out += [f"entries[{n}]: unknown key {key!r}" for key in sorted(set(entry) - QUEUE_ENTRY_KEYS)]
+        if not isinstance(entry.get("spec"), str) or not entry["spec"]:
+            out.append(f"entries[{n}]: spec is not a path")
+        if not (isinstance(entry.get("head"), str) and HEAD_RE.match(entry["head"])):
+            out.append(f"entries[{n}]: head {entry.get('head')!r} is not a full 40-hex commit")
+        locales = entry.get("locales")
+        if locales is not None and not (isinstance(locales, list)
+                                        and all(isinstance(x, str) for x in locales)):
+            out.append(f"entries[{n}]: locales is not a list of locale names")
+    return out
+
+
+def cmd_batch(args) -> int:
+    """Every queued entry, with one switch per locale: each head built once before the lock, one
+    evidence document in --out-dir and one attestation per entry, each entry's verdict printed,
+    and the exit the worst of theirs (2, then 1, then 3, then 0). Refusals come first (exit 2)."""
+    import runner
+    try:
+        queue = E.load(args.queue)
+        problems = queue_problems(queue)
+    except (OSError, ValueError) as exc:
+        queue, problems = None, [f"{args.queue}: {exc}"]
+    entries = []
+    for n, item in enumerate([] if problems else queue["entries"]):
+        path = item["spec"] if os.path.isabs(item["spec"]) else os.path.join(repo(), item["spec"])
+        try:
+            spec = E.load(path)
+        except (OSError, ValueError) as exc:
+            problems.append(f"entries[{n}]: {path}: {exc}")
+            continue
+        entries.append({"spec": spec, "spec_path": os.path.relpath(os.path.abspath(path), repo()),
+                        "head": item["head"], "locales": item.get("locales")})
+    if problems:
+        for line in problems:
+            print(f"REFUSED {args.queue}: {line}")
+        print("batch: refused before anything was built or driven (exit 2)")
+        return engine.EXIT_REFUSED
+    return runner.run_batch(entries, args.out_dir, args.record)
 
 
 def cmd_self_test(args) -> int:
     import selftest
-    return selftest.main(cases_only=args.cases_only)
+    return selftest.main(cases_only=args.cases_only, first_failure=args.first_failure)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -359,18 +465,23 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("evidence")
     p.add_argument("--out", required=True, help="the records directory, e.g. docs/observations")
     p.set_defaults(func=cmd_record)
-    p = sub.add_parser("run", help="P0b: run one spec's rows against a head, in its locales")
+    p = sub.add_parser("run", help="build a head, drive one spec's rows in Logic in its locales, judge them")
     p.add_argument("spec")
     p.add_argument("--head", required=True, help="the full 40-hex commit to build and run")
     p.add_argument("--locales", help="comma-separated subset; default: the spec's locales")
     p.add_argument("--out", required=True, help="where to write the evidence document")
-    p.set_defaults(func=cmd_p0b)
-    p = sub.add_parser("batch", help="P0b: switch each locale once and run every queued head's rows")
-    p.add_argument("--queue", default="docs/acceptance/QUEUE.json")
-    p.add_argument("--out-dir", required=True)
-    p.set_defaults(func=cmd_p0b)
+    p.add_argument("--record", help="the records directory, e.g. docs/observations: publish the "
+                                    "evidence under its sha256 and one record per measured locale")
+    p.set_defaults(func=cmd_run)
+    p = sub.add_parser("batch", help="every queued spec and head, with one switch per locale")
+    p.add_argument("--queue", required=True, help=f"an {QUEUE_FORMAT} queue; spec paths are "
+                                                  f"relative to the repository")
+    p.add_argument("--out-dir", required=True, help="where each entry's evidence document is written")
+    p.add_argument("--record", help="as for run: the records directory, e.g. docs/observations")
+    p.set_defaults(func=cmd_batch)
     p = sub.add_parser("self-test", help="fixtures and engine mutants, offline")
     p.add_argument("--cases-only", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--first-failure", action="store_true", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_self_test)
     return top
 

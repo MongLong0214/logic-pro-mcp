@@ -98,7 +98,11 @@ actor MCUFeedbackParser {
 
         switch button.function {
         case .mute:
-            await cache.updateTrack(at: trackIndex) { $0.isMuted = button.on }
+            // Not written. `isMuted` is the track header's Mute checkbox (#1040), and the MCU Mute LED
+            // is a different fact: Logic lights it on every strip a solo silences. Measured 2026-09-28
+            // on 12.3, es-ES: a silenced track's checkbox read 0 while `logic://tracks` published
+            // `isMuted: true` from this LED. The poller's header read is the only writer.
+            break
         case .solo:
             await cache.updateTrack(at: trackIndex) { $0.isSoloed = button.on }
         case .recArm:

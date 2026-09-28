@@ -79,6 +79,10 @@ def host(lproj: str) -> dict:
             "os": "macOS 26.3 (25D125)"}
 
 
+#: The rest() result the fixtures' run took: Logic back in Korean, confirmed.
+RESTED = {"in_locale": True, "reading": locale_reading("ko")}
+
+
 def build(spec_name: str) -> dict:
     spec = E.load(os.path.join(FIXTURES, spec_name))
     doc = E.new_document(spec, f"Scripts/verify/fixtures/{spec_name}", dict(UNBOUND_BINARY))
@@ -92,6 +96,7 @@ def build(spec_name: str) -> dict:
                 for step in row["steps"] + row["restore"]}}
         doc["runs"][lproj] = run
         doc["verdicts"][lproj] = engine.evaluate_run(spec, run, lproj)
+    doc[E.REST] = dict(RESTED)
     return doc
 
 

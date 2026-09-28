@@ -261,7 +261,11 @@ actor SerializedStdioTransport: Transport {
                 let frame = pending[pending.startIndex..<newline]
                 pending = pending[(newline + 1)...]
                 if !frame.isEmpty {
-                    continuation.yield(Data(frame))
+                    // Before the SDK decodes it: an `initialize` whose experimental capabilities follow
+                    // the MCP schema fails the SDK's decode (#1048). Every other frame is unchanged.
+                    // Nothing is logged here: a write to stderr blocks while the client leaves that pipe
+                    // full, and this thread has not yet handed the request on.
+                    continuation.yield(InitializeExperimentalFilter.filter(Data(frame)).frame)
                 }
             }
         }

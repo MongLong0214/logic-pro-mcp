@@ -3,8 +3,10 @@
 Two things make a live run's readings belong to that run, and this module is both:
 
 1. `LIVE.lock`, created with O_CREAT|O_EXCL so exactly one creator wins, holding the pid, host and
-   purpose of whoever holds it. Default path `$S/LIVE.lock` (the coordinator's scratchpad); the
-   environment variable `LPM_LIVE_LOCK` overrides it, which is how the tests point it elsewhere.
+   purpose of whoever holds it. Its path is the environment variable `LPM_LIVE_LOCK`, which the
+   coordinator exports as `$S/LIVE.lock` and the tests point elsewhere. There is no default: a
+   default names one scratchpad, and a process started with another would take another lock and
+   lose exclusivity without a word (plan-p0b2 D7). Unset, empty or relative, `lock_path` refuses.
    A lock whose pid is dead on this host is STALE, and is reported as such. A lock that names no
    pid (`touch LIVE.lock`, which is how scratchpad/live291.sh takes it) cannot be proven stale and
    is treated as held.
@@ -30,8 +32,6 @@ import time
 from . import obs
 
 LOCK_ENV = "LPM_LIVE_LOCK"
-DEFAULT_LOCK = ("/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/"
-                "8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/LIVE.lock")
 
 #: A server: the executable's basename starts with LogicProMCP (the build product, the copies
 #: binary.py makes as LogicProMCP-<sha>-<sha256>, and live291.sh's -candidate/-control copies).
@@ -42,8 +42,19 @@ TEST_BUNDLE = re.compile(r"\.xctest\b|LogicProMCPPackageTests")
 RECOVER_WAIT_S = 10.0
 
 
+class LockPathUnset(Exception):
+    """LPM_LIVE_LOCK does not name an absolute path, so there is no one lock to take."""
+
+
 def lock_path():
-    return os.environ.get(LOCK_ENV) or DEFAULT_LOCK
+    """The lock's path from LPM_LIVE_LOCK; LockPathUnset when it is unset, empty or relative (a
+    relative path is a different lock in every working directory)."""
+    path = os.environ.get(LOCK_ENV) or ""
+    if not os.path.isabs(path):
+        raise LockPathUnset(f"{LOCK_ENV} is {'not set' if not path else f'relative ({path!r})'}; "
+                            f"export it as the coordinator's absolute LIVE.lock path, since a "
+                            f"default would be a different lock for a process started elsewhere")
+    return path
 
 
 def pid_alive(pid):
@@ -195,13 +206,14 @@ def release(taken):
     return {"released": True, "path": path, "exists_after": os.path.exists(path)}
 
 
-def wait_and_acquire(purpose, timeout_s, interval_s=5.0, path=None, alive=pid_alive):
-    """Wait (bounded) for the lock to be absent or stale, then take it. Returns every poll."""
+def wait_and_acquire(purpose, timeout_s, interval_s=5.0, path=None, alive=pid_alive, break_stale=True):
+    """Wait (bounded) for the lock to be absent or stale, then take it. Returns every poll. With
+    `break_stale` False a stale lock is waited on like a held one, and never moved aside."""
     path = path or lock_path()
     attempts = []
 
     def attempt():
-        result = acquire(purpose, path=path, alive=alive)
+        result = acquire(purpose, path=path, break_stale=break_stale, alive=alive)
         attempts.append({"t": obs.now(), **{k: v for k, v in result.items() if k != "holder"}})
         return result
 
@@ -273,15 +285,22 @@ def competing_now(own_pids=()):
 
 
 @contextlib.contextmanager
-def claim(purpose, timeout_s, record, interval_s=5.0, path=None):
+def claim(purpose, timeout_s, record, interval_s=5.0, path=None, break_stale=True):
     """Hold the live lane for the body of a `with`; always release.
 
     `record` is a dict the caller keeps: `lock`, `competing` and `release` are written into it, so
     the evidence has them whether the body finished or raised. The body is entered only when the
     lock was taken AND no competing process was seen; otherwise `record["refused"]` says why and the
-    body is not run (the manager yields False).
+    body is not run (the manager yields False). With no `path` and LPM_LIVE_LOCK unusable, it
+    refuses the same way, having touched no file.
     """
-    taken = wait_and_acquire(purpose, timeout_s, interval_s=interval_s, path=path)
+    try:
+        taken = wait_and_acquire(purpose, timeout_s, interval_s=interval_s, path=path,
+                                 break_stale=break_stale)
+    except LockPathUnset as exc:
+        record["refused"] = str(exc)
+        yield False
+        return
     record["lock"] = taken
     try:
         if not taken.get("acquired"):

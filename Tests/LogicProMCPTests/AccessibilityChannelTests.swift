@@ -3136,7 +3136,8 @@ private func makeTempoSliderFixture(
     #expect(tracks.count == 1)
     #expect(tracks[0].name == "Lead Vox")
     #expect(tracks[0].type == .audio)
-    #expect(tracks[0].isMuted)
+    let track0Muted = try #require(tracks[0].isMuted)
+    #expect(track0Muted)
 
     let selectedResult = await channel.execute(operation: "track.get_selected", params: [:])
     #expect(selectedResult.isSuccess)

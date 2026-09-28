@@ -20,6 +20,10 @@ What this adds, because the audit (audit-A-report.md section 2b) found evidence.
   arrives after its call timed out stays in the transcript as late.
 - A stop that is verified: stdin closed, then terminate, then kill, each bounded, and the pid is
   checked gone afterwards (`pid_gone`).
+- The reply line itself: `request` returns the line it matched as `raw` beside the parse. The
+  runner (runner_live.py) stores a tool's `content[0].text` as that parse holds it, which is the
+  string the server sent; `body_of_tool_reply` below is for harnesses that want a body and may
+  make one up (`_text`, `_no_result`), so the runner does not use it.
 """
 
 import json
@@ -137,7 +141,11 @@ class Server:
         return self.proc.pid if self.proc else None
 
     def request(self, method, params=None, timeout_s=60.0):
-        """One JSON-RPC request; the raw reply, or `timed_out` / `server_exited` saying why not."""
+        """One JSON-RPC request; the reply, or `timed_out` / `server_exited` saying why not.
+
+        With a reply, `raw` is the line exactly as it was read (without its newline) and `reply` is
+        that line parsed. A reader that must store what the server sent reads it from `raw` or from
+        the strings inside `reply`, never from a re-serialization of `reply`."""
         if self.proc is None:
             return {"method": method, "sent": False, "cause": "server not started"}
         self._next_id += 1
@@ -154,7 +162,7 @@ class Server:
             if rid in self._pending:
                 entry = self._pending.pop(rid)
                 return {"id": rid, "method": method, "sent": True, "reply": entry["json"],
-                        "t_sent": started, "t_reply": entry["t"],
+                        "raw": entry["raw"], "t_sent": started, "t_reply": entry["t"],
                         "elapsed_s": entry["t"] - started, "timed_out": False}
             remaining = deadline - obs.now()
             if remaining <= 0:

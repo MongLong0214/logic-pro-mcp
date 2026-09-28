@@ -362,9 +362,11 @@ enum ProjectSessionAudit {
         let unnamed = snapshot.tracks
             .filter { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map(\.id)
-        let muted = snapshot.tracks.filter(\.isMuted).map(\.id)
-        let soloed = snapshot.tracks.filter(\.isSoloed).map(\.id)
-        let armed = snapshot.tracks.filter(\.isArmed).map(\.id)
+        // Only a toggle READ as on is listed. An unread one (#1040) is neither listed here nor taken
+        // as off: `track_toggles_unread` names it.
+        let muted = snapshot.tracks.filter { $0.isMuted == true }.map(\.id)
+        let soloed = snapshot.tracks.filter { $0.isSoloed == true }.map(\.id)
+        let armed = snapshot.tracks.filter { $0.isArmed == true }.map(\.id)
         let selected = snapshot.tracks.filter(\.isSelected).map(\.id)
 
         let tracksEvidence = TrackEvidence(
@@ -640,7 +642,7 @@ enum ProjectSessionAudit {
                 "cache_fresh"
             ))
         }
-        let mutedSoloed = snapshot.tracks.filter { $0.isMuted && $0.isSoloed }.map(\.id)
+        let mutedSoloed = snapshot.tracks.filter { $0.isMuted == true && $0.isSoloed == true }.map(\.id)
         if !mutedSoloed.isEmpty {
             findings.append(finding(
                 "muted_and_soloed_tracks",
@@ -653,7 +655,7 @@ enum ProjectSessionAudit {
                 tracks.freshness.provenance
             ))
         }
-        let mutedArmed = snapshot.tracks.filter { $0.isMuted && $0.isArmed }.map(\.id)
+        let mutedArmed = snapshot.tracks.filter { $0.isMuted == true && $0.isArmed == true }.map(\.id)
         if !mutedArmed.isEmpty {
             findings.append(finding(
                 "muted_and_armed_tracks",
@@ -713,6 +715,29 @@ enum ProjectSessionAudit {
                 "logic://tracks",
                 tracks.soloedIndices.map(String.init).joined(separator: ","),
                 ["soloed_indices=\(tracks.soloedIndices.map(String.init).joined(separator: ","))"],
+                tracks.freshness.provenance
+            ))
+        }
+        // #1040: a Mute, Solo or Record Enable the header read could not read is not "off". While one
+        // is unread, "no track is soloed, armed or muted" was not observed, so the export cannot be
+        // review_ready on it; the finding names the tracks and which control on each.
+        let unreadMute = snapshot.tracks.filter { $0.isMuted == nil }.map(\.id)
+        let unreadSolo = snapshot.tracks.filter { $0.isSoloed == nil }.map(\.id)
+        let unreadArm = snapshot.tracks.filter { $0.isArmed == nil }.map(\.id)
+        let unreadTracks = Set(unreadMute + unreadSolo + unreadArm).sorted()
+        if !unreadTracks.isEmpty {
+            findings.append(finding(
+                "track_toggles_unread",
+                .warn,
+                "export",
+                "Mute, Solo or Record Enable could not be read on some tracks, so whether they are muted, soloed or armed is unknown.",
+                "logic://tracks",
+                unreadTracks.map(String.init).joined(separator: ","),
+                [
+                    "unread_mute_indices=\(unreadMute.map(String.init).joined(separator: ","))",
+                    "unread_solo_indices=\(unreadSolo.map(String.init).joined(separator: ","))",
+                    "unread_arm_indices=\(unreadArm.map(String.init).joined(separator: ","))",
+                ],
                 tracks.freshness.provenance
             ))
         }
@@ -888,7 +913,7 @@ enum ProjectSessionAudit {
             ))
         }
 
-        let soloed = snapshot.tracks.filter(\.isSoloed).map(\.id)
+        let soloed = snapshot.tracks.filter { $0.isSoloed == true }.map(\.id)
         if !soloed.isEmpty {
             steps.append(toggleStep(
                 id: "clear_solo_states",
@@ -900,7 +925,7 @@ enum ProjectSessionAudit {
             ))
         }
 
-        let armed = snapshot.tracks.filter(\.isArmed).map(\.id)
+        let armed = snapshot.tracks.filter { $0.isArmed == true }.map(\.id)
         if !armed.isEmpty {
             steps.append(toggleStep(
                 id: "clear_arm_states",

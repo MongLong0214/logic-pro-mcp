@@ -8,7 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+---
+
+## [3.18.0] — 2026-09-28
+
+42 commits and pull requests since v3.17.0. Written caller-facing: guard scripts, CI, test
+infrastructure, live harnesses, the ADR-027 verifier and canon derivation work, and roadmap work
+are excluded because a caller cannot observe them. Where a change stated a limit, the limit is
+carried into its entry.
+
 ### Added
+- `logic://tracks` reads each track's Input Monitoring (#1040). A row carries `isInputMonitoring` as the track header's Input Monitoring checkbox reads, found by a new `AXLocalePolicy.trackInputMonitoringButton` whose members are Apple's own `Input Monitoring#acc` row (and the plain `Input Monitoring` row, which holds the same values) in all ten locales Logic ships, derived by `Scripts/derive_label_variants.py` and pinned in the canon index. It is tri-state the way Mute, Solo and Record Enable now are: `true`, `false`, or absent when the control was not found or its value would not read. Rows built without a header read (the project-file placeholders and rows MCU feedback creates) leave it absent, since nothing else in the server reads the control. Read only: there is no Input Monitoring write.
 - `logic_mixer bank` (`mixer.bank`, MCU only, #862): moves the Mackie Control fader bank by eight strips per step, `{ direction: "left" | "right", count?: 1–31 }`. Each step is one press followed by its own readback, a fresh, changed MCU LCD upper row that holds still, never the press having been sent; two presses sent back to back moved Logic 12.3 one bank, so presses are not batched, and the walk stops at the first step that did not move. Handler replies carry `banks_moved`, `banks_requested`, `bank_presses_sent` and `step_windows`. State A (`verify_source: mcu_lcd_upper_row`, `window_before` / `window_after` / `strips`) means every step moved; it does not say which bank is showing. With no step moved, State B `noop_unobservable` when the row redraws unchanged and `echo_timeout_<ms>ms` when it never redraws; with some steps moved, State B `readback_mismatch` when the next step redraws unchanged (the end of the mixer) and `echo_timeout_<ms>ms` when it does not redraw, with the bank counter moved by `banks_moved` only. A cold start has two answers, and neither sends a byte: with no MCU feedback received yet, the shared router health gate answers State C `channels_exhausted` before the handler runs, as for every MCU operation; with feedback but no upper row yet, State C `readback_unavailable` with `write_attempted: false`, `bank_presses_sent: 0`, `banks_moved: 0`, `banks_requested` equal to `count` and `step_windows: []`. Registered, handler-bound, in the skill catalog, help text and API docs; listed as an audited exclusion in the semantic-oracle table until a live observation record exists.
 - **`logic_project.inspect_session`: a cache-only session population report (#965, first
   increment).** The `logic_pro_mcp_session_population.v1` report is read from the state cache
@@ -59,40 +69,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   I/O-label rename reads `unclassified` rather than as a bus and `main_output` says so; the
   strip-to-track attribution is still positional; bus-to-aux input edges are `not_observed`;
   which bus a send goes to is not read; `no_output` and `unclassified` were seen in fixtures only.
-- **An internal intent model and one main-output rule for the project audit (#966 P1, ADR-021;
-  refs #966).** `ProjectSessionAudit.parseIntentPolicy` reads a
-  `logic_pro_mcp_repair_policy.v1` object (exact keys, `trk_` targets, an optional `prj_`
-  `project_ref`, proposed roles, and per-subject main outputs of `bus: n` or
-  `output: "no_output"`), and `assessIntent` checks it against one #965 capture and the #291 R1
-  graph published from it (`SessionPopulationObservation.routingGraph(capture:)`, which
-  `inspect_session`'s routing section now also builds from, unchanged on the wire). `compliant`
-  and `violation` need the `main_output` and `strip_track_association` domains both `complete`;
-  otherwise the finding is `unverified` with `main_output_coverage_incomplete` /
-  `strip_track_association_incomplete` and the domains' own reasons copied as evidence. A capture
-  that moved, a graph from another capture, a graph whose project reference is not the one the
-  capture issued, an inconsistent graph, no document, occlusion, a stale reference snapshot or an
-  unissued project reference is `unverified` with its own token; a policy for another project or a
-  target outside the snapshot is `outside_scope`. A role with no accepted member is a
-  `needs_input` question only when the checks a direct target reads before it looks for its node
-  pass, through the same functions: those checks, the capture's track references on and current,
-  and the graph's epoch. The domains are read more narrowly: a direct target's verdict is about
-  routing and needs both domains `complete`, but the question is about which captured track fills
-  the role, so only an `unstable` domain stops it and a `partial` one does not. Otherwise its
-  finding carries the failing check's status and token and nothing is asked; a capture whose
-  project reference went stale is published with every domain `unstable`, so it stops at the
-  domain check. Its
-  candidates are the proposed members whose references the capture issued for exactly one row, in
-  the policy's order. When none is, the role carries the tokens a direct target with those
-  references gets (`target_not_in_snapshot`, `target_ambiguous_in_snapshot`), it is
-  `outside_scope` only when every candidate is outside the snapshot, and nothing is asked. The
-  source is found by reference, never by name; a node id, destination bus number or captured
-  reference that more than one node or row carries is `unverified` rather than decided by order;
-  and send and input edges, levels, enabled flags and automation are never read. Limits:
-  `publish` leaves both domains `partial` on every read today, so every real assessment of a
-  direct target is `unverified`, while a role with no accepted member still asks; no command,
-  resource or documented surface exposes this yet.
+- The stock plug-in catalog reads factory presets at every depth of every root, not only its
+  first level (#1036). Measured on Logic 12.3 (6674) before the change: ES2 listed 2 of its 257
+  factory settings and Sculpture 2 of 225, because the walk skipped subfolders, never read the
+  `Plug-In Settings Internal` root, and had no entry (or reason) for a folder no seed named
+  (Studio Piano, whose settings ship only under `Internal`). The walk now descends, keeps the
+  subfolder path as the preset's category, and reads the bundle root, the `Internal` root and the
+  shared library root; every folder no seed owns now carries a reason read from
+  `DefaultPluginMapping.plist`, or is named by a check that lists any folder with neither a seed
+  nor a reason.
+
+### Changed
+- `transport.goto_position`'s post-leaf outcomes are decided from one reading of the on-screen
+  window list rather than several separate probes, and a post-leaf menu refusal is reconciled
+  against the dialog cleanup instead of being read as a dialog refusal (#942). Fourteen post-leaf
+  results now act only as that one reading permits and say what they saw; the twelve returns that
+  close both the dialog and the menu after the leaf click no longer report the menu as unobserved
+  when only the dialog cleanup was. The Escape-over-dialog policy ships withheld until a live
+  record measures the order. Limit: the other fourteen post-leaf returns #942 counts still end with
+  the menu never observed and a dialog possibly still up; whether an Escape may be sent there is
+  unresolved.
+- Thirteen locale `LabelSet`s (mixer, transport and area matchers) now derive their ten-locale
+  members from the Apple `.strings` row each cites, instead of a hand-typed literal, so a locale's
+  word reaches the matcher from the canon (#904).
 
 ### Fixed
+- Codex can connect to the server again (#1048). Codex sends `"experimental": {"codex/auth-change": {}}` in the capabilities of its `initialize` request. The MCP schema types each experimental capability as an object, but the MCP Swift SDK this server is built on (0.12.1, the latest release) decodes them as strings only, so the handshake failed with `-32603 Internal error: The data couldn't be read because it isn't in the correct format.` and Codex listed no Logic Pro tools. Before the SDK reads an `initialize` request, the stdio transport now removes the experimental capabilities whose value is not a string, and keeps the string ones. It writes nothing to stderr while doing so, and no log line names the removed keys. Nothing in the server reads a client's experimental capabilities, so removing them changes no behaviour. Every other message passes through byte for byte. Measured against the built server with the `initialize` request captured from Codex CLI 0.156.1 and with a minimal `{"x": {}}` capability: both were refused before and now get a normal `initialize` result, and a following `tools/list` returns all 10 tools. Codex CLI 0.156.1 itself, pointed at the build before the change, logged `MCP server startup failed ... handshaking with MCP server failed: JSON-RPC error: -32603`; pointed at the build after it, it completed `initialize` and received the 10 tools from `tools/list`. Requests shaped like Claude Code 2.1.283's and the specification's example still initialize. Codex Desktop 26.924.22138, the version in the report, which bundles Codex 0.158.0-alpha.2.1, reproduced the failure against the 3.17.0 release binary. Its `initialize` carries the same `codex/auth-change` object and also an `extensions` capability, which the SDK ignores and the transport leaves in place. That request, with its client names replaced, is now a regression test. Against an earlier build of this change, which still logged a line naming the removed keys, the same app started the server (`status=ready`), completed `initialize`, and received the 10 tools from `tools/list`; that run has not been repeated on the final build. Measured on release builds with the server's stderr pipe (65,536 bytes) never read and filled so that 100 bytes of room remained after the server's 2,479 bytes of startup lines, with a request of one 100,000-character object-valued key and 1,000 more: a build that still logged one line for that request (a 307-byte write) got no `initialize` reply in 10 seconds in 3 of 3 runs, and replied once stderr was read; the build after this change answered `initialize` and `tools/list` (10 tools) in 3 of 3 runs and wrote nothing to stderr after startup. Limit: every logger call writes to stderr synchronously, so a client that stops reading stderr can still stall the server at its next logged line, as it could in 3.17.0; with the pipe already full when the server starts, the build after this change answers nothing, because its first startup line blocks. Only `initialize` is now free of writes.
 - MCU button presses now send the button release: bank left/right (`mixer.bank` and the bank walk behind every strip-relative MCU operation), track select, automation mode, the mute / solo / arm / select strip buttons, and the MCU transport buttons (play, stop, record, rewind, fast forward, cycle). Before, each press was a Note On with no release, so Logic saw every button as held, and it auto-repeats held bank buttons: after one bank walk left and one press right, the LCD kept redrawing between two bank windows for seconds. The `enabled: false` branch of `track.set_mute` / `set_solo` / `set_arm`, which sent a single release with no press, is replaced under #1020 below. (#862)
 - `track.set_mute` / `set_solo` / `set_arm` on the MCU fallback are a set, not a toggle (#1020). The Mackie Control Mute / Solo / Rec buttons flip whatever Logic holds on a press, so `enabled: true` on an already-muted track unmuted it, and `enabled: false` sent a single release with no press, which Logic ignores, so the fallback could never clear a mute, solo or arm. The MCU handler now reads the track header's button through Accessibility first (`verification_source: ax_value`), sends nothing when it already equals `enabled` (State A, `write_attempted: false`, `observed`), and when it differs presses once with its release and confirms by polling the same read (up to ten polls at 50 ms): State A with `write_attempted: true` when the read flipped; State B `readback_mismatch` (still the old value) or `readback_unavailable` (unreadable after the press), both with `write_attempted: true` and no second press, when it did not. When the state cannot be read before the press it sends nothing and refuses with the new non-terminal State C `track_state_unreadable` (`write_attempted: false`), which the router walks past to the next channel. `track.select` on MCU is unchanged. Driven live for record-arm on Logic 12.3 in all ten languages, reaching the MCU rung through an unparseable `LOGIC_PRO_MCP_ARM_KEYCODE`; mute and solo have no such route and rest on unit tests against a surface that flips on a press, as Logic's buttons were measured to under #862.
 - Every strip-relative MCU write now walks the bank one verified press at a time (#1020): strip mute / solo / arm, `track.select`, `track.set_automation`, `mixer.set_volume` and `mixer.set_pan` for a track outside the bank the server last placed. Before, the bank presses went out 1 ms apart behind a fixed 250 ms settle and the bank counter was set to the target without a reading; Logic 12.3 was measured moving one bank for two presses sent back to back, so a strip byte could land a bank short (from bank 0, `enabled: false` for armed track 16 pressed strip 0 on bank 1, arming track 8). Each step is now the same measurement `mixer.bank` makes: one press, then a quiescent LCD upper-row redraw to a different row. The write runs only when every step toward its bank moved. A step that does not move stops the walk: the strip is not pressed, the steps that moved are walked back, and the answer is State C `bank_walk_unverified` with `write_attempted: false`, `bank_presses_sent`, `banks_moved`, `banks_requested`, `bank_restored` and `step_windows`; that code is not terminal, so the router moves on to the next channel. An upper row never received refuses the same way with nothing sent. After the write, the walk home is stepped the same way and stops at a step that does not move; the write's own reply stands and carries the same bank fields, with `bank_restored: false` when the walk home stopped short. The bank counter moves only by steps that moved. Limit: a track in the bank the counter already names is written with no bank press and no reading, as before; Logic re-banking on its own (on selection) still leaves that counter stale. Driven live on Logic 12.3 in all ten languages at c7c0b7a7 (records in 34e35bae): track 15, strip 7 of bank 1, armed and then disarmed with State A after the walk, and track 7 did not change. The absorbed press itself was not reproduced live; its test is a fake surface modelled on the recorded cadence.
@@ -138,6 +140,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   but no longer issues a reference from it: both resources report the project as unobserved until
   the poller caches the path. Limits: the ten-language live run had the path cached; the pathless
   window rests on fixtures.
+- SMFReader no longer rejects a whole MIDI file for one zero-length note (#1043). The Note Off
+  guard required `tick > start.tick`, so a Note On and its Note Off landing on the same tick — a
+  zero-length note, common for drum triggers — threw `malformedEvent` and rejected the file. The
+  guard is now `tick >= start.tick`, which keeps the note (`durationBeats 0`) and changes nothing
+  else.
+- A `Mixer` or strip whose children did not read is reported as unread, not as empty (#982).
+  `stripEnumeration` and `audioPluginInsertSlots` answered a failed `kAXChildrenAttribute` read
+  with `[]`, so an unread Mixer enumerated as a Mixer with no strips and an unread strip as one
+  with no inserts, and both were reported as complete reads. `get_mixer_state`, `get_channel_strip`
+  and `get_inventory` now report the strips unknown, and `insert_plugin`, `insert_verified` and
+  `set_param_verified` refuse for that reason before any press or write. A Mixer found with no
+  `AXIdentifier` (Logic 12.2 and 12.3) that fails its own children read is reported the same way,
+  rather than dropped as not locatable. Limit: no live reading reproduced a failed children read on
+  the running Mixer; it was modelled only through the fixture.
+- Locale coverage now asks Apple's strings byte for byte only where a `LabelSet` match mode is
+  itself case-sensitive; every `LabelSet` match mode folds case, so a member equal to Apple's row
+  only up to case (`mixer` against German's `Mixer`) no longer reads as unmeasured coverage or
+  undocumented variant debt (#981).
+- Three area locators (the Mixer's own name, the Control Bar group label, and the Mixer's
+  Inspector context) now cite the row Logic's own area descriptions carry, in all ten locales,
+  instead of a row that agreed only in some of them — Italian by case, Portuguese by spelling, and
+  German (for the two that used the plain row) by translation (#979).
+- An `insert_plugin` refusal (root menu not found, or the requested leaf not offered) now runs the
+  same measured popup cleanup a verified insert already uses and reports
+  `plugin_popup_menu_state` (`dismissed`, `no_popup_observed`, `window_count_unavailable`, or
+  `could_not_be_dismissed` with counts) in its State C envelope, instead of posting a blind Escape
+  and returning as though the screen were clean (#1016). Limit: not live-verified; the four popup
+  states were driven against a fixture window list and a recorded Escape, never a running Logic.
+  Limit: only windows at exactly the popup-menu window level are counted, so a refusal over a
+  Logic-owned window at another layer reports `no_popup_observed`.
+- Track creation now presses the control Logic actually draws, in German and Spanish (#883). In
+  German, the Session Player menu leaf's row renders its ellipsis-preceding space as U+0020 where
+  Apple's row has U+00A0, so the exact menu match found no leaf and fell back to a key command that
+  created no track; the rendered spelling is now matched alongside Apple's row. In Spanish, the New
+  Track sheet titles its button "Crear" while the matcher cited the noun "creación", so nothing was
+  identified or pressed and the mandatory sheet was left open; "Crear" is now matched too.
+- `transport.goto_position`'s State B/C refusal receipts now report the leaf click and each
+  cleanup half (dialog, menu) from its own observation, rather than folding both cleanups into one
+  Boolean (#999). Four outcomes that are returned only after the leaf click had reported
+  `menu_actuation_attempted: false`, and the State B receipt carried no `menu_state` at all. Limit:
+  `menu_actuation_attempted` still reads `false` on three early-refusal outcomes where whether the
+  top-level menu was clicked first was not checked.
+- The CGEvent keyboard fallback's key map now posts the keystroke Apple's own U.S. key-command
+  preset binds to each function, replacing several hand-typed entries marked `(approximate)`, and
+  `transport.pause` / `transport.play` verify against the playhead's own state rather than assuming
+  the keystroke landed (#1045).
+- The record-arm key-command setup no longer types an English command name into a Key Commands
+  search it cannot read in the running language (#1049). `it-IT`, `pt-BR` and `zh-TW`'s generated
+  command-name table did not carry an entry (their QuickHelp files are byte-identical to English),
+  so the setup fell back to typing "Toggle Track Record Enable" — English — into an Italian,
+  Portuguese or Traditional Chinese search. The setup now refuses for those three languages with
+  `key_command_name_unknown_for_locale` before any key is typed, rather than typing the wrong
+  language; the other seven languages, and the Key Commands window lookup itself, were found to
+  need locale-specific fixes along the way (the window is found by its Localizable title rather
+  than a row it does not draw; `AXDocument`'s "no value" answer is read as "no document" rather
+  than as an unreadable one; the control bar's Record checkbox is matched by the row it actually
+  renders in `fr`, `pt` and `zh-TW`) and were driven live in all ten languages. Limit: `it`, `pt`
+  and `zh-TW` now refuse the automated setup until their Key Commands spelling is proven from
+  Apple's data or measured live.
 
 ---
 
@@ -145,6 +206,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 177 commits and 68 pull requests since v3.16.0. Written caller-facing: guard scripts, CI, test
 infrastructure, live harnesses and roadmap work are excluded because a caller cannot observe them.
+- `logic://tracks` no longer publishes `false` for a Mute, Solo or Record Enable nobody read (#1040). The track-header read ended each of the three in `?? false`, so a control that was not found on the header, whose `AXValue` would not read, or whose value was neither 0 nor 1 (an AX checkbox can report 2 for its mixed state) was published as a confirmed "off". **The JSON changes:** such a field is now left out of the row, the way `is_stack_header` already is for a header that could not be examined, where it used to be `"isMuted": false`. A field that is present was read. `TrackState.isMuted` / `isSoloed` / `isArmed` are `Bool?`, and a stored row without the keys decodes as unread. The consumers that decide something from them take an unread one as unread: `track.arm_only` reports an unread arm in `unverifiedDisarm` and answers State B `readback_unavailable` without writing to that track (with its checkbox unreadable the only write left is a press, which would arm a disarmed track); the project audit lists only toggles read as on in `muted_indices` / `soloed_indices` / `armed_indices`, and names unread ones in a new `track_toggles_unread` warning (category `export`), so `export_readiness` is `review_required` rather than `review_ready` while one is unread. Rows built without a header read start unread as well: the project-file placeholders, and the rows MCU feedback creates, which carry only the Solo that feedback reported and never a Record Enable (MCU feedback does not write the arm, #1020). Those MCU rows are served as `source: "ax_live"` with nothing marking them, and on 2026-09-28 (ko, Logic 12.3) the read taken right after arming a track was such a row set, answering `isArmed: false` for the armed track. **The MCU Mute LED no longer writes `isMuted`.** Logic lights that LED on every strip a solo silences, so `isMuted` said `true` for a track whose Mute checkbox read 0 (es-ES, 2026-09-28), and the audit's `muted_indices` took it from there. `isMuted` is now only the header's checkbox: a row MCU feedback creates leaves it out, and the LED leaves a row the header read as it was. The MCU rung of `track.set_mute` is unaffected, since it confirms by reading the checkbox (#1020).
 Where a change stated a limit, the limit is carried into the entry rather than dropped.
 
 ### Breaking
