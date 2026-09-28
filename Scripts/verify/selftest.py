@@ -54,7 +54,9 @@ RUN CASES (`"run": {...}`)
     and judges it; the case requires its exit code and a substring of its output. `events` counts
     what the lifecycle was asked to do ({"switch": 0}); `start_env` requires every server start to
     carry those variables; `recheck` then rechecks the written file from the command line;
-    `"record": true` passes a records directory, as `run --record` does. `"entries": [{"spec",
+    `"record": true` passes a records directory, as `run --record` does, and `"record_readings":
+    {row: [path, ...]}` requires every record's readings for that row to be exactly those paths.
+    `"entries": [{"spec",
     "spec_ops"?, "head"?, "locales"?}, ...]` in place of `spec` runs them as one
     `runner.run_batch`. The script:
         "answers": {"[<lproj>/]<row>/<as>": answer | [answer, ...]}   a list answers successive
@@ -382,9 +384,8 @@ MUTANTS = [
      "old": 'f"`verify.py run` (P0b-2), which records the evidence it produced when given --record. "',
      "new": 'f"a later command, which records the evidence it produced when given --record. "'},
     {"id": "evidence-not-content-addressed", "file": "verify.py",
-     "old": 'name = E.publish_content_addressed(os.path.join(out, "evidence"), data)',
-     "new": ('name = "evidence.json"; '
-             'E.write_bytes_atomic(os.path.join(out, "evidence", name), data)')},
+     "old": 'name = E.content_name(data)',
+     "new": 'name = "evidence.json"'},
     {"id": "count_eq-one-element-passes", "file": "predicates.py",
      "old": '"count_eq": (True, lambda a, b: _count(a, b) and len(a) == b),',
      "new": '"count_eq": (True, lambda a, b: _count(a, b) and len(a) >= 1),'},
@@ -448,6 +449,16 @@ MUTANTS = [
     {"id": "record-without-attestation", "file": "runner.py",
      "old": "        recorded = verify.record_attested(data, att, record_dir)\n",
      "new": "        recorded = verify.record_attested(data, None, record_dir)\n"},
+    {"id": "record-written-past-the-canon-guard", "file": "verify.py",
+     "old": "        refused = canon_record_guard.refusals(record)\n",
+     "new": "        refused = []\n"},
+    {"id": "record-keeps-every-reading", "file": "verify.py",
+     "old": ("        for path in checked_paths(row):\n"
+             "            value = lookup(path)\n"
+             "            readings[path] ="),
+     "new": ("        for path, entry in entries.items():\n"
+             "            value = engine.observation_value(entry)\n"
+             "            readings[path] =")},
     {"id": "armed-false-when-unread", "file": "live/spec_probes.py",
      "old": '        raise Unreadable(f"track_armed: {why}")\n',
      "new": '        return {"track": index, "armed": False, "name": None}\n'},
@@ -873,6 +884,16 @@ def _run_fake(case: dict, where: dict):
         short = [env for env in envs if any(env.get(k) != v for k, v in run["start_env"].items())]
         if not envs or short:
             return f"the servers were started with {envs}, each wanted to carry {run['start_env']}", text
+    for row_id, wanted in run.get("record_readings", {}).items():
+        kept = []
+        for name in sorted(os.listdir(records)) if records and os.path.isdir(records) else []:
+            if not name.endswith(".json"):
+                continue
+            with open(os.path.join(records, name), encoding="utf-8") as handle:
+                kept += [sorted(o["readings"]) for o in json.load(handle)["observations"]
+                         if o["row"] == row_id]
+        if not kept or any(keys != sorted(wanted) for keys in kept):
+            return f"the records keep readings {kept} for {row_id}, each wanted {sorted(wanted)}", text
     if "recheck" in case and code == case["exit"]:
         again, said = _verify(["recheck", out])
         if again != case["recheck"]["exit"] or case["recheck"]["says"] not in said:
@@ -951,7 +972,40 @@ def check_records_cite_their_bytes(case: dict, where: dict):
     code, text = _guard("check-observation-records.py", {"LPM_OBSERVATIONS_DIR": out})
     if code != 0:
         return f"check-observation-records on the two runs' records: exit {code}; {text.strip().splitlines()[-2:]}"
+    import canon_record_guard
+    for name in records:
+        with open(os.path.join(out, name), encoding="utf-8") as handle:
+            refused = canon_record_guard.refusals(json.load(handle))
+        if refused:
+            return f"check-canon-citations refuses {name}: {refused[0]}"
     return None
+
+
+#: The checked-in #1020 pilot evidence (P0a). Its arm-unarmed-sets reply names the rung it fell back
+#: from, a string Logic ships, in a field no check of the row reads.
+PILOT_EVIDENCE = "docs/acceptance/evidence/1020-ko-4b036d93.json"
+
+
+def check_pilot_record_passes_the_canon_guard(case: dict, where: dict):
+    """#1052 VFY-03: a record built from the pilot evidence keeps only the readings its checks read,
+    so the reply's fallback rung is not in it and check-canon-citations accepts it. The pilot stores
+    no host block or date (convert_1020.py says why); the fixtures' ko host and date stand in, since
+    neither is a reading. The control: the stored reply does carry that field."""
+    import canon_record_guard
+    import engine
+    import fixtures_build
+    import verify
+    with open(os.path.join(ROOT, PILOT_EVIDENCE), encoding="utf-8") as handle:
+        doc = json.load(handle)
+    reply = doc["runs"]["ko"]["rows"]["arm-unarmed-sets"]["observations"]["reply"]
+    if "fallback_from_channel" not in json.dumps(reply, ensure_ascii=False):
+        return "control: the pilot's arm-unarmed-sets reply no longer names a fallback rung"
+    doc["runs"]["ko"]["host"], doc["runs"]["ko"]["date"] = fixtures_build.host("ko"), fixtures_build.DATE
+    record = verify.build_record(doc, "ko", engine.judge(doc)["verdicts"]["ko"], "evidence/pilot.json")
+    if "fallback_from_channel" in json.dumps(record["observations"], ensure_ascii=False):
+        return "the pilot's record keeps the reply's fallback rung, which no check reads"
+    refused = canon_record_guard.refusals(record)
+    return f"check-canon-citations refuses the pilot's record: {refused[0]}" if refused else None
 
 
 #: Where an `engine.Attestation` may be named, as (repo-relative file, top-level definition): the
@@ -1457,6 +1511,7 @@ def check_live_fixtures(case: dict, where: dict):
 
 
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
+          "pilot_record_passes_the_canon_guard": check_pilot_record_passes_the_canon_guard,
           "run_cli_has_no_life_seam": check_run_cli_has_no_life_seam,
           "live_records_go_to_sidecars": check_live_records_go_to_sidecars,
           "nan_not_written": check_nan_not_written,

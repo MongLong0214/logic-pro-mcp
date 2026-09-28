@@ -398,6 +398,15 @@ record. Every record cites that file, and its reverify command is `verify.py rec
 later run can never overwrite what an earlier record points at. That recheck exits 3 at best: it
 reads a file. It skips a locale that is not measured or that stored no host block or date.
 
+A record's `readings` for a row are the values its checks read and nothing else: every `path` and
+`ref.obs` of the row's `expect` and `restore_expect`, each under its path (`post.armed`), or
+`{"unreadable": why}`. Every other field of a step stays in the evidence the record cites. Before
+anything is published, each record is put to the repository's canon guard
+(`Scripts/canon_record_guard.py` runs `check_record` of `Scripts/check-canon-citations.py`, rule 13
+among its rules); a record it would refuse is not written, the locale is reported as skipped with
+the guard's message, and the recording exits 3. A `matches_canon` citation is bound to the record
+(`{"kind": "record"}`): the value it cites is the reading kept under that check's path.
+
 ## The pilot
 
 `docs/acceptance/1020.json` holds the #1020 rows. `docs/acceptance/evidence/1020-ko-4b036d93.json`

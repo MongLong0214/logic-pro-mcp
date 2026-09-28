@@ -67,6 +67,7 @@ SCRIPTS = os.path.dirname(HERE)
 sys.path.insert(0, SCRIPTS)
 sys.path.insert(0, HERE)
 
+import canon_record_guard  # noqa: E402
 import engine  # noqa: E402
 import evidence_doc as E  # noqa: E402
 import predicates as P  # noqa: E402
@@ -201,6 +202,20 @@ def _axis_locale(code: str):
     return observation_host.axis_locale(code.replace("_", "-"), observation_host.axis_locales())
 
 
+def checked_paths(row: dict) -> list:
+    """The paths a row's checks read, each once, in the order the checks name them: every `path`
+    and `ref.obs` of `expect` and `restore_expect`. A record keeps these readings and no others; the
+    rest of each step's text stays in the evidence it cites. A field no check reads (a track's
+    name, the channel a reply fell back from) is not what the record is about, and a string Logic
+    ships among them made canon rule 13 refuse all ten step-11 records."""
+    out = []
+    for e in row["expect"] + row["restore_expect"]:
+        for path in [e["path"]] + ([e["ref"]["obs"]] if "obs" in (e.get("ref") or {}) else []):
+            if path not in out:
+                out.append(path)
+    return out
+
+
 def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> dict:
     """One observation record for one locale's run. Every value is read from the evidence."""
     spec, run, binary = doc["spec"], doc["runs"][locale], doc["binary"]
@@ -217,10 +232,11 @@ def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> d
     observations, citations = [], []
     for row in rows:
         entries = run["rows"].get(row["id"], {}).get("observations", {})
+        lookup = engine._lookup({k: engine.observation_value(v) for k, v in entries.items()})
         readings = {}
-        for name, entry in entries.items():
-            value = engine.observation_value(entry)
-            readings[name] = value.value if isinstance(value, P.Found) else {"unreadable": value.reason}
+        for path in checked_paths(row):
+            value = lookup(path)
+            readings[path] = value.value if isinstance(value, P.Found) else {"unreadable": value.reason}
         observations.append({"row": row["id"], "verdict": verdicts[row["id"]]["verdict"],
                              "reasons": verdicts[row["id"]]["reasons"], "readings": readings})
         for i, e in enumerate(row["expect"]):
@@ -231,7 +247,8 @@ def build_record(doc: dict, locale: str, verdicts: dict, evidence_rel: str) -> d
                 code = locale if ref["locale"] == "$locale" else ref["locale"]
                 cited = engine.logic_canon.CanonRef(parsed.source, parsed.unit, code, parsed.key, parsed.field)
                 citations.append({"ref": str(cited), "value": found.value,
-                                  "used_for": f"{row['id']}: expect[{i}] {e['path']} matches_canon"})
+                                  "used_for": f"{row['id']}: expect[{i}] {e['path']} matches_canon",
+                                  "binding": {"kind": "record"}})
     listing = "; ".join(f"{o}: {', '.join(ids) if ids else 'none'}" for o, ids in by_verdict.items())
     record = {
         "id": f"{run['date']}-{host.get('locale')}-acceptance-{spec['issue']}-{evidence_sha[:12]}",
@@ -320,13 +337,23 @@ def record_attested(data: bytes, attestation, out: str) -> int:
             skipped.append(f"{locale}: the run stored no host block or date")
         else:
             ready.append(locale)
-    written = []
-    if ready:
-        name = E.publish_content_addressed(os.path.join(out, "evidence"), data)
-        evidence_rel = f"evidence/{name}"
+    # Every record is built and put to the canon guard before anything is published, citing the
+    # name the evidence bytes are then published under.
+    written, accepted = [], []
+    name = E.content_name(data)
+    evidence_rel = f"evidence/{name}"
+    for locale in ready:
+        record = build_record(doc, locale, result["verdicts"][locale], evidence_rel)
+        refused = canon_record_guard.refusals(record)
+        if refused:
+            skipped.append(f"{locale}: the canon guard would refuse its record, so it is not "
+                           f"written: {refused[0]}")
+        else:
+            accepted.append(record)
+    if accepted:
+        E.publish(os.path.join(out, "evidence"), name, data)
         print(f"wrote {os.path.join(out, evidence_rel)}")
-        for locale in ready:
-            record = build_record(doc, locale, result["verdicts"][locale], evidence_rel)
+        for record in accepted:
             path = os.path.join(out, f"{record['id']}.json")
             E.write_atomic(path, record)
             written.append(path)
