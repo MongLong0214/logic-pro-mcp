@@ -104,6 +104,7 @@ struct OperationCatalogTests {
         .transportSetCycleRange: ["end", "start"],
         .mixerSetVolume: ["value", "volume"],
         .mixerSetPan: ["pan", "value"],
+        .mixerSetOutputVerified: ["destination", "expected_current"],
         .mixerSetMasterVolume: ["value", "volume"],
         .mixerBank: ["count", "direction"],
         .mixerSetPluginParam: ["insert", "param", "value"],
@@ -250,6 +251,8 @@ struct OperationCatalogTests {
             params["value"] = .double(0.3)
         case .mixerSetPan:
             params["value"] = .double(0.25)
+        case .mixerSetOutputVerified:
+            params["destination"] = .object(["kind": .string("bus"), "number": .int(1)])
         case .mixerSetPluginParam:
             params["insert"] = .int(0)
             params["param"] = .int(0)
@@ -411,7 +414,7 @@ struct OperationCatalogTests {
                     ("get_trace", "system.get_trace", ["trace_id"], .none),
                     ("clear_traces", "system.clear_traces", ["confirmed"], .l2),
                 ]
-                #expect(OperationRegistry.specs.count == 116)
+                #expect(OperationRegistry.specs.count == 117)
                 for (command, operationID, allowedParams, confirmation) in expectedSpecs {
                     let spec = OperationRegistry.spec(tool: "logic_system", command: command)
                     #expect(spec?.id.rawValue == operationID, "\(command) must have one public spec")
@@ -559,12 +562,12 @@ struct OperationCatalogTests {
             !(Self.selectorsRequiringLiveQualificationByOperation[$0.0.id]?.contains($0.1) ?? false)
         }
 
-        #expect(advertised.filter { $0.1 == "index" }.count == 17)
-        #expect(advertised.filter { $0.1 == "track" }.count == 17)
-        #expect(advertised.count == 34)
-        #expect(probes.filter { $0.1 == "index" }.count == 16)
-        #expect(probes.filter { $0.1 == "track" }.count == 13)
-        #expect(probes.count == 29)
+        #expect(advertised.filter { $0.1 == "index" }.count == 18)
+        #expect(advertised.filter { $0.1 == "track" }.count == 18)
+        #expect(advertised.count == 36)
+        #expect(probes.filter { $0.1 == "index" }.count == 17)
+        #expect(probes.filter { $0.1 == "track" }.count == 14)
+        #expect(probes.count == 31)
         #expect(Self.selectorsRequiringLiveQualificationByOperation.values.reduce(0) { $0 + $1.count } == 5)
         #expect(
             Set(Self.selectorLiveQualificationReasonByOperation.keys)
@@ -738,7 +741,7 @@ struct OperationCatalogTests {
 
     @Test("strict: every registered operation rejects unknown keys and accepts its pinned keys")
     func strictRegistryWideInvariant() throws {
-        #expect(OperationRegistry.specs.count == 116)
+        #expect(OperationRegistry.specs.count == 117)
         #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
 
         for spec in OperationRegistry.specs {
@@ -818,10 +821,10 @@ struct OperationCatalogTests {
         let targetBearing = Set(OperationRegistry.specs.filter {
             $0.target == .acceptsStableTarget
         }.map(\.id))
-        #expect(actualIndex.count == 17)
-        #expect(actualTrack.count == 17)
+        #expect(actualIndex.count == 18)
+        #expect(actualTrack.count == 18)
         #expect(actualTargetRef == targetBearing)
-        #expect(actualTargetRef.count == 15)
+        #expect(actualTargetRef.count == 16)
         for spec in OperationRegistry.specs {
             #expect(
                 spec.allowedParams.isDisjoint(
@@ -905,7 +908,7 @@ struct OperationCatalogTests {
         #expect(sharedToolText(trackRejected).contains("port parameter not supported for record_sequence"))
     }
 
-    @Test("catalog: exact URI reads the generated 116-operation catalog")
+    @Test("catalog: exact URI reads the generated 117-operation catalog")
     func catalogReadsRegistryProjection() async throws {
         let result = try await ResourceHandlers.read(
             uri: Self.uri,
@@ -918,7 +921,7 @@ struct OperationCatalogTests {
         #expect(body["generated_at"] as? String != nil)
         #expect(body["operation_count"] as? Int == OperationRegistry.specs.count)
         let operations = try #require(body["operations"] as? [[String: Any]])
-        #expect(operations.count == 116)
+        #expect(operations.count == 117)
         #expect(!text.contains("\n"))
 
         let ids = operations.compactMap { $0["id"] as? String }

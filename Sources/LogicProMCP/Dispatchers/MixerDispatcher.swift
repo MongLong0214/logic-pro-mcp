@@ -152,24 +152,6 @@ struct MixerDispatcher: OperationTraceDispatching {
             return notExposedCommandResult(operation: "mixer.set_output")
 
         case "set_output_verified":
-            guard let rawDestination = params["destination"] else {
-                return toolInvalidParamsResult(
-                    "set_output_verified requires 'destination': {kind:\"bus\", number:N}, "
-                        + "{kind:\"physical\", ports:[a,b]}, {kind:\"stereo_output\"} or {kind:\"no_output\"}"
-                )
-            }
-            let parsedDestination = Self.outputAssignmentParam(rawDestination, field: "destination")
-            guard let destination = parsedDestination.assignment else {
-                return toolInvalidParamsResult(parsedDestination.problem ?? "invalid 'destination'")
-            }
-            var routedParams = ["destination": destination.token]
-            if let rawExpected = params["expected_current"] {
-                let parsedExpected = Self.outputAssignmentParam(rawExpected, field: "expected_current")
-                guard let expected = parsedExpected.assignment else {
-                    return toolInvalidParamsResult(parsedExpected.problem ?? "invalid 'expected_current'")
-                }
-                routedParams["expected_current"] = expected.token
-            }
             let index: Int
             let resolvedReference: TargetReference?
             let resolvedFingerprint: String?
@@ -193,6 +175,24 @@ struct MixerDispatcher: OperationTraceDispatching {
                 resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
+            }
+            guard let rawDestination = params["destination"] else {
+                return toolInvalidParamsResult(
+                    "set_output_verified requires 'destination': {kind:\"bus\", number:N}, "
+                        + "{kind:\"physical\", ports:[a,b]}, {kind:\"stereo_output\"} or {kind:\"no_output\"}"
+                )
+            }
+            let parsedDestination = Self.outputAssignmentParam(rawDestination, field: "destination")
+            guard let destination = parsedDestination.assignment else {
+                return toolInvalidParamsResult(parsedDestination.problem ?? "invalid 'destination'")
+            }
+            var routedParams = ["destination": destination.token]
+            if let rawExpected = params["expected_current"] {
+                let parsedExpected = Self.outputAssignmentParam(rawExpected, field: "expected_current")
+                guard let expected = parsedExpected.assignment else {
+                    return toolInvalidParamsResult(parsedExpected.problem ?? "invalid 'expected_current'")
+                }
+                routedParams["expected_current"] = expected.token
             }
             routedParams["index"] = String(index)
             let traceID = await startTraceIfEnabled(command: command)
