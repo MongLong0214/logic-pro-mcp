@@ -27,13 +27,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `write_attempted: true`, `safe_to_retry: false` and `fallback_unsafe: true`, and reports a fresh
   read as observed. `edit.toggle_step_input` carries the same marker. Driven in the ten
   languages: `toggle_cycle` pressed the Cycle checkbox once each way.
-- **In Portuguese, `transport.play` and `transport.stop` find the control bar's Play checkbox
-  (#1060).** A Portuguese Logic describes it `Reproduz`, which the Play label set did not carry,
-  so `play` fell through to the MCU rung, answered State B and Logic did not play; `stop` and the
-  playing read use the same set. The set now also derives from the control bar's own row,
+- **In Portuguese, `transport.play` finds the control bar's Play checkbox and a playing transport
+  reads as playing (#1060).** A Portuguese Logic describes it `Reproduz`, which the Play label set
+  did not carry, so `play` fell through to the MCU rung, answered State B and Logic did not play.
+  The same set is the `isPlaying` read that `transport.stop` checks before sending its CGEvent
+  key, so a playing Portuguese transport read as stopped and `stop` would answer State A with
+  nothing sent. The set now also derives from the control bar's own row,
   `StrTransportBtns|||Play`, and the derivation check holds it to that row in every locale.
   Driven in the ten languages: `play` pressed the checkbox through AX and answered State A in
-  each, `Reproduz` included, and a playing transport read as playing.
+  each, `Reproduz` included; `stop` read the transport as playing, sent its key, and read the
+  Play checkbox off.
 
 ### Removed
 - **`logic://transport` no longer declares `isPaused` (#1041).** Nothing that reads Logic ever

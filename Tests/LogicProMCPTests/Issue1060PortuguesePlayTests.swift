@@ -76,6 +76,33 @@ private struct Issue1060ControlBar {
     }
 }
 
+/// The CGEvent rung, which `transport.stop` tries first (RoutingTable, #1029). A delivered Stop key
+/// turns the control bar's Play off, the way Logic does; every operation it is handed is recorded.
+private actor Issue1060StopKey: Channel {
+    nonisolated let id = ChannelID.cgEvent
+    private let builder: FakeAXRuntimeBuilder
+    private nonisolated(unsafe) let play: AXUIElement
+    private(set) var executed: [String] = []
+
+    init(bar: Issue1060ControlBar) {
+        builder = bar.builder
+        play = bar.play
+    }
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        executed.append(operation)
+        if operation == "transport.stop" {
+            builder.setAttribute(play, kAXValueAttribute as String, NSNumber(value: false))
+        }
+        return .success("stop key: \(operation)")
+    }
+
+    func healthCheck() async -> ChannelHealth { .healthy(detail: "stop key") }
+}
+
 private func issue1060Object(_ raw: String) -> [String: Any]? {
     guard let data = raw.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -122,9 +149,38 @@ struct Issue1060PortuguesePlayTests {
         #expect(try #require(envelope["state"] as? String) == "A")
     }
 
-    /// Mutation that turns this red: the same removal. `stop` sets the same checkbox off, so in
-    /// Portuguese it fell to a later rung too.
-    @Test("stop in Portuguese sets Reproduz off through AX")
+    /// Mutation that turns this red: the same removal. `logic_transport stop` sends its CGEvent key
+    /// only after reading the transport as playing, and that read is this set. Without `Reproduz` a
+    /// playing Portuguese transport read as stopped, so `stop` answered State A with nothing sent.
+    @Test("stop in Portuguese reads the transport as playing and sends its key, and AX presses nothing")
+    func stopThroughTheToolSendsTheKey() async throws {
+        let bar = Issue1060ControlBar(playing: true)
+        let router = ChannelRouter()
+        let stopKey = Issue1060StopKey(bar: bar)
+        await router.register(AccessibilityChannel(runtime: .axBacked(
+            isTrusted: { true },
+            isLogicProRunning: { true },
+            logicRuntime: bar.logicRuntime(),
+            controlBarMouseRuntime: issue1060NoMouseRuntime
+        )))
+        await router.register(stopKey)
+
+        let result = await TransportDispatcher.handle(
+            command: "stop", params: [:], router: router, cache: StateCache(), sleep: { _ in }
+        )
+
+        #expect(await stopKey.executed == ["transport.stop"])
+        #expect(bar.actions.performed.isEmpty, "the CGEvent rung answered, so AX pressed nothing")
+        #expect(!(try #require(result.isError as Bool?)))
+        let envelope = try #require(issue1060Object(sharedToolText(result)))
+        #expect(try #require(envelope["state"] as? String) == "A")
+        #expect(try #require(envelope["write_attempted"] as? Bool))
+        #expect(try #require(envelope["verify_source"] as? String) == "ax_transport_state")
+    }
+
+    /// Mutation that turns this red: the same removal. This is the rung after CGEvent, which runs
+    /// when CGEvent refuses: it sets the same checkbox off, and in Portuguese it found none.
+    @Test("stop's Accessibility rung in Portuguese sets Reproduz off")
     func stopReleasesReproduz() async throws {
         let bar = Issue1060ControlBar(playing: true)
         let channel = AccessibilityChannel(runtime: .axBacked(
