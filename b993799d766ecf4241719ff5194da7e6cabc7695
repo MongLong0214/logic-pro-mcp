@@ -1,0 +1,81 @@
+Limit: nan-in-evidence-refused already exited 2 at f2c04444, because raw_bytes is shape-checked as an integer; its red there is the refusal reason, not the exit. The reading-level red is nan-in-raw-is-unreadable, where the NaN was read as a float.
+Provenance: inherited 5448579ea8a163ca642613f65f591d9aaf6d4d80
+
+Limit: a null inside a constant operand is UNREADABLE too (not_in ["idle", null], ne {"armed": null}), although it is the author's constant and not an absence. The rule reads both sides alike, as f2c04444 already did for a top-level ne null.
+Limit: the W01 cases pin the reading they test (after.armed eq [null], after.mode in [{"state": "idle"}]), so the absence rule is the only check between the row and PASS. They isolate the rule and are not modelled on a Logic reading.
+Provenance: inherited 1200c8436719da2d5996a474ebb285c295f23723
+
+Limit: a restore check still needs no counterexample, so a restoring call that changes nothing passes these rules, as recorded on f2c04444.
+Provenance: inherited 1078610839de1a17f1e5346f83c17afce785bd9f
+
+Limit: a pin is any check against a constant, `ne "idle"` and `count_ge 1` included, so a weak pin still admits a `changed` check. The rule makes the row say what the reading became; it does not judge how precisely.
+Ruled-out: forbidding a second pre-operation reading as the witness of a `changed` check | the plan's D9 weighed it as narrower than a pin and easier to evade, and it would still not say what the reading became
+Provenance: inherited d2806d15e59ea658b07d66be95a9fa9110c1c96a
+
+Limit: verify.py run and batch still exit 2 in this commit; the live lifecycle is the next one.
+Limit: the seam rule matches names, so a caller that reaches the runner's private functions through getattr with a computed string is not named; it guards against accident, not a forger with push rights.
+Provenance: inherited b4497fdcba97ec6ff406797e65771d06bb45ad08
+
+Limit: LiveLifecycle is not driven live in this commit, and verify.py run still exits 2; the fixture gate, reset and probes are its next pieces.
+Limit: sidecars are written under ~/lpm-evidence/verify-runs by their own sha256, not grouped by the evidence's sha256 as D5 words it, because the evidence digest does not exist yet when a transcript is written.
+Warn: a tools/call result with isError true is stored as the text it carries; only the absent, error, timeout, exit and text-versus-structuredContent cases are unreadable, as plan-p0b2 section 6 lists them.
+Provenance: inherited 08627e01dacbd3e4ce94b533640b5144382cc9a4
+
+Limit: the live gate, reset and fixture refusal are not driven live in this commit; their first live reading is the plan's step 9a.
+Limit: whether a reopen brings the MCU bank home is unmeasured; if it does not, the gate after a reset keeps failing and the row is unreadable, never judged off home.
+Limit: the baseline upper row is read once per locale and never retaken, so a baseline read while the bank is off home would let later gates pass off home; nothing checks the baseline row itself.
+Provenance: inherited ef8db0330f75be7c2a4e24676b620bd701197d95
+
+Limit: the live smoke (30 reads 100 ms apart of an armed track's Record Enable, and one armed_set cross-check against logic://tracks) runs on this commit after it lands; its record is kept under ~/lpm-evidence/1028 and summarized in the pull request body, not in this commit.
+Limit: mcu_upper_row's offline cases use a constructed resource text; its first live reading is the plan's step 9a.
+Provenance: inherited 669221bbac9ac4373592a38e252c89b2f8639166
+
+Limit: the live runs 9a (the main head in ko, then ko and de) and 9b (d81c7e5b in ko, which must exit 1) run on this commit after it lands; their evidence is kept under ~/lpm-evidence/1028 and summarized in the pull request body, not in this commit.
+Provenance: inherited 51a1ce0e8d71564a97f5344e7d3b8962a03dd66a
+
+Limit: the live batch (the main head and d81c7e5b, each in ko and de; it measures R1, MCU re-binding after a server restart without relaunching Logic) runs on this commit after it lands; its evidence is kept under ~/lpm-evidence/1028 and summarized in the pull request body, not in this commit.
+Provenance: inherited f0b1bb991249eb3658247daee80e6f5fd2b7a634
+
+Limit: the run's ten generated records and its evidence (sha256 9655ccec0c87e35a37405e845f7a13faa3d237848756b344a137920c8db915ef) are not committed. check-canon-citations rule 13 refuses every record: each declares the canon axis does not apply, as record_attested does for rows that cite no canon row, and each carries two readings that equal strings Logic ships ("Absolute Zero", the fixture's first track name, in pre.name; "Accessibility", the product's channel name, in reply.fallback_from_channel). `logic_canon.py confirm` found both shipped (the first in strings for de, en, es, fr, it, ja, ko and pt; the second in nibstrings/en); that pin is saved beside the records, not committed. Either the generator keeps only the readings a row's predicates read, or it cites, or rule 13 changes; that is a decision, not a fix made here. A record is written only in the process that ran the rows, so a generator change needs a new live run. The records and evidence are kept byte for byte under ~/lpm-evidence/1028/p0b2b/11-records.
+Limit: arming an armed track (`arm-armed-writes-nothing`) is UNREADABLE in all ten locales. Its expect[2] is `reply.write_attempted eq false`, and main's verified no-op reply ({"state": "A", "action": "no-op", ...}) has no `write_attempted`. The row was written in P0a from a harness that never armed an armed track. The predicate is not relaxed here; whether the spec or the reply changes is for review.
+Limit: `clamped-last-bank-refused-unchanged` FAILs in es and fr on expect[4], `post_row.upper_row unchanged pre_row.upper_row`: pre_row read Logic's passing record-enable message on the MCU upper row ("Activar grabacion", "Enregistrement active") and post_row was read after it cleared. The product's answer was right in both (State C; armed set unchanged at []). This is the plan's R3; its remedy is spec wait steps, a contract change under independent review.
+Limit: in de the same row FAILs because its control, arming track 15, was refused (State C, channels_exhausted, "No keyboard shortcut mapped for: track.set_arm", no MCU-rung trace in the reply), so the counterexample could not show that the row discriminates. The control was refused in 2 of the 4 de runs at a main head (both step-11 runs, at 68419f7f and a6108ee8) and armed track 15 through the MCU rung in the other two (9a at 867cce8a, the batch at 68419f7f); the fixture gate and reset before the row were the same in 9a and both refusals. Not root-caused: the server keeps no log of the call.
+Limit: two earlier step-11 attempts are kept only under ~/lpm-evidence/1028/p0b2b: one at 68419f7f whose en, es, fr, it, ja, pt and zh_CN rows were all UNREADABLE because other workers' test bundles ran during them, and one stopped before it drove, when main moved to a6108ee8.
+Provenance: inherited ea0b3a07a6ca1a60365ad7c5d7dd50e609528a5d
+
+Limit: this waits only at the gate. A probe inside a row (the clamped row's pre_row) can still read the message, which is the es and fr FAIL of the first step-11 run; that needs spec wait steps, a contract change not made here.
+Provenance: inherited c512ec552dd8dd620cbe33c1826a7c87a4aefb4b
+
+Limit: setups.abbreviates is a copy of the rule in Scripts/livekit/live_862_bank_answers_from_the_redrawn_upper_row.py, checked against it by hand once. Nothing pins the two together, so a change to one does not reach the other.
+Provenance: inherited 69de0e7d2ce12363b5229500ce986fde0e93e575
+
+Limit: evidence written before this change carries no rest, so a recheck of it also says "restore not confirmed". The committed pilot docs/acceptance/evidence/1020-ko-4b036d93.json was already exit 3 (unbound binary, unattested) and stays exit 3.
+Provenance: inherited 30e6050146551bf5fe47b8b491cb046c662abd44
+
+Limit: `verify.py recheck` of this evidence exits 3 on one line, that evidence read from a file cannot attest; its 50 row verdicts are PASS. Only the `run` process attests.
+Limit: the run before this one (kept as ~/lpm-evidence/1028/p0b2b/11r1.*) refused all ten locales, because a document another, finished worker had left open (lpm-routing-aux.logicx, with unsaved edits) was still open and the verifier does not answer another document's save prompt. Those edits were discarded under the lock before this run (discard-other-doc.json there); the project on disk is unchanged.
+Limit: after the Korean restore the fixture shows a Marker List window beside the Tracks window; both titles are Korean. Where that window came from was not measured.
+Provenance: inherited f6f016c7aea859789b790ea1cb3e4454305ea3cc
+
+Limit: the probes are matched against the passing message the locale's baseline carries; a message the baseline did not carry is not waited out
+Provenance: inherited 7d457bff86b826a471d6956aaf689ac8df660228
+
+Limit: the verifier relies on the server's report of which branch it took; a reply that claims both no-op and a write attempt is not distinguished. `reply.write_attempted` absent-or-false is not checked: a missing key is UNREADABLE under the predicate library, and no operator was added.
+Limit: a write reply without an `action` key (the MCU rung's) makes this row UNREADABLE, not FAIL; the row is INCOMPLETE and the run exits 3.
+Provenance: inherited 4b4c72e2a20cee95b9c73d1075bf66ef129025ec
+
+Limit: 0 of 10 records of the clean 11r2 run are published and 10 are declined, by canon rule 13 on `Absolute Zero` and `Accessibility`. Rule 13 is unchanged here; its server-vocabulary false positive is drafted as an issue outside the repository, not registered.
+Limit: every run over the current #1020 fixture will be declined the same way while its first track is named `Absolute Zero`, so the verifier publishes no #1020 record until rule 13 or the fixture changes.
+Provenance: inherited aa6da85510b1bca994239d0091610a13eb48da20
+
+Limit: 0 of the run's 10 records are published and 10 are declined, by canon rule 13 on `Absolute Zero` (all ten carry it, and `Accessibility` in reply.fallback_from_channel); the recording exits 3 and writes no record, and the row verdicts are unchanged.
+Limit: the Marker List window was closed before the run and reopened with the fixture at the restore; it was closed again after, under the lock.
+Provenance: inherited eda2208edac6efd656cd24fab9aac609eddf83b5
+
+Limit: the runner's time for this guard is not measured yet; the CI run of this commit is that measurement, and 600 s over roughly 2.4 times fewer case runs is an estimate, not a reading
+Ruled-out: raising LPM_GUARD_TIMEOUT for this guard | it spends the test job's budget and hides a cost that grows with every mutant and case added
+Ruled-out: moving the mutant run into its own CI job | a workflow change, and run-repo-guards.py would stop running the mutants locally
+Provenance: inherited 1e1ec9adc3a3cbe69a777fb62958fb289d75214f
+
+Limit: the full CI=1 run-repo-guards.py was not rerun for this one-row change while the v3.18.0 live qualification held the machine; CI runs it
+Provenance: inherited e81b44716b0a204023de4cb465cd422b3cfa0f51
