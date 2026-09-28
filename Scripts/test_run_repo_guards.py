@@ -65,6 +65,25 @@ class EvidenceOfWork(unittest.TestCase):
         self.assertIsNone(runner.evidence_of_work("we Ran 0 tests worth of setup by hand\n")[1])
 
 
+class ThePythonFloor(unittest.TestCase):
+    """#1056: the runner must refuse below 3.10 BEFORE discovering anything, in one place."""
+
+    def test_below_the_floor_is_refused_and_the_message_names_everything(self):
+        message = runner.python_floor_refusal((3, 9, 6), "/usr/bin/python3")
+        self.assertIsNotNone(message)
+        self.assertIn("3.10", message)
+        self.assertIn("/usr/bin/python3", message)
+        self.assertIn("sys.stdlib_module_names", message)
+        self.assertIn("3.9.6", message, "the running interpreter's own version, not just the floor")
+
+    def test_at_the_floor_is_accepted(self):
+        self.assertIsNone(runner.python_floor_refusal((3, 10, 0), "/usr/bin/python3"))
+
+    def test_the_running_interpreter_is_accepted(self):
+        """This suite itself runs on a 3.10+ interpreter -- see the end-to-end case below for 3.9."""
+        self.assertIsNone(runner.python_floor_refusal(sys.version_info, sys.executable))
+
+
 class TheSkipBudget(unittest.TestCase):
     def test_the_declared_guard_has_a_budget_and_a_reason(self):
         budget, why = runner.allowed_skips("Scripts/test_logic_canon.py")
@@ -237,6 +256,39 @@ class TheLoop(unittest.TestCase):
         proc = _main_over([])
         self.assertEqual(proc.returncode, 1)
         self.assertIn("that is not a pass", proc.stdout)
+
+
+class TheEndToEndPythonFloor(unittest.TestCase):
+    """Runs the REAL file under the machine's real Apple `/usr/bin/python3` -- nothing patched.
+
+    GitHub's macOS runners usually ship Apple's /usr/bin/python3 at 3.9, which is exactly the
+    interpreter #1056 is about, so this case may well run under CI too rather than skip there --
+    it does not assume either way. It skips, with a reason, only when THIS machine's
+    `/usr/bin/python3` is missing or already at the floor; both are real states of the machine,
+    not a failure of the check.
+    """
+
+    def test_apple_python3_is_refused_before_any_guard_runs(self):
+        apple_python3 = "/usr/bin/python3"
+        if not os.path.exists(apple_python3):
+            self.skipTest(f"{apple_python3} does not exist on this machine")
+        probe = subprocess.run(
+            [apple_python3, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"],
+            capture_output=True, text=True, timeout=10)
+        if probe.returncode != 0:
+            self.skipTest(f"{apple_python3} could not report its own version: {probe.stderr!r}")
+        major, minor = (int(part) for part in probe.stdout.strip().split("."))
+        if (major, minor) >= runner.PYTHON_FLOOR:
+            self.skipTest(f"{apple_python3} reports {major}.{minor}, already at or above "
+                          f"the {'.'.join(str(p) for p in runner.PYTHON_FLOOR)} floor")
+        proc = subprocess.run(
+            [apple_python3, os.path.join("Scripts", "run-repo-guards.py")],
+            cwd=REPO, capture_output=True, text=True, timeout=60)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("3.10", proc.stdout)
+        self.assertIn("sys.stdlib_module_names", proc.stdout)
+        self.assertNotIn("→   ", proc.stdout, "a guard was announced -- discovery must not run")
+        self.assertNotIn("discovered", proc.stdout, "discovery ran before the floor was checked")
 
 
 if __name__ == "__main__":

@@ -70,6 +70,42 @@ import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+#: The oldest interpreter this runner may start ANYTHING under. `Scripts/check-third-party-
+#: imports-are-installed.py` and its test (#1033) read `sys.stdlib_module_names`, added in 3.10;
+#: under Apple's system `/usr/bin/python3` (3.9) they die with an AttributeError that names an
+#: attribute, not the interpreter the release needed. #1056 is that failure, reached through
+#: `Scripts/release-stable.sh`'s plain `python3`. Checking this before `discovered()` even runs
+#: keeps the requirement in the one file that starts every guard, instead of asking each guard
+#: to re-derive it.
+#:
+#: NOTE: this file must keep parsing and running on Python 3.9 up to the point where this check
+#: fires -- no `X | Y` annotations, no `match`, no syntax newer than 3.9 anywhere in this file, or 3.9
+#: crashes before it can refuse.
+PYTHON_FLOOR = (3, 10)
+
+
+def python_floor_refusal(version_info, executable):
+    """None if `version_info` meets PYTHON_FLOOR; otherwise the message to print before exiting.
+
+    Takes the version tuple and the executable path as arguments, rather than reading `sys`
+    itself, so a case can drive it with any pair without spawning a second interpreter. `main`
+    is the one caller that passes `sys.version_info` and `sys.executable` for real.
+    """
+    if tuple(version_info[:2]) >= PYTHON_FLOOR:
+        return None
+    floor = ".".join(str(part) for part in PYTHON_FLOOR)
+    running = ".".join(str(part) for part in version_info[:3])
+    return (
+        f"run-repo-guards.py needs Python {floor}+; this interpreter is {running} "
+        f"({executable}).\n"
+        f"Scripts/check-third-party-imports-are-installed.py (and its test) reads "
+        f"`sys.stdlib_module_names`, which does not exist before 3.10 -- below the floor it "
+        f"raises AttributeError naming that attribute instead of the interpreter it needs.\n"
+        f"Put a Python {floor}+ `python3` first on PATH, or invoke this runner with one "
+        f"directly, e.g. `/opt/homebrew/bin/python3 Scripts/run-repo-guards.py`."
+    )
+
+
 #: Spelled once, because the reader and the two sentences that name it to a contributor have to
 #: agree. This file governs CI, not Logic; it lives with the other CI policy under `.github/ci/`.
 CI_SKIPS = os.path.join(".github", "ci", "CI-SKIPS.json")
@@ -215,6 +251,10 @@ SLOWEST = 8
 
 
 def main():
+    refusal = python_floor_refusal(sys.version_info, sys.executable)
+    if refusal is not None:
+        print(refusal)
+        return 1
     files = discovered()
     if not files:
         print("no guards or drives discovered — that is not a pass")
