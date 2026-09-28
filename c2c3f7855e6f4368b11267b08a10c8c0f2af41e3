@@ -3,32 +3,39 @@ Limit: transport.toggle_cycle and toggle_metronome keep safe_to_retry true on th
 Limit: transport.resume is internal and CGEvent only, so play on a paused transport has no other rung; if CGEvent cannot post, play returns that failure and nothing else is tried.
 Limit: measured in ko only, under 2-Set Korean, once per case, at 120 and 60 BPM. An external osascript brought Logic to the front before each of the 14 product calls, so the product's own activation before the play key was not exercised (it reported already_frontmost).
 Warn: the seven earlier commits on this branch, 5660b5fc through d6d7341e, put their Limit lines above the Refs paragraph, so commitlore does not index them. Two of those lines are also wrong: 2a7e1706 and d6d7341e say an external osascript brought Logic to the front before each product call, but in those runs it did so once per phase; Logic read frontmost before every call.
+Record-Id: r-inhc2c3f71061b9b8
 Provenance: inherited 1061b9b8a0a52b442d6425fc42dcb2bb16459c7a
 
 Limit: criterion 3 is not met: the live runs were in ko only, once per case, and under the 2-Set Korean input source Q, N and X ran nothing.
 Limit: criterion 4 is met only in part: the key-command channel was approved on the measuring host, so quantize, bounce in place and the score editor never reached CGEvent, and those ops with that channel unavailable were not run.
+Record-Id: r-inhc2c3f7e01a0e17
 Provenance: inherited e01a0e1786b279f21d2096b5d1d5aa31ac5ce50e
 
 Limit: a citation proves only that Logic ships the command's name; which key the U.S. preset binds to it still comes from the pinned web tables, which the bundle does not state in a form anything here reads.
 Limit: track.create_drummer and project.new have no row naming their own command, so they cite the command the removed keystroke was bound to (Toggle Individual Track Zoom, New from Template).
 Limit: pause, quantize, bounce in place, the score editor, the step editor and save-as have no QuickHelp title with the whole value, so they cite Localizable.strings; the bounce row is a toolbar tooltip key.
+Record-Id: r-inhc2c3f703cd0587
 Provenance: inherited 03cd0587fa6a15aa14fe27f1e8f39c57a8977dc7
 
 Limit: the refusal path (CGEvent refuses, nothing is sent) is proved by unit tests over a fake tree; it was not driven live.
 Limit: the Accessibility refusal is not terminal, so a rung added after it later would still run; the routing invariant is what keeps the chain to CGEvent alone.
+Record-Id: r-inhc2c3f771d09828
 Provenance: inherited 71d09828f6b0eb97ba095e5b7dca25f7c5f46456
 
 Limit: OperationTraceWriteBoundaryPresentForDispatchedMutationsCensus and the HC route case for pause failed in CI before this change (pause reads before it writes and refuses with no write when that read fails); neither is changed here.
 Limit: the tempo read is the slider only; a Logic whose control bar shows tempo as a text field and no slider now gets tempo_unreadable from pause and play.
+Record-Id: r-inhc2c3f72023fd64
 Provenance: inherited 2023fd647195da718ae24af44c2f1c1455edeb67
 
 Limit: that nothing is posted is shown by the unit recorder and the reply's events_posted; no outside reading witnesses it, and under 2-Set Korean a posted plain letter changes nothing Logic shows.
 Limit: under a non-ASCII input source the ten operations are now refused where CGEvent is their only remaining rung; they still cannot act there until the source is ASCII-capable or a key-command or AX rung answers.
+Record-Id: r-inhc2c3f7ca5d6ca1
 Provenance: inherited ca5d6ca144f5efe33833c9bbc642672bc54b2e7c
 
 Limit: under ABC the Q positive control did not act in this setup: three runs (through the product with key focus in the Event List, through the product with key focus in the Tracks area, and direct posts including one from a process started after ABC was selected) left all four notes where they were; the sequence that quantized under ABC on 2026-09-27 (X twice, Command-A in the Tracks area, then Q) was not repeated.
 Limit: the Unicode-string experiment (Q, N and X with the key's Latin character set on both events, under 2-Set Korean) had no positive control in the same setup, so its negative does not show that the string cannot help.
 Limit: a process started under 2-Set Korean keeps building keycode 12 as U+3142 after ABC is selected by another process, even once its own input-source read says ABC; the server is such a process, and whether Logic acts on that character is unmeasured.
+Record-Id: r-inhc2c3f70ceb9e7c
 Provenance: inherited 0ceb9e7c21bd80fe41c18fc5da3d848a350e429c
 
 Limit: the census sees only what its refusing mock lets each spec reach, so a write after a successful read is covered only where a test drives it past its reads, as the pause test does.
@@ -36,36 +43,45 @@ Limit: the census and the HC route test both set and unset LOGIC_MCP_SUPPORT_BUN
 Ruled-out: recording the routed operation on channel.started | the trace's attribute keys are one privacy table that the support bundle and the trace tool export and a test pins, and operation_id already means the trace's own operation.
 Ruled-out: excluding specs whose reply says write_attempted false | that ties the census to what an operation says about itself, so one that wrote without an arm and said false would pass.
 Warn: a new internal router operation that a mutating spec routes fails this census as unclassified until it is added to the read or the internal-write set here.
+Record-Id: r-inhc2c3f7fc2f7781
 Provenance: inherited fc2f7781607eb1b2a4100e8b2cff5af356af3ec3
 
 Limit: the unread branch is shown with the injected probe only; TIS was not made to fail against a running Logic.
 Limit: the ABC rows followed X, X and Command-A in the Tracks area, the sequence that acted on 2026-09-27. Round 1's runs set key focus with AXFocused and posted no Command-A, and left the notes unchanged; which of those differences matters was not isolated.
 Limit: of the ten plain-letter operations, Q, X and N were driven live under both sources; the other seven were not.
+Record-Id: r-inhc2c3f7d83a659e
 Provenance: inherited d83a659ed6fe8920331bf5e15ed73534b0ef2936
 
 Limit: tempo_unreadable was not driven live; the tempo slider could not be made to fail a read against a running Logic, so that branch is shown with the fake readback only.
+Record-Id: r-inhc2c3f74f18602c
 Provenance: inherited 4f18602c0a3cca815cc63efb62b79b7a135d64d7
 
 Warn: a test that reads the shared trace store by operation id or by recency sees traces from every suite running beside it; read by the id the dispatch registered on its OperationTraceContext.
+Record-Id: r-inhc2c3f7c3b71286
 Provenance: inherited c3b712862d5473e59fdef4ec29e89e5e74fcdb94
 
 Limit: 14 test files outside this suite still set process-wide variables, 16 other LOGIC_MCP_ keys among them (ADR002_TARGET_REF and ADR003_STRICT_PARAMS the most used); only the trace, support-bundle and audit-root variables are brought under one suite here.
 Limit: tests outside OperationTraceTests that dispatch still add traces to the shared store while the nested suites run; the coverage tests read by their own trace id for that reason, and TraceClearAuditTests still counts the whole store.
+Record-Id: r-inhc2c3f75ac5ea76
 Provenance: inherited 5ac5ea76d371bd72d29a1959dca892053142a838
 
 Limit: main may add its own #1048 row before this branch merges; the two rows would then conflict and main's should be kept.
+Record-Id: r-inhc2c3f7d843ef33
 Provenance: inherited d843ef331ea8449a41e98053300a42929a9b5bbe
 
 Limit: the transition was not produced live. On the measuring host com.apple.HIToolbox has no AppleGlobalTextInputProperties key (TextInputGlobalPropertyPerContextInput absent), so the per-document setting is off and activation does not change the source there; the setting was read, not changed.
 Limit: how soon after activation macOS switches the source is unmeasured; the read follows two frontmost observations 50 ms apart.
 Ruled-out: keeping the pre-activation read beside a second read after activation | under the same macOS setting a reading of 2-Set Korean taken while another app is in front refuses before Logic comes forward, so every plain letter is refused while that app's source is Korean, even when Logic's own source is ABC
+Record-Id: r-inhc2c3f74b969305
 Provenance: inherited 4b96930534debfed2de330a35f2c46a767264bac
 
 Limit: that macos-15's `.iso8601` rejects the fractional form is inferred by elimination and not run on macos-15; CI on this change is the test of it.
 Ruled-out: attributing CI's HC failure to the support-bundle collision that 5ac5ea76 serialized | both CI failures were pause's refusal before writing, and 66355127, which contains 5ac5ea76, failed the same way
 Ruled-out: making dispatcherJSONDecoder accept both timestamp forms | it is shared by every dispatcher, and the only producer of transport.get_state already writes whole seconds
 Warn: two decoders read the same transport.get_state payload. ResourceHandlers.decodeTransportState accepts fractional and whole seconds; decodeJSONValue's `.iso8601` accepts fractional seconds only on newer Foundation. If the AX channel's encoder ever writes fractional seconds, pause, navigate and MIDI readbacks fail on macOS 14 and 15 alone, and a macOS 26 host will not show it.
+Record-Id: r-inhc2c3f795ad5f44
 Provenance: inherited 95ad5f447eb9335c942597aa0f61babed09d8d29
 
 Limit: every round-3 row ran once or twice in ko on one host; the ten-locale run #1029 asks for remains.
+Record-Id: r-inhc2c3f72141ee53
 Provenance: inherited 2141ee5304f40dbec714fcc521bb4ce5126b2560
