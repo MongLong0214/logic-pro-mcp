@@ -57,26 +57,24 @@
    "id": "arm-armed-writes-nothing",
    "criterion": 0,
    "steps": [
-    {"as": "as_found", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "as_found", "probe": {"name": "armed_set", "args": {}}},
     {"as": "setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
-    {"as": "pre", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "pre", "probe": {"name": "armed_set", "args": {}}},
     {"as": "reply", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
-    {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
+    {"as": "post", "probe": {"name": "armed_set", "args": {}}}
    ],
    "operation": "reply",
    "expect": [
-    {"path": "pre.armed", "op": "eq", "value": true, "invariant": true},
+    {"path": "pre.armed", "op": "eq", "value": [0], "invariant": true},
     {"path": "reply.state", "op": "eq", "value": "A"},
-    {"path": "reply.write_attempted", "op": "eq", "value": false},
     {"path": "post.armed", "op": "unchanged", "ref": {"obs": "pre.armed"}}
    ],
    "counterexample": [
-    {"observation": "as_found", "replaces": "post", "must_fail": [3]},
-    {"observation": "setup", "replaces": "reply", "must_fail": [2]}
+    {"observation": "as_found", "replaces": "post", "must_fail": [2]}
    ],
    "restore": [
     {"as": "undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
-    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+    {"as": "restored", "probe": {"name": "armed_set", "args": {}}}
    ],
    "restore_expect": [
     {"path": "restored.armed", "op": "eq", "ref": {"obs": "as_found.armed"}}

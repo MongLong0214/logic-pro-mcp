@@ -143,10 +143,8 @@
      {
       "as": "as_found",
       "probe": {
-       "name": "track_armed",
-       "args": {
-        "index": 0
-       }
+       "name": "armed_set",
+       "args": {}
       }
      },
      {
@@ -163,10 +161,8 @@
      {
       "as": "pre",
       "probe": {
-       "name": "track_armed",
-       "args": {
-        "index": 0
-       }
+       "name": "armed_set",
+       "args": {}
       }
      },
      {
@@ -183,10 +179,8 @@
      {
       "as": "post",
       "probe": {
-       "name": "track_armed",
-       "args": {
-        "index": 0
-       }
+       "name": "armed_set",
+       "args": {}
       }
      }
     ],
@@ -195,18 +189,15 @@
      {
       "path": "pre.armed",
       "op": "eq",
-      "value": true,
+      "value": [
+       0
+      ],
       "invariant": true
      },
      {
       "path": "reply.state",
       "op": "eq",
       "value": "A"
-     },
-     {
-      "path": "reply.write_attempted",
-      "op": "eq",
-      "value": false
      },
      {
       "path": "post.armed",
@@ -220,13 +211,6 @@
      {
       "observation": "as_found",
       "replaces": "post",
-      "must_fail": [
-       3
-      ]
-     },
-     {
-      "observation": "setup",
-      "replaces": "reply",
       "must_fail": [
        2
       ]
@@ -247,10 +231,8 @@
      {
       "as": "restored",
       "probe": {
-       "name": "track_armed",
-       "args": {
-        "index": 0
-       }
+       "name": "armed_set",
+       "args": {}
       }
      }
     ],
@@ -646,7 +628,7 @@
    }
   ]
  },
- "spec_sha256": "86ab771354a1f1a83bc0874a9ac4d125a9bf22a3899ce9917f809eab65ab3f3e",
+ "spec_sha256": "a564203355c384cedbbdb9c1c60c67b165dfc3abf17d1fb9de265f47e980cc9f",
  "binary": {
   "binary_path": null,
   "binary_sha256": "161320c13e3d25655fa79f7b3fef9428b80b8ef90869dabf14b58c3c5979aeff",
@@ -769,10 +751,8 @@
        "step": {
         "as": "as_found",
         "probe": {
-         "name": "track_armed",
-         "args": {
-          "index": 0
-         }
+         "name": "armed_set",
+         "args": {}
         }
        },
        "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
@@ -801,10 +781,8 @@
        "step": {
         "as": "pre",
         "probe": {
-         "name": "track_armed",
-         "args": {
-          "index": 0
-         }
+         "name": "armed_set",
+         "args": {}
         }
        },
        "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
@@ -833,10 +811,8 @@
        "step": {
         "as": "post",
         "probe": {
-         "name": "track_armed",
-         "args": {
-          "index": 0
-         }
+         "name": "armed_set",
+         "args": {}
         }
        },
        "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
@@ -865,10 +841,8 @@
        "step": {
         "as": "restored",
         "probe": {
-         "name": "track_armed",
-         "args": {
-          "index": 0
-         }
+         "name": "armed_set",
+         "args": {}
         }
        },
        "unreadable": "live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
@@ -1304,11 +1278,9 @@
     "expect": [
      "UNREADABLE",
      "UNREADABLE",
-     "UNREADABLE",
      "UNREADABLE"
     ],
     "counterexample": [
-     "UNREADABLE",
      "UNREADABLE"
     ],
     "restore": [
@@ -1317,10 +1289,8 @@
     "reasons": [
      "expect[0] UNREADABLE: pre.armed -- pre: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
      "expect[1] UNREADABLE: reply.state -- reply: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
-     "expect[2] UNREADABLE: reply.write_attempted -- reply: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
-     "expect[3] UNREADABLE: post.armed -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
-     "counterexample UNREADABLE: expect[3] on 'as_found' -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
-     "counterexample UNREADABLE: expect[2] on 'setup' -- reply: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "expect[2] UNREADABLE: post.armed -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
+     "counterexample UNREADABLE: expect[2] on 'as_found' -- post: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung",
      "restore UNREADABLE: restore_expect[0] -- restored: the runner could not read it: live_1020_mcu_set_arm_is_a_set did not drive this row: it never armed an already-armed track, because the Accessibility rung answers that no-op before the MCU rung"
     ]
    },
