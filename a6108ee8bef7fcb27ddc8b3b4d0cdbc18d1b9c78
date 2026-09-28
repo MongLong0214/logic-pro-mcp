@@ -1,0 +1,31 @@
+Limit: it, pt and zh_TW now refuse the automated setup until their Key Commands spelling is proven from Apple's data or measured live.
+Provenance: inherited 31f82d62e6d91dcea00048171e1ecb6b24de1ae8
+
+Limit: at this commit the it, pt, zh_TW, de and ja spellings are derived from Apple's bytes and not yet read off a running Logic; the live drive follows in the same pull request.
+Limit: the refusal path is now reachable only for a language the table does not carry, which none of the ten is.
+Provenance: inherited 8ee6135974358ad8a42b7560c3733613618a2bb5
+
+Limit: the other nine titles are Apple's bytes at this commit; the ten-language live drive that follows in this pull request reads each one off a running Logic.
+Limit: the check that a LabelSet is its row's values cannot tell whether the row is the one the UI draws; this set passed it for the wrong row, and other sets derived by the same method were not re-examined here.
+Provenance: inherited 40ee8362c2701bfa0805e550b94b328316a9b97a
+
+Limit: the shared AX test builder still answers an unset attribute with success-and-nil; other fixtures built on it may carry the same gap, and they were not audited here.
+Limit: Option+K opens nothing while a composing input source such as 2-Set Korean is selected, and this stage's hint does not say so; the live drive selects ABC around each setup call and restores the user's source.
+Provenance: inherited 21c3013ee8441cf48cc13e61e810e2ccbc922dd4
+
+Limit: extractTransportState's containment scan also accepts the free-tempo checkbox in en, ko, fr and pt (en and ko did before this); the exact control-bar read that follows overrides it whenever the Record box is found, which is now all ten languages.
+Limit: transportPlayControl, transportCycleControl and the other control-bar sets derived by the same method were not re-read live here.
+Warn: #expect(optional ?? false) passed with the optional nil on Swift 6.2.4 (measured here); the new test uses try #require for that reason.
+Provenance: inherited 3b78f83f41f76c5f33357133414aeb8c13d3ff13
+
+Limit: the #1048 row records the report only; nothing in this work examined it.
+Provenance: inherited 1d1db13025cb4cd14e49200292e9d55348f89856
+
+Limit: the pinned cells are readings of Logic 12.3 (6674). The drive's receipts are in #1049's body and the evidence directory, not under docs/observations.
+Ruled-out: a schema-3 record per locale plus a livekit harness, as #977 did | the drive rewrites the KeyCommands and AppleLanguages preferences, and the pinned cells can already be checked in the checkout against the canon digest
+Warn: build the ten-language fixture from displayedRecordArmCell, never from searchQuery. A fixture taken from the product's answer passed the German-gets-Korean mutant.
+Provenance: inherited 989f8c455dd4aeecd175e67eb7ae15ea8b0221e7
+
+Limit: the record is one run on one host (Logic 12.3 / 6674), and every language started with entry 593 removed, so the already-configured path was not driven. Re-running it follows reverify.command by hand.
+Ruled-out: a livekit harness that re-drives the ten languages, as #977 did | the drive rewrites the KeyCommands and AppleLanguages preferences and relaunches Logic once per language; the record carries the readings and a manual reverify
+Provenance: inherited 38eec41aee591b8c579a8eb330216583d11b06bf
