@@ -16,10 +16,23 @@ the id is declared here, once, and nowhere else:
                                             home (the product's reading; nothing else reads the LCD)
 
 A gate reading is {"declared": {"track_count", "names"}, "fingerprint": {"track_count", "names",
-"flags": [{"arm", "mute", "solo"}, ...]}, "upper_row": {"readable", "value" | "cause"}}. `declared`
-travels with the reading, so a recorded reading says what it was compared with. This module reads
-nothing itself and imports no live code: check-spec and the engine can load it anywhere.
+"flags": [{"arm", "mute", "solo"}, ...]}, "upper_row": {"readable", "value" | "cause"},
+"passing_message"?: {"readable", "value" | "cause", "row"}}. `declared` travels with the reading, so
+a recorded reading says what it was compared with. This module reads nothing itself and imports no
+live code: check-spec and the engine can load it anywhere.
+
+THE PASSING MESSAGE. After a record-enable press Logic writes its own name for the control across
+the MCU upper row for a few seconds, from the pressed strip on, then puts the strips back: the
+value of `Record Enable` in Logic.framework's Localizable.strings for the locale, with its
+diacritics dropped (an accented e shows as a plain e). The live lifecycle puts that
+string, read from the installed Logic, into `passing_message`; nothing here names it. A row that
+shows it is not off home and not home: the runner reads the gate again until the message is gone,
+up to a stated bound (runner.PASSING_WAIT_S), and a row still showing it after the bound is a
+named problem, never a pass. A reading without a readable `passing_message` recognises nothing and
+is judged against the baseline as before.
 """
+
+import unicodedata
 
 SETUPS = {
     "lpm-locale-campaign-19": {
@@ -83,6 +96,26 @@ def _fingerprint_problems(reading: dict) -> list:
     return out
 
 
+def lcd_text(text: str) -> str:
+    """`text` as the MCU LCD shows it: compatibility-decomposed, its combining marks dropped."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+
+
+def passing_message(reading: dict):
+    """The passing message the reading carries, as the LCD shows it; None when it carries none."""
+    message = (reading or {}).get("passing_message") or {}
+    value = message.get("value") if message.get("readable") else None
+    return lcd_text(value) if isinstance(value, str) and value.strip() else None
+
+
+def shows_passing_message(reading: dict) -> bool:
+    """Whether the reading's MCU upper row shows the passing message it carries."""
+    row = (reading or {}).get("upper_row") or {}
+    message = passing_message(reading)
+    return bool(message and row.get("readable") and isinstance(row.get("value"), str)
+                and message in row["value"])
+
+
 def _upper_row_problems(reading: dict, baseline: dict) -> list:
     row = reading.get("upper_row") or {}
     base = (baseline or {}).get("upper_row") or {}
@@ -90,6 +123,12 @@ def _upper_row_problems(reading: dict, baseline: dict) -> list:
         return [f"the MCU upper row could not be read: {row.get('cause')}"]
     if not base.get("readable"):
         return [f"the baseline MCU upper row was not read: {base.get('cause')}"]
+    if shows_passing_message(baseline):
+        return [f"the baseline MCU upper row shows Logic's passing message "
+                f"{passing_message(baseline)!r}: {base.get('value')!r}"]
+    if shows_passing_message(reading):
+        return [f"the MCU upper row still shows Logic's passing message "
+                f"{passing_message(reading)!r}: {row.get('value')!r}"]
     if row.get("value") != base.get("value"):
         return [f"the MCU bank is off home: upper row {row.get('value')!r}, "
                 f"baseline {base.get('value')!r}"]

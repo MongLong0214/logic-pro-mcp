@@ -64,6 +64,7 @@ import probes  # noqa: E402
 import runner  # noqa: E402
 from live import binary, exclusive, fixture, mcp, obs, screen, spec_probes  # noqa: E402
 from live import locale as live_locale  # noqa: E402
+from live import probes as live_probes  # noqa: E402
 
 #: Where sidecars go, one file per sha256 of its bytes (D5).
 SIDECARS = os.path.expanduser("~/lpm-evidence/verify-runs")
@@ -253,9 +254,16 @@ class LiveLifecycle(runner.Lifecycle):
         record = fixture.read(decl["live"], ctx["lproj"])
         upper_row = self._upper_row(ctx) if "mcu_upper_row_is_baseline" in decl["gate"] else None
         reading = gate_reading_of(fixture.FIXTURES[decl["live"]], record["track_flags"], upper_row)
+        if upper_row is not None:
+            reading["passing_message"] = self._passing_message(ctx["lproj"])
         data = json.dumps(record["track_flags"], ensure_ascii=False, sort_keys=True, default=repr)
         reading["walk_sha256"] = self.sidecar(data.encode("utf-8"))
         return reading
+
+    def _passing_message(self, lproj):
+        """Logic's passing message after a record-enable press (setups.py), as the installed Logic
+        names it in this locale: the row the arm flag's checkbox is read by, with the row named."""
+        return live_locale.apple_row(lproj, live_probes.FLAG_ROWS["arm"])
 
     def _upper_row(self, ctx):
         session = ctx.get("session")

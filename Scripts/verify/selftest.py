@@ -65,8 +65,9 @@ RUN CASES (`"run": {...}`)
                   answer fixtures_build.READINGS for the spec.
         "dirt":   {"before:<row>/<as>" | "after:<row>/<as>": [dirt, ...]}
         "gate":   {lproj: [[op, ...], ...]}   successive fixture readings in that locale, each as
-                  patch ops over a clean one (FAKE_TRACKS, every flag 0, upper row "home"); the
-                  first is the locale's baseline; after the list, clean
+                  patch ops over a clean one (FAKE_TRACKS, every flag 0, upper row "home", the
+                  passing message FAKE_PASSING); the first is the locale's baseline; after the
+                  list, clean. {"times": n, "ops": [op, ...]} in the list stands for n readings
         "readings": {lproj: {key: value}}   merged over fixtures_build.locale_reading(lproj)
         "tuple_in_reading": true            the window names come back as a tuple
         "current": lproj                    the locale Logic is in when the run starts
@@ -449,6 +450,22 @@ MUTANTS = [
     {"id": "record-without-attestation", "file": "runner.py",
      "old": "        recorded = verify.record_attested(data, att, record_dir)\n",
      "new": "        recorded = verify.record_attested(data, None, record_dir)\n"},
+    {"id": "gate-reads-once-over-the-passing-message", "file": "runner.py",
+     "old": "    while setups.shows_passing_message(reading) and life.now() < bound:\n",
+     "new": "    while False and setups.shows_passing_message(reading) and life.now() < bound:\n"},
+    {"id": "baseline-read-once-over-the-passing-message", "file": "runner.py",
+     "old": "            baselines[lproj] = _gate_reading(ctx)[0]\n",
+     "new": "            baselines[lproj] = normalize(life.gate_reading(ctx))\n"},
+    {"id": "passing-message-outlasting-the-wait-passes", "file": "setups.py",
+     "old": ('        return [f"the MCU upper row still shows Logic\'s passing message "\n'
+             '                f"{passing_message(reading)!r}: {row.get(\'value\')!r}"]\n'),
+     "new": "        return []\n"},
+    {"id": "baseline-showing-the-passing-message-unchecked", "file": "setups.py",
+     "old": "    if shows_passing_message(baseline):\n",
+     "new": "    if False and shows_passing_message(baseline):\n"},
+    {"id": "passing-message-keeps-its-accents", "file": "setups.py",
+     "old": '    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))\n',
+     "new": "    return text\n"},
     {"id": "record-written-past-the-canon-guard", "file": "verify.py",
      "old": "        refused = canon_record_guard.refusals(record)\n",
      "new": "        refused = []\n"},
@@ -720,6 +737,9 @@ class FakeSession(runner.Session):
 
 #: The fake fixture's tracks: a gate reading of FakeLifecycle declares these and, unscripted, reads them.
 FAKE_TRACKS = ("Self-test one", "Self-test two")
+#: The passing message every fake gate reading carries (setups.py): made up, with an accent the LCD
+#: drops, so a case's upper row shows it as "Self-test pass message".
+FAKE_PASSING = "Self-test pass m\u00e9ssage"
 
 
 class FakeLifecycle(runner.Lifecycle):
@@ -797,8 +817,11 @@ class FakeLifecycle(runner.Lifecycle):
         reading = {"declared": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS)},
                    "fingerprint": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS),
                                    "flags": clear},
-                   "upper_row": {"readable": True, "value": "home"}}
-        scripted = self.script.get("gate", {}).get(ctx["lproj"], [])
+                   "upper_row": {"readable": True, "value": "home"},
+                   "passing_message": {"readable": True, "value": FAKE_PASSING}}
+        scripted = []
+        for item in self.script.get("gate", {}).get(ctx["lproj"], []):
+            scripted += [item["ops"]] * item["times"] if isinstance(item, dict) else [item]
         if n <= len(scripted):
             _apply(reading, scripted[n - 1], self.label, self.where)
         return reading

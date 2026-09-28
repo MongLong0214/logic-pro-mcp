@@ -20,8 +20,10 @@ THE FLOW, per run (plan-p0b2 section 1)
              started with the declaration's server_env and the fixture's surface awaited; the
              fixture's baseline (life.gate_reading) is read once per locale, after it was first
              opened there. Before each row the screen is settled and the fixture gated: the
-             lifecycle reads, setups.gate_problems judges against the declaration and the
-             baseline, and both are logged; a gate miss gets one full reset (server stopped, fixture reopened,
+             lifecycle reads (again, within PASSING_WAIT_S, while the MCU upper row shows Logic's
+             passing message; the baseline is read the same way), setups.gate_problems judges
+             against the declaration and the baseline, and both are logged; a gate miss gets one
+             full reset (server stopped, fixture reopened,
              server restarted, surface awaited) and a second gate; a row whose gate still fails is
              stored with every step unreadable. A switch that found Logic already in the locale
              is followed by a reset, so every locale starts from the file on disk.
@@ -77,6 +79,12 @@ RESTING = "ko"
 CALL_TIMEOUT_S = 120.0
 READ_TIMEOUT_S = 60.0
 PURPOSE = "verify.py run"
+#: While a gate reading's MCU upper row shows Logic's passing message (setups.py), the gate is read
+#: again every PASSING_INTERVAL_S, for at most PASSING_WAIT_S. Measured in de at a24b4919: the
+#: message was gone 1.15 s and 1.46 s after an arm and a disarm reply ended. The bound only ends the
+#: waiting: what is judged is the last reading, and one still showing the message is a gate problem.
+PASSING_WAIT_S = 6.0
+PASSING_INTERVAL_S = 0.25
 
 
 class StepUnreadable(Exception):
@@ -402,15 +410,34 @@ def _reset(ctx: dict, run: dict) -> bool:
     return _start(ctx)
 
 
+def _gate_reading(ctx: dict) -> tuple:
+    """(reading, reads): the gate reading, taken again while its MCU upper row shows Logic's
+    passing message, until it does not or PASSING_WAIT_S has passed. The last reading is returned
+    whatever it shows; the bound never stands in for a reading."""
+    life = ctx["life"]
+    bound = life.now() + PASSING_WAIT_S
+    reading, reads = normalize(life.gate_reading(ctx)), 1
+    while setups.shows_passing_message(reading) and life.now() < bound:
+        life.sleep(PASSING_INTERVAL_S)
+        reading, reads = normalize(life.gate_reading(ctx)), reads + 1
+    if reads > 1:
+        print(f"  {ctx['lproj']}/{ctx['row'] or 'baseline'}: the MCU upper row showed Logic's passing "
+              f"message; read {reads} time(s), "
+              f"{'still showing it' if setups.shows_passing_message(reading) else 'then gone'}")
+    return reading, reads
+
+
 def _gate(ctx: dict, baseline: dict, ready: bool, extra: dict) -> list:
     """The gate before a row: the lifecycle reads, the registry judges; both are logged."""
     life = ctx["life"]
+    reads = 0
     if not ready:
         dirty, reading = ["the fixture's surface is not ready"], None
     else:
-        reading = normalize(life.gate_reading(ctx))
+        reading, reads = _gate_reading(ctx)
         dirty = setups.gate_problems(ctx["decl"], reading, baseline)
-    ctx["log"].append({"t": life.now(), "at": ctx["row"], "gate": dirty, "reading": reading, **extra})
+    ctx["log"].append({"t": life.now(), "at": ctx["row"], "gate": dirty, "reading": reading,
+                       "reads": reads, **extra})
     return dirty
 
 
@@ -436,7 +463,7 @@ def run_locale(life: Lifecycle, entry: dict, lproj: str, reset_first: bool, base
             log.append({"t": life.now(), "event": "reset", "record": life.reset(ctx)})
         ready = _start(ctx)
         if lproj not in baselines:
-            baselines[lproj] = normalize(life.gate_reading(ctx))
+            baselines[lproj] = _gate_reading(ctx)[0]
         baseline = baselines[lproj]
         log.append({"t": life.now(), "event": "baseline", "baseline": baseline})
         for row in spec["rows"]:
