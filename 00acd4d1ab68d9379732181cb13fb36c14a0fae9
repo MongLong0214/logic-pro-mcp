@@ -1,10 +1,13 @@
 Limit: the failures are injected through fake AX only; no live Logic read was made to fail
 Limit: the output and input readers still pass over an element whose role or help will not read; their nil already means unknown
 Limit: a successor whose role fails once and then reads keeps a per-slot unreadable; on a tree that answers the same way twice the walk reaches it and returns nil
+Record-Id: r-inh00acd48fa940f9
 Provenance: inherited 8fa940f97426ed092ac179843de808fa4f5a4422
 
 Limit: the #291 endpoint records bind evidence to 0188d624 and 24c33ecc; none was re-run for this commit.
+Record-Id: r-inh00acd4c6a4b242
 Provenance: inherited c6a4b24207aa863bec0d3cdd7bbf5da0b755a48d
 
 Limit: the six cells stay unmeasured until a run in it-IT, pt-BR or zh-TW stores the AXHelp string it read for a send slot and a Send Level knob.
+Record-Id: r-inh00acd4eb633828
 Provenance: inherited eb6338280f354bef0fbc1572152751308c8d8cb3
