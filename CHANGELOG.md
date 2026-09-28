@@ -8,6 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+- **`transport.goto_position`'s CGEvent fallback types nothing until the Go To Position dialog is
+  on screen (#1038).** It used to type the position and Return right after the key that opens the
+  dialog, so with the dialog not open the keys reached Logic as key commands. The opening key now
+  goes out alone, and the rest waits until the window list shows exactly one new Logic window
+  titled as that dialog, read up to 30 times 0.1 s apart. Otherwise it refuses as State C
+  `dialog_not_found` with `safe_to_retry: false`, and the hint says the opening key's effect is
+  unobserved. Driven in ko and de: with a Logic menu open first, nothing
+  was typed and the position did not move.
+- **A toggle press that was delivered is not pressed again by a later rung (#1042).**
+  `toggle_cycle`, `toggle_metronome` and `toggle_count_in` used to go on to AXConfirm, a second
+  press, when the readback had not changed within 0.6 s, and the router then handed the same
+  toggle to the MIDI key command, a third. A lagging readback let the later presses turn the
+  control back. They now stop at the first delivered press: the mismatch carries
+  `write_attempted: true`, `safe_to_retry: false` and `fallback_unsafe: true`, and reports a fresh
+  read as observed. `edit.toggle_step_input` carries the same marker.
+
+### Removed
+- **`logic://transport` no longer declares `isPaused` (#1041).** Nothing that reads Logic ever
+  wrote it, so it was always `false`. A paused transport reads `isPlaying: true`.
+
 ---
 
 ## [3.18.0] — 2026-09-28
