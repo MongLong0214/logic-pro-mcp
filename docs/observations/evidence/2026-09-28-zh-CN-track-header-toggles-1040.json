@@ -1,0 +1,2825 @@
+{
+ "A_all_on": {
+  "ax_after_read": {
+   "apple_rows": {
+    "arm": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Record Enable",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "录音启用"
+    },
+    "monitor": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Input Monitoring",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "输入监听"
+    },
+    "mute": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Mute",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "静音"
+    },
+    "solo": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Solo",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "独奏"
+    }
+   },
+   "labelset_members": {
+    "arm": [
+     "녹음 활성화",
+     "Record Enable",
+     "Record",
+     "録音を可能にする",
+     "Aufnahme aktivieren",
+     "Activar grabación",
+     "Enregistrement activé",
+     "Abilita registrazione",
+     "Ativar Gravação",
+     "录音启用",
+     "錄音啟用"
+    ],
+    "monitor": [
+     "Input Monitoring",
+     "입력 모니터링",
+     "入力モニタリング",
+     "Input-Monitoring",
+     "Monitorización de entrada",
+     "Monitoring de l’entrée",
+     "Monitoraggio ingresso",
+     "Monitoramento de Entrada",
+     "输入监听",
+     "輸入監聽"
+    ],
+    "mute": [
+     "Mute",
+     "음소거",
+     "ミュート",
+     "Ton aus",
+     "Stumm",
+     "Silenciar",
+     "Muet",
+     "Muto",
+     "静音",
+     "靜音"
+    ],
+    "solo": [
+     "Solo",
+     "솔로",
+     "ソロ",
+     "Assolo",
+     "独奏",
+     "獨奏"
+    ]
+   },
+   "rail": [
+    1,
+    8,
+    1,
+    0,
+    1,
+    0,
+    0
+   ],
+   "readable": true,
+   "track_count": 19,
+   "tracks": [
+    {
+     "controls": [
+      {
+       "description": "静音",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "独奏",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      },
+      {
+       "description": "录音启用",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      },
+      {
+       "description": "输入监听",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      }
+     ],
+     "index": 2,
+     "matched": {
+      "arm": {
+       "description": "录音启用",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "monitor": {
+       "description": "输入监听",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "mute": {
+       "description": "静音",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "solo": {
+       "description": "独奏",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 1
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      2
+     ]
+    },
+    {
+     "controls": [
+      {
+       "description": "静音",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": -1,
+       "value_error": null
+      },
+      {
+       "description": "独奏",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "录音启用",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "输入监听",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      }
+     ],
+     "index": 3,
+     "matched": {
+      "arm": {
+       "description": "录音启用",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "monitor": {
+       "description": "输入监听",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "mute": {
+       "description": "静音",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": -1
+      },
+      "solo": {
+       "description": "独奏",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      3
+     ]
+    }
+   ]
+  },
+  "ax_before_equals_after": [
+   true,
+   false
+  ],
+  "first_table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": false,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": false,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Track 3"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": false,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": false,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": false,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": -1,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": false,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Track 4"
+   }
+  ],
+  "header_backed_attempt": 3,
+  "product_attempts": [
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": null,
+     "complete": true,
+     "fetched_at": null,
+     "readable": true,
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 8,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": true,
+      "name": "Track 3",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isMuted": false,
+      "isSelected": false,
+      "name": "Track 4",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     }
+    ]
+   },
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": null,
+     "complete": true,
+     "fetched_at": null,
+     "readable": true,
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 8,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": true,
+      "name": "Track 3",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isMuted": false,
+      "isSelected": false,
+      "name": "Track 4",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     }
+    ]
+   },
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": null,
+     "complete": true,
+     "fetched_at": null,
+     "readable": true,
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      true
+     ],
+     [
+      1,
+      true
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      true
+     ],
+     [
+      4,
+      true
+     ],
+     [
+      5,
+      true
+     ],
+     [
+      6,
+      true
+     ],
+     [
+      7,
+      true
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 8,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": true,
+      "name": "Track 3",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isMuted": true,
+      "isSelected": false,
+      "name": "Track 4",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     }
+    ]
+   },
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": 1.038417935371399,
+     "collapsed_stacks": [
+      {
+       "index": 0,
+       "name": "Absolute Zero"
+      }
+     ],
+     "complete": false,
+     "fetched_at": "2026-09-28T00:01:36.695Z",
+     "readable": true,
+     "reason": "collapsed_track_stack",
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ],
+     [
+      8,
+      "<absent>"
+     ],
+     [
+      9,
+      "<absent>"
+     ],
+     [
+      10,
+      "<absent>"
+     ],
+     [
+      11,
+      "<absent>"
+     ],
+     [
+      12,
+      "<absent>"
+     ],
+     [
+      13,
+      "<absent>"
+     ],
+     [
+      14,
+      "<absent>"
+     ],
+     [
+      15,
+      "<absent>"
+     ],
+     [
+      16,
+      "<absent>"
+     ],
+     [
+      17,
+      "<absent>"
+     ],
+     [
+      18,
+      "<absent>"
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 19,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isArmed": true,
+      "isInputMonitoring": true,
+      "isMuted": false,
+      "isSelected": true,
+      "isSoloed": true,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_F0ABC6F5-0047-49E9-9D88-7AD78492654B",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": false,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_A013500B-34B8-413B-A6A1-05842F5F6449",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     }
+    ]
+   }
+  ],
+  "table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Deluxe Classic"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": false,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": -1,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Deluxe Classic"
+   }
+  ],
+  "wait": {
+   "elapsed_s": 0.2036945410000044,
+   "polls": 1,
+   "timed_out": false
+  },
+  "want_on_target": {
+   "arm": 1,
+   "monitor": 1,
+   "solo": 1
+  }
+ },
+ "B_solo_released": {
+  "ax_after_read": {
+   "apple_rows": {
+    "arm": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Record Enable",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "录音启用"
+    },
+    "monitor": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Input Monitoring",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "输入监听"
+    },
+    "mute": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Mute",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "静音"
+    },
+    "solo": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Solo",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "独奏"
+    }
+   },
+   "labelset_members": {
+    "arm": [
+     "녹음 활성화",
+     "Record Enable",
+     "Record",
+     "録音を可能にする",
+     "Aufnahme aktivieren",
+     "Activar grabación",
+     "Enregistrement activé",
+     "Abilita registrazione",
+     "Ativar Gravação",
+     "录音启用",
+     "錄音啟用"
+    ],
+    "monitor": [
+     "Input Monitoring",
+     "입력 모니터링",
+     "入力モニタリング",
+     "Input-Monitoring",
+     "Monitorización de entrada",
+     "Monitoring de l’entrée",
+     "Monitoraggio ingresso",
+     "Monitoramento de Entrada",
+     "输入监听",
+     "輸入監聽"
+    ],
+    "mute": [
+     "Mute",
+     "음소거",
+     "ミュート",
+     "Ton aus",
+     "Stumm",
+     "Silenciar",
+     "Muet",
+     "Muto",
+     "静音",
+     "靜音"
+    ],
+    "solo": [
+     "Solo",
+     "솔로",
+     "ソロ",
+     "Assolo",
+     "独奏",
+     "獨奏"
+    ]
+   },
+   "rail": [
+    1,
+    8,
+    1,
+    0,
+    1,
+    0,
+    0
+   ],
+   "readable": true,
+   "track_count": 19,
+   "tracks": [
+    {
+     "controls": [
+      {
+       "description": "静音",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      },
+      {
+       "description": "独奏",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "录音启用",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      },
+      {
+       "description": "输入监听",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      }
+     ],
+     "index": 2,
+     "matched": {
+      "arm": {
+       "description": "录音启用",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "monitor": {
+       "description": "输入监听",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "mute": {
+       "description": "静音",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "solo": {
+       "description": "独奏",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      2
+     ]
+    },
+    {
+     "controls": [
+      {
+       "description": "静音",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "独奏",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "录音启用",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "输入监听",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      }
+     ],
+     "index": 3,
+     "matched": {
+      "arm": {
+       "description": "录音启用",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "monitor": {
+       "description": "输入监听",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "mute": {
+       "description": "静音",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "solo": {
+       "description": "独奏",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      3
+     ]
+    }
+   ]
+  },
+  "ax_before_equals_after": [
+   true,
+   true
+  ],
+  "first_table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Deluxe Classic"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Deluxe Classic"
+   }
+  ],
+  "header_backed_attempt": 0,
+  "product_attempts": [
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": 0.9828929901123047,
+     "collapsed_stacks": [
+      {
+       "index": 0,
+       "name": "Absolute Zero"
+      }
+     ],
+     "complete": false,
+     "fetched_at": "2026-09-28T00:01:47.187Z",
+     "readable": true,
+     "reason": "collapsed_track_stack",
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      true
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ],
+     [
+      8,
+      false
+     ],
+     [
+      9,
+      false
+     ],
+     [
+      10,
+      false
+     ],
+     [
+      11,
+      false
+     ],
+     [
+      12,
+      false
+     ],
+     [
+      13,
+      false
+     ],
+     [
+      14,
+      false
+     ],
+     [
+      15,
+      false
+     ],
+     [
+      16,
+      false
+     ],
+     [
+      17,
+      false
+     ],
+     [
+      18,
+      false
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 19,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isArmed": true,
+      "isInputMonitoring": true,
+      "isMuted": true,
+      "isSelected": true,
+      "isSoloed": false,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_F0ABC6F5-0047-49E9-9D88-7AD78492654B",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": false,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_A013500B-34B8-413B-A6A1-05842F5F6449",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     }
+    ]
+   }
+  ],
+  "table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Deluxe Classic"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Deluxe Classic"
+   }
+  ],
+  "wait": {
+   "elapsed_s": 0.18961204200013526,
+   "polls": 1,
+   "timed_out": false
+  },
+  "want_on_target": {
+   "arm": 1,
+   "monitor": 1,
+   "mute": 1,
+   "solo": 0
+  }
+ },
+ "C_all_off": {
+  "ax_after_read": {
+   "apple_rows": {
+    "arm": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Record Enable",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "录音启用"
+    },
+    "monitor": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Input Monitoring",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "输入监听"
+    },
+    "mute": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Mute",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "静音"
+    },
+    "solo": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Solo",
+      "lproj": "zh_CN",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "独奏"
+    }
+   },
+   "labelset_members": {
+    "arm": [
+     "녹음 활성화",
+     "Record Enable",
+     "Record",
+     "録音を可能にする",
+     "Aufnahme aktivieren",
+     "Activar grabación",
+     "Enregistrement activé",
+     "Abilita registrazione",
+     "Ativar Gravação",
+     "录音启用",
+     "錄音啟用"
+    ],
+    "monitor": [
+     "Input Monitoring",
+     "입력 모니터링",
+     "入力モニタリング",
+     "Input-Monitoring",
+     "Monitorización de entrada",
+     "Monitoring de l’entrée",
+     "Monitoraggio ingresso",
+     "Monitoramento de Entrada",
+     "输入监听",
+     "輸入監聽"
+    ],
+    "mute": [
+     "Mute",
+     "음소거",
+     "ミュート",
+     "Ton aus",
+     "Stumm",
+     "Silenciar",
+     "Muet",
+     "Muto",
+     "静音",
+     "靜音"
+    ],
+    "solo": [
+     "Solo",
+     "솔로",
+     "ソロ",
+     "Assolo",
+     "独奏",
+     "獨奏"
+    ]
+   },
+   "rail": [
+    1,
+    8,
+    1,
+    0,
+    1,
+    0,
+    0
+   ],
+   "readable": true,
+   "track_count": 19,
+   "tracks": [
+    {
+     "controls": [
+      {
+       "description": "静音",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "独奏",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "录音启用",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "输入监听",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      }
+     ],
+     "index": 2,
+     "matched": {
+      "arm": {
+       "description": "录音启用",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "monitor": {
+       "description": "输入监听",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "mute": {
+       "description": "静音",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "solo": {
+       "description": "独奏",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      2
+     ]
+    },
+    {
+     "controls": [
+      {
+       "description": "静音",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "独奏",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "录音启用",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "输入监听",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      }
+     ],
+     "index": 3,
+     "matched": {
+      "arm": {
+       "description": "录音启用",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "monitor": {
+       "description": "输入监听",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "mute": {
+       "description": "静音",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "solo": {
+       "description": "独奏",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      3
+     ]
+    }
+   ]
+  },
+  "ax_before_equals_after": [
+   true,
+   true
+  ],
+  "first_table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Deluxe Classic"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Deluxe Classic"
+   }
+  ],
+  "header_backed_attempt": 0,
+  "product_attempts": [
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": 1.4138280153274536,
+     "collapsed_stacks": [
+      {
+       "index": 0,
+       "name": "Absolute Zero"
+      }
+     ],
+     "complete": false,
+     "fetched_at": "2026-09-28T00:02:14.412Z",
+     "readable": true,
+     "reason": "collapsed_track_stack",
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ],
+     [
+      8,
+      false
+     ],
+     [
+      9,
+      false
+     ],
+     [
+      10,
+      false
+     ],
+     [
+      11,
+      false
+     ],
+     [
+      12,
+      false
+     ],
+     [
+      13,
+      false
+     ],
+     [
+      14,
+      false
+     ],
+     [
+      15,
+      false
+     ],
+     [
+      16,
+      false
+     ],
+     [
+      17,
+      false
+     ],
+     [
+      18,
+      false
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 19,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": true,
+      "isSoloed": false,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_F0ABC6F5-0047-49E9-9D88-7AD78492654B",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": false,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_A013500B-34B8-413B-A6A1-05842F5F6449",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     }
+    ]
+   }
+  ],
+  "table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Deluxe Classic"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "录音启用",
+      "ax_label": "录音启用",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "输入监听",
+      "ax_label": "输入监听",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "静音",
+      "ax_label": "静音",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "独奏",
+      "ax_label": "独奏",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Deluxe Classic"
+   }
+  ],
+  "wait": {
+   "elapsed_s": 0.3681018340000719,
+   "polls": 1,
+   "timed_out": false
+  },
+  "want_on_target": {
+   "arm": 0,
+   "monitor": 0,
+   "mute": 0,
+   "solo": 0
+  }
+ },
+ "crash": null,
+ "in_locale_after_switch": true,
+ "lproj": "zh_CN",
+ "meta": {
+  "binary_sha256": "b04c1640ef1070491ed081e890497a87dd79a38e510bd21a62d08f73748be6c1",
+  "fixture": "locale_campaign_19",
+  "harness_sha256": {
+   "live1040_ax.py": "66dad1e914f766940a05149a668d22d581c09eda9e7d630a7f0b22b5896ea1a4",
+   "live1040_run.py": "62e1263fac3b3eaeb63c310a1e353cd0f2deb3a974b1c207f0b046768f93caa6",
+   "probe_press2_lib.py": "1ddb9ab7f8071ca01ee4799e8879b30408d0ec7e827056bb463a674e4aa23518"
+  },
+  "head": "693c02fddefeff2a3a100c0ba62cc80bc2678a78",
+  "off": 3,
+  "target": 2
+ },
+ "reading_after_switch": {
+  "code": "zh-CN",
+  "expected_title": {
+   "fixture_name": "lpm-locale-campaign",
+   "readable": true,
+   "suffix": {
+    "readable": true,
+    "row": {
+     "field": null,
+     "key": "Tracks",
+     "lproj": "zh_CN",
+     "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/zh_CN.lproj/Localizable.strings",
+     "source": "strings:Logic"
+    },
+    "same_as_en": false,
+    "value": "轨道"
+   },
+   "value": "lpm-locale-campaign - 轨道"
+  },
+  "language_setting": {
+   "raw": "(\n    \"zh-CN\"\n)\n",
+   "readable": true,
+   "value": [
+    "zh-CN"
+   ]
+  },
+  "lproj": "zh_CN",
+  "window_names": {
+   "readable": true,
+   "value": [
+    "lpm-locale-campaign - 标记列表",
+    "lpm-locale-campaign - 轨道"
+   ]
+  }
+ },
+ "release_solo": {
+  "elapsed_s": 7.884307834000083,
+  "flag": "solo",
+  "replies": [
+   {
+    "enabled": false,
+    "fallback_from_channel": "Accessibility",
+    "fallback_from_error": "ax_write_failed",
+    "fallback_from_hint": "track 2 Solo=false: read-back never matched after AXPress + exclusive-select then key 's' (coordinate-free actuators only). The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+    "function": "solo",
+    "observed": false,
+    "state": "A",
+    "success": true,
+    "trace_id": "lpmcp_399ED929-5E72-4EF1-BDD0-96B8D0C93219",
+    "track": 2,
+    "verification_source": "ax_value",
+    "verified": true,
+    "write_attempted": true,
+    "write_source": "mcu"
+   }
+  ],
+  "timed_out": false,
+  "value": 0
+ },
+ "reset": null,
+ "run": {
+  "binary_sha256": "b04c1640ef1070491ed081e890497a87dd79a38e510bd21a62d08f73748be6c1",
+  "foreign_document_closed": null,
+  "harness_sha256": {
+   "live1040_ax.py": "66dad1e914f766940a05149a668d22d581c09eda9e7d630a7f0b22b5896ea1a4",
+   "live1040_run.py": "62e1263fac3b3eaeb63c310a1e353cd0f2deb3a974b1c207f0b046768f93caa6",
+   "probe_press2_lib.py": "1ddb9ab7f8071ca01ee4799e8879b30408d0ec7e827056bb463a674e4aa23518"
+  },
+  "head": "693c02fddefeff2a3a100c0ba62cc80bc2678a78",
+  "lock": {
+   "acquired": true,
+   "attempts": 1,
+   "broke_stale": null,
+   "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/LIVE.lock"
+  }
+ },
+ "server_start_pid": 45004,
+ "set": [
+  {
+   "elapsed_s": 8.984839458999886,
+   "flag": "mute",
+   "replies": [
+    {
+     "enabled": true,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "track 2 Mute=true: read-back never matched after AXPress + exclusive-select then key 'm' (coordinate-free actuators only). The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "mute",
+     "observed": true,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_9CCF1B8A-213C-4640-B96B-CBBD6054349C",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 1
+  },
+  {
+   "elapsed_s": 8.38083974999995,
+   "flag": "solo",
+   "replies": [
+    {
+     "enabled": true,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "track 2 Solo=true: read-back never matched after AXPress + exclusive-select then key 's' (coordinate-free actuators only). The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "solo",
+     "observed": true,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_AFFD2FE7-9CDC-4D54-B46B-BB1E1B2A4FA4",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 1
+  },
+  {
+   "elapsed_s": 8.401136292000047,
+   "flag": "arm",
+   "replies": [
+    {
+     "enabled": true,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or set LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key. The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "recArm",
+     "observed": true,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_2F106FD9-94DC-4871-B2C0-027C38F35CCB",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 1
+  },
+  {
+   "monitor_want": 1,
+   "read": {
+    "arm": 1,
+    "monitor": 1,
+    "mute": 0,
+    "solo": 1
+   },
+   "tries": [
+    {
+     "focus": {
+      "found": true,
+      "status": 0
+     },
+     "from": 0,
+     "press": {
+      "path": [
+       1,
+       8,
+       1,
+       0,
+       1,
+       0,
+       0,
+       2,
+       5
+      ],
+      "pressed": true,
+      "status": 0
+     }
+    },
+    {
+     "already": 1
+    }
+   ]
+  }
+ ],
+ "switch": {
+  "cause": null,
+  "forced": false,
+  "switched": true
+ },
+ "unset": [
+  {
+   "monitor_want": 0,
+   "read": {
+    "arm": 1,
+    "monitor": 0,
+    "mute": 1,
+    "solo": 0
+   },
+   "tries": [
+    {
+     "focus": {
+      "found": true,
+      "status": 0
+     },
+     "from": 1,
+     "press": {
+      "path": [
+       1,
+       8,
+       1,
+       0,
+       1,
+       0,
+       0,
+       2,
+       5
+      ],
+      "pressed": true,
+      "status": 0
+     }
+    },
+    {
+     "already": 0
+    }
+   ]
+  },
+  {
+   "elapsed_s": 9.648679207999976,
+   "flag": "mute",
+   "replies": [
+    {
+     "enabled": false,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "track 2 Mute=false: read-back never matched after AXPress + exclusive-select then key 'm' (coordinate-free actuators only). The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "mute",
+     "observed": false,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_D4EC86ED-C75D-483B-9F81-BFC964957546",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 0
+  },
+  {
+   "elapsed_s": 10.905271207999931,
+   "flag": "arm",
+   "replies": [
+    {
+     "enabled": false,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or set LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key. The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "recArm",
+     "observed": false,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_07FACA0B-36C0-4C5A-91B9-D475C39598E8",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 0
+  }
+ ],
+ "walk_first": {
+  "any_flag_set": false,
+  "readable": true,
+  "track_count": 19
+ }
+}

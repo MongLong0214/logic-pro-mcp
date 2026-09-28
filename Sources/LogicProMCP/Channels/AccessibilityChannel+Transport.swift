@@ -55,6 +55,24 @@ extension AccessibilityChannel {
         return encodeResult(state)
     }
 
+    /// `transport.get_tempo`: the tempo slider's value, or an error when it was not read.
+    ///
+    /// `transport.get_state` cannot tell a read tempo from an unread one: `TransportState.tempo`
+    /// keeps the model's 120 default when no tempo control reads. Pause and play size their
+    /// stillness gap from the tempo, and a gap sized from 120 during slow playback calls a moving
+    /// playhead still (#1029 review, R-02). So they ask here. This is the slider `set_tempo` finds
+    /// and reads back, and an unread tempo is an error, never a number.
+    static func defaultGetObservedTempo(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
+        guard let slider = AXLogicProElements.findTempoSlider(runtime: runtime) else {
+            return .error("tempo slider not found, so the tempo was not read")
+        }
+        guard let tempo = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax),
+              tempo.isFinite, tempo > 0 else {
+            return .error("tempo slider found, but its value was not read")
+        }
+        return encodeResult(["tempo": tempo])
+    }
+
     static func defaultToggleTransportButton(
         named name: String,
         runtime: AXLogicProElements.Runtime = .production,

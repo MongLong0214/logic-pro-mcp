@@ -128,10 +128,16 @@ Optional. Logic 12.2+ does not reliably import the legacy `.plist`; use it only 
 
 Manual binding is only needed for remaining keycmd-only/channel-only paths:
 
+- `edit.delete`
 - `edit.duplicate`
 - `edit.normalize`
 - `nav.goto_marker`
 - `transport.capture_recording`
+- `view.toggle_inspector`
+- `view.toggle_step_editor`
+
+`edit.delete`, `view.toggle_inspector` and `view.toggle_step_editor` are here because Apple's U.S.
+key-command preset binds no key to their functions, so the CGEvent fallback does not guess one.
 
 Most normal tool calls route through Accessibility, AppleScript, MCU, CoreMIDI, or CGEvent without manual MIDI Learn.
 

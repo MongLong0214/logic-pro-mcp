@@ -4,6 +4,11 @@ import MCP
 import Testing
 @testable import LogicProMCP
 
+// Nested in `OperationTraceTests`, which is `.serialized`, so this suite never runs beside another
+// test that sets LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE, a process-wide variable: one test's restore
+// unset it in the middle of another (#1045 review round 2). `.serialized` orders only the tests
+// inside one suite, so every test that sets it lives under that suite.
+extension OperationTraceTests {
 @Suite("ADR-005 support bundle", .serialized)
 struct SupportBundleTests {
     @Test("bundle is complete, readback-verifiable, and privacy safe")
@@ -527,4 +532,5 @@ struct SupportBundleTests {
     private static func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
+}
 }

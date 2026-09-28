@@ -141,7 +141,7 @@ import Testing
     #expect(AXValueExtractors.extractLogicMixerFaderValue(rangedVolume, runtime: runtime) == 0.8)
 }
 
-@Test func testAXValueExtractorsBuildTrackStateFromHeader() {
+@Test func testAXValueExtractorsBuildTrackStateFromHeader() throws {
     let builder = FakeAXRuntimeBuilder()
     let header = builder.element(1)
     let name = builder.element(2)
@@ -175,9 +175,12 @@ import Testing
     #expect(track.id == 3)
     #expect(track.name == "Lead Vox")
     #expect(track.type == .audio)
-    #expect(track.isMuted)
-    #expect(!track.isSoloed)
-    #expect(track.isArmed)
+    let trackMuted = try #require(track.isMuted)
+    #expect(trackMuted)
+    let trackSoloed = try #require(track.isSoloed)
+    #expect(!trackSoloed)
+    let trackArmed = try #require(track.isArmed)
+    #expect(trackArmed)
     #expect(track.isSelected)
     // Colour is not readable through Accessibility (#448). This fixture's header
     // description contains the English word "color", which is exactly what the old
@@ -284,7 +287,7 @@ private func colourIsUnread(_ track: TrackState) -> Bool {
     #expect(AXValueExtractors.extractSliderRange(sliderInvalid, runtime: runtime) == nil)
 }
 
-@Test func testAXValueExtractorsTrackFallbacksAndTypeInferenceVariants() {
+@Test func testAXValueExtractorsTrackFallbacksAndTypeInferenceVariants() throws {
     let builder = FakeAXRuntimeBuilder()
     let header = builder.element(20)
     let nameField = builder.element(21)
@@ -310,7 +313,8 @@ private func colourIsUnread(_ track: TrackState) -> Bool {
 
     #expect(track.name == "808 Rack")
     #expect(track.type == .externalMIDI)
-    #expect(track.isMuted)
+    let trackMuted = try #require(track.isMuted)
+    #expect(trackMuted)
     #expect(colourIsUnread(track))
     #expect(unknownTrack.name == "Mystery Track")
     #expect(unknownTrack.type == .unknown)
@@ -507,7 +511,7 @@ private func makePlayheadTransport(
 /// keyword map, as before #1020. The input-monitoring checkbox sits beside the arm in the same
 /// header, lit, so a reader that takes any lit checkbox for the arm fails the `armed: false` case.
 @Test(arguments: [true, false])
-func testAXValueExtractorsReadTheSpanishArmFromTheRecordEnableCheckbox(armed: Bool) {
+func testAXValueExtractorsReadTheSpanishArmFromTheRecordEnableCheckbox(armed: Bool) throws {
     let builder = FakeAXRuntimeBuilder()
     let header = builder.element(1)
     let arm = builder.element(2)
@@ -523,5 +527,6 @@ func testAXValueExtractorsReadTheSpanishArmFromTheRecordEnableCheckbox(armed: Bo
 
     let track = AXValueExtractors.extractTrackState(from: header, index: 0, runtime: builder.makeAXRuntime())
 
-    #expect(armed ? track.isArmed : !track.isArmed, "armed \(armed)")
+    let isArmed = try #require(track.isArmed, "armed \(armed)")
+    #expect(armed ? isArmed : !isArmed, "armed \(armed)")
 }

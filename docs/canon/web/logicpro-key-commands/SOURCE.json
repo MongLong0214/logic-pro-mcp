@@ -1,0 +1,58 @@
+{
+  "note": "Apple's Logic Pro User Guide key-command tables, the authority for which keystroke is Logic's DEFAULT for a function (#1029). Each table file is the exact bytes of the one <table> element in a `curl -s -L <url>` capture of that page: from `<table` to the first `</table>` after it, not re-encoded. `capture_sha256` is the digest of the whole capture, so a refetch can be cut the same way and compared; `table_sha256` is what Scripts/check-cgevent-keystrokes-are-apples.py re-derives from the committed file before it reads a row. `fetched` is the capture file's modification time, which is when curl wrote it. Every page carries the sentence in `preset_sentence` once, so these are the U.S. default preset's bindings, and the guard reads each named key as the kVK_ANSI_* / kVK_* virtual keycode of that key on a U.S. keyboard.",
+  "limits": [
+    "Which Logic Pro version the web guide describes is not stated on these pages and was not measured; docs/canon/MANIFEST.json pins Logic 12.3 (6674), and nothing here shows the two agree.",
+    "Logic's bundle ships its own preset (Contents/Resources/Key Commands/U.S..logikcs); its bindings sit in an opaque LogicBinaryPreferences blob that nothing here decodes, so the two were not compared.",
+    "Only the four pages the CGEvent key table cites are pinned; a keystroke whose row lives on another key-command page needs that page pinned the same way first."
+  ],
+  "pages": {
+    "global-commands": {
+      "url": "https://support.apple.com/guide/logicpro/global-commands-lgcp02bf31b6/mac",
+      "fetched": "2026-09-27T14:37:00+09:00",
+      "capture_sha256": "e61af0f3ad1c73a72356736796f0eead4aa23d3d63ba2303cab09090d915ecf8",
+      "capture_bytes": 2464360,
+      "table_file": "global-commands.table.html",
+      "table_sha256": "84ebf6471bb2fbd8c0148a6b6c3770f5c774e9a5314b876f8877d6495b4734fb",
+      "table_bytes": 15769,
+      "aria_label": "Table. Global Commands key commands",
+      "body_rows": 199,
+      "preset_sentence": "The following table reflects default key commands included in the U.S. default preset."
+    },
+    "main-window-tracks": {
+      "url": "https://support.apple.com/guide/logicpro/main-window-tracks-lgcpb99be9c5/mac",
+      "fetched": "2026-09-27T14:38:18+09:00",
+      "capture_sha256": "efe3190cab7b51bca164496435aa15b152e66266d180d0d23fe7f4b46fd6d785",
+      "capture_bytes": 2445861,
+      "table_file": "main-window-tracks.table.html",
+      "table_sha256": "280ecf600798126e102c6042205c4023c951c39b1058a6eaa0129cdbe1f9266e",
+      "table_bytes": 10102,
+      "aria_label": "Table. Main Window Tracks key commands",
+      "body_rows": 109,
+      "preset_sentence": "The following table reflects default key commands included in the U.S. default preset."
+    },
+    "main-window-tracks-and-various-editors": {
+      "url": "https://support.apple.com/guide/logicpro/main-window-tracks-and-various-editors-lgcpe8314fe2/mac",
+      "fetched": "2026-09-27T14:38:12+09:00",
+      "capture_sha256": "122e80fc029029c31476caabafec57e510654af11e1f2dcf158f1068c44b6945",
+      "capture_bytes": 2455653,
+      "table_file": "main-window-tracks-and-various-editors.table.html",
+      "table_sha256": "049da4bb1f760c8b45dd611abe5e15e73ca0715c0c8db2eaf4cad3fb89dcfe4c",
+      "table_bytes": 7069,
+      "aria_label": "Table. Main Windows Tracks and Various Editors key commands",
+      "body_rows": 70,
+      "preset_sentence": "The following table reflects default key commands included in the U.S. default preset."
+    },
+    "various-windows": {
+      "url": "https://support.apple.com/guide/logicpro/various-windows-lgcp665bbccc/mac",
+      "fetched": "2026-09-27T14:38:16+09:00",
+      "capture_sha256": "9f6251390c16ceaeefb65178be6788da979749a02eb34317c08954c5d12fb81a",
+      "capture_bytes": 2451809,
+      "table_file": "various-windows.table.html",
+      "table_sha256": "041bccf8984673634e0e2fef8537ddf176c33ece40b0c847da291255b85e6ae0",
+      "table_bytes": 3392,
+      "aria_label": "Table. Various Windows key commands",
+      "body_rows": 42,
+      "preset_sentence": "The following table reflects default key commands included in the U.S. default preset."
+    }
+  }
+}
