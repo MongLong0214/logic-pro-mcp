@@ -3,6 +3,11 @@ import MCP
 import Testing
 @testable import LogicProMCP
 
+// Nested in `OperationTraceTests`, which is `.serialized`, so this suite never runs beside another
+// test that sets LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE, a process-wide variable: one test's restore
+// unset it in the middle of another (#1045 review round 2). `.serialized` orders only the tests
+// inside one suite, so every test that sets it lives under that suite.
+extension OperationTraceTests {
 @Suite("HC global invariant")
 struct HCGlobalInvariantTests {
     private enum Invariant {
@@ -571,9 +576,12 @@ struct HCGlobalInvariantTests {
 
     private static func hcEnvelopeRouter() async -> ChannelRouter {
         let router = ChannelRouter()
-        let transportJSON = """
-        {"isPlaying":false,"isRecording":false,"isPaused":false,"tempo":120.0,"position":"1.1.1.1","timePosition":"00:00:00.000","sampleRate":44100,"isCycleEnabled":false,"isMetronomeEnabled":false,"lastUpdated":"2026-06-19T02:17:42.000Z"}
-        """
+        // The AX channel's own encoder writes this reading, so it carries the timestamp form the
+        // server sends. A hand-typed `.000Z` decodes under `.iso8601` on macOS 26 but not on the
+        // macos-15 CI runner, where pause's read then failed and it refused before writing.
+        let transportReading = AccessibilityChannel.encodeResult(
+            TransportState(lastUpdated: Date(timeIntervalSince1970: 1_781_835_462))
+        )
         let markersJSON = """
         [{"id":0,"name":"Intro","position":"1.1.1.1","positionSource":"parser"}]
         """
@@ -583,7 +591,7 @@ struct HCGlobalInvariantTests {
             "track.select": verifiedResult,
             "track.rename": verifiedResult,
             "track.set_arm": verifiedResult,
-            "transport.get_state": .success(transportJSON),
+            "transport.get_state": transportReading,
             "nav.get_markers": .success(markersJSON),
         ]
         for id in ChannelID.allCases {
@@ -615,4 +623,5 @@ struct HCGlobalInvariantTests {
         mtime: { _ in nil },
         sleep: { _ in }
     )
+}
 }

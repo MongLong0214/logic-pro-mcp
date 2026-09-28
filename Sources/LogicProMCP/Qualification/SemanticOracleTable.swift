@@ -468,8 +468,9 @@ enum SemanticOracleTable {
             + "keystroke); the paste has no arrange read-back and emits State B "
             + "send_only_no_readback, so no State A exists",
         .editDelete:
-            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Delete "
-            + "keystroke); the delete has no arrange read-back and emits State B "
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command; CGEvent posts "
+            + "no keystroke, as Apple's U.S. preset binds none to a plain delete); the delete has "
+            + "no arrange read-back and emits State B "
             + "send_only_no_readback, so no State A exists",
         .editSelectAll:
             "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+A "
@@ -1568,12 +1569,13 @@ enum SemanticOracleTable {
     /// mouse-click) is caught.
     static let controlBarClickActions = ["axpress", "axconfirm"]
 
-    // TransportDispatcher `handleVerifiedTransportCommand(.play)` → encodeStateA.
-    // BOTH State-A branches (already-playing fast path, and the post-write poll)
-    // emit `operation:"transport.play"`, `verify_source:"transport_state"`, and an
-    // `observed_after` transportStateSummary whose `isPlaying == true` (State A is
-    // reached ONLY when `action.matches(observed)`, i.e. the readback showed
-    // playback). `observed_after.isPlaying == true` is the GENUINE invariant — it
+    // TransportDispatcher `verifiedPlayResult` → encodeStateA. Every State-A branch
+    // (from stopped, the post-write poll of `routeAndVerifyTransportCommand(.play)`;
+    // already playing, Play on with the playhead moving; resumed from pause, the
+    // play key then a moving playhead) emits `operation:"transport.play"`,
+    // `verify_source:"transport_state"`, and an `observed_after` transportStateSummary
+    // whose `isPlaying == true` (no branch reaches State A without a readback that
+    // showed playback). `observed_after.isPlaying == true` is the GENUINE invariant — it
     // relates the AX transport readback to the operation's target semantics, NOT a
     // same-source echo. `write_attempted`/`poll_attempts` differ per branch and
     // are not pinned.
@@ -1623,14 +1625,14 @@ enum SemanticOracleTable {
         ]
     )
 
-    // TransportDispatcher `verifiedPauseResult` → encodeStateA. Both State-A
-    // branches (already-paused fast path, post-write path) emit the SAME three
-    // constants: `operation:"transport.pause"`, `requested_state:"paused"`,
+    // TransportDispatcher `verifiedPauseResult` → encodeStateA. Its three State-A
+    // branches (not playing, already paused, paused after the keystroke) emit the
+    // SAME three constants: `operation:"transport.pause"`, `requested_state:"paused"`,
     // `verify_source:"transport_state"` (pause never uses the ax_transport_state
-    // tag stop's write path does). Their readback keys differ (nested
-    // `observed_after` vs flat `observed_isPlaying`), so — as with stop — the
-    // stopped-confirmation is structural (envelope), and only the shared constants
-    // are declaratively pinned.
+    // tag stop's write path does). Their readback keys differ (only the post-write
+    // branch carries flat `observed_isPlaying`/`observed_position`), so — as with
+    // stop — the pause confirmation (Play on, two equal playhead readings) is
+    // structural (envelope), and only the shared constants are declaratively pinned.
     static let transportPause = SafeMutationOracle.oracle(
         .transportPause,
         semantics: [

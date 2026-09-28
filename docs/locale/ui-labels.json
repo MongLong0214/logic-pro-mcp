@@ -2874,16 +2874,17 @@
    }
   },
   "keyCommandsWindowTitle": {
-   "canonical": "Key Command",
+   "canonical": "Key Command Assignments",
    "variants": [
-    "키 명령",
-    "キーコマンド",
-    "Befehlstaste",
-    "Comando de teclado",
-    "Raccourci clavier",
-    "Comando da tastiera",
-    "键盘命令",
-    "按鍵指令"
+    "키 명령 할당",
+    "キーコマンドの割り当て",
+    "Tastaturkurzbefehlzuweisungen",
+    "Asignaciones de comandos de teclado",
+    "Assignations de raccourcis clavier",
+    "Assegnazioni comandi da tastiera",
+    "Atribuições de Comandos de Teclado",
+    "键盘命令分配",
+    "按鍵指令指定"
    ],
    "rationale": "Identifies the Key Commands window by title substring. The window Logic opened for",
    "match": "contains",
@@ -5163,13 +5164,18 @@
    "canonical": "Toggle Track Record Enable",
    "variants": [
     "트랙 녹음 활성화 토글",
+    "トラックの録音可能を切り替え",
     "トラックの録音可能を切り替える",
+    "Spur für die Aufnahme aktivieren ein-/aus",
     "Spur für die Aufnahme aktivieren ein-/ausschalten",
     "Activar/desactivar grabación de pista",
     "Activer/Désactiver l’enregistrement sur piste",
-    "开关轨道录音启用"
+    "开关轨道录音启用",
+    "Attiva/disattiva abilitazione registrazione traccia",
+    "Ativar/Desativar Gravação das Pistas",
+    "切換音軌錄音啟用"
    ],
-   "rationale": "The Key Commands entry `system.setup_arm_key` assigns a chord to. Apple keys it in",
+   "rationale": "The Key Commands entry `system.setup_arm_key` assigns a chord to. Apple names it",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -5178,10 +5184,10 @@
     "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "regionBarsSentence": {
@@ -6753,6 +6759,34 @@
     "zh-TW": "derived"
    }
   },
+  "trackInputMonitoringButton": {
+   "canonical": "Input Monitoring",
+   "variants": [
+    "입력 모니터링",
+    "入力モニタリング",
+    "Input-Monitoring",
+    "Monitorización de entrada",
+    "Monitoring de l’entrée",
+    "Monitoraggio ingresso",
+    "Monitoramento de Entrada",
+    "输入监听",
+    "輸入監聽"
+   ],
+   "rationale": "Identifies the track header's Input Monitoring checkbox by description substring; read-only state extraction (#1040).",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "trackMenuBar": {
    "canonical": "Track",
    "variants": [
@@ -7362,17 +7396,17 @@
    }
   },
   "transportRecordControl": {
-   "canonical": "record",
+   "canonical": "Record",
    "variants": [
     "녹음",
     "録音",
     "Aufnahme",
-    "grabar",
-    "enregistrer",
-    "registra",
-    "gravar",
+    "Grabar",
+    "Enregistrement",
+    "Registra",
+    "Grava",
     "录音",
-    "錄製"
+    "錄音"
    ],
    "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only.",
    "match": "contains",

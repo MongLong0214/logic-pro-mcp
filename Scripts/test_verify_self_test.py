@@ -33,11 +33,19 @@ class VerifierSelfTest(unittest.TestCase):
         self.assertGreater(total, 0, tail)
         self.assertEqual(killed, total, tail)
 
-    def test_the_p0b_commands_refuse_rather_than_pretend(self):
-        proc = subprocess.run([sys.executable, VERIFY, "batch", "--out-dir", os.devnull],
-                              capture_output=True, text=True, timeout=60)
-        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
-        self.assertIn("P0b", proc.stdout)
+    def test_run_and_batch_refuse_before_anything_is_built(self):
+        """The live commands refuse bad input with exit 2 before a build or the live lock: a head
+        that is not 40 hex, and a spec handed to batch as its queue."""
+        spec = os.path.join(REPO, "docs", "acceptance", "1020.json")
+        for argv, says in ((["run", spec, "--head", "HEAD", "--out", os.devnull],
+                            "not a full 40-hex commit"),
+                           (["batch", "--queue", spec, "--out-dir", os.devnull],
+                            "not an lpm-queue/1 queue")):
+            proc = subprocess.run([sys.executable, VERIFY] + argv, capture_output=True, text=True,
+                                  timeout=60)
+            self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+            self.assertIn(says, proc.stdout)
+            self.assertIn("refused before anything was built or driven", proc.stdout)
 
 
 if __name__ == "__main__":

@@ -52,10 +52,11 @@ struct Issue291GermanTrackHeaderMuteTests {
     }
 
     @Test("the track read takes isMuted from the checkbox described Stumm")
-    func extractorReadsStumm() {
+    func extractorReadsStumm() throws {
         let h = makeGermanHeader()
         let track = AXValueExtractors.extractTrackState(
             from: h.header, index: 0, runtime: h.builder.makeAXRuntime())
-        #expect(track.isMuted)
+        let trackMuted = try #require(track.isMuted)
+        #expect(trackMuted)
     }
 }

@@ -345,5 +345,28 @@
     "reasons": []
    }
   }
+ },
+ "rest": {
+  "in_locale": true,
+  "reading": {
+   "lproj": "ko",
+   "code": "ko",
+   "expected_title": {
+    "readable": true,
+    "value": "lpm-locale-campaign - 트랙"
+   },
+   "language_setting": {
+    "readable": true,
+    "value": [
+     "ko"
+    ]
+   },
+   "window_names": {
+    "readable": true,
+    "value": [
+     "lpm-locale-campaign - 트랙"
+    ]
+   }
+  }
  }
 }

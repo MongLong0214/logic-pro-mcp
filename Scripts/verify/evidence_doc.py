@@ -34,7 +34,12 @@ FORMAT `lpm-evidence/1`
           }
         }
       },
-      "verdicts": {"<locale>": {"<row id>": {...engine.evaluate_row output...}}}
+      "verdicts": {"<locale>": {"<row id>": {...engine.evaluate_row output...}}},
+      "rest": {"in_locale": true | false, ...}   # the lifecycle's rest() result: Logic put back
+                                         # in Korean after the last locale. Written by `run` and
+                                         # `batch`, held in the attestation too; absent or not
+                                         # `"in_locale": true`, the document is at best
+                                         # incomplete ("restore not confirmed")
     }
 
 The predicates are not copied beside each observation: they are the embedded spec's rows, bound to
@@ -79,6 +84,7 @@ UNBOUND = "unbound"
 # Scripts/verify/live/binary.py build() returns, so P0b stores its result without renaming.
 BINARY_PATH, BINARY_SHA256, HEAD, BINDING = "binary_path", "binary_sha256", "head", "binding"
 LOCALE_READING = "locale_reading"
+REST = "rest"
 
 #: lproj -> the AppleLanguages code Logic is given for it. The same table as
 #: Scripts/verify/live/locale.py CODES (P0b); the engine checks a run's reading against it.
@@ -215,14 +221,19 @@ def write_bytes_atomic(path: str, data: bytes) -> None:
         raise
 
 
-def publish_content_addressed(directory: str, data: bytes) -> str:
-    """Write `data` as `<directory>/<sha256>.json` and return that name. The name IS the content,
-    so a later file can never take an earlier one's name: a record that cites it cites these bytes."""
-    name = f"{sha256_of_bytes(data)}.json"
+def content_name(data: bytes) -> str:
+    """The name evidence bytes are published under: `<sha256>.json`. The name IS the content, so a
+    later file can never take an earlier one's name: a record that cites it cites these bytes."""
+    return f"{sha256_of_bytes(data)}.json"
+
+
+def publish(directory: str, name: str, data: bytes) -> None:
+    """Write `data` as `<directory>/<name>`, leaving a file already there with these bytes as it is.
+    The record writer names it with `content_name` first, so the records it checks before
+    publishing cite the name the bytes are then written under."""
     path = os.path.join(directory, name)
     if os.path.exists(path):
         with open(path, "rb") as handle:
             if handle.read() == data:
-                return name
+                return
     write_bytes_atomic(path, data)
-    return name

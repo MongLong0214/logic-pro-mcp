@@ -268,6 +268,10 @@ private actor SequencedTransportReadbackChannel: Channel {
     nonisolated let id: ChannelID
     let toggleResult: ChannelResult
     let gotoPositionResult: ChannelResult
+    /// What the tempo slider reads, or nil when it could not be read. It is independent of the
+    /// `tempo` field in `transportStates`, which is the model's 120 default whenever the reading's
+    /// own tempo read failed.
+    let observedTempo: Double?
     var transportStates: [TransportState]
     var executedOps: [(String, [String: String])] = []
 
@@ -275,11 +279,13 @@ private actor SequencedTransportReadbackChannel: Channel {
         id: ChannelID = .accessibility,
         toggleResult: ChannelResult = .error("unexpected toggle"),
         gotoPositionResult: ChannelResult = .error("unexpected goto"),
+        observedTempo: Double? = 120.0,
         transportStates: [TransportState]
     ) {
         self.id = id
         self.toggleResult = toggleResult
         self.gotoPositionResult = gotoPositionResult
+        self.observedTempo = observedTempo
         self.transportStates = transportStates
     }
 
@@ -299,6 +305,11 @@ private actor SequencedTransportReadbackChannel: Channel {
             }
             let next = transportStates.removeFirst()
             return .success(encodeDispatcherJSON(next))
+        case "transport.get_tempo":
+            guard let observedTempo else {
+                return .error("tempo slider not read")
+            }
+            return .success("{\"tempo\":\(observedTempo)}")
         default:
             return .error("unexpected operation: \(operation)")
         }
@@ -705,18 +716,79 @@ private func liveTransportJSON(
     #expect(object["observed"] as? String == "8.1.1.1")
 }
 
-@Test func testTransportDispatcherPauseReturnsStateAWhenPlaybackStops() async throws {
-    // #138: pause must verify via transport readback like stop, not report
-    // bare success. Routing: transport.pause -> .coreMIDI; transport.get_state
-    // -> .accessibility, so the write and the readback live on separate fakes.
+/// A transport reading whose position the reader observed, as Logic's control bar shows it: bar and
+/// beat only.
+private func pauseReading(playing: Bool, at position: String) -> TransportState {
+    TransportState(
+        isPlaying: playing,
+        position: position,
+        positionReadback: TransportPositionReadback(value: position, observedComponents: [.bar, .beat]),
+        lastUpdated: Date()
+    )
+}
+
+private actor RecordedSleeps {
+    var nanoseconds: [UInt64] = []
+    func append(_ value: UInt64) { nanoseconds.append(value) }
+}
+
+@Test func testTransportDispatcherPauseVerifiesByPlayheadStillWithPlayOn() async throws {
+    // #1029: Logic's Pause freezes the playhead and leaves Play on (measured in ko), so State A is
+    // Play on with two equal positions a gap apart, not Play off.
+    // Mutation killed: the old Play-off check restored (`if confirming.isPlaying == false`).
     let router = ChannelRouter()
-    let pauseWrite = FixedResultChannel(id: .coreMIDI, result: .success("MMC pause sent"))
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
     let readback = SequencedTransportReadbackChannel(
         id: .accessibility,
         transportStates: [
-            // before: playing -> first poll: stopped
-            TransportState(isPlaying: true, position: "1.2.1.1", timePosition: "00:00:02.000", lastUpdated: Date()),
-            TransportState(isPlaying: false, position: "1.2.1.1", timePosition: "00:00:02.000", lastUpdated: Date()),
+            pauseReading(playing: true, at: "12.1"),
+            pauseReading(playing: true, at: "12.3"),
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+        ]
+    )
+    await router.register(pauseWrite)
+    await router.register(readback)
+    let sleeps = RecordedSleeps()
+
+    let result = await TransportDispatcher.handle(
+        command: "pause",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { await sleeps.append($0) }
+    )
+
+    #expect(!result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(try #require(object["verified"] as? Bool))
+    #expect(object["operation"] as? String == "transport.pause")
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(try #require(object["observed_isPlaying"] as? Bool))
+    #expect(object["observed_position"] as? String == "12.4")
+    let writeOps = await pauseWrite.executedOps
+    #expect(writeOps.map(\.0) == ["transport.pause"])
+    // One second between the two readings before the keystroke, a settle, one second between the
+    // two after: at 120 BPM a beat is half a second, so a moving playhead cannot read the same twice.
+    let slept = await sleeps.nanoseconds
+    #expect(slept == [1_000_000_000, 300_000_000, 1_000_000_000])
+}
+
+@Test func testTransportDispatcherPauseAlreadyPausedPostsNothing() async throws {
+    // #1029: Pause is a toggle. A transport already paused (Play on, playhead still across the gap)
+    // gets no keystroke; pressing would resume playback.
+    // Mutation killed: the pre-read's verdict skipped (`if stillBefore {` -> `if false {`).
+    // Four still readings, so a mutant that presses can verify its own press as State A; only the
+    // recorded keystroke and `write_attempted` tell the two apart, not readings running out.
+    let router = ChannelRouter()
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        transportStates: [
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
         ]
     )
     await router.register(pauseWrite)
@@ -730,32 +802,30 @@ private func liveTransportJSON(
         sleep: { _ in }
     )
 
-    #expect(!result.isError!)
+    let writeOps = await pauseWrite.executedOps
+    #expect(writeOps.isEmpty)
     let object = try #require(parseDispatcherObject(dispatcherText(result)))
-    #expect((object["verified"] as? Bool)!)
-    #expect(object["operation"] as? String == "transport.pause")
-    let observedPlaying = try #require(object["observed_isPlaying"] as? Bool)
-    #expect(!observedPlaying)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!result.isError!)
+    #expect(try #require(object["verified"] as? Bool))
+    #expect(try #require(object["already_paused"] as? Bool))
 }
 
-@Test func testTransportDispatcherPauseReturnsStateCWhenPlaybackContinues() async throws {
-    // #138: if the playhead keeps running after the pause send, pause must
-    // fail closed with State C readback_mismatch — never bare success.
+@Test func testTransportDispatcherPauseMismatchAfterTheToggleIsNotSafeToRetry() async throws {
+    // #1029: resending pause while paused resumed playback (measured in ko), so a mismatch after the
+    // keystroke must not invite a retry.
+    // Mutation killed: `safe_to_retry` restored to true on the mismatch.
     let router = ChannelRouter()
-    let pauseWrite = FixedResultChannel(id: .coreMIDI, result: .success("MMC pause sent"))
-    // 13 states: 1 "before" read + 12 polls, all still playing.
-    let stillPlaying = Array(
-        repeating: TransportState(
-            isPlaying: true,
-            position: "1.3.1.1",
-            timePosition: "00:00:03.000",
-            lastUpdated: Date()
-        ),
-        count: 13
-    )
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
     let readback = SequencedTransportReadbackChannel(
         id: .accessibility,
-        transportStates: stillPlaying
+        transportStates: [
+            pauseReading(playing: true, at: "12.1"),
+            pauseReading(playing: true, at: "12.3"),
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "13.2"),
+        ]
     )
     await router.register(pauseWrite)
     await router.register(readback)
@@ -770,21 +840,246 @@ private func liveTransportJSON(
 
     #expect(result.isError!)
     let object = try #require(parseDispatcherObject(dispatcherText(result)))
-    // State C carries success:false + error (no `verified`/`reason` keys).
     let success = try #require(object["success"] as? Bool)
     #expect(!success)
     #expect(object["error"] as? String == "readback_mismatch")
     #expect(object["operation"] as? String == "transport.pause")
-    let observedPlaying = try #require(object["observed_isPlaying"] as? Bool)
-    #expect(observedPlaying)
+    #expect(try #require(object["write_attempted"] as? Bool))
+    let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
+}
+
+@Test(arguments: [
+    (120.0, UInt64?(1_000_000_000)),
+    (40.0, UInt64?(1_875_000_000)),
+    (20.0, UInt64?(3_750_000_000)),
+    (15.0, UInt64?(5_000_000_000)),
+    (14.0, UInt64?.none),
+    (5.0, UInt64?.none),
+    (0.0, UInt64?.none),
+])
+func testTransportDispatcherPauseStillnessGapIsLongerThanABeat(tempo: Double, expected: UInt64?) {
+    // The control bar shows bar and beat only, so the gap must exceed a beat at the observed tempo.
+    // Mutations killed: the gap not scaled by tempo (`max(1.0, 1.25 * 60.0 / tempo)` -> `1.0`), and
+    // the limit moved off 5 s (15 BPM measured, 14 BPM not).
+    #expect(TransportDispatcher.pauseStillnessGapNanoseconds(tempo: tempo) == expected)
+}
+
+/// The write each stillness command sends when it decides: pause presses Pause, play sends the Play
+/// key to a paused transport.
+private let stillnessCommands: [(command: String, write: String)] = [
+    ("pause", "transport.pause"),
+    ("play", "transport.resume"),
+]
+
+@Test(arguments: stillnessCommands)
+func testTransportDispatcherStillnessWithTheTempoUnreadSendsNothingAndSaysSo(
+    command: String, write: String
+) async throws {
+    // #1029 review round 1 (R-02): the reading's `tempo` is the model's 120 default when its tempo
+    // read fails, and a gap sized from it can call a slow, moving playhead still. With the tempo
+    // slider unread, neither command may decide: nothing is sent, and the answer is a State C
+    // failure with the reason. Round 2 (R-04): it was State B with `success` true, and State B
+    // means an action was attempted.
+    // Mutations killed: the gap sized from the reading's own tempo again (`observedTempo(router:)`
+    // -> `first.tempo`), which reads these equal positions as a paused transport; and the answer
+    // back to State B (`unmeasured-is-state-b`).
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: nil,
+        transportStates: [
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+        ]
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+    let sleeps = RecordedSleeps()
+
+    let result = await TransportDispatcher.handle(
+        command: command,
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { await sleeps.append($0) }
+    )
+
+    let writeOps = await keyWrite.executedOps
+    #expect(!writeOps.map(\.0).contains(write))
+    #expect(writeOps.isEmpty, "\(command) sent \(writeOps.map(\.0)) with the tempo unread")
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "C")
+    let success = try #require(object["success"] as? Bool)
+    #expect(!success)
+    #expect(object["error"] as? String == "readback_unavailable")
+    #expect(object["reason"] as? String == "tempo_unreadable")
     let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
     #expect(safeToRetry)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(object["already_paused"] == nil)
+    #expect(object["resumed_from_pause"] == nil)
+    // Nothing was measured, so nothing was waited for.
+    let slept = await sleeps.nanoseconds
+    #expect(slept.isEmpty)
+}
+
+@Test(arguments: stillnessCommands)
+func testTransportDispatcherStillnessAtFiveBPMDoesNotReadEqualPositionsAsStill(
+    command: String, write: String
+) async throws {
+    // #1029 review round 1 (R-02): at 5 BPM a beat lasts 12 s, so two readings a second apart are
+    // equal while the playhead moves. The readings here carry the model's 120 default (their own
+    // tempo read failed); the tempo slider reads 5. A 1.25-beat gap is 15 s, past the 5 s limit, so
+    // neither command waits or decides, and neither calls the transport paused.
+    // Mutations killed: the gap sized from the reading's own tempo again (`observedTempo(router:)`
+    // -> `first.tempo`): 120 gives a 1 s gap, and the equal readings become "already paused" for
+    // pause and a paused transport that gets the Play key for play; and the answer back to State B
+    // with `success` true (`unmeasured-is-state-b`, round 2 R-04).
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: 5.0,
+        transportStates: [
+            pauseReading(playing: true, at: "3.2"),
+            pauseReading(playing: true, at: "3.2"),
+            pauseReading(playing: true, at: "3.2"),
+            pauseReading(playing: true, at: "3.2"),
+        ]
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+    let sleeps = RecordedSleeps()
+
+    let result = await TransportDispatcher.handle(
+        command: command,
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { await sleeps.append($0) }
+    )
+
+    let writeOps = await keyWrite.executedOps
+    #expect(!writeOps.map(\.0).contains(write))
+    #expect(writeOps.isEmpty, "\(command) sent \(writeOps.map(\.0)) at 5 BPM")
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "C")
+    let success = try #require(object["success"] as? Bool)
+    #expect(!success)
+    #expect(object["error"] as? String == "readback_unavailable")
+    #expect(object["reason"] as? String == "tempo_too_slow_to_measure")
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(object["observed_tempo"] as? Double == 5.0)
+    #expect(object["already_paused"] == nil)
+    #expect(object["resumed_from_pause"] == nil)
+    let slept = await sleeps.nanoseconds
+    #expect(slept.isEmpty)
+}
+
+/// The other refusals pause and play make before their key, once the tempo has read: the second
+/// transport reading failed, or the playhead position did not read in either reading.
+private let stillnessPreWriteRefusals: [(command: String, write: String, failure: String)] = [
+    ("pause", "transport.pause", "second_reading_failed"),
+    ("pause", "transport.pause", "position_unread"),
+    ("play", "transport.resume", "second_reading_failed"),
+    ("play", "transport.resume", "position_unread"),
+]
+
+@Test(arguments: stillnessPreWriteRefusals)
+func testTransportDispatcherStillnessRefusalsBeforeTheKeyAreStateC(
+    command: String, write: String, failure: String
+) async throws {
+    // Round 2 (R-04 sweep): every refusal that sends nothing is State C with `success` false,
+    // never State B, which says an action was attempted.
+    // Mutation killed: `refusalBeforeWrite` answering State B (`encodeStateB(reason:
+    // .readbackUnavailable, ...)`) in either command.
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("key sent"))
+    let readings: [TransportState] = failure == "second_reading_failed"
+        ? [pauseReading(playing: true, at: "12.1")]
+        : [
+            TransportState(isPlaying: true, position: "12.1", lastUpdated: Date()),
+            TransportState(isPlaying: true, position: "12.1", lastUpdated: Date()),
+        ]
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: 120.0,
+        transportStates: readings
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+
+    let result = await TransportDispatcher.handle(
+        command: command,
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { _ in }
+    )
+
+    let writeOps = await keyWrite.executedOps
+    #expect(!writeOps.map(\.0).contains(write))
+    #expect(writeOps.isEmpty, "\(command) (\(failure)) sent \(writeOps.map(\.0))")
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "C")
+    let success = try #require(object["success"] as? Bool)
+    #expect(!success)
+    #expect(object["error"] as? String == "readback_unavailable")
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+}
+
+@Test func testTransportDispatcherPauseAtAnObservedTempoStillDecides() async throws {
+    // Positive control for the two tests above: with the tempo slider read at 120 BPM, equal
+    // readings a 1000 ms gap apart are still decided. Pause answers "already paused" and sends
+    // nothing, from the observed tempo rather than the reading's.
+    let router = ChannelRouter()
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: 120.0,
+        transportStates: [
+            pauseReading(playing: true, at: "12.4"),
+            pauseReading(playing: true, at: "12.4"),
+        ]
+    )
+    await router.register(pauseWrite)
+    await router.register(readback)
+    let sleeps = RecordedSleeps()
+
+    let result = await TransportDispatcher.handle(
+        command: "pause",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { await sleeps.append($0) }
+    )
+
+    #expect(!result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "A")
+    #expect(try #require(object["already_paused"] as? Bool))
+    #expect(object["observed_tempo"] as? Double == 120.0)
+    #expect(object["stillness_gap_ms"] as? Int == 1000)
+    let writeOps = await pauseWrite.executedOps
+    #expect(writeOps.isEmpty)
+    let slept = await sleeps.nanoseconds
+    #expect(slept == [1_000_000_000])
 }
 
 @Test func testTransportDispatcherPauseReturnsStateAUnchangedWhenAlreadyStopped() async throws {
     // Idempotent early-return: already stopped means no write is attempted.
     let router = ChannelRouter()
-    let pauseWrite = FixedResultChannel(id: .coreMIDI, result: .success("MMC pause sent"))
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
     let readback = SequencedTransportReadbackChannel(
         id: .accessibility,
         transportStates: [
@@ -809,16 +1104,166 @@ private func liveTransportJSON(
     #expect(!writeAttempted)
     let unchanged = try #require(object["unchanged"] as? Bool)
     #expect(unchanged)
-    // No write should have been routed to the coreMIDI pause channel.
+    // No write should have been routed to the pause channel.
     let writeOps = await pauseWrite.executedOps
     #expect(writeOps.isEmpty)
+}
+
+@Test func testTransportDispatcherPauseWhileStoppedSendsNothingAndSaysWhy() async throws {
+    // #1029: from stopped, Logic's Pause key would turn Play on with the playhead still (measured),
+    // so pause keeps its answer (nothing sent) and the reply names the reason.
+    // Mutation killed: the reason dropped (`extras["not_playing"] = true` removed), so a caller
+    // cannot tell a stopped transport from a paused one.
+    let router = ChannelRouter()
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        transportStates: [pauseReading(playing: false, at: "4.2")]
+    )
+    await router.register(pauseWrite)
+    await router.register(readback)
+
+    let result = await TransportDispatcher.handle(
+        command: "pause",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { _ in }
+    )
+
+    let writeOps = await pauseWrite.executedOps
+    #expect(writeOps.isEmpty)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(!result.isError!)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(try #require(object["not_playing"] as? Bool))
+    #expect(object["already_paused"] == nil)
+}
+
+@Test func testTransportDispatcherPlayWhilePausedSendsThePlayKeyAndVerifiesMovement() async throws {
+    // #1029: a paused transport reads Play on with the playhead still. The AX Play control already
+    // reads on, so play sends Logic's Play key through `transport.resume` and needs the playhead to
+    // move afterwards.
+    // Mutation killed: the play route sent instead of the play key (`transport.resume` ->
+    // `transport.play`), which on a live Logic is the AX control's no-op.
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("play key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        transportStates: [
+            pauseReading(playing: true, at: "10.3"),
+            pauseReading(playing: true, at: "10.3"),
+            pauseReading(playing: true, at: "10.4"),
+            pauseReading(playing: true, at: "11.2"),
+        ]
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+    let sleeps = RecordedSleeps()
+
+    let result = await TransportDispatcher.handle(
+        command: "play",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { await sleeps.append($0) }
+    )
+
+    let writeOps = await keyWrite.executedOps
+    #expect(writeOps.map(\.0) == ["transport.resume"])
+    #expect(!result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(try #require(object["verified"] as? Bool))
+    #expect(try #require(object["resumed_from_pause"] as? Bool))
+    #expect(try #require(object["write_attempted"] as? Bool))
+    let after = try #require(object["observed_after"] as? [String: Any])
+    #expect(after["position"] as? String == "11.2")
+    #expect(try #require(after["isPlaying"] as? Bool))
+    // The gap before the key, the settle, the gap after: the same gap pause measures stillness with.
+    let slept = await sleeps.nanoseconds
+    #expect(slept == [1_000_000_000, 300_000_000, 1_000_000_000])
+}
+
+@Test func testTransportDispatcherPlayWhileMovingSendsNothing() async throws {
+    // #1029: already playing means Play on AND the playhead moving across the gap. Nothing is sent.
+    // Mutation killed: movement not recognised (`if stillBefore == false {` -> `if false {`), so a
+    // playing transport is taken for paused and gets the play key.
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("play key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        transportStates: [
+            pauseReading(playing: true, at: "6.3"),
+            pauseReading(playing: true, at: "7.1"),
+            pauseReading(playing: true, at: "7.3"),
+            pauseReading(playing: true, at: "8.1"),
+        ]
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+    let sleeps = RecordedSleeps()
+
+    let result = await TransportDispatcher.handle(
+        command: "play",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { await sleeps.append($0) }
+    )
+
+    let writeOps = await keyWrite.executedOps
+    #expect(writeOps.isEmpty)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!result.isError!)
+    #expect(try #require(object["already_playing"] as? Bool))
+    // Two readings one gap apart: the movement was measured, not assumed from Play on.
+    let slept = await sleeps.nanoseconds
+    #expect(slept == [1_000_000_000])
+}
+
+@Test func testTransportDispatcherPlayMismatchAfterTheKeyIsNotSafeToRetry() async throws {
+    // #1029: the play key went to a paused transport and the playhead still does not move. Resending
+    // is another keystroke into an unknown state, so the mismatch must not invite a retry.
+    // Mutation killed: `safe_to_retry` set to true on the mismatch.
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("play key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        transportStates: [
+            pauseReading(playing: true, at: "10.3"),
+            pauseReading(playing: true, at: "10.3"),
+            pauseReading(playing: true, at: "10.3"),
+            pauseReading(playing: true, at: "10.3"),
+        ]
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+
+    let result = await TransportDispatcher.handle(
+        command: "play",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { _ in }
+    )
+
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["error"] as? String == "readback_mismatch")
+    #expect(object["operation"] as? String == "transport.play")
+    #expect(try #require(object["write_attempted"] as? Bool))
+    let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
 }
 
 @Test func testTransportDispatcherPauseReturnsStateCWhenReadbackUnavailable() async throws {
     // If no transport readback is ever available, pause must fail closed with
     // State C readback_unavailable, never bare success.
     let router = ChannelRouter()
-    let pauseWrite = FixedResultChannel(id: .coreMIDI, result: .success("MMC pause sent"))
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
     // SequencedTransportReadbackChannel returns .error when its queue is empty,
     // so an empty queue models a transport whose state can never be read.
     let readback = SequencedTransportReadbackChannel(

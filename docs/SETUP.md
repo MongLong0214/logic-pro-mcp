@@ -1,11 +1,11 @@
 # Setup
 
-Minimal install and Logic Pro integration guide for Logic Pro MCP v3.17.0.
+Minimal install and Logic Pro integration guide for Logic Pro MCP v3.18.0.
 
 ## Requirements
 
 - macOS 14+
-- Logic Pro — **latest release prioritized (currently 12.3)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variants: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`) and Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`). They use different process names for System Events automation.
+- Logic Pro — **latest release prioritized (currently 12.3)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variant: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported; the two use different process names for System Events automation. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro.
 - Claude Code, Claude Desktop, Cursor, or another MCP client
 - Homebrew, or Xcode/Swift if building from source
 
@@ -30,8 +30,8 @@ swift build -c release
 Pinned shell installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.17.0/Scripts/install.sh -o install.sh
-# inspect install.sh, then copy pins from the v3.17.0 release:
+curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.18.0/Scripts/install.sh -o install.sh
+# inspect install.sh, then copy pins from the v3.18.0 release:
 LOGIC_PRO_MCP_SHA256=<sha256 for LogicProMCP-macOS-universal.tar.gz entry> LOGIC_PRO_MCP_TEAM_ID=<team_id> bash install.sh
 ```
 
@@ -71,13 +71,13 @@ LogicProMCP doctor
 
 ### Forcing a Logic Pro variant
 
-When both desktop Logic Pro and Creator Studio Logic Pro are installed, the server auto-detects the frontmost running instance, otherwise prefers the desktop install. To force a specific variant:
+Without an override the server targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both, so a frontmost or only-running Creator Studio becomes the target. To pin the desktop variant:
 
 ```bash
-LOGIC_PRO_BUNDLE_ID=com.apple.mobilelogic LogicProMCP
+LOGIC_PRO_BUNDLE_ID=com.apple.logic10 LogicProMCP
 ```
 
-Valid values: `com.apple.logic10` (desktop), `com.apple.mobilelogic` (Creator Studio).
+Valid values: `com.apple.logic10` (desktop) and `com.apple.mobilelogic` (Creator Studio). Only desktop Logic Pro is qualified for this release. Forcing `com.apple.mobilelogic` points the server at Creator Studio anyway, with no qualification evidence behind it, and on a machine where Creator Studio is the only Logic installed, `LogicProMCP doctor` fails `logic.installation` with reason `unshipped_variant_only`.
 
 ## Logic Pro Setup
 
@@ -128,10 +128,16 @@ Optional. Logic 12.2+ does not reliably import the legacy `.plist`; use it only 
 
 Manual binding is only needed for remaining keycmd-only/channel-only paths:
 
+- `edit.delete`
 - `edit.duplicate`
 - `edit.normalize`
 - `nav.goto_marker`
 - `transport.capture_recording`
+- `view.toggle_inspector`
+- `view.toggle_step_editor`
+
+`edit.delete`, `view.toggle_inspector` and `view.toggle_step_editor` are here because Apple's U.S.
+key-command preset binds no key to their functions, so the CGEvent fallback does not guess one.
 
 Most normal tool calls route through Accessibility, AppleScript, MCU, CoreMIDI, or CGEvent without manual MIDI Learn.
 

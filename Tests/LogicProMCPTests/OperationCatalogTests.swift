@@ -33,6 +33,11 @@ private actor CatalogSelectorProbeChannel: Channel {
     }
 }
 
+// Nested in `OperationTraceTests`, which is `.serialized`, so this suite never runs beside another
+// test that clears or counts the shared trace store or sets LOGIC_MCP_ADR005_OPERATION_TRACE or the
+// audit-log root, all process-wide: beside the trace suites, a clear there changed this suite's
+// counts and wrote into its receipt root (#1045 review round 2).
+extension OperationTraceTests {
 @Suite("OperationCatalogTests", .serialized)
 struct OperationCatalogTests {
     private static let uri = "logic://system/operations"
@@ -1002,4 +1007,5 @@ struct OperationCatalogTests {
         let errorState: (Bool?) -> String = { $0.map { $0 ? "true" : "false" } ?? "nil" }
         #expect(errorState(withUnknownParams.isError) == errorState(baseline.isError))
     }
+}
 }

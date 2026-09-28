@@ -1,0 +1,639 @@
+{
+  "id": "2026-09-28-fr-FR-track-header-toggles-without-the-mute-led-writer",
+  "date": "2026-09-28",
+  "schema": 3,
+  "subject": "The track header's Mute, Solo, Record Enable and Input Monitoring checkboxes: the descriptions they are found by, and what logic://tracks publishes for each, once MCU feedback no longer writes the Mute LED into isMuted",
+  "question": "On a fr-FR Logic, does logic://tracks publish each of the four track-header toggles as its checkbox reads, leave out one nobody read, and find each checkbox by the value Apple ships?",
+  "verdict": "works",
+  "issues": [
+    1040
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "fr-FR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "swift build -c release; copy .build/release/LogicProMCP to a new path; take LIVE.lock; open the 19-track locale-campaign fixture in the locale; set Mute, Solo and Record Enable on track 2 through logic_tracks and press its Input Monitoring checkbox; call system.refresh_cache and read logic://tracks until the read has a fetched_at and 19 rows; walk the track headers and compare each checkbox's AXValue and AXDescription with the row; release Solo and read again; clear all four and read again; relaunch Logic in Korean",
+    "expected": "every checkbox that reads 0 or 1 is published as false or true under its field; a checkbox that was not read is absent from the row; each description equals the Apple row cited in canon",
+    "cost": "about 8 minutes per locale, most of it Logic relaunching; needs Logic, the fixture and LIVE.lock"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift:extractTrackState",
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift:extractTrackButtonState",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:trackMuteButton",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:trackSoloButton",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:trackInputMonitoringButton",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Tracks.swift:trackArmControl",
+    "Sources/LogicProMCP/State/StateModels.swift:TrackState.isInputMonitoring",
+    "Sources/LogicProMCP/MIDI/MCUFeedbackParser.swift:handleButton"
+  ],
+  "evidence": [
+    "evidence/2026-09-28-fr-FR-track-header-toggles-1040-r1.json"
+  ],
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/Mute#value",
+      "value": "Muet",
+      "used_for": "the value the track header's Mute checkbox is described by; the product finds it through AXLocalePolicy.trackMuteButton",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/Solo#value",
+      "value": "Solo",
+      "used_for": "the value the track header's Solo checkbox is described by; the product finds it through AXLocalePolicy.trackSoloButton",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/Record%20Enable#value",
+      "value": "Enregistrement activé",
+      "used_for": "the value the track header's Record Enable checkbox is described by; the product finds it through AXLocalePolicy.trackRecordEnableCheckbox",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/Input%20Monitoring%23acc#value",
+      "value": "Monitoring de l’entrée",
+      "used_for": "the value the track header's Input Monitoring checkbox is described by; AXLocalePolicy.trackInputMonitoringButton derives from this row",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/Input%20Monitoring#value",
+      "value": "Monitoring de l’entrée",
+      "used_for": "the value the track header's Input Monitoring checkbox is described by; AXLocalePolicy.trackInputMonitoringButton derives from this row",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    }
+  ],
+  "method": "Release build of c5a391cc0fcd91c534ba4bbcee67387d33a229c0 (binary sha256 5f035d797469..., full value in the evidence), copied out of .build to a new path and run from the copy over stdio. One harness run drove all ten locales in one pass under LIVE.lock: for each, Logic was quit and relaunched in the locale (Scripts/verify/live/locale.py switch_to, confirmed by the language setting and the translated window title), the fixture was reset from disk when its header walk was not the clean 19 tracks, then the product server was started. Mute, Solo and Record Enable were set on track 2 through logic_tracks (set_mute, set_solo, set_arm); Input Monitoring by the harness. For each of three readings the harness waited for the header walk to show the wanted state, then called system.refresh_cache and read logic://tracks, up to 6 times, until the read carried a fetched_at and all 19 rows, and walked the headers again. The walk finds each checkbox the way the product does (first AXButton, then AXCheckBox, whose description contains the label) and records the description beside Apple's row. After the ten locales the fixture's four controls were off and Logic was relaunched in Korean. Harness files: live1040_run.py, live1040_ax.py, probe_press2_lib.py, outside the repository; their sha256 are in the evidence.",
+  "observations": [
+    {
+      "reading": "A_all_on",
+      "set_on_track_2": {
+        "solo": 1,
+        "arm": 1,
+        "monitor": 1
+      },
+      "ax_wait": {
+        "timed_out": false,
+        "elapsed_s": 0.19567737507168204,
+        "polls": 1
+      },
+      "ax_same_before_and_after_the_read": [
+        true,
+        false
+      ],
+      "product_reads": [
+        {
+          "source": "ax_live",
+          "fetched_at": "2026-09-28T01:51:47.504Z",
+          "readable": true,
+          "row_count": 19,
+          "refreshed": true,
+          "rows_published_muted": []
+        }
+      ],
+      "header_backed_read_index": 0,
+      "cells": [
+        {
+          "track": 2,
+          "flag": "mute",
+          "ax_description": "Muet",
+          "apple_row_value": "Muet",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isMuted",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 2,
+          "flag": "solo",
+          "ax_description": "Solo",
+          "apple_row_value": "Solo",
+          "description_is_apple_row": true,
+          "ax_value": 1,
+          "product_field": "isSoloed",
+          "product": true,
+          "agrees": true
+        },
+        {
+          "track": 2,
+          "flag": "arm",
+          "ax_description": "Enregistrement activé",
+          "apple_row_value": "Enregistrement activé",
+          "description_is_apple_row": true,
+          "ax_value": 1,
+          "product_field": "isArmed",
+          "product": true,
+          "agrees": true
+        },
+        {
+          "track": 2,
+          "flag": "monitor",
+          "ax_description": "Monitoring de l’entrée",
+          "apple_row_value": "Monitoring de l’entrée",
+          "description_is_apple_row": true,
+          "ax_value": 1,
+          "product_field": "isInputMonitoring",
+          "product": true,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "mute",
+          "ax_description": "Muet",
+          "apple_row_value": "Muet",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isMuted",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "solo",
+          "ax_description": "Solo",
+          "apple_row_value": "Solo",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isSoloed",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "arm",
+          "ax_description": "Enregistrement activé",
+          "apple_row_value": "Enregistrement activé",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isArmed",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "monitor",
+          "ax_description": "Monitoring de l’entrée",
+          "apple_row_value": "Monitoring de l’entrée",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isInputMonitoring",
+          "product": false,
+          "agrees": true
+        }
+      ],
+      "first_read_cells": "same read as cells",
+      "what": "Solo, Record Enable and Input Monitoring set on track 2 (Mute set too, which Logic draws as 0 on a soloed track)"
+    },
+    {
+      "reading": "B_solo_released",
+      "set_on_track_2": {
+        "mute": 1,
+        "solo": 0,
+        "arm": 1,
+        "monitor": 1
+      },
+      "ax_wait": {
+        "timed_out": false,
+        "elapsed_s": 0.18719341605901718,
+        "polls": 1
+      },
+      "ax_same_before_and_after_the_read": [
+        true,
+        true
+      ],
+      "product_reads": [
+        {
+          "source": "ax_live",
+          "fetched_at": "2026-09-28T01:51:54.242Z",
+          "readable": true,
+          "row_count": 19,
+          "refreshed": true,
+          "rows_published_muted": [
+            2
+          ]
+        }
+      ],
+      "header_backed_read_index": 0,
+      "cells": [
+        {
+          "track": 2,
+          "flag": "mute",
+          "ax_description": "Muet",
+          "apple_row_value": "Muet",
+          "description_is_apple_row": true,
+          "ax_value": 1,
+          "product_field": "isMuted",
+          "product": true,
+          "agrees": true
+        },
+        {
+          "track": 2,
+          "flag": "solo",
+          "ax_description": "Solo",
+          "apple_row_value": "Solo",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isSoloed",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 2,
+          "flag": "arm",
+          "ax_description": "Enregistrement activé",
+          "apple_row_value": "Enregistrement activé",
+          "description_is_apple_row": true,
+          "ax_value": 1,
+          "product_field": "isArmed",
+          "product": true,
+          "agrees": true
+        },
+        {
+          "track": 2,
+          "flag": "monitor",
+          "ax_description": "Monitoring de l’entrée",
+          "apple_row_value": "Monitoring de l’entrée",
+          "description_is_apple_row": true,
+          "ax_value": 1,
+          "product_field": "isInputMonitoring",
+          "product": true,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "mute",
+          "ax_description": "Muet",
+          "apple_row_value": "Muet",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isMuted",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "solo",
+          "ax_description": "Solo",
+          "apple_row_value": "Solo",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isSoloed",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "arm",
+          "ax_description": "Enregistrement activé",
+          "apple_row_value": "Enregistrement activé",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isArmed",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "monitor",
+          "ax_description": "Monitoring de l’entrée",
+          "apple_row_value": "Monitoring de l’entrée",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isInputMonitoring",
+          "product": false,
+          "agrees": true
+        }
+      ],
+      "first_read_cells": "same read as cells",
+      "what": "Solo released on track 2; Mute, Record Enable and Input Monitoring still on"
+    },
+    {
+      "reading": "C_all_off",
+      "set_on_track_2": {
+        "mute": 0,
+        "solo": 0,
+        "arm": 0,
+        "monitor": 0
+      },
+      "ax_wait": {
+        "timed_out": false,
+        "elapsed_s": 0.17956808407325298,
+        "polls": 1
+      },
+      "ax_same_before_and_after_the_read": [
+        true,
+        true
+      ],
+      "product_reads": [
+        {
+          "source": "ax_live",
+          "fetched_at": "2026-09-28T01:52:12.375Z",
+          "readable": true,
+          "row_count": 19,
+          "refreshed": true,
+          "rows_published_muted": []
+        }
+      ],
+      "header_backed_read_index": 0,
+      "cells": [
+        {
+          "track": 2,
+          "flag": "mute",
+          "ax_description": "Muet",
+          "apple_row_value": "Muet",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isMuted",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 2,
+          "flag": "solo",
+          "ax_description": "Solo",
+          "apple_row_value": "Solo",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isSoloed",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 2,
+          "flag": "arm",
+          "ax_description": "Enregistrement activé",
+          "apple_row_value": "Enregistrement activé",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isArmed",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 2,
+          "flag": "monitor",
+          "ax_description": "Monitoring de l’entrée",
+          "apple_row_value": "Monitoring de l’entrée",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isInputMonitoring",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "mute",
+          "ax_description": "Muet",
+          "apple_row_value": "Muet",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isMuted",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "solo",
+          "ax_description": "Solo",
+          "apple_row_value": "Solo",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isSoloed",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "arm",
+          "ax_description": "Enregistrement activé",
+          "apple_row_value": "Enregistrement activé",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isArmed",
+          "product": false,
+          "agrees": true
+        },
+        {
+          "track": 3,
+          "flag": "monitor",
+          "ax_description": "Monitoring de l’entrée",
+          "apple_row_value": "Monitoring de l’entrée",
+          "description_is_apple_row": true,
+          "ax_value": 0,
+          "product_field": "isInputMonitoring",
+          "product": false,
+          "agrees": true
+        }
+      ],
+      "first_read_cells": "same read as cells",
+      "what": "all four off on track 2"
+    },
+    {
+      "writes": [
+        {
+          "by": "product logic_tracks",
+          "flag": "mute",
+          "enabled": true,
+          "attempts": 1,
+          "success": true,
+          "state": "A",
+          "write_source": null,
+          "timed_out": false
+        },
+        {
+          "by": "product logic_tracks",
+          "flag": "solo",
+          "enabled": true,
+          "attempts": 1,
+          "success": true,
+          "state": "A",
+          "write_source": null,
+          "timed_out": false
+        },
+        {
+          "by": "product logic_tracks",
+          "flag": "arm",
+          "enabled": true,
+          "attempts": 1,
+          "success": true,
+          "state": "A",
+          "write_source": "mcu",
+          "timed_out": false
+        },
+        {
+          "by": "harness AXFocused + AXPress",
+          "flag": "monitor",
+          "enabled": true,
+          "presses": 1,
+          "read_after": 1
+        },
+        {
+          "by": "product logic_tracks",
+          "flag": "solo",
+          "enabled": false,
+          "attempts": 1,
+          "success": true,
+          "state": "A",
+          "write_source": null,
+          "timed_out": false
+        },
+        {
+          "by": "harness AXFocused + AXPress",
+          "flag": "monitor",
+          "enabled": false,
+          "presses": 1,
+          "read_after": 0
+        },
+        {
+          "by": "product logic_tracks",
+          "flag": "mute",
+          "enabled": false,
+          "attempts": 1,
+          "success": true,
+          "state": "A",
+          "write_source": null,
+          "timed_out": false
+        },
+        {
+          "by": "product logic_tracks",
+          "flag": "arm",
+          "enabled": false,
+          "attempts": 1,
+          "success": true,
+          "state": "A",
+          "write_source": "mcu",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "locale_after_switch": {
+        "language_setting": [
+          "fr"
+        ],
+        "expected_title": "lpm-locale-campaign - Pistes",
+        "in_locale": true
+      }
+    },
+    {
+      "against_the_superseded_record": {
+        "superseded": {
+          "id": "2026-09-28-fr-FR-track-header-toggles-publish-what-was-read",
+          "head": "693c02fddefeff2a3a100c0ba62cc80bc2678a78",
+          "binary_sha256": "b04c1640ef1070491ed081e890497a87dd79a38e510bd21a62d08f73748be6c1",
+          "per_reading": {
+            "A_all_on": {
+              "header_backed_read_index": null,
+              "reads": 6,
+              "reads_of_mcu_created_rows": 6,
+              "reads_publishing_the_led_pattern": 4
+            },
+            "B_solo_released": {
+              "header_backed_read_index": 0,
+              "reads": 1,
+              "reads_of_mcu_created_rows": 0,
+              "reads_publishing_the_led_pattern": 0
+            },
+            "C_all_off": {
+              "header_backed_read_index": 0,
+              "reads": 1,
+              "reads_of_mcu_created_rows": 0,
+              "reads_publishing_the_led_pattern": 0
+            }
+          },
+          "over_the_three_readings": {
+            "reads": 8,
+            "reads_of_mcu_created_rows": 6,
+            "reads_publishing_the_led_pattern": 4
+          }
+        },
+        "this_record": {
+          "head": "c5a391cc0fcd91c534ba4bbcee67387d33a229c0",
+          "binary_sha256": "5f035d7974693fc9d2840a97aba793c097bf7ef7b38a6a66f17ab8d1ded42930",
+          "per_reading": {
+            "A_all_on": {
+              "header_backed_read_index": 0,
+              "reads": 1,
+              "reads_of_mcu_created_rows": 0,
+              "reads_publishing_the_led_pattern": 0
+            },
+            "B_solo_released": {
+              "header_backed_read_index": 0,
+              "reads": 1,
+              "reads_of_mcu_created_rows": 0,
+              "reads_publishing_the_led_pattern": 0
+            },
+            "C_all_off": {
+              "header_backed_read_index": 0,
+              "reads": 1,
+              "reads_of_mcu_created_rows": 0,
+              "reads_publishing_the_led_pattern": 0
+            }
+          },
+          "over_the_three_readings": {
+            "reads": 3,
+            "reads_of_mcu_created_rows": 0,
+            "reads_publishing_the_led_pattern": 0
+          }
+        },
+        "led_pattern_rows": [
+          0,
+          1,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      }
+    },
+    {
+      "tally": {
+        "readings_with_a_header_read": [
+          "A_all_on",
+          "B_solo_released",
+          "C_all_off"
+        ],
+        "readings_without_a_header_read": [],
+        "cells_compared": 24,
+        "cells_agreeing": 24,
+        "cells_disagreeing": [],
+        "cells_not_comparable": [],
+        "descriptions_not_apple_rows": [],
+        "first_read_cells_published_but_disagreeing": [],
+        "rule": "works: B and C each had a header read, every compared cell agrees, every description is the Apple row, A had a header read and no cell was left uncompared; partial: B and C were read but one of those does not hold; inconclusive: B or C had no header read, or the switch or the run failed"
+      }
+    }
+  ],
+  "conclusion": "On Logic in fr-FR, the four track-header checkboxes were found by the descriptions isMuted by 'Muet', isSoloed by 'Solo', isArmed by 'Enregistrement activé', isInputMonitoring by 'Monitoring de l’entrée', each the value of Apple's row this record cites. In the readings where logic://tracks served rows a header read wrote (A_all_on, B_solo_released, C_all_off), 24 of the 24 cells whose checkbox read 0 or 1 were published as that value. Against the record this supersedes, read with the build of 693c02fd whose MCU parser wrote the Mute LED into isMuted: reads that served the rows MCU feedback creates went from 6 of 8 to 0 of 3, and reads whose muted rows were exactly the first MCU bank's strips other than the soloed track (the LED's pattern) went from 4 to 0. Verdict works by the rule in the tally.",
+  "limits": [
+    "One host and one disposable project (the 19-track locale-campaign fixture); track 2 carries the toggles and track 3 is the one read off. Other builds, other track types and a hidden or collapsed header are not measured.",
+    "Logic draws a soloed track's own Mute checkbox as 0, so no single reading shows all four on: reading A has Solo, Record Enable and Input Monitoring on, reading B has Mute, Record Enable and Input Monitoring on.",
+    "While a track is soloed, the Mute checkbox of every track the solo silences read -1 in some walks and 0 in others; the product publishes a -1 as unread and a 0 as false, and which one its read meets depends on when it lands. A cell whose walk after the read met -1 is counted apart, not compared; one whose walk met 0 while the product left the field out is counted as disagreeing, and nothing records which value the product's own read met.",
+    "A logic://tracks read is compared with the header walk taken right after it, not at the same instant; the walk before the read is recorded, and ax_same_before_and_after_the_read says whether the header moved in between.",
+    "Input Monitoring was set and cleared by the harness (AXFocused, then AXPress on the checkbox), not by the product, which has no Input Monitoring write.",
+    "No read in this run, in any locale, served the rows MCU feedback creates, so this run does not show what such a row publishes while a solo lights the Mute LED of the tracks it silences; Issue1040MCUMuteLEDTests feeds that LED and checks logic://tracks and the audit.",
+    "The drop in reads served from MCU-created rows fits one cause: every Mute LED write advanced the tracks section's revision, and StateCache.applyTracks refuses a header read if that revision moved while the read ran. Neither run recorded the revision or the refused writes, so the cause is not measured."
+  ],
+  "supersedes": "2026-09-28-fr-FR-track-header-toggles-publish-what-was-read"
+}

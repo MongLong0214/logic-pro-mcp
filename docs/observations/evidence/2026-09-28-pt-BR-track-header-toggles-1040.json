@@ -1,0 +1,2828 @@
+{
+ "A_all_on": {
+  "ax_after_read": {
+   "apple_rows": {
+    "arm": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Record Enable",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "Ativar Gravação"
+    },
+    "monitor": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Input Monitoring",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "Monitoramento de Entrada"
+    },
+    "mute": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Mute",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "Silenciar"
+    },
+    "solo": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Solo",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": true,
+     "value": "Solo"
+    }
+   },
+   "labelset_members": {
+    "arm": [
+     "녹음 활성화",
+     "Record Enable",
+     "Record",
+     "録音を可能にする",
+     "Aufnahme aktivieren",
+     "Activar grabación",
+     "Enregistrement activé",
+     "Abilita registrazione",
+     "Ativar Gravação",
+     "录音启用",
+     "錄音啟用"
+    ],
+    "monitor": [
+     "Input Monitoring",
+     "입력 모니터링",
+     "入力モニタリング",
+     "Input-Monitoring",
+     "Monitorización de entrada",
+     "Monitoring de l’entrée",
+     "Monitoraggio ingresso",
+     "Monitoramento de Entrada",
+     "输入监听",
+     "輸入監聽"
+    ],
+    "mute": [
+     "Mute",
+     "음소거",
+     "ミュート",
+     "Ton aus",
+     "Stumm",
+     "Silenciar",
+     "Muet",
+     "Muto",
+     "静音",
+     "靜音"
+    ],
+    "solo": [
+     "Solo",
+     "솔로",
+     "ソロ",
+     "Assolo",
+     "独奏",
+     "獨奏"
+    ]
+   },
+   "rail": [
+    1,
+    8,
+    1,
+    0,
+    1,
+    0,
+    0
+   ],
+   "readable": true,
+   "track_count": 19,
+   "tracks": [
+    {
+     "controls": [
+      {
+       "description": "Silenciar",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Solo",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      },
+      {
+       "description": "Ativar Gravação",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      },
+      {
+       "description": "Monitoramento de Entrada",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      }
+     ],
+     "index": 2,
+     "matched": {
+      "arm": {
+       "description": "Ativar Gravação",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "monitor": {
+       "description": "Monitoramento de Entrada",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "mute": {
+       "description": "Silenciar",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "solo": {
+       "description": "Solo",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 1
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      2
+     ]
+    },
+    {
+     "controls": [
+      {
+       "description": "Silenciar",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": -1,
+       "value_error": null
+      },
+      {
+       "description": "Solo",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Ativar Gravação",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Monitoramento de Entrada",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      }
+     ],
+     "index": 3,
+     "matched": {
+      "arm": {
+       "description": "Ativar Gravação",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "monitor": {
+       "description": "Monitoramento de Entrada",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "mute": {
+       "description": "Silenciar",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": -1
+      },
+      "solo": {
+       "description": "Solo",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      3
+     ]
+    }
+   ]
+  },
+  "ax_before_equals_after": [
+   true,
+   false
+  ],
+  "first_table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": false,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": false,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Track 3"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": false,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": false,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": false,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": -1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": false,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": "<absent>",
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Track 4"
+   }
+  ],
+  "header_backed_attempt": null,
+  "product_attempts": [
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": null,
+     "complete": true,
+     "fetched_at": null,
+     "readable": true,
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      true
+     ],
+     [
+      1,
+      true
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      true
+     ],
+     [
+      4,
+      true
+     ],
+     [
+      5,
+      true
+     ],
+     [
+      6,
+      true
+     ],
+     [
+      7,
+      true
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 8,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": true,
+      "name": "Track 3",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isMuted": true,
+      "isSelected": false,
+      "name": "Track 4",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     }
+    ]
+   },
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": null,
+     "complete": true,
+     "fetched_at": null,
+     "readable": true,
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 8,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": true,
+      "name": "Track 3",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isMuted": false,
+      "isSelected": false,
+      "name": "Track 4",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     }
+    ]
+   },
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": null,
+     "complete": true,
+     "fetched_at": null,
+     "readable": true,
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      true
+     ],
+     [
+      1,
+      true
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      true
+     ],
+     [
+      4,
+      true
+     ],
+     [
+      5,
+      true
+     ],
+     [
+      6,
+      true
+     ],
+     [
+      7,
+      true
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 8,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": true,
+      "name": "Track 3",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isMuted": true,
+      "isSelected": false,
+      "name": "Track 4",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     }
+    ]
+   },
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": null,
+     "complete": true,
+     "fetched_at": null,
+     "readable": true,
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 8,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": true,
+      "name": "Track 3",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isMuted": false,
+      "isSelected": false,
+      "name": "Track 4",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     }
+    ]
+   },
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": null,
+     "complete": true,
+     "fetched_at": null,
+     "readable": true,
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      true
+     ],
+     [
+      1,
+      true
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      true
+     ],
+     [
+      4,
+      true
+     ],
+     [
+      5,
+      true
+     ],
+     [
+      6,
+      true
+     ],
+     [
+      7,
+      true
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 8,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": true,
+      "name": "Track 3",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isMuted": true,
+      "isSelected": false,
+      "name": "Track 4",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     }
+    ]
+   },
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": null,
+     "complete": true,
+     "fetched_at": null,
+     "readable": true,
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 8,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": true,
+      "name": "Track 3",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isMuted": false,
+      "isSelected": false,
+      "name": "Track 4",
+      "pan": 0,
+      "type": "unknown",
+      "volume": 0
+     }
+    ]
+   }
+  ],
+  "table": null,
+  "wait": {
+   "elapsed_s": 0.4232661660000758,
+   "polls": 1,
+   "timed_out": false
+  },
+  "want_on_target": {
+   "arm": 1,
+   "monitor": 1,
+   "solo": 1
+  }
+ },
+ "B_solo_released": {
+  "ax_after_read": {
+   "apple_rows": {
+    "arm": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Record Enable",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "Ativar Gravação"
+    },
+    "monitor": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Input Monitoring",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "Monitoramento de Entrada"
+    },
+    "mute": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Mute",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "Silenciar"
+    },
+    "solo": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Solo",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": true,
+     "value": "Solo"
+    }
+   },
+   "labelset_members": {
+    "arm": [
+     "녹음 활성화",
+     "Record Enable",
+     "Record",
+     "録音を可能にする",
+     "Aufnahme aktivieren",
+     "Activar grabación",
+     "Enregistrement activé",
+     "Abilita registrazione",
+     "Ativar Gravação",
+     "录音启用",
+     "錄音啟用"
+    ],
+    "monitor": [
+     "Input Monitoring",
+     "입력 모니터링",
+     "入力モニタリング",
+     "Input-Monitoring",
+     "Monitorización de entrada",
+     "Monitoring de l’entrée",
+     "Monitoraggio ingresso",
+     "Monitoramento de Entrada",
+     "输入监听",
+     "輸入監聽"
+    ],
+    "mute": [
+     "Mute",
+     "음소거",
+     "ミュート",
+     "Ton aus",
+     "Stumm",
+     "Silenciar",
+     "Muet",
+     "Muto",
+     "静音",
+     "靜音"
+    ],
+    "solo": [
+     "Solo",
+     "솔로",
+     "ソロ",
+     "Assolo",
+     "独奏",
+     "獨奏"
+    ]
+   },
+   "rail": [
+    1,
+    8,
+    1,
+    0,
+    1,
+    0,
+    0
+   ],
+   "readable": true,
+   "track_count": 19,
+   "tracks": [
+    {
+     "controls": [
+      {
+       "description": "Silenciar",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      },
+      {
+       "description": "Solo",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Ativar Gravação",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      },
+      {
+       "description": "Monitoramento de Entrada",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 1,
+       "value_error": null
+      }
+     ],
+     "index": 2,
+     "matched": {
+      "arm": {
+       "description": "Ativar Gravação",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "monitor": {
+       "description": "Monitoramento de Entrada",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "mute": {
+       "description": "Silenciar",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 1
+      },
+      "solo": {
+       "description": "Solo",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      2
+     ]
+    },
+    {
+     "controls": [
+      {
+       "description": "Silenciar",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Solo",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Ativar Gravação",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Monitoramento de Entrada",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      }
+     ],
+     "index": 3,
+     "matched": {
+      "arm": {
+       "description": "Ativar Gravação",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "monitor": {
+       "description": "Monitoramento de Entrada",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "mute": {
+       "description": "Silenciar",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "solo": {
+       "description": "Solo",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      3
+     ]
+    }
+   ]
+  },
+  "ax_before_equals_after": [
+   true,
+   true
+  ],
+  "first_table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Deluxe Classic"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Deluxe Classic"
+   }
+  ],
+  "header_backed_attempt": 0,
+  "product_attempts": [
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": 1.0680620670318604,
+     "collapsed_stacks": [
+      {
+       "index": 0,
+       "name": "Absolute Zero"
+      }
+     ],
+     "complete": false,
+     "fetched_at": "2026-09-28T00:00:03.010Z",
+     "readable": true,
+     "reason": "collapsed_track_stack",
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      true
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ],
+     [
+      8,
+      false
+     ],
+     [
+      9,
+      false
+     ],
+     [
+      10,
+      false
+     ],
+     [
+      11,
+      false
+     ],
+     [
+      12,
+      false
+     ],
+     [
+      13,
+      false
+     ],
+     [
+      14,
+      false
+     ],
+     [
+      15,
+      false
+     ],
+     [
+      16,
+      false
+     ],
+     [
+      17,
+      false
+     ],
+     [
+      18,
+      false
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 19,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isArmed": true,
+      "isInputMonitoring": true,
+      "isMuted": true,
+      "isSelected": true,
+      "isSoloed": false,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_ACE0143D-2538-4E39-A645-9B68E9DFC02C",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": false,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_8A07D9A6-4075-4B9F-ABEA-22C0BFAB710C",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     }
+    ]
+   }
+  ],
+  "table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": 1,
+      "label_is_apple_row": true,
+      "product": true,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Deluxe Classic"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Deluxe Classic"
+   }
+  ],
+  "wait": {
+   "elapsed_s": 0.19667658299999857,
+   "polls": 1,
+   "timed_out": false
+  },
+  "want_on_target": {
+   "arm": 1,
+   "monitor": 1,
+   "mute": 1,
+   "solo": 0
+  }
+ },
+ "C_all_off": {
+  "ax_after_read": {
+   "apple_rows": {
+    "arm": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Record Enable",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "Ativar Gravação"
+    },
+    "monitor": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Input Monitoring",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "Monitoramento de Entrada"
+    },
+    "mute": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Mute",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": false,
+     "value": "Silenciar"
+    },
+    "solo": {
+     "readable": true,
+     "row": {
+      "field": null,
+      "key": "Solo",
+      "lproj": "pt",
+      "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+      "source": "strings:Logic"
+     },
+     "same_as_en": true,
+     "value": "Solo"
+    }
+   },
+   "labelset_members": {
+    "arm": [
+     "녹음 활성화",
+     "Record Enable",
+     "Record",
+     "録音を可能にする",
+     "Aufnahme aktivieren",
+     "Activar grabación",
+     "Enregistrement activé",
+     "Abilita registrazione",
+     "Ativar Gravação",
+     "录音启用",
+     "錄音啟用"
+    ],
+    "monitor": [
+     "Input Monitoring",
+     "입력 모니터링",
+     "入力モニタリング",
+     "Input-Monitoring",
+     "Monitorización de entrada",
+     "Monitoring de l’entrée",
+     "Monitoraggio ingresso",
+     "Monitoramento de Entrada",
+     "输入监听",
+     "輸入監聽"
+    ],
+    "mute": [
+     "Mute",
+     "음소거",
+     "ミュート",
+     "Ton aus",
+     "Stumm",
+     "Silenciar",
+     "Muet",
+     "Muto",
+     "静音",
+     "靜音"
+    ],
+    "solo": [
+     "Solo",
+     "솔로",
+     "ソロ",
+     "Assolo",
+     "独奏",
+     "獨奏"
+    ]
+   },
+   "rail": [
+    1,
+    8,
+    1,
+    0,
+    1,
+    0,
+    0
+   ],
+   "readable": true,
+   "track_count": 19,
+   "tracks": [
+    {
+     "controls": [
+      {
+       "description": "Silenciar",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Solo",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Ativar Gravação",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Monitoramento de Entrada",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      }
+     ],
+     "index": 2,
+     "matched": {
+      "arm": {
+       "description": "Ativar Gravação",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "monitor": {
+       "description": "Monitoramento de Entrada",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "mute": {
+       "description": "Silenciar",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "solo": {
+       "description": "Solo",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      2
+     ]
+    },
+    {
+     "controls": [
+      {
+       "description": "Silenciar",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Solo",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Ativar Gravação",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      },
+      {
+       "description": "Monitoramento de Entrada",
+       "path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "read_errors": [],
+       "role": "AXCheckBox",
+       "title": "",
+       "value": 0,
+       "value_error": null
+      }
+     ],
+     "index": 3,
+     "matched": {
+      "arm": {
+       "description": "Ativar Gravação",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        4
+       ],
+       "rule": "first AXCheckBox whose description equals or begins with a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "monitor": {
+       "description": "Monitoramento de Entrada",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        5
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "mute": {
+       "description": "Silenciar",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        2
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      },
+      "solo": {
+       "description": "Solo",
+       "element_path": [
+        1,
+        8,
+        1,
+        0,
+        1,
+        0,
+        0,
+        3,
+        3
+       ],
+       "rule": "first AXButton then AXCheckBox whose description contains a member",
+       "same_as_apple_row": true,
+       "value": 0
+      }
+     },
+     "name": null,
+     "path": [
+      1,
+      8,
+      1,
+      0,
+      1,
+      0,
+      0,
+      3
+     ]
+    }
+   ]
+  },
+  "ax_before_equals_after": [
+   true,
+   true
+  ],
+  "first_table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Deluxe Classic"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Deluxe Classic"
+   }
+  ],
+  "header_backed_attempt": 0,
+  "product_attempts": [
+   {
+    "envelope": {
+     "ax_occluded": false,
+     "cache_age_sec": 1.065977931022644,
+     "collapsed_stacks": [
+      {
+       "index": 0,
+       "name": "Absolute Zero"
+      }
+     ],
+     "complete": false,
+     "fetched_at": "2026-09-28T00:00:24.477Z",
+     "readable": true,
+     "reason": "collapsed_track_stack",
+     "source": "ax_live",
+     "verified_empty": false
+    },
+    "is_muted_by_row": [
+     [
+      0,
+      false
+     ],
+     [
+      1,
+      false
+     ],
+     [
+      2,
+      false
+     ],
+     [
+      3,
+      false
+     ],
+     [
+      4,
+      false
+     ],
+     [
+      5,
+      false
+     ],
+     [
+      6,
+      false
+     ],
+     [
+      7,
+      false
+     ],
+     [
+      8,
+      false
+     ],
+     [
+      9,
+      false
+     ],
+     [
+      10,
+      false
+     ],
+     [
+      11,
+      false
+     ],
+     [
+      12,
+      false
+     ],
+     [
+      13,
+      false
+     ],
+     [
+      14,
+      false
+     ],
+     [
+      15,
+      false
+     ],
+     [
+      16,
+      false
+     ],
+     [
+      17,
+      false
+     ],
+     [
+      18,
+      false
+     ]
+    ],
+    "refresh": {
+     "message": "State refresh completed via AX fallback poller.",
+     "operation": "system.refresh_cache",
+     "refreshed": true,
+     "source": "ax_fallback_poller"
+    },
+    "row_count": 19,
+    "rows": [
+     {
+      "automationMode": "off",
+      "id": 2,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": true,
+      "isSoloed": false,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_ACE0143D-2538-4E39-A645-9B68E9DFC02C",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     },
+     {
+      "automationMode": "off",
+      "id": 3,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": false,
+      "isSoloed": false,
+      "is_stack_header": false,
+      "name": "Deluxe Classic",
+      "pan": 0.007874015748031496,
+      "track_ref": "trk_8A07D9A6-4075-4B9F-ABEA-22C0BFAB710C",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     }
+    ]
+   }
+  ],
+  "table": [
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 2,
+    "product_name": "Deluxe Classic"
+   },
+   {
+    "ax_name": null,
+    "flags": {
+     "arm": {
+      "agrees": true,
+      "apple_row_value": "Ativar Gravação",
+      "ax_label": "Ativar Gravação",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isArmed"
+     },
+     "monitor": {
+      "agrees": true,
+      "apple_row_value": "Monitoramento de Entrada",
+      "ax_label": "Monitoramento de Entrada",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isInputMonitoring"
+     },
+     "mute": {
+      "agrees": true,
+      "apple_row_value": "Silenciar",
+      "ax_label": "Silenciar",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isMuted"
+     },
+     "solo": {
+      "agrees": true,
+      "apple_row_value": "Solo",
+      "ax_label": "Solo",
+      "ax_value": 0,
+      "label_is_apple_row": true,
+      "product": false,
+      "product_field": "isSoloed"
+     }
+    },
+    "index": 3,
+    "product_name": "Deluxe Classic"
+   }
+  ],
+  "wait": {
+   "elapsed_s": 0.22901229200010675,
+   "polls": 1,
+   "timed_out": false
+  },
+  "want_on_target": {
+   "arm": 0,
+   "monitor": 0,
+   "mute": 0,
+   "solo": 0
+  }
+ },
+ "crash": null,
+ "in_locale_after_switch": true,
+ "lproj": "pt",
+ "meta": {
+  "binary_sha256": "b04c1640ef1070491ed081e890497a87dd79a38e510bd21a62d08f73748be6c1",
+  "fixture": "locale_campaign_19",
+  "harness_sha256": {
+   "live1040_ax.py": "66dad1e914f766940a05149a668d22d581c09eda9e7d630a7f0b22b5896ea1a4",
+   "live1040_run.py": "62e1263fac3b3eaeb63c310a1e353cd0f2deb3a974b1c207f0b046768f93caa6",
+   "probe_press2_lib.py": "1ddb9ab7f8071ca01ee4799e8879b30408d0ec7e827056bb463a674e4aa23518"
+  },
+  "head": "693c02fddefeff2a3a100c0ba62cc80bc2678a78",
+  "off": 3,
+  "target": 2
+ },
+ "reading_after_switch": {
+  "code": "pt-BR",
+  "expected_title": {
+   "fixture_name": "lpm-locale-campaign",
+   "readable": true,
+   "suffix": {
+    "readable": true,
+    "row": {
+     "field": null,
+     "key": "Tracks",
+     "lproj": "pt",
+     "path": "/Applications/Logic Pro.app/Contents/Frameworks/Logic.framework/Versions/A/Resources/pt.lproj/Localizable.strings",
+     "source": "strings:Logic"
+    },
+    "same_as_en": false,
+    "value": "Pistas"
+   },
+   "value": "lpm-locale-campaign - Pistas"
+  },
+  "language_setting": {
+   "raw": "(\n    \"pt-BR\"\n)\n",
+   "readable": true,
+   "value": [
+    "pt-BR"
+   ]
+  },
+  "lproj": "pt",
+  "window_names": {
+   "readable": true,
+   "value": [
+    "lpm-locale-campaign - Lista de Marcadores",
+    "lpm-locale-campaign - Pistas"
+   ]
+  }
+ },
+ "release_solo": {
+  "elapsed_s": 7.945794167000031,
+  "flag": "solo",
+  "replies": [
+   {
+    "enabled": false,
+    "fallback_from_channel": "Accessibility",
+    "fallback_from_error": "ax_write_failed",
+    "fallback_from_hint": "track 2 Solo=false: read-back never matched after AXPress + exclusive-select then key 's' (coordinate-free actuators only). The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+    "function": "solo",
+    "observed": false,
+    "state": "A",
+    "success": true,
+    "trace_id": "lpmcp_636FABD5-2D21-4B21-95D2-864BC6202AEF",
+    "track": 2,
+    "verification_source": "ax_value",
+    "verified": true,
+    "write_attempted": true,
+    "write_source": "mcu"
+   }
+  ],
+  "timed_out": false,
+  "value": 0
+ },
+ "reset": null,
+ "run": {
+  "binary_sha256": "b04c1640ef1070491ed081e890497a87dd79a38e510bd21a62d08f73748be6c1",
+  "foreign_document_closed": null,
+  "harness_sha256": {
+   "live1040_ax.py": "66dad1e914f766940a05149a668d22d581c09eda9e7d630a7f0b22b5896ea1a4",
+   "live1040_run.py": "62e1263fac3b3eaeb63c310a1e353cd0f2deb3a974b1c207f0b046768f93caa6",
+   "probe_press2_lib.py": "1ddb9ab7f8071ca01ee4799e8879b30408d0ec7e827056bb463a674e4aa23518"
+  },
+  "head": "693c02fddefeff2a3a100c0ba62cc80bc2678a78",
+  "lock": {
+   "acquired": true,
+   "attempts": 1,
+   "broke_stale": null,
+   "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/LIVE.lock"
+  }
+ },
+ "server_start_pid": 34317,
+ "set": [
+  {
+   "elapsed_s": 11.449600791999956,
+   "flag": "mute",
+   "replies": [
+    {
+     "enabled": true,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "track 2 Mute=true: read-back never matched after AXPress + exclusive-select then key 'm' (coordinate-free actuators only). The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "mute",
+     "observed": true,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_CC397219-C3DD-400D-88DC-C2636A42E34C",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 1
+  },
+  {
+   "elapsed_s": 11.299522541999977,
+   "flag": "solo",
+   "replies": [
+    {
+     "enabled": true,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "track 2 Solo=true: read-back never matched after AXPress + exclusive-select then key 's' (coordinate-free actuators only). The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "solo",
+     "observed": true,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_4EE978F8-7980-4CBE-9B9B-5567F94A2139",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 1
+  },
+  {
+   "elapsed_s": 12.878357208999887,
+   "flag": "arm",
+   "replies": [
+    {
+     "enabled": true,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or set LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key. The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "recArm",
+     "observed": true,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_653A6897-4183-49A0-8DEB-4AFB92842C10",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 1
+  },
+  {
+   "monitor_want": 1,
+   "read": {
+    "arm": 1,
+    "monitor": 1,
+    "mute": 0,
+    "solo": 1
+   },
+   "tries": [
+    {
+     "focus": {
+      "found": true,
+      "status": 0
+     },
+     "from": 0,
+     "press": {
+      "path": [
+       1,
+       8,
+       1,
+       0,
+       1,
+       0,
+       0,
+       2,
+       5
+      ],
+      "pressed": true,
+      "status": 0
+     }
+    },
+    {
+     "already": 1
+    }
+   ]
+  }
+ ],
+ "switch": {
+  "cause": null,
+  "forced": false,
+  "switched": true
+ },
+ "unset": [
+  {
+   "monitor_want": 0,
+   "read": {
+    "arm": 1,
+    "monitor": 0,
+    "mute": 1,
+    "solo": 0
+   },
+   "tries": [
+    {
+     "focus": {
+      "found": true,
+      "status": 0
+     },
+     "from": 1,
+     "press": {
+      "path": [
+       1,
+       8,
+       1,
+       0,
+       1,
+       0,
+       0,
+       2,
+       5
+      ],
+      "pressed": true,
+      "status": 0
+     }
+    },
+    {
+     "already": 0
+    }
+   ]
+  },
+  {
+   "elapsed_s": 8.14745158300002,
+   "flag": "mute",
+   "replies": [
+    {
+     "enabled": false,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "track 2 Mute=false: read-back never matched after AXPress + exclusive-select then key 'm' (coordinate-free actuators only). The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "mute",
+     "observed": false,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_BC40FFB8-FCF0-4893-858A-7709D422F907",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 0
+  },
+  {
+   "elapsed_s": 8.485957708000115,
+   "flag": "arm",
+   "replies": [
+    {
+     "enabled": false,
+     "fallback_from_channel": "Accessibility",
+     "fallback_from_error": "ax_write_failed",
+     "fallback_from_hint": "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or set LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key. The active macOS input source is 'com.apple.inputmethod.Korean.2SetKorean', which composes characters: a synthetic key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard layout and retry.",
+     "function": "recArm",
+     "observed": false,
+     "state": "A",
+     "success": true,
+     "trace_id": "lpmcp_A5DC72BD-7B35-4BE9-8EA7-7D54F728FF33",
+     "track": 2,
+     "verification_source": "ax_value",
+     "verified": true,
+     "write_attempted": true,
+     "write_source": "mcu"
+    }
+   ],
+   "timed_out": false,
+   "value": 0
+  }
+ ],
+ "walk_first": {
+  "any_flag_set": false,
+  "readable": true,
+  "track_count": 19
+ }
+}

@@ -20,17 +20,25 @@ extension ChannelRouter {
         // AppleScript "stop" can still leave transport running. The
         // spacebar-equivalent CGEvent path proved to be the first reliable
         // non-AX fallback, so prefer it before MIDI/AppleScript fallbacks and
-        // let the dispatcher's live readback gate decide success.
+        // let the dispatcher's live readback gate decide success. #1029: the
+        // keystroke is now Apple's Stop (keypad 0), because Space is Play or
+        // Stop and starts playback when transport is stopped; the keypad key
+        // has not been driven live yet, so the proof above is Space's.
         "transport.stop":             [.cgEvent, .accessibility, .mcu, .coreMIDI, .appleScript],
         "transport.record":           [.accessibility, .mcu, .coreMIDI, .cgEvent, .appleScript],
-        // Logic 12.x has no distinct "pause" — the playhead stops in place via
-        // the Stop button / spacebar. MMC "pause" (the old primary) is silently
-        // ignored by Logic, so a verified pause always failed closed. Mirror the
-        // proven transport.stop order: spacebar-equivalent CGEvent first (the
-        // first reliable non-AX path, posted to Logic's PID so it is
-        // frontmost-independent), the AX Stop button next, MMC last as a
-        // best-effort fallback.
-        "transport.pause":            [.cgEvent, .accessibility, .coreMIDI],
+        // #1029: CGEvent alone. Apple's Pause key (keypad Period) freezes the
+        // playhead and leaves Play on; driven live in ko on 2026-09-27, it
+        // paused at 120 and 60 BPM. No other rung pauses. The Accessibility
+        // channel has no pause control and used to press Stop, which turns Play
+        // off and clears Record, and Logic ignores MMC pause (#138). A rung that
+        // cannot pause must not run, so when CGEvent refuses (Logic not
+        // frontmost, events not trusted), pause returns that refusal and nothing
+        // is sent.
+        "transport.pause":            [.cgEvent],
+        // #1029: internal, not a tool command. The play dispatcher sends it only to a paused
+        // transport (Play on, playhead still), where the AX Play control already reads on and
+        // would do nothing. Apple's Play key (keypad Enter) was measured to resume it.
+        "transport.resume":           [.cgEvent],
         "transport.rewind":           [.mcu, .coreMIDI, .cgEvent],
         "transport.fast_forward":     [.mcu, .coreMIDI, .cgEvent],
         "transport.toggle_cycle":     [.accessibility, .midiKeyCommands, .cgEvent, .mcu],
@@ -40,6 +48,10 @@ extension ChannelRouter {
         // Router fallback just obscures the real AX error message.
         "transport.set_tempo":        [.accessibility],
         "transport.get_state":        [.accessibility],
+        // Internal read (#1029 review, R-02): the tempo slider on its own, an error when it was not
+        // read. transport.get_state cannot say so, because its tempo keeps the model's 120 default.
+        // Pause and play size their stillness gap from this.
+        "transport.get_tempo":        [.accessibility],
         "transport.goto_position":    [.accessibility, .mcu, .coreMIDI, .cgEvent],
         "transport.set_cycle_range":  [.accessibility],
         "transport.toggle_count_in":  [.accessibility, .midiKeyCommands, .cgEvent],
@@ -59,7 +71,9 @@ extension ChannelRouter {
         // AX first: clicks "Track > 트랙 삭제" menu item directly. CGEvent
         // fallback uses Cmd+Delete which actually deletes regions (not tracks)
         // in Logic 12 — leaving it as last-resort only for environments where
-        // the menu path AX query fails.
+        // the menu path AX query fails. #1029: Apple's U.S. preset lists
+        // Command-Delete as Delete Track; the region reading above predates
+        // that join and was not re-measured.
         "track.delete":               [.accessibility, .midiKeyCommands, .cgEvent],
         "track.rename":               [.accessibility],
         // #448: menu-only structural reorder. The Accessibility channel reads

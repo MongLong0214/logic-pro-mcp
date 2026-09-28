@@ -1,4 +1,5 @@
-"""The probe registry of the fixed verifier (ADR-027 D2). Declarations now; implementations in P0b.
+"""The probe registry of the fixed verifier (ADR-027 D2): declarations here, implementations in
+live/spec_probes.py, loaded only when a probe runs, so the engine imports no live code.
 
 A probe is the only feature-specific code the verifier allows: a named reader (or actuator) that
 turns Logic's state into one JSON value. An acceptance row names a probe by `name` with `args`, and
@@ -6,9 +7,9 @@ turns Logic's state into one JSON value. An acceptance row names a probe by `nam
 declaration. That is the whole plugin surface -- there is no discovery, no loading by path, and
 no way for a row to bring its own code.
 
-WHAT P0b MUST SUPPLY FOR EACH ENTRY
------------------------------------
-    run(session, args) -> str     the probe's reading as JSON TEXT, exactly as produced. The runner
+WHAT EACH ENTRY HAS
+-------------------
+    run(name, ctx, args) -> str   the probe's reading as JSON TEXT, exactly as produced. The runner
                                   stores that text untruncated through
                                   `evidence_doc.make_observation`; the engine parses it. A probe
                                   that cannot read returns nothing and raises `ProbeUnreadable`,
@@ -17,8 +18,10 @@ WHAT P0b MUST SUPPLY FOR EACH ENTRY
     a positive control            a fixture state in which the probe must return a known value
     its own mutants               ADR-027 D4: a probe no mutant can flip is refused
 
-`session` is the P0b runner's handle on one MCP server process (tool calls and resource reads);
-its type is defined in P0b, and nothing here depends on it.
+`ctx` is the runner's per-locale context: the lproj (a row cannot pass it), the fixture's
+declaration (setups.py), the MCP server handle (`session`: tool calls and resource reads) and the
+lifecycle, which keeps sidecars. `unimplemented` names a declared probe live/spec_probes.py does
+not implement; the runner refuses a spec that uses one.
 
 The declarations below are the ones `docs/acceptance/1020.json` uses. `args` maps an argument
 name to its JSON type (`int`, `str`, `bool`); `returns` is the JSON shape the engine will read
@@ -31,19 +34,24 @@ PROBES = {
     "track_armed": {
         "args": {"index": "int"},
         "returns": '{"track": <int>, "armed": <bool | null>}',
-        "reads": "logic_system refresh_cache, then logic://tracks; `armed` is data[id=index].isArmed. "
-                 "A track the list does not carry is UNREADABLE, never armed:false.",
+        "reads": "the verifier's own AX walk (live/probes.py track_flags_ax, labels from Apple's "
+                 "rows), not the product (D1): `armed` is the Record Enable checkbox of the index-th "
+                 "track of the arrange rail. A walk that does not read the fixture's declared track "
+                 "count, a track it does not carry, or a checkbox missing, doubled or unread is "
+                 "UNREADABLE, never armed:false. The reading cites the walk by walk_sha256.",
     },
     "armed_set": {
         "args": {},
         "returns": '{"armed": [<int>, ...]}',
-        "reads": "logic_system refresh_cache, then logic://tracks; the sorted ids whose isArmed is "
-                 "true. An unreadable list is UNREADABLE, never [].",
+        "reads": "the same walk as track_armed: the sorted indices whose Record Enable is 1. "
+                 "UNREADABLE unless every declared track's checkbox read, never [].",
     },
     "mcu_upper_row": {
         "args": {},
         "returns": '{"upper_row": <str>}',
-        "reads": "logic://mcu/state; the Mackie Control LCD upper row as the server last received it.",
+        "reads": "logic://mcu/state, the PRODUCT's reading (nothing else reads the LCD): "
+                 "display.upperRow, the Mackie Control LCD upper row as the server last received "
+                 "it, with the resource text embedded whole.",
     },
 }
 
@@ -74,6 +82,34 @@ def arg_problems(name: str, args) -> list:
     return out
 
 
-def run(name: str, session, args: dict) -> str:
-    """P0b: execute a declared probe against a live server and return its JSON text."""
-    raise NotImplementedError("P0b: probes are declared in this commit set and implemented in P0b")
+def _implementation(name: str):
+    from live import spec_probes  # here, not at the top: the engine imports no live code
+    return spec_probes, getattr(spec_probes, name, None)
+
+
+def run(name: str, ctx: dict, args: dict) -> str:
+    """A declared probe's reading as JSON text; ProbeUnreadable saying why when it cannot read."""
+    spec_probes, probe = _implementation(name)
+    if name not in PROBES or not callable(probe):
+        raise ProbeUnreadable(f"probe {name!r} is not declared and implemented")
+    try:
+        return probe(ctx, **args)
+    except spec_probes.Unreadable as exc:
+        raise ProbeUnreadable(str(exc)) from exc
+
+
+def used(spec: dict) -> list:
+    """The probe names a spec's steps and waits read, sorted."""
+    names = set()
+    for row in spec["rows"]:
+        for step in row["steps"] + row["restore"]:
+            for holder in (step, step.get("wait") or {}):
+                if "probe" in holder:
+                    names.add(holder["probe"]["name"])
+    return sorted(names)
+
+
+def unimplemented(spec: dict) -> list:
+    """Why the spec uses a probe live/spec_probes.py does not implement; empty when it does not."""
+    return [f"probe {name!r} is declared but live/spec_probes.py does not implement it"
+            for name in used(spec) if not callable(_implementation(name)[1])]

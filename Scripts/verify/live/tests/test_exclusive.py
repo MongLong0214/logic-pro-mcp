@@ -149,6 +149,44 @@ class Lock(unittest.TestCase):
         self.assertTrue(waited["timed_out"])
         self.assertGreaterEqual(waited["polls"], 2)
 
+    def test_lock_path_refuses_unset(self):
+        # Kills: a default lock path used when LPM_LIVE_LOCK is unset, empty or relative (D7). A
+        # default names one scratchpad; a process started with another takes another lock, and
+        # exclusivity is lost without a word.
+        for value in (None, "", "LIVE.lock"):
+            with self.subTest(value=value):
+                if value is None:
+                    os.environ.pop(exclusive.LOCK_ENV, None)
+                else:
+                    os.environ[exclusive.LOCK_ENV] = value
+                with self.assertRaises(exclusive.LockPathUnset):
+                    exclusive.lock_path()
+                record = {}
+                with exclusive.claim("unset", 0.0, record) as held:
+                    self.assertFalse(held)
+                self.assertIn(exclusive.LOCK_ENV, record["refused"])
+                self.assertNotIn("lock", record)
+
+    def test_a_stale_lock_is_waited_on_when_breaking_is_off(self):
+        # Kills: break_stale dropped between claim, wait_and_acquire and acquire (a run told never
+        # to break another worker's lock would move a stale one aside and take the lane).
+        child = os.fork()
+        if child == 0:
+            os._exit(0)
+        os.waitpid(child, 0)
+        body = json.dumps({"pid": child, "host": socket.gethostname(), "purpose": "gone"})
+        with open(self.path, "w") as handle:
+            handle.write(body)
+        self.assertTrue(exclusive.read_lock()["stale"])
+        record = {}
+        with exclusive.claim("polite", 0.2, record, interval_s=0.1, break_stale=False) as held:
+            self.assertFalse(held)
+        self.assertFalse(record["lock"]["acquired"])
+        self.assertIsNone(record["lock"]["broke_stale"])
+        with open(self.path) as handle:
+            self.assertEqual(handle.read(), body)
+        self.assertEqual(os.listdir(self.dir.name), ["LIVE.lock"])
+
 
 PS_COMM = """\
     1     0 /sbin/launchd

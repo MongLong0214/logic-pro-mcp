@@ -84,12 +84,12 @@ private func makeAuditSnapshot(
 private func messySnapshot(
     now: Date = Date(timeIntervalSince1970: 1_730_000_000)
 ) -> ProjectSessionAudit.Snapshot {
-    var kickA = TrackState(id: 0, name: "Kick", type: .audio)
+    var kickA = TrackState(id: 0, name: "Kick", type: .audio, isMuted: false, isSoloed: false, isArmed: false)
     kickA.isSoloed = true
-    var kickB = TrackState(id: 1, name: "Kick", type: .audio)
+    var kickB = TrackState(id: 1, name: "Kick", type: .audio, isMuted: false, isSoloed: false, isArmed: false)
     kickB.isMuted = true
     kickB.isSoloed = true
-    var unnamed = TrackState(id: 2, name: "", type: .softwareInstrument)
+    var unnamed = TrackState(id: 2, name: "", type: .softwareInstrument, isMuted: false, isSoloed: false, isArmed: false)
     unnamed.isArmed = true
 
     var strip = ChannelStripState(trackIndex: 0)
