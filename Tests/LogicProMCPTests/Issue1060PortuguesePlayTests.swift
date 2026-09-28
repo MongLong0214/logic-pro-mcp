@@ -139,8 +139,8 @@ struct Issue1060PortuguesePlayTests {
         let playID = bar.builder.elementID(bar.play)
         #expect(bar.actions.performed == ["\(playID):\(kAXPressAction as String)"])
         #expect(result.isSuccess)
-        let value = bar.builder.attributeValue(bar.play, kAXValueAttribute as String) as? NSNumber
-        #expect(value?.boolValue == false)
+        let value = try #require(bar.builder.attributeValue(bar.play, kAXValueAttribute as String) as? NSNumber)
+        #expect(!value.boolValue)
     }
 
     /// Mutation that turns this red: the same removal. `transport.get_state` reads Play twice --
