@@ -14,20 +14,27 @@ import Testing
     #expect(abs(strips[2].volume - 0.5) < 0.01)
 }
 
-@Test func testFeedbackParserUpdatesMuteState() async {
+/// #1040: the MCU Mute LED is not the track header's Mute checkbox (Logic lights it on a track a
+/// solo silences), so it writes no track state: a Mute read off stays off, an unread one stays unread.
+@Test func testFeedbackParserLeavesMuteToTheHeader() async throws {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)
     await cache.updateChannelStrips((0..<8).map { ChannelStripState(trackIndex: $0) })
-    await cache.updateTracks((0..<8).map { TrackState(id: $0, name: "Track \($0)", type: .audio) })
+    var rows = (0..<8).map { TrackState(id: $0, name: "Track \($0)", type: .audio) }
+    rows[2].isMuted = false
+    await cache.updateTracks(rows)
 
-    let event = MIDIFeedback.Event.noteOn(channel: 0, note: 0x12, velocity: 0x7F)
-    await parser.handle(event)
+    await parser.handle(MIDIFeedback.Event.noteOn(channel: 0, note: 0x12, velocity: 0x7F))
+    await parser.handle(MIDIFeedback.Event.noteOn(channel: 0, note: 0x13, velocity: 0x7F))
 
     let tracks = await cache.getTracks()
-    #expect(tracks[2].isMuted)
+    let track2Muted = try #require(tracks[2].isMuted)
+    #expect(!track2Muted)
+    let track3Unread = tracks[3].isMuted.map { _ in false } ?? true
+    #expect(track3Unread)
 }
 
-@Test func testFeedbackParserUpdatesSoloState() async {
+@Test func testFeedbackParserUpdatesSoloState() async throws {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)
     await cache.updateTracks((0..<8).map { TrackState(id: $0, name: "Track \($0)", type: .audio) })
@@ -36,7 +43,8 @@ import Testing
     await parser.handle(event)
 
     let tracks = await cache.getTracks()
-    #expect(tracks[2].isSoloed)
+    let track2Soloed = try #require(tracks[2].isSoloed)
+    #expect(track2Soloed)
 }
 
 @Test func testFeedbackParserParsesLCD() async {
@@ -70,21 +78,24 @@ import Testing
     #expect(updated.registeredAsDevice)
 }
 
-@Test func testFeedbackParserBankOffsetApplied() async {
+@Test func testFeedbackParserBankOffsetApplied() async throws {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)
 
     // 16 tracks, bank 1 (offset 8)
-    await cache.updateTracks((0..<16).map { TrackState(id: $0, name: "Track \($0)", type: .audio) })
+    await cache.updateTracks((0..<16).map { TrackState(id: $0, name: "Track \($0)", type: .audio, isMuted: false, isSoloed: false, isArmed: false) })
     await parser.setBankOffsetProvider { 1 } // bank 1 → offset 8
 
-    // Mute strip 0 should map to track 8 (not track 0)
-    let event = MIDIFeedback.Event.noteOn(channel: 0, note: 0x10, velocity: 0x7F)
+    // Solo strip 0 should map to track 8 (not track 0). Solo, because the Mute LED writes no
+    // track state (#1040).
+    let event = MIDIFeedback.Event.noteOn(channel: 0, note: 0x08, velocity: 0x7F)
     await parser.handle(event)
 
     let tracks = await cache.getTracks()
-    #expect(!(tracks[0].isMuted)) // track 0 untouched
-    #expect(tracks[8].isMuted)  // track 8 muted
+    let track0Soloed = try #require(tracks[0].isSoloed)
+    #expect(!track0Soloed) // track 0 untouched
+    let track8Soloed = try #require(tracks[8].isSoloed)
+    #expect(track8Soloed)  // track 8 soloed
 }
 
 @Test func testFeedbackParserFaderBankOffset() async {
@@ -103,7 +114,7 @@ import Testing
     #expect(abs(strips[8].volume - 0.5) < 0.01) // strip 8 updated
 }
 
-@Test func testFeedbackParserHandlesNoteOffForSelectAndLeavesTheArmAlone() async {
+@Test func testFeedbackParserHandlesNoteOffForSelectAndLeavesTheArmAlone() async throws {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)
     await cache.updateTracks((0..<8).map { index in
@@ -118,14 +129,15 @@ import Testing
 
     let tracks = await cache.getTracks()
     // A dark Rec LED is half of Logic's blink on an armed track, not a disarm (#1020).
-    #expect(tracks[0].isArmed)
+    let track0Armed = try #require(tracks[0].isArmed)
+    #expect(track0Armed)
     #expect(!(tracks[1].isSelected))
 }
 
 /// Logic blinks an armed track's Rec LED. Replayed as the frames it sends, the cached arm state has to
 /// hold through every dark frame, and a lit frame on a disarmed track does not arm it either: the arm
 /// state is the poller's reading of the checkbox (#1020).
-@Test func testFeedbackParserRecArmBlinkDoesNotMoveTheCachedArm() async {
+@Test func testFeedbackParserRecArmBlinkDoesNotMoveTheCachedArm() async throws {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)
     await cache.updateTracks((0..<2).map { index in
@@ -139,8 +151,10 @@ import Testing
         await parser.handle(.noteOn(channel: 0, note: 0x00, velocity: lit))
         await parser.handle(.noteOn(channel: 0, note: 0x01, velocity: lit))
         let tracks = await cache.getTracks()
-        #expect(tracks[0].isArmed, "frame \(frame)")
-        #expect(!tracks[1].isArmed, "frame \(frame)")
+        let track0Armed = try #require(tracks[0].isArmed, "frame \(frame)")
+        #expect(track0Armed, "frame \(frame)")
+        let track1Armed = try #require(tracks[1].isArmed, "frame \(frame)")
+        #expect(!track1Armed, "frame \(frame)")
     }
 }
 
@@ -173,10 +187,10 @@ import Testing
     #expect(after[5].isSelected)
 }
 
-@Test func testFeedbackParserIgnoresControlChangeAndDefaultEventsAfterUpdatingConnection() async {
+@Test func testFeedbackParserIgnoresControlChangeAndDefaultEventsAfterUpdatingConnection() async throws {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)
-    await cache.updateTracks([TrackState(id: 0, name: "Track 0", type: .audio)])
+    await cache.updateTracks([TrackState(id: 0, name: "Track 0", type: .audio, isMuted: false, isSoloed: false, isArmed: false)])
     var initialConn = await cache.getMCUConnection()
     initialConn.portName = "LogicProMCP-MCU-Internal"
     await cache.updateMCUConnection(initialConn)
@@ -189,6 +203,8 @@ import Testing
     #expect(conn.isConnected)
     #expect(conn.lastFeedbackAt != nil)
     #expect(conn.registeredAsDevice)
-    #expect(!(tracks[0].isMuted))
-    #expect(!(tracks[0].isSoloed))
+    let track0Muted = try #require(tracks[0].isMuted)
+    #expect(!track0Muted)
+    let track0Soloed = try #require(tracks[0].isSoloed)
+    #expect(!track0Soloed)
 }

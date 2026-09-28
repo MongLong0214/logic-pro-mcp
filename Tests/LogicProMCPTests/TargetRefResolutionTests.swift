@@ -90,9 +90,9 @@ struct TargetRefResolutionTests {
         )
         let cache = StateCache()
         await cache.updateTracks([
-            TrackState(id: 0, name: "Kick", type: .audio),
-            TrackState(id: 1, name: "Snare", type: .audio),
-            TrackState(id: index, name: name, type: .audio),
+            TrackState(id: 0, name: "Kick", type: .audio, isMuted: false, isSoloed: false, isArmed: false),
+            TrackState(id: 1, name: "Snare", type: .audio, isMuted: false, isSoloed: false, isArmed: false),
+            TrackState(id: index, name: name, type: .audio, isMuted: false, isSoloed: false, isArmed: false),
         ])
         return (registry, cache, reference)
     }

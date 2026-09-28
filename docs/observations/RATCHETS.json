@@ -63,7 +63,27 @@
       "2026-09-15-the-korean-project-chooser-names-itself",
       "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
       "2026-09-23-972-en-US-plugin-instance-identity",
-      "2026-09-28-1028-the-arm-key-setup-types-each-languages-own-command-name"
+      "2026-09-28-1028-the-arm-key-setup-types-each-languages-own-command-name",
+      "2026-09-28-de-DE-track-header-toggles-publish-what-was-read",
+      "2026-09-28-de-DE-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-28-en-US-track-header-toggles-publish-what-was-read",
+      "2026-09-28-en-US-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-28-es-ES-track-header-toggles-publish-what-was-read",
+      "2026-09-28-es-ES-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-28-fr-FR-track-header-toggles-publish-what-was-read",
+      "2026-09-28-fr-FR-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-28-it-IT-track-header-toggles-publish-what-was-read",
+      "2026-09-28-it-IT-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-28-ja-JP-track-header-toggles-publish-what-was-read",
+      "2026-09-28-ja-JP-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-28-ko-KR-track-header-toggles-publish-what-was-read",
+      "2026-09-28-ko-KR-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-28-pt-BR-track-header-toggles-publish-what-was-read",
+      "2026-09-28-pt-BR-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-28-zh-CN-track-header-toggles-publish-what-was-read",
+      "2026-09-28-zh-CN-track-header-toggles-without-the-mute-led-writer",
+      "2026-09-28-zh-TW-track-header-toggles-publish-what-was-read",
+      "2026-09-28-zh-TW-track-header-toggles-without-the-mute-led-writer"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
@@ -510,9 +530,28 @@
     "manual_reverify": {
       "date": "2026-09-28",
       "members": [
-        "2026-09-28-1028-the-arm-key-setup-types-each-languages-own-command-name"
+        "2026-09-28-de-DE-track-header-toggles-publish-what-was-read",
+        "2026-09-28-de-DE-track-header-toggles-without-the-mute-led-writer",
+        "2026-09-28-en-US-track-header-toggles-publish-what-was-read",
+        "2026-09-28-en-US-track-header-toggles-without-the-mute-led-writer",
+        "2026-09-28-es-ES-track-header-toggles-publish-what-was-read",
+        "2026-09-28-es-ES-track-header-toggles-without-the-mute-led-writer",
+        "2026-09-28-fr-FR-track-header-toggles-publish-what-was-read",
+        "2026-09-28-fr-FR-track-header-toggles-without-the-mute-led-writer",
+        "2026-09-28-it-IT-track-header-toggles-publish-what-was-read",
+        "2026-09-28-it-IT-track-header-toggles-without-the-mute-led-writer",
+        "2026-09-28-ja-JP-track-header-toggles-publish-what-was-read",
+        "2026-09-28-ja-JP-track-header-toggles-without-the-mute-led-writer",
+        "2026-09-28-ko-KR-track-header-toggles-publish-what-was-read",
+        "2026-09-28-ko-KR-track-header-toggles-without-the-mute-led-writer",
+        "2026-09-28-pt-BR-track-header-toggles-publish-what-was-read",
+        "2026-09-28-pt-BR-track-header-toggles-without-the-mute-led-writer",
+        "2026-09-28-zh-CN-track-header-toggles-publish-what-was-read",
+        "2026-09-28-zh-CN-track-header-toggles-without-the-mute-led-writer",
+        "2026-09-28-zh-TW-track-header-toggles-publish-what-was-read",
+        "2026-09-28-zh-TW-track-header-toggles-without-the-mute-led-writer"
       ],
-      "reason": "#1028 P1b (#1049): the ten-language arm-key setup record reverifies by hand. The drive rewrites the KeyCommands and AppleLanguages preferences and relaunches Logic once per language, and no livekit harness here stages that; reverify.command carries the steps and expected carries the readings. The member of the previous raise (#976) is in the base and is no longer growth."
+      "reason": "#1040: the ten per-locale track-header toggle records reverify by hand. The run that produced them used a harness kept with the evidence outside this repository (live1040_run.py with its AX walker and the Input Monitoring press; each evidence file carries their sha256), because it presses a checkbox the product has no write for and was written for this one ten-locale reading; porting it into Scripts/livekit would make the committed harness a different program from the one whose output the records cite. The reverify block carries the steps, the expected reading and the cost. Registered in the same commit as the records; the member of the previous raise is in the base and is no longer growth. The second ten (track-header-toggles-without-the-mute-led-writer) are the same reading by the same harness on the head whose MCU parser no longer writes the Mute LED into isMuted (review round 1 of #1040); each supersedes its locale's first record and reverifies by hand for the same reason."
     },
     "records_without_evidence": {
       "date": "2026-09-19",

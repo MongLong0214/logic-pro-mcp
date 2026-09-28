@@ -1868,6 +1868,18 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Record%20Enable#value"
     )
 
+    /// The track header's Input Monitoring checkbox, read into `TrackState.isInputMonitoring` (#1040).
+    static let trackInputMonitoringButton = LabelSet(
+        canonical: "Input Monitoring",
+        variants: ["입력 모니터링", "入力モニタリング", "Input-Monitoring", "Monitorización de entrada", "Monitoring de l’entrée", "Monitoraggio ingresso", "Monitoramento de Entrada", "输入监听", "輸入監聽"],
+        rationale: "Identifies the track header's Input Monitoring checkbox by description substring; read-only state extraction (#1040)."
+            + " Derived on 2026-09-28 by Scripts/derive_label_variants.py, which chose the row Apple keys this control `Input Monitoring#acc` in Apple's own namespace; the canon marks that row's unit translated in every locale Logic ships."
+            + " The plain `Input Monitoring` row is named as well, because the track header's Mute (#291) and Record Enable (#1020) turned out to be described by their plain rows; here the two rows hold the same value in all ten locales, so either lookup is covered."
+            + " Read live before this set existed: the en-US track-header census of 2026-09-08 saw `Input Monitoring` on every header, and the ko-KR navigation-free census of 2026-09-05 saw an AXCheckBox described `입력 모니터링` inside each track's AXLayoutItem.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Input%20Monitoring%23acc#value",
+        alsoDerivedFrom: ["logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Input%20Monitoring#value"]
+    )
+
     // --- Track-header automation-mode read (WS3 AC2, value-only honesty fix) ---
     //
     // `logic://tracks` previously fabricated `automationMode = .off`. These label
@@ -3231,6 +3243,7 @@ enum AXLocalePolicy {
         trackSoloButton,
         trackRecordButton,
         trackRecordEnableCheckbox,
+        trackInputMonitoringButton,
         automationModeContext,
         automationModeWrite,
         automationModeTrim,
