@@ -2,52 +2,65 @@ Limit: the product still types the English commandName in those three locales. A
 Limit: six LabelSet cells are now uncovered and listed with reasons in KNOWN_UNCOVERED. Five are de rows spelled with U+00A0 where the member and the de-DE menu census use U+0020, and one is es with no es-ES raw reading. Each needs a live raw-byte readback.
 Limit: RATCHETS.json raised.unmeasured_coverage for it-IT, pt-BR, zh-TW and zh-CN is re-dated, because the guard requires the raise to name exactly the new members. The earlier 2026-09-18 reasons remain in history.
 Limit: the not_localized rule compares whole units. A unit Apple partly translated, with English left in rows, still credits those rows. That is the documented false-negative cost of not refusing row-level equality.
+Record-Id: r-inhd04952e0cdb6f3
 Provenance: inherited e0cdb6f39edddd1bb62291544da86fc7c0917ad1
 
 Limit: with this commit alone the guard fails on 'Channel EQ'. It is an AU plug-in name that no pinned corpus carries. The next commit gives it a reasoned waiver, and check-canon-citations refuses that waiver because the list may only shrink. Keeping the waiver, or moving 'Channel EQ' into a LabelSet or a censused plug-in catalogue, is a decision for the coordinator.
 Limit: identifier is decided by shape: sentinel prefix, extension, reverse DNS, punctuation, or a fragment of the product's own message. A literal of that shape that Logic also displays would be misfiled. A stale waiver fails only on the real tree, not under LPM_AX_COMPARISON_ROOTS.
+Record-Id: r-inhd04952c7b99815
 Provenance: inherited c7b9981551196544a553bec78c9b2b28b0fa204c
 
 Limit: the host check reads Info.plist only. It does not detect a Logic whose resources changed without a version or build bump.
 Limit: a host mismatch only warns. It never fails, so a developer can still build with an unpinned Logic without the guard stopping them.
+Record-Id: r-inhd04952accb2f6f
 Provenance: inherited accb2f6fce36e4e08b6d7286d56485067795b602
 
 Limit: this file says Apple ships the name with no translation in its data. That the plug-in menu SHOWS it untranslated has been read on a Korean Logic only (f4b8d5a0).
 Limit: the map covers the plug-ins Logic tags content with. A plug-in missing from it is not thereby missing from Logic.
 Limit: in c7b99815 a Limit says the next commit waives 'Channel EQ'. That waiver commit was dropped before anything was pushed, and this commit replaces it.
+Record-Id: r-inhd049521546719f
 Provenance: inherited 1546719f9d8aa055f45d9c85610ae198662b2946
 
 Limit: a match is on the exact value only. 'channel eq' is not cited, and a comparison the scanner records case-folded is classified by its folded spelling.
 Limit: madsp and nib pin only cited rows, so for them the exact route rarely answers and the 32-bit absence probe still decides.
+Record-Id: r-inhd04952cc330aac
 Provenance: inherited cc330aac6e2ede9e9c51bf83a9cf23259eacd8cf
 
 Limit: the merge brings main's Swift in unchanged, and this commit changes no Swift file. swift build was not re-run on the merged tree; main's own CI covers that code.
+Record-Id: r-inhd0495220786807
 Provenance: inherited 207868073e385fb198cad6856c7712740a52b6f2
 
 Limit: Scripts/test_logic_canon.py still anchors on this key and value, and no citation now ties that test to the row. If Apple changes the composition, the index rebuild catches it, not a binding.
+Record-Id: r-inhd049529a0195bc
 Provenance: inherited 9a0195bc1b35a02fb5f0f615fb0fe26893be02ef
 
 Limit: the cross-namespace merge after the loop still loads the index as the loop just wrote it. That is already re-taken for every source in this run, and a source outside the run is not merged into.
 Limit: the value index (.values.tsv) keeps its own keep-while-credited rule; a value row names no key, so it has no duplicate-key hazard.
+Record-Id: r-inhd04952f09c41fd
 Provenance: inherited f09c41fd95ed3a0bed7d14f9bc94913740f21199
 
 Limit: `other` is required because CLDR gives it to every language; which other categories a locale needs is not checked against CLDR's per-locale rules.
 Limit: a format with no %#@variable@ reference, or a variable the format names but the entry lacks, is not checked.
+Record-Id: r-inhd049524b1ba42e
 Provenance: inherited 4b1ba42ed7e1dceb31fd4dfe4a4f52313d2ccf66
 
 Limit: a comparison against a value Apple itself ships with padding or U+00A0 is now unknown too. The canon holds only normalized digests, so those bytes cannot be vouched for; none exists in Sources today.
 Limit: the case-folded branch still reports Apple's spelling when a folded candidate is translated. That literal is refused as translated either way.
+Record-Id: r-inhd049521b8d035a
 Provenance: inherited 1b8d035a443906df8ab3b3cb610d67c437999aac
 
 Limit: the literal no longer sits in a comparison, so the AX comparison guard stops seeing it. The guard does not follow a static let or a let to its use: a scratch file comparing an AX value with a constant holding the translated label Mixer passes, while the same comparison with the literal inline is refused (/Users/isaac/lpm-evidence/1034/blindspot). That blind spot predates this change.
 Limit: the literals at the MENU_PICK_FAILED refusal sites are unchanged; they begin with their sentinel code.
+Record-Id: r-inhd0495279781497
 Provenance: inherited 79781497db527d7d3e6519baf6e4b29363729f2f
 
 Limit: the guard does not follow a static let or a let to the comparison that uses it. A scratch file planting the translated label Mixer in a constant and comparing an AX value with it passes; the inline literal is refused (/Users/isaac/lpm-evidence/1034/blindspot). So 'cleanup was not observed' passes today because it is a constant, not because the guard proved it is the product's own phrase. Left for a separate change: following constants is scanner work, not this classifier rule.
 Limit: a bare UPPER_SNAKE literal with no delimiter is still an identifier by shape (the _SENTINEL rule), as before.
+Record-Id: r-inhd049528b46375c
 Provenance: inherited 8b46375cab8f9f73d2b66c305baacfd12be4f4d0
 
 Limit: not followed are values that reach a comparison through a function parameter, an instance member, an interpolation or any other expression. There are 17 such operands on this tree, for example AXLogicProElements.swift:983 desc.hasPrefix(prefix), where prefix is a parameter.
 Limit: a bare name resolves only to a declaration in the same file, so a type member declared in an extension in another file and used bare is not followed.
 Limit: the constant and emitter patterns are regular expressions over single-line declarations. A multi-line or """ literal initializer is not indexed.
+Record-Id: r-inhd04952435de2ee
 Provenance: inherited 435de2ee522bc62432687c3e56a94cb48f020d03
