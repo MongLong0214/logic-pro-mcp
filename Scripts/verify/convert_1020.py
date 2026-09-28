@@ -23,9 +23,9 @@ WHAT IT CANNOT
     readings here are the harness's own reduction of that list (`armed_in_track_list_after`, the
     census `after_arm`), which is the track's `isArmed` as the harness read it -- a second read of
     the same surface, not a raw one.
-  * ROWS THE HARNESS NEVER DROVE. `arm-armed-writes-nothing` has no observation: the harness did
-    not arm an armed track (its own record's limits say the Accessibility rung answers that no-op
-    first). Its steps are stored as unreadable, and the row is UNREADABLE, not PASS.
+  * ROWS THE HARNESS NEVER DROVE. `arm-armed-reported-no-op-keeps-the-set` has no observation:
+    the harness did not arm an armed track (its own record's limits say the Accessibility rung
+    answers that no-op first). Its steps are stored as unreadable, and the row is UNREADABLE, not PASS.
   * A WITNESS THE HARNESS NEVER TOOK. The last row's unchanged-upper-row claim is an effect, so
     its counterexample needs an upper row that differs from the one before the arm (`off_home_row`,
     read with the MCU window banked away from home). The harness only read the row at home, before
@@ -139,7 +139,7 @@ def mapping(src: Source) -> dict:
             "undo": (disarm0, p_disarm0, None),
             "restored": (track(after_off), p_off, w_off),
         },
-        "arm-armed-writes-nothing": {},
+        "arm-armed-reported-no-op-keeps-the-set": {},
         "disarm-clears": {
             "as_found": (track(found0), p_found0, None),
             "setup": (arm0, p_arm0, None),

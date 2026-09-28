@@ -78,7 +78,8 @@ RUN CASES (`"run": {...}`)
                                             that ignores its bound ends
     `"replay": {"evidence": path, "lproj": lproj}` in place of `spec` replays a committed evidence
     document in that one locale: the spec is the one it embeds, run in [lproj] only (so the
-    locales it does not run leave the exit at 3 at best);
+    locales it does not run leave the exit at 3 at best); `"spec": path` there judges it against
+    that spec file instead, and `"rows": {old: new}` renames the evidence's rows to that spec's ids;
     every unscripted step answers the text the evidence stored for it (an unreadable one its
     reason); the locale reading and host block are the ones it stored; and every gate reading
     starts from the baseline its lifecycle log holds, passing message included, before the
@@ -1008,10 +1009,14 @@ def _replayed(run: dict, where: dict, label: str):
     doc = E.load(_fill(replay["evidence"], where))
     lproj = replay["lproj"]
     spec = copy.deepcopy(doc["spec"])
+    if "spec" in replay:
+        with open(_fill(replay["spec"], where), encoding="utf-8") as fh:
+            spec = json.load(fh)
+    renamed = replay.get("rows", {})
     _apply(spec, run.get("spec_ops", []), label, where)
     answers = {}
     for row_id, stored in doc["runs"][lproj]["rows"].items():
-        answers[row_id] = {name: ({"text": entry["raw"]} if "raw" in entry
+        answers[renamed.get(row_id, row_id)] = {name: ({"text": entry["raw"]} if "raw" in entry
                                   else {"unreadable": entry.get("unreadable") or "unreadable in the evidence"})
                            for name, entry in stored["observations"].items()}
     base = [e["baseline"] for e in doc["runs"][lproj]["lifecycle"] if e.get("event") == "baseline"]
