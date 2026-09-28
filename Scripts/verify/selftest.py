@@ -76,6 +76,13 @@ RUN CASES (`"run": {...}`)
         "current": lproj                    the locale Logic is in when the run starts
         "poll_limit": n                     the fake raises after n reads of one step, so a wait
                                             that ignores its bound ends
+    `"replay": {"evidence": path, "lproj": lproj}` in place of `spec` replays a committed evidence
+    document in that one locale: the spec is the one it embeds, run in [lproj] only (so the
+    locales it does not run leave the exit at 3 at best);
+    every unscripted step answers the text the evidence stored for it (an unreadable one its
+    reason); the locale reading and host block are the ones it stored; and every gate reading
+    starts from the baseline its lifecycle log holds, passing message included, before the
+    script's gate ops.
 
 GATE CASES (`"check": "gate"`)
     The gate (setups.gate_problems) over readings recorded live, in live/tests/samples/: a
@@ -463,8 +470,22 @@ MUTANTS = [
      "old": "        recorded = verify.record_attested(data, att, record_dir)\n",
      "new": "        recorded = verify.record_attested(data, None, record_dir)\n"},
     {"id": "gate-reads-once-over-the-passing-message", "file": "runner.py",
-     "old": "    while setups.shows_passing_message(reading) and life.now() < bound:\n",
-     "new": "    while False and setups.shows_passing_message(reading) and life.now() < bound:\n"},
+     "old": "                                        setups.shows_passing_message)\n",
+     "new": "                                        lambda reading: False)\n"},
+    # The wait itself reverted, for the gate and the row probes at once (they share it).
+    {"id": "passing-wait-reads-once", "file": "runner.py",
+     "old": "    while shows(reading) and life.now() < bound:\n",
+     "new": "    while False and shows(reading) and life.now() < bound:\n"},
+    {"id": "passing-wait-unbounded", "file": "runner.py",
+     "old": "    while shows(reading) and life.now() < bound:\n",
+     "new": "    while shows(reading):\n"},
+    # The row probes' wait reverted alone: a probe reads once over the passing message.
+    {"id": "row-probe-reads-once-over-the-passing-message", "file": "runner.py",
+     "old": "                                     lambda t: _probe_shows_passing(ctx, t))\n",
+     "new": "                                     lambda t: False)\n"},
+    {"id": "row-probe-ignores-the-baseline-message", "file": "runner.py",
+     "old": '"passing_message": (ctx.get("baseline") or {}).get("passing_message")})\n',
+     "new": '"passing_message": None})\n'},
     {"id": "baseline-read-once-over-the-passing-message", "file": "runner.py",
      "old": "            baselines[lproj] = _gate_reading(ctx)[0]\n",
      "new": "            baselines[lproj] = normalize(life.gate_reading(ctx))\n"},
@@ -786,8 +807,9 @@ class FakeLifecycle(runner.Lifecycle):
     """The world, scripted (see RUN CASES). Its clock moves only when the runner sleeps, in whole
     microseconds, so a wait's poll count is exact. Every request is kept in `events`."""
 
-    def __init__(self, script: dict, where: dict, label: str, defaults: dict):
+    def __init__(self, script: dict, where: dict, label: str, defaults: dict, replay: dict = None):
         self.script, self.where, self.label, self.defaults = script, where, label, defaults
+        self.replay = replay or {}
         self.micros, self.events, self.reads, self.gates = 0, [], {}, {}
         self.locale = script.get("current", "ko")
 
@@ -831,7 +853,8 @@ class FakeLifecycle(runner.Lifecycle):
 
     def reading(self, lproj):
         import fixtures_build
-        reading = fixtures_build.locale_reading(lproj)
+        replayed = self.replay.get("readings", {})
+        reading = copy.deepcopy(replayed[lproj]) if lproj in replayed else fixtures_build.locale_reading(lproj)
         reading.update(copy.deepcopy(self.script.get("readings", {}).get(lproj, {})))
         if self.script.get("tuple_in_reading"):
             reading["window_names"]["value"] = tuple(reading["window_names"]["value"])
@@ -839,7 +862,8 @@ class FakeLifecycle(runner.Lifecycle):
 
     def host(self, lproj):
         import fixtures_build
-        return fixtures_build.host(lproj)
+        replayed = self.replay.get("hosts", {})
+        return copy.deepcopy(replayed[lproj]) if lproj in replayed else fixtures_build.host(lproj)
 
     def start(self, ctx, env):
         self.events.append(("start", env))
@@ -854,11 +878,12 @@ class FakeLifecycle(runner.Lifecycle):
     def gate_reading(self, ctx):
         n = self.gates[ctx["lproj"]] = self.gates.get(ctx["lproj"], 0) + 1
         clear = [{"arm": 0, "mute": 0, "solo": 0} for _ in FAKE_TRACKS]
-        reading = {"declared": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS)},
-                   "fingerprint": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS),
-                                   "flags": clear},
-                   "upper_row": {"readable": True, "value": FAKE_HOME_ROW},
-                   "passing_message": {"readable": True, "value": FAKE_PASSING}}
+        reading = copy.deepcopy(self.replay["baseline"]) if self.replay else {
+            "declared": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS)},
+            "fingerprint": {"track_count": len(FAKE_TRACKS), "names": list(FAKE_TRACKS),
+                            "flags": clear},
+            "upper_row": {"readable": True, "value": FAKE_HOME_ROW},
+            "passing_message": {"readable": True, "value": FAKE_PASSING}}
         scripted = []
         for item in self.script.get("gate", {}).get(ctx["lproj"], []):
             scripted += [item["ops"]] * item["times"] if isinstance(item, dict) else [item]
@@ -898,7 +923,7 @@ class FakeLifecycle(runner.Lifecycle):
         if n > self.script.get("poll_limit", 1000):
             raise RuntimeError(f"the fake stopped reading {key} after {n - 1} reads")
         if scripted is None:
-            scripted = {"value": self.defaults[ctx["row"]][ctx["step"]["as"]]}
+            scripted = self.defaults[ctx["row"]][ctx["step"]["as"]]
         if isinstance(scripted, list):
             scripted = scripted[min(n, len(scripted)) - 1]
         if "unreadable" in scripted:
@@ -914,18 +939,27 @@ def _run_fake(case: dict, where: dict):
     """(exit, output) of the runner driven over FakeLifecycle, as a run case asks."""
     import fixtures_build
     run = case["run"]
-    items = run.get("entries") or [{"spec": run["spec"], "spec_ops": run.get("spec_ops", []),
-                                    "locales": run.get("locales")}]
-    entries = []
-    for item in items:
-        path = _fill(item["spec"], where)
-        with open(path, encoding="utf-8") as handle:
-            spec = json.load(handle)
-        _apply(spec, item.get("spec_ops", []), case["name"], where)
-        entries.append({"spec": spec, "spec_path": os.path.relpath(path, ROOT),
-                        "head": item.get("head", SELFTEST_HEAD), "locales": item.get("locales")})
-    life = FakeLifecycle(run.get("script", {}), where, case["name"],
-                         fixtures_build.READINGS[os.path.basename(_fill(items[0]["spec"], where))])
+    if "replay" in run:
+        try:
+            entries, defaults, replay = _replayed(run, where, case["name"])
+        except (OSError, ValueError, KeyError) as exc:  # a replay that cannot load fails its case
+            return f"crash {type(exc).__name__}: {exc}", ""
+    else:
+        items = run.get("entries") or [{"spec": run["spec"], "spec_ops": run.get("spec_ops", []),
+                                        "locales": run.get("locales")}]
+        entries = []
+        for item in items:
+            path = _fill(item["spec"], where)
+            with open(path, encoding="utf-8") as handle:
+                spec = json.load(handle)
+            _apply(spec, item.get("spec_ops", []), case["name"], where)
+            entries.append({"spec": spec, "spec_path": os.path.relpath(path, ROOT),
+                            "head": item.get("head", SELFTEST_HEAD), "locales": item.get("locales")})
+        readings = fixtures_build.READINGS[os.path.basename(_fill(items[0]["spec"], where))]
+        defaults = {row: {name: {"value": value} for name, value in steps.items()}
+                    for row, steps in readings.items()}
+        replay = None
+    life = FakeLifecycle(run.get("script", {}), where, case["name"], defaults, replay)
     out = os.path.join(where["tmp"], f"{case['name']}.evidence.json")
     records = os.path.join(where["tmp"], f"{case['name']}.records") if run.get("record") else None
     printed = io.StringIO()
@@ -964,6 +998,29 @@ def _run_fake(case: dict, where: dict):
         if again != case["recheck"]["exit"] or case["recheck"]["says"] not in said:
             return f"recheck of the run's evidence: exit {again}; {said.strip().splitlines()[-1:]}", text
     return code, text
+
+
+def _replayed(run: dict, where: dict, label: str):
+    """([entry], answers, replay) for a `replay` run case (see RUN CASES): replay holds the
+    locale's logged baseline, its locale reading and its host block, as the evidence stored them."""
+    import evidence_doc as E
+    replay = run["replay"]
+    doc = E.load(_fill(replay["evidence"], where))
+    lproj = replay["lproj"]
+    spec = copy.deepcopy(doc["spec"])
+    _apply(spec, run.get("spec_ops", []), label, where)
+    answers = {}
+    for row_id, stored in doc["runs"][lproj]["rows"].items():
+        answers[row_id] = {name: ({"text": entry["raw"]} if "raw" in entry
+                                  else {"unreadable": entry.get("unreadable") or "unreadable in the evidence"})
+                           for name, entry in stored["observations"].items()}
+    base = [e["baseline"] for e in doc["runs"][lproj]["lifecycle"] if e.get("event") == "baseline"]
+    if len(base) != 1:
+        raise ValueError(f"{replay['evidence']}: {len(base)} baselines logged in {lproj}, not one")
+    entry = {"spec": spec, "spec_path": doc["spec_path"], "head": SELFTEST_HEAD, "locales": [lproj]}
+    stored = doc["runs"][lproj]
+    return [entry], answers, {"baseline": base[0], "readings": {lproj: stored[E.LOCALE_READING]},
+                              "hosts": {lproj: stored["host"]}}
 
 
 def _verify(argv: list):

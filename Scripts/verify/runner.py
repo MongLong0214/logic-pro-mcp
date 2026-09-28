@@ -54,6 +54,13 @@ A `wait` polls its probe until its condition holds or its bound passes, on the l
 at most timeout/interval + 1 polls. It stores the last reading either way; whether that reading
 passes is the engine's to say.
 
+A probe whose reading carries an MCU upper row (`upper_row`, the mcu_upper_row probe) is read the
+way the gate is, through the same helper (`_read_past_passing`): again every PASSING_INTERVAL_S,
+for at most PASSING_WAIT_S, while the row shows the passing message the locale's baseline carries.
+The last reading is stored and judged, one still showing the message included; the number of
+reads is logged. A probe read once over the message saw Logic's own label, not the bank: that was
+the es and fr FAIL of the first step-11 run, on the clamped row's pre_row.
+
 WHO CAN CERTIFY CLEAN
 ---------------------
 `_attest` is the one Attestation site outside the self-test (selftest.ATTESTATION_SITES). Its four
@@ -323,6 +330,49 @@ def _wait(ctx: dict, step: dict) -> str:
     return last
 
 
+def _read_past_passing(ctx: dict, read, shows) -> tuple:
+    """(reading, reads): `read()`, taken again every PASSING_INTERVAL_S while `shows(reading)` says
+    its MCU upper row shows Logic's passing message, until it does not or PASSING_WAIT_S has passed.
+    The last reading is returned whatever it shows; the bound never stands in for a reading. The
+    gate and the row probes both wait here, so the two cannot drift apart."""
+    life = ctx["life"]
+    bound = life.now() + PASSING_WAIT_S
+    reading, reads = read(), 1
+    while shows(reading) and life.now() < bound:
+        life.sleep(PASSING_INTERVAL_S)
+        reading, reads = read(), reads + 1
+    return reading, reads
+
+
+def _said_passing(where: str, reads: int, still: bool) -> None:
+    if reads > 1:
+        print(f"  {where}: the MCU upper row showed Logic's passing message; read {reads} time(s), "
+              f"{'still showing it' if still else 'then gone'}")
+
+
+def _probe_shows_passing(ctx: dict, text) -> bool:
+    """Whether a probe's reading carries an MCU upper row that shows the passing message the
+    locale's baseline carries. A reading with no upper row, or text that is not JSON, shows none."""
+    try:
+        value = E.loads(text) if isinstance(text, str) else None
+    except ValueError:
+        return False
+    row = value.get("upper_row") if isinstance(value, dict) else None
+    if not isinstance(row, str):
+        return False
+    return setups.shows_passing_message({"upper_row": {"readable": True, "value": row},
+                                         "passing_message": (ctx.get("baseline") or {}).get("passing_message")})
+
+
+def _probe(ctx: dict, step: dict) -> str:
+    life, probe = ctx["life"], step["probe"]
+    text, reads = _read_past_passing(ctx, lambda: life.probe(probe["name"], ctx, probe["args"]),
+                                     lambda t: _probe_shows_passing(ctx, t))
+    ctx["log"].append({"t": life.now(), "at": f"{ctx['row']}/{step['as']}", "reads": reads})
+    _said_passing(f"{ctx['lproj']}/{ctx['row']}/{step['as']}", reads, _probe_shows_passing(ctx, text))
+    return text
+
+
 def _take(ctx: dict, step: dict) -> str:
     if "call" in step:
         call = step["call"]
@@ -330,7 +380,7 @@ def _take(ctx: dict, step: dict) -> str:
     if "read" in step:
         return ctx["session"].read(step["read"]["uri"], READ_TIMEOUT_S)
     if "probe" in step:
-        return ctx["life"].probe(step["probe"]["name"], ctx, step["probe"]["args"])
+        return _probe(ctx, step)
     return _wait(ctx, step)
 
 
@@ -453,15 +503,10 @@ def _gate_reading(ctx: dict) -> tuple:
     passing message, until it does not or PASSING_WAIT_S has passed. The last reading is returned
     whatever it shows; the bound never stands in for a reading."""
     life = ctx["life"]
-    bound = life.now() + PASSING_WAIT_S
-    reading, reads = normalize(life.gate_reading(ctx)), 1
-    while setups.shows_passing_message(reading) and life.now() < bound:
-        life.sleep(PASSING_INTERVAL_S)
-        reading, reads = normalize(life.gate_reading(ctx)), reads + 1
-    if reads > 1:
-        print(f"  {ctx['lproj']}/{ctx['row'] or 'baseline'}: the MCU upper row showed Logic's passing "
-              f"message; read {reads} time(s), "
-              f"{'still showing it' if setups.shows_passing_message(reading) else 'then gone'}")
+    reading, reads = _read_past_passing(ctx, lambda: normalize(life.gate_reading(ctx)),
+                                        setups.shows_passing_message)
+    _said_passing(f"{ctx['lproj']}/{ctx['row'] or 'baseline'}", reads,
+                  setups.shows_passing_message(reading))
     return reading, reads
 
 
@@ -497,7 +542,7 @@ def run_locale(life: Lifecycle, entry: dict, lproj: str, reset_first: bool, base
                                                       f"{lproj}: {why}")
         return run, reading
     ctx = {"life": life, "lproj": lproj, "decl": entry["decl"], "built": entry["built"],
-           "session": None, "row": None, "step": None, "log": log}
+           "session": None, "row": None, "step": None, "log": log, "baseline": None}
     try:
         if lproj in stopped:
             _stop_locale(ctx, run, spec["rows"], stopped[lproj])
@@ -511,7 +556,7 @@ def run_locale(life: Lifecycle, entry: dict, lproj: str, reset_first: bool, base
         ready = _start(ctx)
         if lproj not in baselines:
             baselines[lproj] = _gate_reading(ctx)[0]
-        baseline = baselines[lproj]
+        baseline = ctx["baseline"] = baselines[lproj]
         log.append({"t": life.now(), "event": "baseline", "baseline": baseline})
         for n, row in enumerate(spec["rows"]):
             ctx["row"], ctx["step"] = row["id"], None
