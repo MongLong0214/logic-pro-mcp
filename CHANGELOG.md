@@ -70,8 +70,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   under the submenu that owns it (the root's checked entry only echoes the current output) and
   refused when missing or repeated under one parent. State A needs the same strip, found again at
   its ordinal because Logic replaces a strip's elements when its output changes, to read back the
-  destination and the strip count to hold; a count that grew is State C `unexpected_side_effect: "strip_created"`, left as it is. The reply
-  carries the observed `before` for the inverse call. `set_output` stays not-exposed. Registry
+  destination and the strip count to hold; a count that grew is State C `unexpected_side_effect:
+  "strip_created"`, left as it is. Logic adds a strip for an output pair no strip used before and
+  removes it once the pair is unused, so a move onto or off such a pair is State C
+  (`strip_created` / `strip_removed`) although the output changed. The reply carries the observed
+  `before` for the inverse call. `set_output` stays not-exposed. Registry
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 - **An internal intent model and one main-output rule for the project audit (#966 P1, ADR-021;
   refs #966).** `ProjectSessionAudit.parseIntentPolicy` reads a
