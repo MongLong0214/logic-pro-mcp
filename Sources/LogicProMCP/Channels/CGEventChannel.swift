@@ -30,6 +30,12 @@ actor CGEventChannel: Channel {
         /// an ASCII-capable source with no id: the permissive one, for the same reason as the two
         /// #440 defaults below. `.production` reads TIS.
         let currentInputSource: @Sendable () -> InputSourceReading?
+        /// #1038: the window server's on-screen list, the one `AXLogicProElements.Runtime`
+        /// `.onScreenWindowList` reads for the AX route's post-leaf settlement; nil when it did not
+        /// come back. goto_position types nothing until this list shows the Go To Position dialog,
+        /// so the default is nil: a runtime that says nothing about the screen gets a refusal, not
+        /// a dialog nobody saw. `.production` reads CoreGraphics.
+        let onScreenWindowList: @Sendable () -> [[String: Any]]?
 
         /// The two #440 fields default to an already-frontmost Logic so existing
         /// callers that construct a Runtime for an unrelated reason keep
@@ -47,7 +53,8 @@ actor CGEventChannel: Channel {
             activateLogic: @escaping @Sendable () -> Bool = { true },
             currentInputSource: @escaping @Sendable () -> InputSourceReading? = {
                 InputSourceReading(id: nil, isASCIICapable: true)
-            }
+            },
+            onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = { nil }
         ) {
             self.isLogicProRunning = isLogicProRunning
             self.logicProPID = logicProPID
@@ -56,6 +63,7 @@ actor CGEventChannel: Channel {
             self.isLogicFrontmost = isLogicFrontmost
             self.activateLogic = activateLogic
             self.currentInputSource = currentInputSource
+            self.onScreenWindowList = onScreenWindowList
         }
 
         static let production = Runtime(
@@ -67,7 +75,8 @@ actor CGEventChannel: Channel {
             sleepMicros: { usleep($0) },
             isLogicFrontmost: ProcessUtils.Runtime.production.logicIsFrontmost,
             activateLogic: ProcessUtils.Runtime.production.activateLogicPro,
-            currentInputSource: { CGEventChannel.readCurrentInputSource() }
+            currentInputSource: { CGEventChannel.readCurrentInputSource() },
+            onScreenWindowList: AXLogicProElements.Runtime.liveOnScreenWindowList
         )
     }
 
@@ -269,7 +278,22 @@ actor CGEventChannel: Channel {
             guard preparation.isReady else {
                 return Self.frontmostRefusal(operation: operation, preparation: preparation)
             }
-            let sent = postShortcutSequence(sequence, pid: pid)
+            // #1038: the opener alone goes out first. Every character after it types into
+            // whatever has the keyboard, so none is posted until the window server shows the
+            // Go To Position dialog on screen.
+            let dialogObservation: [String: Any]
+            switch openGotoPositionDialog(opener: sequence[0], pid: pid) {
+            case .openerNotPosted:
+                return .error("Failed to post CGEvent sequence for \(operation)")
+            case let .refused(reason, openerPosted, reading):
+                return Self.gotoDialogRefusal(
+                    position: position, preparation: preparation, reason: reason,
+                    openerPosted: openerPosted, reading: reading
+                )
+            case let .open(polls, reading):
+                dialogObservation = ["polls": polls, "read": reading]
+            }
+            let sent = postShortcutSequence(Array(sequence.dropFirst()), pid: pid)
             if sent {
                 // v3.1.1 (P2-2) — State B envelope. CGEvent sends keystrokes
                 // fire-and-forget; we cannot read back the playhead position
@@ -281,6 +305,7 @@ actor CGEventChannel: Channel {
                         "method": "cgevent",
                         "position": position,
                         "frontmost_preparation": preparation.rawValue,
+                        "dialog_observation": dialogObservation,
                         "sent": true
                     ]
                 ))
@@ -476,6 +501,102 @@ actor CGEventChannel: Channel {
                 "events_posted": 0,
                 "write_attempted": false,
                 "safe_to_retry": true,
+            ]
+        ))
+    }
+
+    // MARK: - #1038 Go To Position dialog gate
+
+    /// How long the dialog is given to appear after the opener: the AppleScript route's bound,
+    /// 30 reads 0.1 s apart.
+    static let gotoDialogObservationPolls = 30
+    static let gotoDialogObservationPollMicros: useconds_t = 100_000
+
+    enum GotoDialogGate {
+        /// The dialog was read on screen, alone, with no Logic menu up and Logic owning the
+        /// keyboard. `polls` is how many waits it took; `reading` is the reading that said so.
+        case open(polls: Int, reading: [String: Any])
+        /// Nothing may be typed. `reading` is the last window-list reading, nil when none was taken.
+        case refused(reason: String, openerPosted: Bool, reading: [String: Any]?)
+        /// The opener's own post failed.
+        case openerNotPosted
+    }
+
+    /// Posts the opener and reads the window server until the Go To Position dialog is on screen.
+    ///
+    /// The reading is the AX route's own (`AccessibilityChannel.readPostLeafScreen`): the
+    /// Logic-owned windows that were not on screen before the opener, the popup-menu layer apart,
+    /// and the dialog named ours only when exactly one appeared and its title is a
+    /// `goToPositionDialogTitle` under `.exactStrict`. The list is read before the opener, so a
+    /// list that does not come back refuses with nothing posted. A window that appeared and is not
+    /// that dialog refuses at once, as the AppleScript route does; a dialog that does not appear
+    /// within the bound refuses when it runs out.
+    func openGotoPositionDialog(opener: Shortcut, pid: pid_t) -> GotoDialogGate {
+        guard let before = runtime.onScreenWindowList() else {
+            return .refused(reason: "window_list_unreadable", openerPosted: false, reading: nil)
+        }
+        let baseline = Set(LogicOnScreenWindows.logicOwned(before, logicPID: pid).map(\.number))
+        guard runtime.postKeyEvent(opener.keyCode, opener.flags, pid) else {
+            return .openerNotPosted
+        }
+        var polls = 0
+        while true {
+            let (reading, appeared) = AccessibilityChannel.readPostLeafScreen(
+                baseline: baseline, logicPID: pid, windows: runtime.onScreenWindowList()
+            )
+            let fields = AccessibilityChannel.PostLeafSettlement.readingFields(reading, appeared: appeared)
+            if reading.dialog == .identifiedOurs, reading.menu == .closed, reading.logicOwnsKeyboard == true {
+                return .open(polls: polls, reading: fields)
+            }
+            if reading.menu == .unreadable || reading.dialog == .unreadable {
+                return .refused(reason: "window_list_unreadable", openerPosted: true, reading: fields)
+            }
+            if case .unidentified = reading.dialog {
+                return .refused(reason: "unidentified_window_appeared", openerPosted: true, reading: fields)
+            }
+            guard polls < Self.gotoDialogObservationPolls else {
+                // Ours on screen but a Logic menu above it, or the keyboard not read as Logic's:
+                // a character typed now goes to the menu or to another process, not the field.
+                let reason = reading.dialog == .identifiedOurs ? "dialog_not_typable" : "dialog_not_observed"
+                return .refused(reason: reason, openerPosted: true, reading: fields)
+            }
+            runtime.sleepMicros(Self.gotoDialogObservationPollMicros)
+            polls += 1
+        }
+    }
+
+    /// State C for a goto_position whose dialog was not observed. No position character and no
+    /// Return was posted, so `write_attempted` is false. When the opener went out, whatever it did
+    /// is unknown -- a dialog can still appear after the bound -- so the caller is told to read the
+    /// screen before retrying and no other channel may take the operation over.
+    static func gotoDialogRefusal(
+        position: String,
+        preparation: FrontmostPreparation,
+        reason: String,
+        openerPosted: Bool,
+        reading: [String: Any]?
+    ) -> ChannelResult {
+        let hint = openerPosted
+            ? "The Go To Position key was posted, but the dialog was not read on screen (\(reason)), so the "
+                + "position and Return were not typed. Whatever the key did is unobserved: read Logic's windows "
+                + "before retrying, and close a Go To Position dialog that appeared late."
+            : "The window list did not read before the Go To Position key, so a dialog could not have been "
+                + "told apart from what was already on screen. Nothing was posted; retry."
+        return .error(HonestContract.encodeStateC(
+            error: .dialogNotFound,
+            hint: hint,
+            extras: [
+                "operation": "transport.goto_position",
+                "method": "cgevent",
+                "position": position,
+                "frontmost_preparation": preparation.rawValue,
+                "reason": reason,
+                "events_posted": openerPosted ? 1 : 0,
+                "dialog_opener_posted": openerPosted,
+                "dialog_observation": reading as Any? ?? NSNull(),
+                "write_attempted": false,
+                "safe_to_retry": !openerPosted,
+                "fallback_unsafe": openerPosted,
             ]
         ))
     }

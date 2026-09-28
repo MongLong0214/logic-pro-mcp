@@ -27,18 +27,23 @@ final class CGEventRecorder: @unchecked Sendable {
     }
 }
 
+/// `screen` is the window server goto_position reads (#1038); without one the list does not read
+/// and goto_position refuses before its first key.
 private func makeCGEventRuntime(
     isRunning: Bool = true,
     pid: pid_t? = 42,
-    recorder: CGEventRecorder = CGEventRecorder()
+    recorder: CGEventRecorder = CGEventRecorder(),
+    screen: GotoDialogScreen? = nil
 ) -> CGEventChannel.Runtime {
-    CGEventChannel.Runtime(
+    let post: @Sendable (CGKeyCode, CGEventFlags, pid_t) -> Bool = { keyCode, flags, pid in
+        recorder.post(keyCode: keyCode, flags: flags, pid: pid)
+    }
+    return CGEventChannel.Runtime(
         isLogicProRunning: { isRunning },
         logicProPID: { pid },
-        postKeyEvent: { keyCode, flags, pid in
-            recorder.post(keyCode: keyCode, flags: flags, pid: pid)
-        },
-        sleepMicros: { _ in }
+        postKeyEvent: screen.map { $0.observing(post) } ?? post,
+        sleepMicros: { _ in },
+        onScreenWindowList: { screen?.windows() }
     )
 }
 
@@ -139,7 +144,7 @@ private func makeCGEventRuntime(
 
 @Test func testCGEventExecutePostsGotoPositionSequence() async {
     let recorder = CGEventRecorder()
-    let channel = CGEventChannel(runtime: makeCGEventRuntime(recorder: recorder))
+    let channel = CGEventChannel(runtime: makeCGEventRuntime(recorder: recorder, screen: GotoDialogScreen(pid: 42)))
 
     let result = await channel.execute(
         operation: "transport.goto_position",
@@ -156,7 +161,7 @@ private func makeCGEventRuntime(
 
 @Test func testCGEventExecuteSupportsTimeAliasAndDefaultPosition() async {
     let aliasRecorder = CGEventRecorder()
-    let aliasChannel = CGEventChannel(runtime: makeCGEventRuntime(recorder: aliasRecorder))
+    let aliasChannel = CGEventChannel(runtime: makeCGEventRuntime(recorder: aliasRecorder, screen: GotoDialogScreen(pid: 42)))
 
     let aliasResult = await aliasChannel.execute(
         operation: "transport.goto_position",
@@ -166,7 +171,7 @@ private func makeCGEventRuntime(
     #expect(aliasResult.message.contains("\"position\":\"01:02:03:04\""))
 
     let defaultRecorder = CGEventRecorder()
-    let defaultChannel = CGEventChannel(runtime: makeCGEventRuntime(recorder: defaultRecorder))
+    let defaultChannel = CGEventChannel(runtime: makeCGEventRuntime(recorder: defaultRecorder, screen: GotoDialogScreen(pid: 42)))
     let defaultResult = await defaultChannel.execute(
         operation: "transport.goto_position",
         params: [:]
@@ -178,7 +183,7 @@ private func makeCGEventRuntime(
 @Test func testCGEventExecuteReportsGotoPositionPostingFailure() async {
     let recorder = CGEventRecorder()
     recorder.failAtEventIndex = 2
-    let channel = CGEventChannel(runtime: makeCGEventRuntime(recorder: recorder))
+    let channel = CGEventChannel(runtime: makeCGEventRuntime(recorder: recorder, screen: GotoDialogScreen(pid: 42)))
 
     let result = await channel.execute(
         operation: "transport.goto_position",
@@ -191,7 +196,7 @@ private func makeCGEventRuntime(
 @Test func testCGEventExecuteReportsGotoPositionFailureOnFirstShortcut() async {
     let recorder = CGEventRecorder()
     recorder.failAtEventIndex = 0
-    let channel = CGEventChannel(runtime: makeCGEventRuntime(recorder: recorder))
+    let channel = CGEventChannel(runtime: makeCGEventRuntime(recorder: recorder, screen: GotoDialogScreen(pid: 42)))
 
     let result = await channel.execute(
         operation: "transport.goto_position",

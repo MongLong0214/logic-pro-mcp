@@ -1617,13 +1617,17 @@ struct Issue529MenuValidationTests {
             sliderWrites: sliderWrites
         )
         let cgEventRecorder = CGEventRecorder()
+        // #1038: this screen shows the Go To Position dialog, so a fallback that reached
+        // CGEvent would post its keys and the empty-recorder assertion below would see them.
+        let cgEventScreen = GotoDialogScreen(pid: 529)
         let cgEvent = CGEventChannel(runtime: .init(
             isLogicProRunning: { true },
             logicProPID: { 529 },
-            postKeyEvent: { keyCode, flags, pid in
+            postKeyEvent: cgEventScreen.observing { keyCode, flags, pid in
                 cgEventRecorder.post(keyCode: keyCode, flags: flags, pid: pid)
             },
-            sleepMicros: { _ in }
+            sleepMicros: { _ in },
+            onScreenWindowList: { cgEventScreen.windows() }
         ))
         let router = ChannelRouter()
         await router.register(accessibility)
@@ -1691,13 +1695,17 @@ struct Issue529MenuValidationTests {
             sliderWrites: sliderWrites
         )
         let cgEventRecorder = CGEventRecorder()
+        // #1038: this screen shows the Go To Position dialog, so a fallback that reached
+        // CGEvent would post its keys and the empty-recorder assertion below would see them.
+        let cgEventScreen = GotoDialogScreen(pid: 529)
         let cgEvent = CGEventChannel(runtime: .init(
             isLogicProRunning: { true },
             logicProPID: { 529 },
-            postKeyEvent: { keyCode, flags, pid in
+            postKeyEvent: cgEventScreen.observing { keyCode, flags, pid in
                 cgEventRecorder.post(keyCode: keyCode, flags: flags, pid: pid)
             },
-            sleepMicros: { _ in }
+            sleepMicros: { _ in },
+            onScreenWindowList: { cgEventScreen.windows() }
         ))
         let router = ChannelRouter()
         await router.register(accessibility)
@@ -1740,13 +1748,17 @@ struct Issue529MenuValidationTests {
                 sliderWrites: sliderWrites
             )
             let cgEventRecorder = CGEventRecorder()
+            // #1038: this screen shows the Go To Position dialog, so a fallback that reached
+            // CGEvent would post its keys and the empty-recorder assertion below would see them.
+            let cgEventScreen = GotoDialogScreen(pid: 529)
             let cgEvent = CGEventChannel(runtime: .init(
                 isLogicProRunning: { true },
                 logicProPID: { 529 },
-                postKeyEvent: { keyCode, flags, pid in
+                postKeyEvent: cgEventScreen.observing { keyCode, flags, pid in
                     cgEventRecorder.post(keyCode: keyCode, flags: flags, pid: pid)
                 },
-                sleepMicros: { _ in }
+                sleepMicros: { _ in },
+                onScreenWindowList: { cgEventScreen.windows() }
             ))
             let router = ChannelRouter()
             await router.register(accessibility)
@@ -1792,13 +1804,17 @@ struct Issue529MenuValidationTests {
             sliderWrites: sliderWrites
         )
         let cgEventRecorder = CGEventRecorder()
+        // #1038: this screen shows the Go To Position dialog, so a fallback that reached
+        // CGEvent would post its keys and the empty-recorder assertion below would see them.
+        let cgEventScreen = GotoDialogScreen(pid: 529)
         let cgEvent = CGEventChannel(runtime: .init(
             isLogicProRunning: { true },
             logicProPID: { 529 },
-            postKeyEvent: { keyCode, flags, pid in
+            postKeyEvent: cgEventScreen.observing { keyCode, flags, pid in
                 cgEventRecorder.post(keyCode: keyCode, flags: flags, pid: pid)
             },
-            sleepMicros: { _ in }
+            sleepMicros: { _ in },
+            onScreenWindowList: { cgEventScreen.windows() }
         ))
         let router = ChannelRouter()
         await router.register(accessibility)

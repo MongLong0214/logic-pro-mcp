@@ -27,6 +27,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `before` for the inverse call. `set_output` stays not-exposed. Registry
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
+### Fixed
+- **`transport.goto_position`'s CGEvent fallback types nothing until the Go To Position dialog is
+  on screen (#1038).** It used to post the position and Return right after the key that opens the
+  dialog, so when the dialog did not open they went to whatever held the keyboard. The opening key
+  now goes out alone. The rest waits until the window list shows exactly one new Logic window
+  titled as that dialog, with no Logic menu above it and Logic holding the keyboard, read up to 30
+  times 0.1 s apart. Otherwise it refuses as State C `dialog_not_found` with `write_attempted:
+  false`; once the opening key went out, the refusal is also `safe_to_retry: false` and
+  `fallback_unsafe: true`, since the dialog can still open later. Driven in the ten languages
+  Logic ships: goto moved the position only after that language's dialog appeared, and with a
+  Logic menu open first the opening key was the only event posted and the position did not move.
+- **A toggle press that was delivered is not pressed again by a later rung (#1042).**
+  `toggle_cycle`, `toggle_metronome` and `toggle_count_in` used to go on to AXConfirm, a second
+  press, when the readback had not changed within 0.6 s, and the router then handed the same
+  toggle to the MIDI key command, a third. A lagging readback let the later presses turn the
+  control back. They now stop at the first delivered press: the mismatch carries
+  `write_attempted: true`, `safe_to_retry: false` and `fallback_unsafe: true`, and reports a fresh
+  read as observed. `edit.toggle_step_input` carries the same marker. Driven in the ten
+  languages: `toggle_cycle` pressed the Cycle checkbox once each way.
+- **In Portuguese, `transport.play` finds the control bar's Play checkbox and a playing transport
+  reads as playing (#1060).** A Portuguese Logic describes it `Reproduz`, which the Play label set
+  did not carry, so `play` fell through to the MCU rung, answered State B and Logic did not play.
+  The same set is the `isPlaying` read that `transport.stop` checks before sending its CGEvent
+  key, so a playing Portuguese transport read as stopped and `stop` would answer State A with
+  nothing sent. The set now also derives from the control bar's own row,
+  `StrTransportBtns|||Play`, and the derivation check holds it to that row in every locale.
+  Driven in the ten languages: `play` pressed the checkbox through AX and answered State A in
+  each, `Reproduz` included; `stop` read the transport as playing, sent its key, and read the
+  Play checkbox off.
+
+### Removed
+- **`logic://transport` no longer declares `isPaused` (#1041).** Nothing that reads Logic ever
+  wrote it, so it was always `false`. A paused transport reads `isPlaying: true`.
+
 ---
 
 ## [3.18.0] — 2026-09-28

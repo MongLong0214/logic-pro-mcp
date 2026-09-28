@@ -21,10 +21,16 @@ struct TransportPositionReadback: Sendable, Codable, Equatable {
 }
 
 /// Transport state from Logic Pro.
+///
+/// #1041: there is no `isPaused`. It was declared here and never set by anything that reads
+/// Logic, so the resource answered `false` for a paused transport. Measured 2026-09-28 in ko: all
+/// 17 control-bar checkboxes read the same playing and paused (Play on in both), and a depth-9
+/// walk of the arrange window (336 elements) found none whose title, description or help names a
+/// pause. The playhead across two reads a beat apart is the only
+/// thing that tells them apart, and one snapshot cannot carry a sequence.
 struct TransportState: Sendable, Codable {
     var isPlaying: Bool = false
     var isRecording: Bool = false
-    var isPaused: Bool = false
     var isCycleEnabled: Bool = false
     var isMetronomeEnabled: Bool = false
     var tempo: Double = 120.0

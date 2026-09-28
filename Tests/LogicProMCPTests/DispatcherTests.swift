@@ -408,7 +408,7 @@ private func liveTransportJSON(
     position: String = "1.1.1.1"
 ) -> String {
     """
-    {"isPlaying":\(isPlaying),"isRecording":\(isRecording),"isPaused":false,"tempo":120.0,"position":"\(position)","timePosition":"00:00:00.000","sampleRate":44100,"isCycleEnabled":false,"isMetronomeEnabled":false,"lastUpdated":"2026-06-19T02:17:42.000Z"}
+    {"isPlaying":\(isPlaying),"isRecording":\(isRecording),"tempo":120.0,"position":"\(position)","timePosition":"00:00:00.000","sampleRate":44100,"isCycleEnabled":false,"isMetronomeEnabled":false,"lastUpdated":"2026-06-19T02:17:42.000Z"}
     """
 }
 

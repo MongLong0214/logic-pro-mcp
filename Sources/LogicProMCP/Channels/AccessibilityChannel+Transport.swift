@@ -3346,6 +3346,29 @@ extension AccessibilityChannel {
                         ]
                     ))
                 }
+                // #1042: the press was delivered and the value did not read as changed. A toggle
+                // has no target value, so a press that landed with its readback lagging and a
+                // second press -- the next strategy here, or the next channel's key command --
+                // turn the control back. Stop at the first delivered press and forbid fallback,
+                // as #1045 did for pause.
+                let observed = controlBarCheckboxValue(cb, runtime: runtime)
+                return .error(HonestContract.encodeStateC(
+                    error: .readbackMismatch,
+                    hint: "control-bar checkbox '\(labels.canonical)' did not read as changed after \(strategy.name). "
+                        + "The press was delivered and may have landed with the readback lagging, so it was not "
+                        + "pressed again and no other channel may press it: read the control before retrying.",
+                    extras: [
+                        "button": reportAs,
+                        "control": reportAs,
+                        "previous": before,
+                        "observed": observed as Any? ?? NSNull(),
+                        "action": strategy.name,
+                        "attempts": attempts,
+                        "write_attempted": true,
+                        "safe_to_retry": false,
+                        "fallback_unsafe": true
+                    ]
+                ))
             } else {
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
@@ -3362,7 +3385,9 @@ extension AccessibilityChannel {
         if let before {
             return .error(HonestContract.encodeStateC(
                 error: .readbackMismatch,
-                hint: "control-bar checkbox '\(labels.canonical)' did not change after AXPress / AXConfirm attempts",
+                // Reached only when every strategy's action reported failure (#1042 returns above
+                // on the first delivered one).
+                hint: "control-bar checkbox '\(labels.canonical)' did not change; AXPress and AXConfirm both reported failure",
                 extras: [
                     "button": reportAs,
                     "control": reportAs,

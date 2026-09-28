@@ -41,11 +41,13 @@ private func parseEnvelope(_ message: String) -> [String: Any]? {
 
 @Test func testCGEventGotoPositionReturnsHCEnvelopeWithPosition() async {
     let recorder = CGEventRecorder()
+    let screen = GotoDialogScreen(pid: 99)
     let runtime = CGEventChannel.Runtime(
         isLogicProRunning: { true },
         logicProPID: { 99 },
-        postKeyEvent: { keyCode, flags, pid in recorder.post(keyCode: keyCode, flags: flags, pid: pid) },
-        sleepMicros: { _ in }
+        postKeyEvent: screen.observing { keyCode, flags, pid in recorder.post(keyCode: keyCode, flags: flags, pid: pid) },
+        sleepMicros: { _ in },
+        onScreenWindowList: { screen.windows() }
     )
     let channel = CGEventChannel(runtime: runtime)
 
