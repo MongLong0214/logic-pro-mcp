@@ -1,0 +1,6 @@
+Limit: the base README's sentence that a standalone Mixer window is not found by the census locator was not carried over; it was not re-measured for this cut
+Ruled-out: moving the Formula hash in this PR | the 3.18.0 archive does not exist until the tag builds it; the hash is pinned after publishing, as #987 did for 3.17.0
+Provenance: inherited 167a9a35f5cc7b3b95a388a695c51bd66d94af95
+
+Ruled-out: refusing Creator Studio at runtime in the release PR | a behaviour change that needs its own issue, tests and live proof, not a documentation repair
+Provenance: inherited 3bd4667ffb6db09a03aea22698f4aba44b74d5b5
