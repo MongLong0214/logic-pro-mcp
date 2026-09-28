@@ -1451,10 +1451,15 @@ enum AXLocalePolicy {
 
     static let transportPlayControl = LabelSet(
         canonical: "play",
-        variants: ["재생", "再生", "Wiedergabe", "reproducir", "lecture", "riproduci", "reproduzir", "播放"],
+        variants: [
+            "재생", "再生", "Wiedergabe", "reproducir", "lecture", "riproduci", "reproduzir", "播放",
+            "Reproduz"
+        ],
         rationale: "Identifies the Play transport control when reading TransportState; read-only."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/play#value"
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py."
+            + " #1060: a Portuguese Logic 12.3 describes the control bar's Play checkbox `Reproduz` (read 2026-09-29), the pt value of `StrTransportBtns|||Play`, where `play` says `reproduzir`; neither the `.exactStrict` finder nor the containment read found it, so play and stop fell to the MCU rung. The control-bar row is named in alsoDerivedFrom and held to every locale by the same guard; in the other nine it agrees with `play` up to case.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/play#value",
+        alsoDerivedFrom: ["logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/pt/StrTransportBtns%7C%7C%7CPlay#value"]
     )
 
     static let transportRecordControl = LabelSet(

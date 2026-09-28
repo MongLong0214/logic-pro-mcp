@@ -7307,7 +7307,8 @@
     "lecture",
     "riproduci",
     "reproduzir",
-    "播放"
+    "播放",
+    "Reproduz"
    ],
    "rationale": "Identifies the Play transport control when reading TransportState; read-only.",
    "match": "contains",

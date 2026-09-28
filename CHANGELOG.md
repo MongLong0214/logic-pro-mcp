@@ -25,6 +25,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   control back. They now stop at the first delivered press: the mismatch carries
   `write_attempted: true`, `safe_to_retry: false` and `fallback_unsafe: true`, and reports a fresh
   read as observed. `edit.toggle_step_input` carries the same marker.
+- **In Portuguese, `transport.play` and `transport.stop` find the control bar's Play checkbox
+  (#1060).** A Portuguese Logic describes it `Reproduz`, which the Play label set did not carry,
+  so both fell through to the MCU rung: `play` answered State B and Logic did not play. A playing
+  transport did not read as playing either. The set now also derives from the control bar's own
+  row, `StrTransportBtns|||Play`, and the derivation check holds it to that row in every locale.
 
 ### Removed
 - **`logic://transport` no longer declares `isPaused` (#1041).** Nothing that reads Logic ever
