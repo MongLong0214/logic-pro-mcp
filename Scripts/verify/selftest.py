@@ -401,6 +401,9 @@ MUTANTS = [
     {"id": "dirt-kind-only", "file": "runner.py",
      "old": '        return str(d.get("kind")) + (f" ({\', \'.join(said)})" if said else "")\n',
      "new": '        return str(d.get("kind"))\n'},
+    {"id": "switch-failure-already-there", "file": "runner.py",
+     "old": '    if switched.get("cause"):\n        return f"NOT switched: {switched[\'cause\']}"\n',
+     "new": ""},
     {"id": "restore-skipped-after-failure", "file": "runner.py",
      "old": '        for step in row["restore"]:\n            entries[step["as"]] = execute_step(ctx, step)',
      "new": ('        for step in (row["restore"] if all("raw" in e for e in entries.values()) else []):\n'
@@ -749,6 +752,9 @@ class FakeLifecycle(runner.Lifecycle):
 
     def switch(self, lproj):
         self.events.append(("switch", lproj))
+        cause = self.script.get("switch_refused", {}).get(lproj)
+        if cause:
+            return {"switched": False, "cause": cause}
         switched, self.locale = lproj != self.locale, lproj
         return {"switched": switched}
 

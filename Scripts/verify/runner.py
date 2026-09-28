@@ -245,6 +245,16 @@ def order(locales, current) -> list:
 # steps
 # ---------------------------------------------------------------------------------------------
 
+def _switch_text(switched: dict) -> str:
+    """What the switch did. One that did not happen for a cause (Logic did not quit, say) is not
+    "already there"; the locale reading before each run still decides whether anything is driven."""
+    if switched.get("switched"):
+        return "switched"
+    if switched.get("cause"):
+        return f"NOT switched: {switched['cause']}"
+    return "already there"
+
+
 def _dirt_text(dirt: list) -> str:
     """Each kind of dirt, and for a process what, which pid and which name it was seen as, or for an
     unreadable condition its cause: the evidence says which process made a step unreadable."""
@@ -528,7 +538,7 @@ def _drive(life: Lifecycle, entries: list, record_dir) -> int:
             wanted = sorted({x for entry in entries for x in entry["locales"]})
             for lproj in order(wanted, life.current_locale()):
                 switched = life.switch(lproj)
-                print(f"run: {lproj}: {'switched' if switched.get('switched') else 'already there'}")
+                print(f"run: {lproj}: {_switch_text(switched)}")
                 reset_first = not switched.get("switched")
                 for entry in entries:
                     if lproj not in entry["locales"]:
