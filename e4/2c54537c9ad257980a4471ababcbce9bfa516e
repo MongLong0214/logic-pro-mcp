@@ -1,0 +1,20 @@
+Limit: R1's `physicalOutputLabelPrefix` holds no `Ausgang`, so `logic://mixer` reports a German strip routed to a physical pair as `unclassified`; not changed here because existing LabelSets are being edited elsewhere.
+Limit: the pair parse is measured in ko and de only; the other eight locales rest on the canon rows.
+Provenance: inherited 4ca72ce21f56f7fba6f0c1b63edc89d41c301a28
+
+Limit: the parameter is `target_ref`, the key every mutating op's resolver reads; `track_ref` is not accepted.
+Limit: the oracle table excludes the op as live-contract-pending until an oracle pins its envelope.
+Limit: a popup that stays open after a successful write is reported in `popup_menu_state` and does not lower State A.
+Provenance: inherited 69ee23366296f8f69feef9d89f279125803cbf43
+
+Limit: after the press, "the same strip" is the strip at the same Mixer ordinal with the strip count unchanged; element identity cannot be used, because Logic replaces the element.
+Ruled-out: confirming the re-found strip by its name (stripName) | not measured on a rebuilt strip, and a census that goes ambiguous would make State A unreachable
+Warn: a fixture that rewrites an AX element in place hides a UI that replaces it; model the replacement, and make the old element answer -25202.
+Provenance: inherited 550cf44977942f33a1ad5e99b3163ca36d54abc9
+
+Limit: telling a strip Logic adds for an output pair from an aux it creates would take a classification rule; none is built, so output-physical-sets onto an unused pair cannot reach State A.
+Provenance: inherited 91d6f9c3b4d861d3f1b218cdbb15806cdf96396f
+
+Limit: the Swift test suite was not run on the merged tree before the ten-language live rerun; CI's test job runs it
+Limit: logic_canon.py build ran under the system Python 3.9.6; the guards that check what it wrote ran under Python 3.14
+Provenance: inherited ba96a8009aa1165c24379ff3c2cc2452e012560b
