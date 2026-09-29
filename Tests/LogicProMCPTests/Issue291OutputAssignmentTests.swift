@@ -551,7 +551,8 @@ func outputAssignmentRechecksTheBusAtThePress(_ change: R2ReceiverChange) async 
 
     #expect(envelope["state"] as? String == "C")
     #expect(envelope["error"] as? String == "bus_has_no_receiver")
-    #expect(envelope["read_with_popup_open"] as? Bool == true)
+    let readWithPopupOpen = try #require(envelope["read_with_popup_open"] as? Bool)
+    #expect(readWithPopupOpen)
     // Before the popup opened, Aux 1 at index 1 was Bus 1's receiver.
     #expect(envelope["bus_receivers"] as? [Int] == [1])
     let written = try #require(envelope["write_attempted"] as? Bool)
@@ -571,7 +572,8 @@ func outputAssignmentRechecksTheStripCountAtThePress() async throws {
 
     #expect(envelope["state"] as? String == "C")
     #expect(envelope["error"] as? String == "unsupported_state")
-    #expect(envelope["read_with_popup_open"] as? Bool == true)
+    let readWithPopupOpen = try #require(envelope["read_with_popup_open"] as? Bool)
+    #expect(readWithPopupOpen)
     #expect(envelope["strip_count_at_press"] as? Int == 4)
     let written = try #require(envelope["write_attempted"] as? Bool)
     #expect(!written)
