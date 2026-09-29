@@ -78,6 +78,12 @@ private final class R2Fixture: @unchecked Sendable {
         var duplicateBusOne = false
         /// False: the press puts a popup-level window up, but no AXMenu appears under the Mixer.
         var menuAppearsUnderMixer = true
+        /// Aux 1's input becomes this when the output popup opens, as a user reassigning it would.
+        var auxInputWhilePopupOpen: String?
+        /// How that change reaches AX: the input slot relabelled, or the strip's elements replaced.
+        var auxChange = R2ReceiverChange.inPlace
+        /// A strip is added to the Mixer when the output popup opens.
+        var stripAddedWhilePopupOpen = false
     }
 
     let options: Options
@@ -93,6 +99,7 @@ private final class R2Fixture: @unchecked Sendable {
     private var failingAttribute: [Int: String] = [:]
     private var failingChildren: Set<Int> = []
     private var replacedStrips = 0
+    private var auxInputNow = ""
 
     private(set) var app: AXUIElement!
     private(set) var mixer: AXUIElement!
@@ -107,6 +114,7 @@ private final class R2Fixture: @unchecked Sendable {
     init(_ options: Options = Options()) {
         self.options = options
         let language = options.language
+        auxInputNow = options.auxInput ?? language.bus(1)
         app = make()
         let window = make()
         b.setAttribute(app, kAXMainWindowAttribute as String, window)
@@ -224,6 +232,22 @@ private final class R2Fixture: @unchecked Sendable {
         replacedStrips += 1
     }
 
+    /// Aux 1 takes another input while the popup is open. Whether Logic relabels the slot or
+    /// replaces the strip's elements is not measured, so both are modelled.
+    private func reassignAuxInput(to input: String) {
+        auxInputNow = input
+        let aux = strips[1]
+        switch options.auxChange {
+        case .inPlace:
+            b.setAttribute(stripChildren[id(aux)]![0], kAXDescriptionAttribute as String, input)
+        case .replaced:
+            invalidated.insert(id(aux))
+            for child in stripChildren[id(aux)] ?? [] { invalidated.insert(id(child)) }
+            strips[1] = strip(output: options.auxOutput ?? options.language.stereoOutput, input: input,
+                              send: options.auxSend).0
+        }
+    }
+
     private func item(_ title: String, result: String? = nil, submenu: [AXUIElement]? = nil) -> AXUIElement {
         let item = make(role: kAXMenuItemRole as String)
         b.setAttribute(item, kAXTitleAttribute as String, title)
@@ -279,6 +303,8 @@ private final class R2Fixture: @unchecked Sendable {
             pressLog.append(pressed)
             if pressed == id(outputButton) {
                 menuOpen = true
+                if let input = options.auxInputWhilePopupOpen { reassignAuxInput(to: input) }
+                if options.stripAddedWhilePopupOpen { strips.append(make(role: kAXLayoutItemRole as String)) }
                 if options.menuAppearsUnderMixer { b.setChildren(mixer, strips + [root]) }
                 // Measured: the press that opens the popup reports -25204 while the menu is up.
                 return false
@@ -291,8 +317,7 @@ private final class R2Fixture: @unchecked Sendable {
             case .slotGoesBlank: replaceAudioStrip(output: "")
             }
             b.setChildren(mixer, strips)
-            let receivedBus = options.auxInput ?? options.language.bus(1)
-            let busWithoutReceiver = label.hasPrefix(options.language.busWord) && label != receivedBus
+            let busWithoutReceiver = label.hasPrefix(options.language.busWord) && label != auxInputNow
             if options.alwaysCreatesStrip || busWithoutReceiver {
                 strips.append(make(role: kAXLayoutItemRole as String))
                 b.setChildren(mixer, strips)
@@ -405,6 +430,8 @@ func outputAssignmentBusSetsAndReadsBack() async throws {
     #expect(envelope["strip_count_before"] as? Int == 3)
     #expect(envelope["strip_count_after"] as? Int == 3)
     #expect(envelope["bus_receivers"] as? [Int] == [1])
+    // The seam fired: the bus was checked again with the popup open, and still had its receiver.
+    #expect(envelope["bus_receivers_at_press"] as? [Int] == [1])
     #expect(envelope["menu_path"] as? [String] == ["Bus", "Bus 1 \u{2192} Aux 1"])
     #expect(envelope["popup_menu_state"] as? String == "closed")
     #expect(envelope["verify_source"] as? String == "ax_output_slot")
@@ -509,6 +536,47 @@ func outputAssignmentRefusesABusWithoutReceiver() async throws {
     #expect(envelope["strips_with_input_not_read"] as? [Int] == [])
     #expect(envelope["strip_count_before"] as? Int == 3)
     #expect(fixture.presses.isEmpty)
+}
+
+enum R2ReceiverChange: String, CaseIterable, Sendable { case inPlace, replaced }
+
+/// Kills M32: checking the bus only before the popup opens. Aux 1, Bus 1's only receiver, takes
+/// another input while the popup is up, so the press would land on a bus nothing receives and the
+/// fixture would add an aux, as Logic does.
+@Test("a receiver reassigned while the popup is open refuses bus_has_no_receiver, nothing selected",
+      arguments: R2ReceiverChange.allCases)
+func outputAssignmentRechecksTheBusAtThePress(_ change: R2ReceiverChange) async throws {
+    let fixture = R2Fixture(.init(auxInputWhilePopupOpen: "Input 2", auxChange: change))
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "bus_has_no_receiver")
+    #expect(envelope["read_with_popup_open"] as? Bool == true)
+    // Before the popup opened, Aux 1 at index 1 was Bus 1's receiver.
+    #expect(envelope["bus_receivers"] as? [Int] == [1])
+    let written = try #require(envelope["write_attempted"] as? Bool)
+    #expect(!written)
+    #expect(envelope["popup_menu_state"] as? String == "dismissed")
+    #expect(fixture.escapeCount == 1)
+    #expect(fixture.presses == [fixture.id(fixture.outputButton)])
+    #expect(fixture.strips.count == 3)
+}
+
+/// Kills M33: rechecking the bus without comparing the strip count. A strip added while the popup is
+/// open can shift what an ordinal names, so the strips are not checked again by ordinal: it refuses.
+@Test("a strip count that moved while the popup is open refuses, nothing selected")
+func outputAssignmentRechecksTheStripCountAtThePress() async throws {
+    let fixture = R2Fixture(.init(stripAddedWhilePopupOpen: true))
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "unsupported_state")
+    #expect(envelope["read_with_popup_open"] as? Bool == true)
+    #expect(envelope["strip_count_at_press"] as? Int == 4)
+    let written = try #require(envelope["write_attempted"] as? Bool)
+    #expect(!written)
+    #expect(envelope["popup_menu_state"] as? String == "dismissed")
+    #expect(fixture.presses == [fixture.id(fixture.outputButton)])
 }
 
 @Test("a strip whose input did not read is listed beside bus_has_no_receiver, never counted")

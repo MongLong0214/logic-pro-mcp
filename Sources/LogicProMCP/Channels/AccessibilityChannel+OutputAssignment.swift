@@ -180,40 +180,12 @@ extension AccessibilityChannel {
         }
 
         if case .bus(let number) = destination {
-            var inputs: [Int: AXLogicProElements.InputSlotReading] = [:]
-            for (ordinal, other) in strips.enumerated() where ordinal != index {
-                inputs[ordinal] = AXLogicProElements.inputSlotReading(in: other, runtime: runtime.ax)
+            switch busCheck(into: number, from: index, strips: strips, runtime: runtime.ax) {
+            case .receivers(let receivers):
+                extras["bus_receivers"] = receivers
+            case .refused(let error, let hint, let more):
+                return refusal(error, hint + "; nothing was pressed.", more)
             }
-            // The loop check comes first: a strip that is the only reader of its own input bus has
-            // no other receiver, and would otherwise be refused as if no strip read that bus.
-            switch busLoop(into: number, from: index, strips: strips, inputs: inputs, runtime: runtime.ax) {
-            case .clear:
-                break
-            case .closes(let feed):
-                let path = feed == number ? "that is the bus it was asked to output to"
-                    : "Bus \(number) reaches Bus \(feed) through the strips that receive it"
-                return refusal(.routingCycle, "This strip reads Bus \(feed) as its input, and \(path), "
-                    + "so the assignment would close a loop; nothing was pressed.", ["input_bus": feed])
-            case .unknown(let ordinal, let part):
-                let unread = ordinal == index ? "This strip's input did not read"
-                    : "This strip reads a bus as its input, and the strip at index \(ordinal), which the "
-                        + "check had to follow from Bus \(number), did not say where its signal goes (\(part))"
-                return refusal(.routingDependencyUnknown, "\(unread). A loop cannot be ruled out; nothing "
-                    + "was pressed.",
-                    ["dependency_strip": ordinal, "dependency_unread": part])
-            }
-            // A bus needs a receiver that already exists: Logic creates an aux for an unused bus, and
-            // this operation has no creation authority (#967). An input that did not read is listed,
-            // never counted as "not a receiver" — the refusal stands either way.
-            let ordinals = inputs.keys.sorted()
-            let receivers = ordinals.filter { busNumber(feeding: inputs[$0]) == number }
-            guard !receivers.isEmpty else {
-                return refusal(.busHasNoReceiver, "No other strip in the Mixer reads Bus \(number) as its "
-                    + "input. Logic creates an aux when a strip is sent to an unused bus, and this "
-                    + "operation may not create one (#967); nothing was pressed.",
-                    ["bus": number, "strips_with_input_not_read": ordinals.filter { inputs[$0] == .unreadable }])
-            }
-            extras["bus_receivers"] = receivers
         }
 
         // A menu already open is somebody else's, and the cleanup below would close it too.
@@ -276,6 +248,32 @@ extension AccessibilityChannel {
             return refusal(.elementNotFound, "The popup entry for this destination is disabled or its "
                 + "enabled state did not read; nothing was selected.",
                 cleanup.merging(["menu_failure": "destination_entry_not_enabled", "menu_path": path]) { _, new in new })
+        }
+
+        // The bus was checked before the popup opened, and a strip can change while it is open: if
+        // the last strip reading the bus is reassigned meanwhile, this press would create an aux.
+        // So the strips are read again from the Mixer the popup opened under, and the bus checked
+        // again, right before the press. AX has no compare-and-press: a change after this read is
+        // seen only afterwards, as a strip count that moved.
+        if case .bus(let number) = destination {
+            var refused: (HonestContract.FailureError, String, [String: Any])?
+            let fresh = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
+            if let fresh, fresh.unreadableChildren == 0, fresh.strips.count == strips.count {
+                switch busCheck(into: number, from: index, strips: fresh.strips, runtime: runtime.ax) {
+                case .receivers(let receivers): extras["bus_receivers_at_press"] = receivers
+                case .refused(let error, let hint, let more): refused = (error, hint, more)
+                }
+            } else {
+                refused = (.unsupportedState, "The Mixer's strips did not read whole, or their count moved",
+                           ["strip_count_at_press": fresh?.strips.count ?? NSNull(),
+                            "unreadable_mixer_children": fresh?.unreadableChildren ?? NSNull()])
+            }
+            if let (error, hint, more) = refused {
+                let cleanup = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: false,
+                                                     cleaner: popupCleaner)
+                return refusal(error, hint + ", read again with the popup open; nothing was selected.",
+                    cleanup.merging(more.merging(["read_with_popup_open": true]) { _, new in new }) { _, new in new })
+            }
         }
 
         extras["write_attempted"] = true
@@ -510,7 +508,56 @@ extension AccessibilityChannel {
         return classification == .bus ? bus : nil
     }
 
-    /// What routing the strip at `index` to a bus would close, read before anything is pressed.
+    /// The two checks a bus destination needs, read from `strips`: the assignment closes no loop,
+    /// and another strip already reads the bus. They are made before the popup opens and again right
+    /// before the press. A refusal's hint says what was found; the caller says what was not done.
+    enum BusCheck {
+        case receivers([Int])
+        case refused(HonestContract.FailureError, String, [String: Any])
+    }
+
+    static func busCheck(
+        into number: Int,
+        from index: Int,
+        strips: [AXUIElement],
+        runtime: AXHelpers.Runtime
+    ) -> BusCheck {
+        var inputs: [Int: AXLogicProElements.InputSlotReading] = [:]
+        for (ordinal, other) in strips.enumerated() where ordinal != index {
+            inputs[ordinal] = AXLogicProElements.inputSlotReading(in: other, runtime: runtime)
+        }
+        // The loop check comes first: a strip that is the only reader of its own input bus has
+        // no other receiver, and would otherwise be refused as if no strip read that bus.
+        switch busLoop(into: number, from: index, strips: strips, inputs: inputs, runtime: runtime) {
+        case .clear:
+            break
+        case .closes(let feed):
+            let path = feed == number ? "that is the bus it was asked to output to"
+                : "Bus \(number) reaches Bus \(feed) through the strips that receive it"
+            return .refused(.routingCycle, "This strip reads Bus \(feed) as its input, and \(path), "
+                + "so the assignment would close a loop", ["input_bus": feed])
+        case .unknown(let ordinal, let part):
+            let unread = ordinal == index ? "This strip's input did not read"
+                : "This strip reads a bus as its input, and the strip at index \(ordinal), which the "
+                    + "check had to follow from Bus \(number), did not say where its signal goes (\(part))"
+            return .refused(.routingDependencyUnknown, "\(unread). A loop cannot be ruled out",
+                ["dependency_strip": ordinal, "dependency_unread": part])
+        }
+        // A bus needs a receiver that already exists: Logic creates an aux for an unused bus, and
+        // this operation has no creation authority (#967). An input that did not read is listed,
+        // never counted as "not a receiver" — the refusal stands either way.
+        let ordinals = inputs.keys.sorted()
+        let receivers = ordinals.filter { busNumber(feeding: inputs[$0]) == number }
+        guard !receivers.isEmpty else {
+            return .refused(.busHasNoReceiver, "No other strip in the Mixer reads Bus \(number) as its "
+                + "input. Logic creates an aux when a strip is sent to an unused bus, and this "
+                + "operation may not create one (#967)",
+                ["bus": number, "strips_with_input_not_read": ordinals.filter { inputs[$0] == .unreadable }])
+        }
+        return .receivers(receivers)
+    }
+
+    /// What routing the strip at `index` to a bus would close, read before the destination is pressed.
     enum BusLoop: Equatable {
         case clear
         /// The strip reads Bus `feed` as its input, and the destination bus reaches it.
