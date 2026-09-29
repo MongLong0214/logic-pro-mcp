@@ -197,6 +197,194 @@
         "AXWindow:False",
         "AXWindow:False"
       ]
+    },
+    {
+      "order": 5,
+      "build": "parent-e42c5453",
+      "binary_sha256": "65dbff81252da7019a2d0caa1a9389cdbd07e4c7c93b9c9e37715578638c2a70",
+      "axwindows_role_and_axmodal_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "reply": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "reason": "retry_exhausted",
+        "observed_delta": 1,
+        "reconciled_modal_observation": "incomplete",
+        "reconciled_modal_unreadable_reason": "top_level_window_modal_read_failed",
+        "reconciled_modal_unreadable_ax_status": -25205,
+        "track_count_before": 24,
+        "track_count_after": 25
+      },
+      "reply_keys": [
+        "dialog_confirmation_attempted",
+        "dialog_present",
+        "menu_clicked",
+        "observed_delta",
+        "reason",
+        "reconciled_modal_observation",
+        "reconciled_modal_unreadable_ax_status",
+        "reconciled_modal_unreadable_ax_status_name",
+        "reconciled_modal_unreadable_reason",
+        "requested_delta",
+        "requested_track_type",
+        "state",
+        "success",
+        "trace_id",
+        "track_count_after",
+        "track_count_before",
+        "verification_source",
+        "verified"
+      ],
+      "elapsed_s": 7.4,
+      "axwindows_role_and_axmodal_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ]
+    },
+    {
+      "order": 6,
+      "build": "fix-e07d5ab6",
+      "binary_sha256": "75b186e3c5252b093eff0d9ec4418e90af4a02047113be690b5600a017becdeb",
+      "axwindows_role_and_axmodal_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "reply": {
+        "state": "A",
+        "success": true,
+        "error": null,
+        "reason": null,
+        "observed_delta": 1,
+        "reconciled_modal_observation": null,
+        "reconciled_modal_unreadable_reason": null,
+        "reconciled_modal_unreadable_ax_status": null,
+        "track_count_before": 25,
+        "track_count_after": 26
+      },
+      "reply_keys": [
+        "dialog_confirmation_attempted",
+        "menu_clicked",
+        "observed_delta",
+        "observed_track_index",
+        "observed_track_name",
+        "observed_track_type",
+        "requested_delta",
+        "requested_track_type",
+        "state",
+        "success",
+        "trace_id",
+        "track_count_after",
+        "track_count_before",
+        "track_type_verification_source",
+        "verification_source",
+        "verified"
+      ],
+      "elapsed_s": 4.0,
+      "axwindows_role_and_axmodal_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ]
+    },
+    {
+      "order": 7,
+      "build": "parent-e42c5453",
+      "binary_sha256": "65dbff81252da7019a2d0caa1a9389cdbd07e4c7c93b9c9e37715578638c2a70",
+      "axwindows_role_and_axmodal_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "reply": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "reason": "retry_exhausted",
+        "observed_delta": 1,
+        "reconciled_modal_observation": "incomplete",
+        "reconciled_modal_unreadable_reason": "top_level_window_modal_read_failed",
+        "reconciled_modal_unreadable_ax_status": -25205,
+        "track_count_before": 26,
+        "track_count_after": 27
+      },
+      "reply_keys": [
+        "dialog_confirmation_attempted",
+        "dialog_present",
+        "menu_clicked",
+        "observed_delta",
+        "reason",
+        "reconciled_modal_observation",
+        "reconciled_modal_unreadable_ax_status",
+        "reconciled_modal_unreadable_ax_status_name",
+        "reconciled_modal_unreadable_reason",
+        "requested_delta",
+        "requested_track_type",
+        "state",
+        "success",
+        "trace_id",
+        "track_count_after",
+        "track_count_before",
+        "verification_source",
+        "verified"
+      ],
+      "elapsed_s": 7.3,
+      "axwindows_role_and_axmodal_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ]
+    },
+    {
+      "order": 8,
+      "build": "fix-e07d5ab6",
+      "binary_sha256": "75b186e3c5252b093eff0d9ec4418e90af4a02047113be690b5600a017becdeb",
+      "axwindows_role_and_axmodal_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "reply": {
+        "state": "A",
+        "success": true,
+        "error": null,
+        "reason": null,
+        "observed_delta": 1,
+        "reconciled_modal_observation": null,
+        "reconciled_modal_unreadable_reason": null,
+        "reconciled_modal_unreadable_ax_status": null,
+        "track_count_before": 27,
+        "track_count_after": 28
+      },
+      "reply_keys": [
+        "dialog_confirmation_attempted",
+        "menu_clicked",
+        "observed_delta",
+        "observed_track_index",
+        "observed_track_name",
+        "observed_track_type",
+        "requested_delta",
+        "requested_track_type",
+        "state",
+        "success",
+        "trace_id",
+        "track_count_after",
+        "track_count_before",
+        "track_type_verification_source",
+        "verification_source",
+        "verified"
+      ],
+      "elapsed_s": 3.9,
+      "axwindows_role_and_axmodal_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ]
     }
   ]
 }

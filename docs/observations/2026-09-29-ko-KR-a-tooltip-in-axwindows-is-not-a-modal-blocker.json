@@ -29,7 +29,7 @@
   "evidence": [
     "evidence/2026-09-29-ko-KR-help-tag-1063.json"
   ],
-  "method": "Two release binaries were built from one tree: 60fe855d, and the same tree with only AccessibilityChannel+ModalReconcile.swift restored to e42c5453. Against the lpm-locale-campaign fixture in a Korean Logic, each call started one server, sent logic_system refresh_cache and logic_tracks create_instrument, and read AXWindows (role and AXModal of each entry) through the livekit AX runtime before and after the call. The builds were alternated: parent, fix, parent, fix.",
+  "method": "Three release binaries were built from one tree: 60fe855d; e07d5ab6, which also skips an AXHelpTag entry whose AXModal answers true; and the same tree with only AccessibilityChannel+ModalReconcile.swift restored to e42c5453. Against the lpm-locale-campaign fixture in a Korean Logic, each call started one server, sent logic_system refresh_cache and logic_tracks create_instrument, and read AXWindows (role and AXModal of each entry) through the livekit AX runtime before and after the call. The builds were alternated in two series: parent, 60fe855d, parent, 60fe855d; then parent, e07d5ab6, parent, e07d5ab6.",
   "observations": [
     {
       "order": 1,
@@ -118,11 +118,99 @@
       "observed_delta": 1,
       "track_count_before": 23,
       "track_count_after": 24
+    },
+    {
+      "order": 5,
+      "binary_sha256": "65dbff81252da7019a2d0caa1a9389cdbd07e4c7c93b9c9e37715578638c2a70",
+      "build": "parent-e42c5453",
+      "axwindows_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "axwindows_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "state": "B",
+      "reason": "retry_exhausted",
+      "reconciled_modal_unreadable_reason": "top_level_window_modal_read_failed",
+      "reconciled_modal_unreadable_ax_status": -25205,
+      "observed_delta": 1,
+      "track_count_before": 24,
+      "track_count_after": 25
+    },
+    {
+      "order": 6,
+      "binary_sha256": "75b186e3c5252b093eff0d9ec4418e90af4a02047113be690b5600a017becdeb",
+      "build": "fix-e07d5ab6",
+      "axwindows_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "axwindows_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "state": "A",
+      "reason": null,
+      "reconciled_modal_unreadable_reason": null,
+      "reconciled_modal_unreadable_ax_status": null,
+      "observed_delta": 1,
+      "track_count_before": 25,
+      "track_count_after": 26
+    },
+    {
+      "order": 7,
+      "binary_sha256": "65dbff81252da7019a2d0caa1a9389cdbd07e4c7c93b9c9e37715578638c2a70",
+      "build": "parent-e42c5453",
+      "axwindows_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "axwindows_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "state": "B",
+      "reason": "retry_exhausted",
+      "reconciled_modal_unreadable_reason": "top_level_window_modal_read_failed",
+      "reconciled_modal_unreadable_ax_status": -25205,
+      "observed_delta": 1,
+      "track_count_before": 26,
+      "track_count_after": 27
+    },
+    {
+      "order": 8,
+      "binary_sha256": "75b186e3c5252b093eff0d9ec4418e90af4a02047113be690b5600a017becdeb",
+      "build": "fix-e07d5ab6",
+      "axwindows_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "axwindows_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "state": "A",
+      "reason": null,
+      "reconciled_modal_unreadable_reason": null,
+      "reconciled_modal_unreadable_ax_status": null,
+      "observed_delta": 1,
+      "track_count_before": 27,
+      "track_count_after": 28
     }
   ],
-  "conclusion": "With the AXHelpTag entry answering AXModal -25205 before and after every call, e42c5453 reported State B retry_exhausted (top_level_window_modal_read_failed, -25205) twice and 60fe855d reported State A twice; every call created exactly one track (20 to 24).",
+  "conclusion": "With the AXHelpTag entry answering AXModal -25205 before and after every call, e42c5453 reported State B retry_exhausted (top_level_window_modal_read_failed, -25205) four times, while 60fe855d and e07d5ab6 each reported State A twice; every call created exactly one track (20 to 28).",
   "limits": [
-    "One fixture, one language, one host, two calls per build. The tooltip was the one Logic showed under a pointer left at rest; which control it belonged to was not recorded.",
+    "One fixture, one language, one host; four calls of the parent and two of each fixed build. The tooltip was the one Logic showed under a pointer left at rest; which control it belonged to was not recorded. Its AXModal answered -25205 in every call, so the skip for a tooltip whose AXModal answers true rests on the unit tests, not on a live reading.",
     "Only create_instrument was driven. The delete path shares topLevelDialogRead and was not driven with a tooltip present.",
     "The sheet scan still visits the tooltip entry; its AXChildren answer was not recorded, only that it did not stop the fixed build's calls.",
     "The Go To Position AppleScript window loops in AccessibilityChannel+Transport.swift were not driven with a tooltip present."
