@@ -84,7 +84,8 @@
       "2026-09-28-zh-CN-track-header-toggles-without-the-mute-led-writer",
       "2026-09-28-zh-TW-track-header-toggles-publish-what-was-read",
       "2026-09-28-zh-TW-track-header-toggles-without-the-mute-led-writer",
-      "2026-09-29-1038-transport-goto-gate-toggle-and-pause-ten-languages"
+      "2026-09-29-1038-transport-goto-gate-toggle-and-pause-ten-languages",
+      "2026-09-29-ko-KR-a-tooltip-in-axwindows-is-not-a-modal-blocker"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
@@ -531,9 +532,9 @@
     "manual_reverify": {
       "date": "2026-09-29",
       "members": [
-        "2026-09-29-1038-transport-goto-gate-toggle-and-pause-ten-languages"
+        "2026-09-29-ko-KR-a-tooltip-in-axwindows-is-not-a-modal-blocker"
       ],
-      "reason": "#1038, #1041, #1042 and #1060: the ten-language transport record reverifies by hand. The run drove Logic through a harness kept with the evidence outside this repository (live.py, and Issue1038LiveHarness.swift copied into the test target only for the run), because the goto cases run CGEventChannel directly against a running Logic from a test harness that CI must not build, and the menu case opens a Logic menu before the call. The reverify block carries the steps, the expected reading and the cost. Registered in the same commit as the record; the members of the previous raise are in the base and are no longer growth."
+      "reason": "#1063: the record's reverify needs a tooltip resting over Logic when the scan runs. It is the one Logic shows under a pointer left at rest; a script cannot arrange that without moving the pointer, so the steps are written out by hand. The four live calls and their raw replies are in docs/observations/evidence/2026-09-29-ko-KR-help-tag-1063.json."
     },
     "records_without_evidence": {
       "date": "2026-09-19",
