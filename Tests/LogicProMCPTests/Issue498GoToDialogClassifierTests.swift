@@ -127,3 +127,107 @@ func issue498DoesNotTouchFloatingModalTitleSuffix() {
     #expect(!AccessibilityChannel.closeGoToPositionDialog(runtime: fixture.runtime))
     #expect(fixture.builder.actionCalls.isEmpty)
 }
+
+// MARK: - #1063 (R1063-02): a help tag is not the Go To Position dialog
+
+/// Logic lists the tooltip under a resting pointer among its `AXWindows` (#1063). An entry that also
+/// answers the Go To Position shape — floating subrole, `AXModal` true, the exact title — is told
+/// apart only by its role as READ. Each window below has that shape and its own Cancel and OK, and
+/// its `AXRole` in the builder's table is `roles[i]`. `failRoleReadAt` makes that window's
+/// status-preserving role read fail with -25204 while the table still holds its role, so a reader
+/// that bypassed the status-preserving path would see the table's role instead of the failure.
+/// `roleReads` counts status-preserving role reads of these windows, which only the help-tag check
+/// makes (the Cancel lookup reads its buttons' roles through the best-effort path).
+private func makeIssue1063GoToShapedWindows(
+    roles: [String],
+    failRoleReadAt failingIndex: Int? = nil
+) -> (
+    builder: FakeAXRuntimeBuilder,
+    runtime: AXLogicProElements.Runtime,
+    cancels: [AXUIElement],
+    roleReads: MutableBox<Int>
+) {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1_063_000)
+    var windows: [AXUIElement] = []
+    var cancels: [AXUIElement] = []
+    for (index, role) in roles.enumerated() {
+        let base = 1_063_010 + index * 10
+        let window = builder.element(base)
+        let cancel = builder.element(base + 1)
+        let ok = builder.element(base + 2)
+        builder.setAttribute(window, kAXRoleAttribute as String, role)
+        builder.setAttribute(window, kAXTitleAttribute as String, "Go To Position")
+        builder.setAttribute(window, kAXSubroleAttribute as String, kAXFloatingWindowSubrole as String)
+        builder.setAttribute(window, kAXModalAttribute as String, true)
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(ok, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(ok, kAXTitleAttribute as String, "OK")
+        builder.setChildren(window, [cancel, ok])
+        windows.append(window)
+        cancels.append(cancel)
+    }
+    builder.setAttribute(app, kAXWindowsAttribute as String, windows)
+
+    let listed = windows
+    let failing = failingIndex.map { windows[$0] }
+    let roleReads = MutableBox(0)
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            guard attribute == kAXRoleAttribute as String,
+                  listed.contains(where: { CFEqual($0, element) }) else { return nil }
+            roleReads.value += 1
+            if let failing, CFEqual(failing, element) {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    return (builder, runtime, cancels, roleReads)
+}
+
+@Test("Issue1063: a help tag with the Go To Position shape is not found and not acted on")
+func issue1063HelpTagWithGoToShapeIsNotTouched() {
+    let fixture = makeIssue1063GoToShapedWindows(roles: [kAXHelpTagRole as String])
+
+    #expect(!AccessibilityChannel.closeGoToPositionDialog(runtime: fixture.runtime))
+    #expect(fixture.roleReads.value == 1, "the help tag's role must be read, or this test proves nothing")
+    #expect(fixture.builder.actionCalls.isEmpty)
+}
+
+@Test("Issue1063: a window with the Go To Position shape whose role reads AXWindow is still closed")
+func issue1063GenuineGoToDialogIsStillClosed() {
+    let fixture = makeIssue1063GoToShapedWindows(roles: [kAXWindowRole as String])
+
+    #expect(AccessibilityChannel.closeGoToPositionDialog(runtime: fixture.runtime))
+    #expect(fixture.roleReads.value == 1, "the role must be read and answer AXWindow, or this test proves nothing")
+    #expect(fixture.builder.actionCalls.count == 1)
+    #expect(fixture.builder.actionCalls.first?.elementID == fixture.builder.elementID(fixture.cancels[0]))
+    #expect(fixture.builder.actionCalls.first?.action == kAXPressAction as String)
+}
+
+@Test("Issue1063: a Go To Position-shaped window whose role read fails is still treated as the dialog")
+func issue1063UnreadableRoleKeepsTheDialogClosed() {
+    // The table says AXHelpTag; the status-preserving read fails. Only the read counts.
+    let fixture = makeIssue1063GoToShapedWindows(roles: [kAXHelpTagRole as String], failRoleReadAt: 0)
+
+    #expect(AccessibilityChannel.closeGoToPositionDialog(runtime: fixture.runtime))
+    #expect(fixture.roleReads.value == 1, "the failing role-read seam must fire, or this test proves nothing")
+    #expect(fixture.builder.actionCalls.count == 1)
+    #expect(fixture.builder.actionCalls.first?.elementID == fixture.builder.elementID(fixture.cancels[0]))
+}
+
+@Test("Issue1063: a help tag listed before the genuine Go To Position dialog is passed over")
+func issue1063HelpTagBeforeGenuineDialogActsOnlyOnTheDialog() {
+    let fixture = makeIssue1063GoToShapedWindows(roles: [kAXHelpTagRole as String, kAXWindowRole as String])
+
+    #expect(AccessibilityChannel.closeGoToPositionDialog(runtime: fixture.runtime))
+    #expect(fixture.roleReads.value == 2, "both roles must be read, or this test proves nothing")
+    #expect(fixture.builder.actionCalls.count == 1)
+    #expect(fixture.builder.actionCalls.first?.elementID == fixture.builder.elementID(fixture.cancels[1]))
+    #expect(fixture.builder.actionCalls.first?.action == kAXPressAction as String)
+}

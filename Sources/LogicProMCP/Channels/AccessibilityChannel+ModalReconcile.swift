@@ -1217,7 +1217,7 @@ extension AccessibilityChannel {
     /// `AXModal` and `AXSubrole` -25205 and `AXTitle` -25212 beside two windows reporting
     /// `AXModal` false; the live harness skips the same entry (`Scripts/livekit/evidence.py`
     /// `_is_help_tag`).
-    private static func windowRoleReadsAsHelpTag(
+    static func windowRoleReadsAsHelpTag(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {

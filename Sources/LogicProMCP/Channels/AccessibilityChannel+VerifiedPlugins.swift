@@ -4944,6 +4944,9 @@ extension AccessibilityChannel {
                   AXLocalePolicy.goToPositionDialogTitle.matches(title, mode: .exactStrict) else {
                 continue
             }
+            // #1063 (R1063-02): a tooltip listed in AXWindows can answer this shape too; one whose role
+            // READS as AXHelpTag is not the dialog. Asked only of a match, so no other window pays the read.
+            if windowRoleReadsAsHelpTag(window, runtime: runtime.ax) { continue }
             found = true
             // #628: identified, not merely found. `findDescendant` returns the first match in
             // traversal order, so with two Cancel-labelled buttons it presses one and nothing
