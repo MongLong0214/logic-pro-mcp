@@ -1271,10 +1271,18 @@ extension AccessibilityChannel {
         guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
             return .error(incompleteInventoryStateC(operation, identity, "the mixer's children did not read"))
         }
-        guard track < strips.count else {
-            return .error(incompleteInventoryStateC(operation, identity, "track index \(track) is not present in the visible mixer"))
+        // `track` is an arrange track-header index (selection above and editor
+        // window binding below both address headers). The Mixer can hold strips
+        // with no header at the same ordinal (aux returns, buses), so the strip
+        // is joined by name rather than assumed to share the header's ordinal.
+        let stripIndex: Int
+        switch mixerStripIndex(forTrack: track, strips: strips, runtime: runtime) {
+        case let .success(index):
+            stripIndex = index
+        case let .failure(failure):
+            return .error(stripBindingFailedStateC(operation, identity, failure))
         }
-        guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax) else {
+        guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[stripIndex], runtime: runtime.ax) else {
             return .error(incompleteInventoryStateC(operation, identity, "the strip's children did not read"))
         }
         let inventory = pluginInventoryItems(for: slots)
@@ -1870,7 +1878,7 @@ extension AccessibilityChannel {
             // and places it on an AXRow label instead. The existing Threshold
             // slider path selects the paired native editor view below.
             guard targetPluginIdentityIsStable(
-                track: track,
+                track: stripIndex,
                 insert: insert,
                 pluginID: pluginID,
                 originalSlot: slots[insert].element,
@@ -1996,7 +2004,7 @@ extension AccessibilityChannel {
         }
 
         guard targetPluginIdentityIsStable(
-            track: track,
+            track: stripIndex,
             insert: insert,
             pluginID: pluginID,
             originalSlot: slots[insert].element,
@@ -2526,6 +2534,101 @@ extension AccessibilityChannel {
                 "what_was_attempted": "select the target track before writing",
                 "what_was_observed": detail,
                 "safe_to_retry": true,
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    enum StripBindingFailure: Error, Equatable {
+        case notInMixer(stripCount: Int)
+        case noStripNamed(String)
+        case ambiguous(name: String, headerCount: Int, stripCount: Int)
+    }
+
+    /// Join an arrange track-header index to its mixer strip ordinal by name.
+    ///
+    /// Header and strip ordinals only coincide until the first strip that has
+    /// no header at the same position (an aux return or bus), so the strip at
+    /// the header's own ordinal is used only when its name matches. Otherwise
+    /// the n-th header carrying the name binds to the n-th strip carrying it —
+    /// the Mixer lists track strips in arrange order — and only when both sides
+    /// carry that name the same number of times. Anything else is refused.
+    ///
+    /// When no header or no strip name reads at all there is nothing to join
+    /// on, and the strip keeps the header's ordinal as before; the insert's
+    /// plug-in identity and the editor window's title still gate the write.
+    static func mixerStripIndex(
+        forTrack track: Int,
+        strips: [AXUIElement],
+        runtime: AXLogicProElements.Runtime
+    ) -> Result<Int, StripBindingFailure> {
+        let stripNames = strips.map {
+            AXPluginInstanceIdentity.stripName($0, runtime: runtime.ax)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return mixerStripIndex(
+            forTrack: track,
+            headerNames: AXLogicProElements.trackNames(runtime: runtime),
+            stripNames: stripNames
+        )
+    }
+
+    static func mixerStripIndex(
+        forTrack track: Int,
+        headerNames: [Int: String]?,
+        stripNames: [String?]
+    ) -> Result<Int, StripBindingFailure> {
+        guard let headerNames, let name = headerNames[track],
+              stripNames.contains(where: { $0 != nil }) else {
+            return track < stripNames.count
+                ? .success(track)
+                : .failure(.notInMixer(stripCount: stripNames.count))
+        }
+        if track < stripNames.count, stripNames[track] == name {
+            return .success(track)
+        }
+        let headersWithName = headerNames.keys.filter { headerNames[$0] == name }.sorted()
+        let stripsWithName = stripNames.indices.filter { stripNames[$0] == name }
+        guard !stripsWithName.isEmpty else {
+            return .failure(.noStripNamed(name))
+        }
+        guard headersWithName.count == stripsWithName.count,
+              let rank = headersWithName.firstIndex(of: track) else {
+            return .failure(.ambiguous(
+                name: name,
+                headerCount: headersWithName.count,
+                stripCount: stripsWithName.count
+            ))
+        }
+        return .success(stripsWithName[rank])
+    }
+
+    private static func stripBindingFailedStateC(
+        _ operation: String,
+        _ identity: [String: Any],
+        _ failure: StripBindingFailure
+    ) -> String {
+        let observed: String
+        let error: HonestContract.FailureError
+        switch failure {
+        case let .notInMixer(stripCount):
+            error = .incompleteInventory
+            observed = "the track index is not present in the visible mixer (\(stripCount) strips)"
+        case let .noStripNamed(name):
+            error = .incompleteInventory
+            observed = "no visible mixer strip is named '\(name)'"
+        case let .ambiguous(name, headerCount, stripCount):
+            error = .ambiguousTargetName
+            observed = "'\(name)' names \(headerCount) track header(s) but \(stripCount) mixer strip(s), so the strip cannot be bound"
+        }
+        return HonestContract.encodeV2StateC(
+            error: error,
+            extras: [
+                "operation": operation,
+                "target_identity": identity,
+                "what_was_attempted": "bind the arrange track to its mixer strip by name before writing",
+                "what_was_observed": observed,
+                "safe_to_retry": false,
                 "write_attempted": false,
             ]
         )
