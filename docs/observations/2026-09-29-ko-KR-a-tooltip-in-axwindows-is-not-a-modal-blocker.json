@@ -1,0 +1,134 @@
+{
+  "schema": 3,
+  "id": "2026-09-29-ko-KR-a-tooltip-in-axwindows-is-not-a-modal-blocker",
+  "date": "2026-09-29",
+  "subject": "the modal scan after a verified track write, with a tooltip entry (AXHelpTag) listed in Logic's AXWindows",
+  "question": "With the tooltip under a resting pointer listed in AXWindows and answering AXModal -25205, does create_instrument report the track it created as State A?",
+  "verdict": "works",
+  "surface": "system.accessibility",
+  "issues": [
+    1063
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "With Logic open on a project and a tooltip showing (rest the pointer over a Logic control), list the application's AXWindows and read AXRole and AXModal on each; one entry must be AXRole AXHelpTag with AXModal -25205. Then start the release binary, call logic_system refresh_cache and logic_tracks create_instrument, and read state, reason and observed_delta. Read AXWindows again afterwards; the AXHelpTag entry must still be there. Alternate a build without windowRoleReadsAsHelpTag (State B retry_exhausted, top_level_window_modal_read_failed, -25205) with this one (State A).",
+    "expected": "every call creates exactly one track; the build without the change reports State B retry_exhausted and this build reports State A, with the AXHelpTag entry present before and after each call",
+    "cost": "needs a running Logic with a project open, a tooltip that stays up, and this shell's Accessibility grant; starts one server per call; creates one track per call"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift:windowRoleReadsAsHelpTag",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift:topLevelDialogRead"
+  ],
+  "evidence": [
+    "evidence/2026-09-29-ko-KR-help-tag-1063.json"
+  ],
+  "method": "Two release binaries were built from one tree: 60fe855d, and the same tree with only AccessibilityChannel+ModalReconcile.swift restored to e42c5453. Against the lpm-locale-campaign fixture in a Korean Logic, each call started one server, sent logic_system refresh_cache and logic_tracks create_instrument, and read AXWindows (role and AXModal of each entry) through the livekit AX runtime before and after the call. The builds were alternated: parent, fix, parent, fix.",
+  "observations": [
+    {
+      "order": 1,
+      "binary_sha256": "65dbff81252da7019a2d0caa1a9389cdbd07e4c7c93b9c9e37715578638c2a70",
+      "build": "parent-e42c5453",
+      "axwindows_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "axwindows_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "state": "B",
+      "reason": "retry_exhausted",
+      "reconciled_modal_unreadable_reason": "top_level_window_modal_read_failed",
+      "reconciled_modal_unreadable_ax_status": -25205,
+      "observed_delta": 1,
+      "track_count_before": 20,
+      "track_count_after": 21
+    },
+    {
+      "order": 2,
+      "binary_sha256": "eb5010c5fe30bcdeba49314fb8b7cff5ab52a9ff5db654a7b86270f88eea447c",
+      "build": "fix-60fe855d",
+      "axwindows_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "axwindows_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "state": "A",
+      "reason": null,
+      "reconciled_modal_unreadable_reason": null,
+      "reconciled_modal_unreadable_ax_status": null,
+      "observed_delta": 1,
+      "track_count_before": 21,
+      "track_count_after": 22
+    },
+    {
+      "order": 3,
+      "binary_sha256": "65dbff81252da7019a2d0caa1a9389cdbd07e4c7c93b9c9e37715578638c2a70",
+      "build": "parent-e42c5453",
+      "axwindows_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "axwindows_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "state": "B",
+      "reason": "retry_exhausted",
+      "reconciled_modal_unreadable_reason": "top_level_window_modal_read_failed",
+      "reconciled_modal_unreadable_ax_status": -25205,
+      "observed_delta": 1,
+      "track_count_before": 22,
+      "track_count_after": 23
+    },
+    {
+      "order": 4,
+      "binary_sha256": "eb5010c5fe30bcdeba49314fb8b7cff5ab52a9ff5db654a7b86270f88eea447c",
+      "build": "fix-60fe855d",
+      "axwindows_before": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "axwindows_after": [
+        "AXHelpTag:ERR('AXModal (AX status -25205)',)",
+        "AXWindow:False",
+        "AXWindow:False"
+      ],
+      "state": "A",
+      "reason": null,
+      "reconciled_modal_unreadable_reason": null,
+      "reconciled_modal_unreadable_ax_status": null,
+      "observed_delta": 1,
+      "track_count_before": 23,
+      "track_count_after": 24
+    }
+  ],
+  "conclusion": "With the AXHelpTag entry answering AXModal -25205 before and after every call, e42c5453 reported State B retry_exhausted (top_level_window_modal_read_failed, -25205) twice and 60fe855d reported State A twice; every call created exactly one track (20 to 24).",
+  "limits": [
+    "One fixture, one language, one host, two calls per build. The tooltip was the one Logic showed under a pointer left at rest; which control it belonged to was not recorded.",
+    "Only create_instrument was driven. The delete path shares topLevelDialogRead and was not driven with a tooltip present.",
+    "The sheet scan still visits the tooltip entry; its AXChildren answer was not recorded, only that it did not stop the fixed build's calls.",
+    "The Go To Position AppleScript window loops in AccessibilityChannel+Transport.swift were not driven with a tooltip present."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "The change rests on an AX role constant (kAXHelpTagRole) and on how Logic's AXWindows answer, measured here; it quotes and depends on no string Logic ships."
+  }
+}
