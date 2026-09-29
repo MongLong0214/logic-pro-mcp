@@ -83,7 +83,7 @@ enum OutputAssignment: Equatable, Sendable {
             }
             return (kind == "no_output" ? .noOutput : .stereoOutput, nil)
         default:
-            return (nil, "'kind' must be one of bus, physical, stereo_output, no_output")
+            return (nil, "'kind' must be one of bus, physical, stereo_output, or no_output (no_output only as expected_current)")
         }
     }
 

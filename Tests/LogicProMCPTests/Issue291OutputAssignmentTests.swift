@@ -16,6 +16,8 @@ import Testing
 private let r2PID: pid_t = 4291
 private let r2InvalidElement = AXHelpers.AXStatusError(raw: -25202)
 private let r2CannotComplete = AXHelpers.AXStatusError(raw: -25204)
+private let r2NoValue = AXHelpers.AXStatusError(raw: -25212)
+private let r2AttributeUnsupported = AXHelpers.AXStatusError(raw: -25205)
 
 /// The labels one Logic language draws in the output popup and on the slot.
 struct R2PopupLanguage: Sendable, CustomStringConvertible {
@@ -59,6 +61,14 @@ private final class R2Fixture: @unchecked Sendable {
     enum AuxSend { case none, empty, occupied }
     /// A read that fails with -25204, which is not an answer.
     enum FailingRead { case sourceInputRole, thirdStripChildren, secondBusOneTitle, nestedBusItemChildren }
+    /// A read of the second `Bus 1` entry that ANSWERS with an AX status (#1062 review R2-03):
+    /// -25212 or -25205, injected explicitly, because the builder reads an unset attribute as
+    /// success-and-nil and that would not exercise the status path.
+    enum AnsweringRead { case secondBusOneTitle(AXHelpers.AXStatusError), secondBusOneRole(AXHelpers.AXStatusError) }
+    /// The root's first entry as measured on Logic 12.3 ko: a menu item whose title answers -25212
+    /// and whose single child is an AXTextField holding one AXButton (the popup's search field).
+    /// `withSubmenu` adds an AXMenu child beside the text field, which makes it not a search field.
+    enum UntitledRootItem { case searchField, withSubmenu }
 
     struct Options {
         var language = R2PopupLanguage.en
@@ -76,6 +86,11 @@ private final class R2Fixture: @unchecked Sendable {
         var record: Bool? = false
         var duplicateSubmenuStereoOutput = false
         var duplicateBusOne = false
+        var answeringRead: AnsweringRead?
+        var untitledRootItem: UntitledRootItem?
+        /// The source strip's input-slot help; nil keeps the measured "Input slot." wording. A help
+        /// that names no known slot is an input slot this project's LabelSet does not recognise.
+        var sourceInputHelp: String?
         /// False: the press puts a popup-level window up, but no AXMenu appears under the Mixer.
         var menuAppearsUnderMixer = true
         /// Aux 1's input becomes this when the output popup opens, as a user reassigning it would.
@@ -97,6 +112,7 @@ private final class R2Fixture: @unchecked Sendable {
     private var stripChildren: [Int: [AXUIElement]] = [:]
     private var invalidated: Set<Int> = []
     private var failingAttribute: [Int: String] = [:]
+    private var answeringAttribute: [Int: (String, AXHelpers.AXStatusError)] = [:]
     private var failingChildren: Set<Int> = []
     private var replacedStrips = 0
     private var auxInputNow = ""
@@ -109,6 +125,8 @@ private final class R2Fixture: @unchecked Sendable {
     private(set) var rootEcho: AXUIElement!
     private(set) var submenuStereoOutput: AXUIElement!
     private(set) var busOne: AXUIElement!
+    private(set) var secondBusOne: AXUIElement?
+    private(set) var untitledRootEntry: AXUIElement?
     private(set) var pair34: AXUIElement!
 
     init(_ options: Options = Options()) {
@@ -134,7 +152,7 @@ private final class R2Fixture: @unchecked Sendable {
         case .label(let label): current = label
         case .blank: current = ""
         }
-        let (audio, audioOutput) = strip(output: current, input: options.sourceInput)
+        let (audio, audioOutput) = strip(output: current, input: options.sourceInput, inputHelp: options.sourceInputHelp)
         outputButton = audioOutput
         let (aux, _) = strip(output: options.auxOutput ?? language.stereoOutput,
                              input: options.auxInput ?? language.bus(1), send: options.auxSend)
@@ -157,6 +175,9 @@ private final class R2Fixture: @unchecked Sendable {
             attributeValueHandler: { [self] element, _ -> AnyObject?? in isGone(element) ? .some(nil) : .none },
             attributeValueResultHandler: { [self] element, attribute in
                 if isGone(element) { return .failure(r2InvalidElement) }
+                if let (answered, status) = answeringAttribute[id(element)], answered == attribute {
+                    return .failure(status)
+                }
                 return failingAttribute[id(element)] == attribute ? .failure(r2CannotComplete) : nil
             },
             childrenHandler: { [self] element in isGone(element) ? [] : nil },
@@ -191,13 +212,16 @@ private final class R2Fixture: @unchecked Sendable {
         return element
     }
 
-    private func strip(output: String?, input: String?, send: AuxSend = .none) -> (AXUIElement, AXUIElement?) {
+    private func strip(
+        output: String?, input: String?, send: AuxSend = .none, inputHelp: String? = nil
+    ) -> (AXUIElement, AXUIElement?) {
         let strip = make(role: kAXLayoutItemRole as String)
         var children: [AXUIElement] = []
         var outputSlot: AXUIElement?
         if let input {
             let slot = make(role: kAXButtonRole as String, description: input)
-            b.setAttribute(slot, kAXHelpAttribute as String, "Input slot. Click and hold to choose the channel strip input.")
+            b.setAttribute(slot, kAXHelpAttribute as String,
+                           inputHelp ?? "Input slot. Click and hold to choose the channel strip input.")
             children.append(slot)
         }
         if send != .none {
@@ -228,7 +252,7 @@ private final class R2Fixture: @unchecked Sendable {
         let old = strips[0]
         invalidated.insert(id(old))
         for child in stripChildren[id(old)] ?? [] { invalidated.insert(id(child)) }
-        strips[0] = strip(output: output, input: options.sourceInput).0
+        strips[0] = strip(output: output, input: options.sourceInput, inputHelp: options.sourceInputHelp).0
         replacedStrips += 1
     }
 
@@ -285,6 +309,12 @@ private final class R2Fixture: @unchecked Sendable {
         if options.duplicateBusOne {
             let second = item(language.bus(1), result: language.bus(1))
             if options.failingRead == .secondBusOneTitle { failingAttribute[id(second)] = kAXTitleAttribute as String }
+            switch options.answeringRead {
+            case .secondBusOneTitle(let status): answeringAttribute[id(second)] = (kAXTitleAttribute as String, status)
+            case .secondBusOneRole(let status): answeringAttribute[id(second)] = (kAXRoleAttribute as String, status)
+            case nil: break
+            }
+            secondBusOne = second
             busItems.append(second)
         }
         busItems += (2...3).map { item(language.bus($0), result: language.bus($0)) }
@@ -293,6 +323,21 @@ private final class R2Fixture: @unchecked Sendable {
         busItems.append(nested)
         rootItems.append(item(language.busSubmenu, submenu: busItems))
         rootItems += [item(""), item(language.pan)]
+        if let untitled = options.untitledRootItem {
+            let entry = make(role: kAXMenuItemRole as String)
+            answeringAttribute[id(entry)] = (kAXTitleAttribute as String, r2NoValue)
+            let field = make(role: kAXTextFieldRole as String)
+            b.setChildren(field, [make(role: kAXButtonRole as String)])
+            var children = [field]
+            if untitled == .withSubmenu {
+                let menu = make(role: kAXMenuRole as String)
+                b.setChildren(menu, [item(language.bus(9), result: language.bus(9))])
+                children.append(menu)
+            }
+            b.setChildren(entry, children)
+            untitledRootEntry = entry
+            rootItems.insert(entry, at: 0)
+        }
         root = make(role: kAXMenuRole as String)
         b.setChildren(root, rootItems)
     }
@@ -787,6 +832,200 @@ func outputAssignmentRefusesAMenuNotReadWhole(_ read: R2MenuRead) async throws {
     #expect(envelope["menu_failure"] as? String == "menu_not_read")
     #expect(envelope["menu_path"] as? [String] == [options.language.busSubmenu])
     #expect(fixture.presses == [fixture.id(fixture.outputButton)])
+}
+
+/// Reads `attribute` through the production status seam and returns the AX status it answered, or
+/// nil when it read. Proves a fixture reaches the status path, not the builder's success-and-nil.
+private func r2AnsweredStatus(
+    _ fixture: R2Fixture, _ element: AXUIElement, _ attribute: String
+) -> Int32? {
+    let read: Result<String?, AXHelpers.AXStatusError> =
+        AXHelpers.getAttributeResult(element, attribute, runtime: fixture.runtime.ax)
+    guard case let .failure(error) = read else { return nil }
+    return error.raw
+}
+
+enum R2AnsweredItemRead: String, CaseIterable, Sendable {
+    case titleNoValue, titleAttributeUnsupported, roleNoValue, roleAttributeUnsupported
+}
+
+/// #1062 review R2-03: an entry whose title or role ANSWERS "none" (-25212, -25205) has no
+/// identity that was read, so it could be the second of two `Bus 1` entries. Passing it over would
+/// make the first look unique and pressable. The Bus submenu is not read whole; nothing is selected.
+@Test("a menu entry whose title or role answers none refuses menu_not_read, nothing selected",
+      arguments: R2AnsweredItemRead.allCases)
+func outputAssignmentRefusesAnEntryWhoseIdentityAnswersNone(_ read: R2AnsweredItemRead) async throws {
+    var options = R2Fixture.Options()
+    options.duplicateBusOne = true
+    let status: AXHelpers.AXStatusError
+    let attribute: String
+    switch read {
+    case .titleNoValue: (status, attribute) = (r2NoValue, kAXTitleAttribute as String)
+    case .titleAttributeUnsupported: (status, attribute) = (r2AttributeUnsupported, kAXTitleAttribute as String)
+    case .roleNoValue: (status, attribute) = (r2NoValue, kAXRoleAttribute as String)
+    case .roleAttributeUnsupported: (status, attribute) = (r2AttributeUnsupported, kAXRoleAttribute as String)
+    }
+    options.answeringRead = attribute == (kAXTitleAttribute as String)
+        ? .secondBusOneTitle(status) : .secondBusOneRole(status)
+    let fixture = R2Fixture(options)
+    let second = try #require(fixture.secondBusOne)
+    // The seam fired: the entry answers the injected status, not the builder's success-and-nil.
+    let answered = try #require(r2AnsweredStatus(fixture, second, attribute))
+    #expect(answered == status.raw)
+
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "element_not_found")
+    #expect(envelope["menu_failure"] as? String == "menu_not_read")
+    #expect(envelope["menu_path"] as? [String] == [options.language.busSubmenu])
+    #expect(fixture.presses == [fixture.id(fixture.outputButton)])
+}
+
+/// Positive control for R2-03, the shape measured on Logic 12.3 ko (2026-09-29): the root's first
+/// entry answers -25212 for its title and holds one AXTextField, the popup's search field. It is
+/// passed over, and a unique `Bus 1` entry is still pressed.
+@Test("an untitled root entry holding only the search field is passed over, and the bus entry is pressed")
+func outputAssignmentPassesOverTheSearchFieldEntry() async throws {
+    var options = R2Fixture.Options()
+    options.untitledRootItem = .searchField
+    let fixture = R2Fixture(options)
+    let entry = try #require(fixture.untitledRootEntry)
+    let answered = try #require(r2AnsweredStatus(fixture, entry, kAXTitleAttribute as String))
+    #expect(answered == r2NoValue.raw)
+
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "A")
+    #expect(dictionary(envelope["after"]) == json(.bus(1)))
+    #expect(fixture.presses == [fixture.id(fixture.outputButton), fixture.id(fixture.busOne)])
+}
+
+/// An untitled entry that also holds a submenu is not the search field: it could be an entry, so
+/// the root is not read whole and nothing is selected.
+@Test("an untitled root entry that holds a submenu refuses menu_not_read, nothing selected")
+func outputAssignmentRefusesAnUntitledEntryWithASubmenu() async throws {
+    var options = R2Fixture.Options()
+    options.untitledRootItem = .withSubmenu
+    let fixture = R2Fixture(options)
+    let entry = try #require(fixture.untitledRootEntry)
+    let answered = try #require(r2AnsweredStatus(fixture, entry, kAXTitleAttribute as String))
+    #expect(answered == r2NoValue.raw)
+
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["menu_failure"] as? String == "menu_not_read")
+    #expect(envelope["menu_path"] as? [String] == [])
+    #expect(fixture.presses == [fixture.id(fixture.outputButton)])
+}
+
+/// #1062 review R2-02, the reviewer's refusal witness: the source strip is fed by Bus 1, but its
+/// input slot's help is wording the LabelSet does not know. Bus 2's receiver outputs Bus 1, so
+/// Bus 2 would close a loop. Reading that strip as "no input slot" would clear the loop check and
+/// press; its input is unknown instead, and the assignment is refused before anything is pressed.
+@Test("a source whose input slot help is unrecognised but names a bus refuses routing_dependency_unknown")
+func outputAssignmentRefusesAnUnrecognisedInputThatNamesABus() async throws {
+    var options = R2Fixture.Options()
+    options.sourceInput = R2PopupLanguage.en.bus(1)
+    options.sourceInputHelp = "Source selector. Choose what this channel strip hears."
+    options.auxInput = R2PopupLanguage.en.bus(2)
+    options.auxOutput = R2PopupLanguage.en.bus(1)
+    let fixture = R2Fixture(options)
+    let envelope = try await runChannel(fixture, destination: .bus(2))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "routing_dependency_unknown")
+    #expect(envelope["dependency_strip"] as? Int == 0)
+    #expect(envelope["dependency_unread"] as? String == "input")
+    #expect(fixture.presses.isEmpty)
+}
+
+// MARK: - inputSlotReading establishes absence (#1062 review R2-02)
+
+enum R2UnknownButton: String, CaseIterable, Sendable {
+    case helpUnmatchedBusDescription, helpAbsentBusDescription, helpUnmatchedOtherDescription
+    case descriptionAnswersNoValue, descriptionFailsCannotComplete
+}
+
+/// One strip: an identified output slot and send slot both described as buses (never consulted),
+/// a Mute button, and one button whose help names no known slot, read as `unknown` says.
+private func r2InputReadingStrip(
+    unknown: R2UnknownButton?, recognisedInputAfter: String? = nil
+) -> (AXUIElement, AXHelpers.Runtime) {
+    let b = FakeAXRuntimeBuilder()
+    var nextID = 29_130_000
+    func make(_ role: String, help: String?, description: String?) -> AXUIElement {
+        nextID += 1
+        let element = b.element(nextID)
+        b.setAttribute(element, kAXRoleAttribute as String, role)
+        if let help { b.setAttribute(element, kAXHelpAttribute as String, help) }
+        if let description { b.setAttribute(element, kAXDescriptionAttribute as String, description) }
+        return element
+    }
+    let strip = make(kAXLayoutItemRole as String, help: nil, description: nil)
+    var children = [
+        make(kAXButtonRole as String, help: "Mute button. Mutes the channel strip.", description: "Mute"),
+        make(kAXButtonRole as String, help: "Send slot. Click to choose a send destination.", description: "Bus 4"),
+        make(kAXButtonRole as String, help: "Output slot. Click and hold to choose the channel strip output.",
+             description: "Bus 3"),
+    ]
+    var failingID: Int?
+    var failingStatus = r2CannotComplete
+    if let unknown {
+        let help: String? = unknown == .helpAbsentBusDescription ? nil : "Source selector. Choose what this strip hears."
+        let description: String? = unknown == .helpUnmatchedOtherDescription ? "Library indicator" : "Bus 1"
+        let button = make(kAXButtonRole as String, help: help, description: description)
+        switch unknown {
+        case .descriptionAnswersNoValue: (failingID, failingStatus) = (b.elementID(button), r2NoValue)
+        case .descriptionFailsCannotComplete: (failingID, failingStatus) = (b.elementID(button), r2CannotComplete)
+        default: break
+        }
+        children.append(button)
+    }
+    if let recognisedInputAfter {
+        children.append(make(kAXButtonRole as String, help: "Input slot. Click and hold to choose the channel strip input.",
+                             description: recognisedInputAfter))
+    }
+    b.setChildren(strip, children)
+    let runtime = b.makeAXRuntime(
+        attributeValueResultHandler: { [failingID, failingStatus, b] element, attribute in
+            guard let failingID, attribute == kAXDescriptionAttribute as String,
+                  b.elementID(element) == failingID else { return nil }
+            return .failure(failingStatus)
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    return (strip, runtime)
+}
+
+@Test("inputSlotReading: a button whose help names no known slot decides by its description",
+      arguments: R2UnknownButton.allCases)
+func inputSlotReadingEstablishesAbsence(_ unknown: R2UnknownButton) throws {
+    let (strip, runtime) = r2InputReadingStrip(unknown: unknown)
+    let reading = AXLogicProElements.inputSlotReading(in: strip, runtime: runtime)
+    switch unknown {
+    case .helpUnmatchedBusDescription, .helpAbsentBusDescription, .descriptionFailsCannotComplete:
+        #expect(reading == .unreadable)
+    case .helpUnmatchedOtherDescription, .descriptionAnswersNoValue:
+        #expect(reading == .noSlot)
+    }
+}
+
+/// The control: a strip whose buttons are all identified slots or ordinary controls reads
+/// `.noSlot`, although its output and send slots are described as buses.
+@Test("inputSlotReading: identified slots and ordinary buttons still read noSlot")
+func inputSlotReadingNoSlotWithOnlyIdentifiedButtons() throws {
+    let (strip, runtime) = r2InputReadingStrip(unknown: nil)
+    #expect(AXLogicProElements.inputSlotReading(in: strip, runtime: runtime) == .noSlot)
+}
+
+/// The first recognised input slot still decides, even after an unidentified button that names a bus.
+@Test("inputSlotReading: a recognised input slot is the source even after an unidentified bus button")
+func inputSlotReadingRecognisedSlotStillDecides() throws {
+    let (strip, runtime) = r2InputReadingStrip(unknown: .helpUnmatchedBusDescription, recognisedInputAfter: "Bus 2")
+    #expect(AXLogicProElements.inputSlotReading(in: strip, runtime: runtime) == .source("Bus 2"))
 }
 
 /// Kills M14: skipping the cleanup when no menu appears under the Mixer. The press still put a

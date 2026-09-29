@@ -488,10 +488,14 @@ extension AXLogicProElements {
     enum InputSlotReading: Equatable, Sendable {
         /// The slot's description, as `inputSlotSource` returns it.
         case source(String)
-        /// Every element in the walk read and no button's help named the input slot: a software
-        /// instrument strip, or a strip on a locale whose help string is not measured.
+        /// Every element in the walk read, no button's help named the input slot, and no button
+        /// whose help named none of the input, output and send slots is described as a bus: a
+        /// software instrument strip, or one whose unrecognised buttons all name something else.
         case noSlot
-        /// A children, role or help read in the walk failed, or the slot was found and named nothing.
+        /// A children, role or help read in the walk failed; the slot was found and named nothing;
+        /// the description of a button whose help named no known slot failed to read; or such a
+        /// button is described as a bus — possibly an input slot whose help wording this project's
+        /// LabelSet does not know, so its absence was not established.
         case unreadable
     }
 
@@ -502,6 +506,18 @@ extension AXLogicProElements {
     /// The walk, depth and first match of `slotButton`, taken through `preOrderDescendants` and
     /// `slotDecidingString`, so -25205 and -25212 are answers and any other failed read makes the
     /// reading `.unreadable` instead of passing the element over.
+    ///
+    /// `.noSlot` is an absence that was established, not a keyword that failed to match (#1062
+    /// review R2-02): every `AXButton` whose help (nil counts) names none of the input, output and
+    /// send slots has its `AXDescription` read, and if any is described as a bus
+    /// (`RoutingGraphPublication.classifyOutputLabel` gives `.bus`) the reading is `.unreadable`,
+    /// because an input slot whose help wording is not in the LabelSet would read exactly so. A
+    /// description that answers -25205/-25212 is no description; any other failure is
+    /// `.unreadable`. Measured on Logic 12.3 ko, 2026-09-29, three strips (Inspector, "오디오 1",
+    /// "Aux 1"): the input slot's help is identical on the audio and aux strip and its description
+    /// is the source ("버스 2", "버스 1"); the other buttons are described 음소거, 솔로, 녹음, 모니터링,
+    /// 피크 레벨 측정기, 목록, Stereo Output, 보내기 버튼, 오디오 플러그인, 채널 모드, EQ,
+    /// 게인 축소 측정기, 설정, 라이브러리 표시기 — none a bus label.
     static func inputSlotReading(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
@@ -509,6 +525,7 @@ extension AXLogicProElements {
         guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else {
             return .unreadable
         }
+        var unidentifiedButtonNamesBus = false
         for visit in walk {
             guard case let .success(role) = slotDecidingString(
                 visit.element, kAXRoleAttribute as String, runtime: runtime
@@ -517,7 +534,17 @@ extension AXLogicProElements {
             guard case let .success(help) = slotDecidingString(
                 visit.element, kAXHelpAttribute as String, runtime: runtime
             ) else { return .unreadable }
-            guard AXLocalePolicy.inputSlotHelpKeyword.containsAny(in: (help ?? "").lowercased()) else {
+            let loweredHelp = (help ?? "").lowercased()
+            guard AXLocalePolicy.inputSlotHelpKeyword.containsAny(in: loweredHelp) else {
+                guard !AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: loweredHelp),
+                      !AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: loweredHelp) else { continue }
+                guard case let .success(description) = slotDecidingString(
+                    visit.element, kAXDescriptionAttribute as String, runtime: runtime
+                ) else { return .unreadable }
+                if let description,
+                   RoutingGraphPublication.classifyOutputLabel(description).0 == .bus {
+                    unidentifiedButtonNamesBus = true
+                }
                 continue
             }
             guard let description = AXHelpers.getDescription(visit.element, runtime: runtime),
@@ -526,7 +553,7 @@ extension AXLogicProElements {
             }
             return .source(description)
         }
-        return .noSlot
+        return unidentifiedButtonNamesBus ? .unreadable : .noSlot
     }
 
     // MARK: - Send slots (#291)

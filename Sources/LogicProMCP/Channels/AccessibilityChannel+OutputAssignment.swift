@@ -452,9 +452,20 @@ extension AccessibilityChannel {
 
     /// Every titled entry of `menu`, with its submenu when it has one, or `nil` when the menu was
     /// not read whole: its children, an entry's role, title or children did not read, or an entry
-    /// holds more than one submenu. -25205 and -25212 are answers (no children, no role, no
-    /// title), and an entry with no title or a blank one is a separator. Nothing that failed to
-    /// read is passed over, because it could be the second of two entries with the same title.
+    /// holds more than one submenu. Nothing whose identity was not established is passed over,
+    /// because it could be the second of two entries with the same title (#1062 review R2-03).
+    ///
+    /// -25205 and -25212 are answers to a read, but not every answer lets an entry be skipped:
+    /// - a child whose role answers "none" is `nil` (it could be a menu item); a readable role
+    ///   other than `AXMenuItem` is skipped;
+    /// - an item whose title reads but is blank or whitespace is a separator and is skipped;
+    /// - an item whose title answers "none" is skipped only when it is the popup's search field:
+    ///   its children include an `AXTextField` and no `AXMenu`, every child's role read. Every
+    ///   other untitled item is `nil`.
+    /// Measured on Logic Pro 12.3 ko, 2026-09-29, the first strip's output-slot popup, whole tree
+    /// walked: 284 `AXMenuItem` children, every role read; 277 titled; 6 separators whose title
+    /// reads `""` with `AXEnabled` false; and exactly one item whose title answers -25212 — root
+    /// item [0], whose single child is an `AXTextField` (holding one `AXButton`).
     private static func titledMenuItems(of menu: AXUIElement, runtime: AXHelpers.Runtime) -> [TitledMenuItem]? {
         guard let children = menuChildren(of: menu, runtime: runtime) else { return nil }
         var items: [TitledMenuItem] = []
@@ -462,11 +473,18 @@ extension AccessibilityChannel {
             guard case let .success(role) = menuString(child, kAXRoleAttribute as String, runtime: runtime) else {
                 return nil
             }
+            guard let role else { return nil }
             guard role == (kAXMenuItemRole as String) else { continue }
             guard case let .success(title) = menuString(child, kAXTitleAttribute as String, runtime: runtime) else {
                 return nil
             }
-            guard let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            guard let title else {
+                guard let isSearchField = isSearchFieldItem(child, runtime: runtime), isSearchField else {
+                    return nil
+                }
+                continue
+            }
+            guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
             guard let below = menuChildren(of: child, runtime: runtime) else { return nil }
             var submenus: [AXUIElement] = []
             for element in below {
@@ -479,6 +497,21 @@ extension AccessibilityChannel {
             items.append(TitledMenuItem(element: child, title: title, submenu: submenus.first))
         }
         return items
+    }
+
+    /// Whether an untitled menu item is the popup's search field: among its children an
+    /// `AXTextField` and no `AXMenu`. `nil` when its children or any child's role did not read, or
+    /// a child's role answers "none" (it could be the submenu that makes the item a real entry).
+    private static func isSearchFieldItem(_ item: AXUIElement, runtime: AXHelpers.Runtime) -> Bool? {
+        guard let children = menuChildren(of: item, runtime: runtime) else { return nil }
+        var holdsTextField = false
+        for child in children {
+            guard case let .success(role) = menuString(child, kAXRoleAttribute as String, runtime: runtime),
+                  let role else { return nil }
+            if role == (kAXMenuRole as String) { return false }
+            if role == (kAXTextFieldRole as String) { holdsTextField = true }
+        }
+        return holdsTextField
     }
 
     private static func menuChildren(of element: AXUIElement, runtime: AXHelpers.Runtime) -> [AXUIElement]? {
