@@ -987,15 +987,25 @@ extension AccessibilityChannel {
             case .success(.some(false)):
                 continue
             case .success(.none):
+                // #1063: see the failure case below.
+                if windowRoleReadsAsHelpTag(window, runtime: runtime.ax) { continue }
                 // `AXModal` is recommended rather than required. A successful
                 // nil is also what the typed helper produces for a malformed
                 // payload, so neither establishes that this window is non-modal.
                 return .unreadable(.topLevelWindowModalReadFailed(.malformedAttribute))
             case .failure(let error):
+                // #1063: Logic lists the tooltip under a resting pointer among
+                // its AXWindows, and that entry answers AXModal -25205. A
+                // tooltip cannot hold input, so an entry whose role is READ as
+                // AXHelpTag leaves the scan; the unanswered AXModal is not what
+                // excludes it.
+                if windowRoleReadsAsHelpTag(window, runtime: runtime.ax) { continue }
                 // Missing `AXModal` is likewise not an explicit false. Unlike
                 // AXSheets, -25205/-25212 cannot be treated as structural
                 // absence here without guessing that an unobservable window is
-                // non-modal and letting it certify State A.
+                // non-modal and letting it certify State A. That still holds for
+                // every entry not identified above, including one whose role
+                // read failed or came back as a successful nil.
                 return .unreadable(.topLevelWindowModalReadFailed(error))
             case .success(.some(true)):
                 break
@@ -1195,6 +1205,27 @@ extension AccessibilityChannel {
     /// always falls through to the descendant traversal above.
     private static func axStatusIsDefinitiveAbsence(_ error: AXHelpers.AXStatusError) -> Bool {
         error.raw == AXError.attributeUnsupported.rawValue || error.raw == AXError.noValue.rawValue
+    }
+
+    /// #1063: whether an `AXWindows` entry is a tooltip, by its role as READ. Only a successful read
+    /// that names `AXHelpTag` answers yes. A failed role read, or a successful nil (which is also what
+    /// a malformed payload produces), identifies nothing and answers no, so the caller's fail-closed
+    /// `AXModal` handling still decides for that entry. Measured on Logic: the tooltip entry answers
+    /// `AXModal` and `AXSubrole` -25205 and `AXTitle` -25212 beside two windows reporting
+    /// `AXModal` false; the live harness skips the same entry (`Scripts/livekit/evidence.py`
+    /// `_is_help_tag`).
+    private static func windowRoleReadsAsHelpTag(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        switch AXHelpers.getAttributeResult(
+            window, kAXRoleAttribute as String, runtime: runtime
+        ) as Result<String?, AXHelpers.AXStatusError> {
+        case .success(.some(let role)):
+            return role == (kAXHelpTagRole as String)
+        case .success(.none), .failure:
+            return false
+        }
     }
 
     /// `invalidUIElement` (-25202) on the EXACT element a bound witness reads
