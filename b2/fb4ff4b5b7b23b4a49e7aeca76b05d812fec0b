@@ -1,0 +1,7 @@
+Limit: no live reading had the tooltip's AXModal answer true; that skip rests on the unit tests
+Provenance: inherited ac9a5ceadfae32d1e100635e11157186e76bd8da
+
+Limit: the tests observe the Cancel press, not the Escape fallback; the fixture has no seam for pressEscape
+Ruled-out: read the role of every window before the subrole, modal and title checks | it adds an AX read per window on every cleanup, and only a window that already matches the dialog can be pressed
+Warn: the measured tooltip's subrole read fails, so no live reading has exercised this skip
+Provenance: inherited 51bda2d0fed909978e887cdf54e53ead335ecc65
