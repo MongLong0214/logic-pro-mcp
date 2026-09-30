@@ -496,8 +496,10 @@ struct Issue966RetainedPlanTests {
         }
     }
 
-    /// The planner's row reasons are the report's own, so a reason the report adds cannot be one
-    /// the planner reads past without this failing.
+    /// Over a stale read and an occluded one, the planner blocks on that reason and on no track
+    /// reason the report does not also give for the same capture: it invents none. The converse is
+    /// not checked. `build` and `trackRowReadbackReasons` still decide row validity separately, so
+    /// a row reason added to the report alone passes here while the planner reads past it.
     @Test func thePlannersRowReasonsAreASubsetOfTheReportsTrackReasons() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (cache, registry, snapshot, _) = try await fixture()

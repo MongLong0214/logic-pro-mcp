@@ -554,10 +554,13 @@ enum SessionPopulationObservation {
     }
 
     /// Why the rows in `capture` cannot stand for a track's CURRENT name, however complete the
-    /// rail is. Each is a tracks-domain reason `build` gives for the same capture about the rows
-    /// that WERE read. The completeness reasons (hidden tracks, a count as the only end witness,
-    /// collapsed stacks) are about rows that were not read, so they are left out: an identical
-    /// name over a fresh but partial rail is still an observation of that name (#966).
+    /// rail is. Each is a tracks-domain reason `build` gives about the rows that WERE read when it
+    /// is the capture's only failure. Every one that holds is returned, where `build` reports only
+    /// the first of moved, no document, no live read, contamination and a stale reference, so over
+    /// a capture with several this can name reasons the report does not. The completeness reasons
+    /// (hidden tracks, a count as the only end witness, collapsed stacks) are about rows that were
+    /// not read, so they are left out: an identical name over a fresh but partial rail is still an
+    /// observation of that name (#966).
     static func trackRowReadbackReasons(capture: Capture) -> [Reason] {
         var reasons: [Reason] = []
         if capture.before != capture.after { reasons.append(.cacheMovedDuringCapture) }
