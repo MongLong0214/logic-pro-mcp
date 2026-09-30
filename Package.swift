@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "LogicProMCP", targets: ["LogicProMCPCLI"]),
+        .executable(name: "trusted-verifier", targets: ["TrustedVerifier"]),
         .library(name: "LogicProMCPKit", targets: ["LogicProMCP"]),
     ],
     dependencies: [
@@ -58,6 +59,11 @@ let package = Package(
             name: "LogicProMCPCLI",
             dependencies: ["LogicProMCP"],
             path: "Sources/LogicProMCPCLI"
+        ),
+        .executableTarget(
+            name: "TrustedVerifier",
+            dependencies: ["LogicProMCP"],
+            path: "Sources/TrustedVerifier"
         ),
         .testTarget(
             name: "LogicProMCPTests",
