@@ -1016,6 +1016,423 @@ struct QualificationRunnerTests {
         }
     }
 
+    private static func summaryCountRejections(_ result: QualificationCommandResult) throws -> [[String: Any]] {
+        let rejections = try resultObject(result)["rejections"] as? [[String: Any]] ?? []
+        return rejections.filter { $0["reason"] as? String == "summaryCountMismatch" }
+    }
+
+    /// #373 Q4. `total`/`passed`/`failed`/`waived` are not in the signed provenance record, so
+    /// before the gate recomputed them a signed bundle with one count edited verified unchanged.
+    /// Each field is edited alone -- a check keyed on one field would pass the other three.
+    @Test func aSignedBundleWhoseCountDisagreesWithItsCasesIsRejected() async throws {
+        for field in ["total", "passed", "failed", "waived"] {
+            let fixture = try await signedTrustedFixture()
+            defer { fixture.remove() }
+            let verify = {
+                QualificationRunner.verifyTrusted(
+                    candidateURL: fixture.executableURL,
+                    bundleURL: fixture.directory,
+                    releaseVersion: "1.2.3",
+                    expectedCommitSHA: fixture.commitSHA,
+                    trustedPublicKeyData: fixture.trustedPublicKeyData
+                )
+            }
+            let control = verify()
+            try #require(control.exitCode == 0, "\(field): \(control.stdout)")
+
+            var recomputed = 0
+            try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+                recomputed = try #require(object[field] as? Int)
+                object[field] = recomputed + 1
+            }
+            let result = verify()
+
+            try Self.expectRejection(result, reason: "summaryCountMismatch")
+            let mismatches = try Self.summaryCountRejections(result)
+            #expect(mismatches.count == 1, "\(field): \(result.stdout)")
+            #expect(mismatches.first?["key"] as? String == field)
+            #expect(mismatches.first?["actual"] as? String == String(recomputed + 1))
+            #expect(mismatches.first?["expected"] as? String == String(recomputed))
+        }
+    }
+
+    @Test func theSignerRefusesCountsItsCasesDoNotImplyAndLeavesTheBundleUnsigned() async throws {
+        let fixture = try trustedFixture()
+        defer { fixture.remove() }
+        try #require((await fixture.runQualification(waiversURL: fixture.waiversURL)).exitCode == 0)
+        let sign = {
+            QualificationRunner.signTrusted(
+                candidateURL: fixture.executableURL,
+                bundleURL: fixture.directory,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: fixture.commitSHA,
+                signingPrivateKeyData: fixture.signingKeyData
+            )
+        }
+        var original = 0
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            original = try #require(object["passed"] as? Int)
+            object["passed"] = original + 1
+        }
+
+        let refused = sign()
+
+        try Self.expectRejection(refused, reason: "summaryCountMismatch")
+        let unsigned = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL)
+        )
+        #expect(unsigned.provenanceSignature == nil)
+
+        // Positive control on the same bundle: put the count back and the same signer signs it,
+        // so the refusal above was the count and nothing else about this fixture.
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            object["passed"] = original
+        }
+        let signed = sign()
+        #expect(signed.exitCode == 0, "\(signed.stdout)")
+    }
+
+    @Test func promotionVerifierRejectsCountsItsCasesDoNotImply() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let control = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        try #require(control.exitCode == 0, "\(control.stdout)")
+
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            object["failed"] = try #require(object["failed"] as? Int) + 1
+        }
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        try Self.expectRejection(result, reason: "summaryCountMismatch")
+        #expect(try Self.summaryCountRejections(result).first?["key"] as? String == "failed")
+    }
+
+    /// #373 Q4. A blocking `O_RDONLY` open of a FIFO waits for a writer, and nothing here ever
+    /// opens one for writing: before `readNoFollow` opened without blocking, each call below
+    /// never returned. Each site is a different read -- the attestation, the evidence manifest,
+    /// the candidate, the bundle directory itself -- through the verifier, the signer and
+    /// `--verify-promotion`.
+    @Test func aFIFOPlantedInTheBundleOrAsTheCandidateIsRefusedWithoutWaitingForAWriter() async throws {
+        func plantFIFO(at url: URL) throws {
+            try FileManager.default.removeItem(at: url)
+            try #require(mkfifo(url.path, 0o600) == 0)
+        }
+        func verifyTrusted(_ fixture: Fixture, bundleURL: URL? = nil) -> QualificationCommandResult {
+            QualificationRunner.verifyTrusted(
+                candidateURL: fixture.executableURL,
+                bundleURL: bundleURL ?? fixture.directory,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: fixture.commitSHA,
+                trustedPublicKeyData: fixture.trustedPublicKeyData
+            )
+        }
+
+        for planted in ["attestation", "evidence-manifest", "candidate"] {
+            let fixture = try await signedTrustedFixture()
+            defer { fixture.remove() }
+            try #require(verifyTrusted(fixture).exitCode == 0, "\(planted): control")
+            switch planted {
+            case "attestation": try plantFIFO(at: fixture.attestationURL)
+            case "evidence-manifest": try plantFIFO(at: fixture.manifestURL)
+            default: try plantFIFO(at: fixture.executableURL)
+            }
+            let result = verifyTrusted(fixture)
+            #expect(result.exitCode != 0, "\(planted): \(result.stdout)")
+            let v1 = try #require(try Self.resultObject(result)["promotable"] as? Bool)
+            #expect(!v1, "\(planted)")
+        }
+
+        do {
+            let fixture = try await signedTrustedFixture()
+            defer { fixture.remove() }
+            let bundleFIFO = fixture.directory.appendingPathComponent("bundle-fifo")
+            try #require(mkfifo(bundleFIFO.path, 0o600) == 0)
+            let result = verifyTrusted(fixture, bundleURL: bundleFIFO)
+            #expect(result.exitCode != 0, "\(result.stdout)")
+            #expect(result.stdout.contains("verifierFailure"), "\(result.stdout)")
+        }
+
+        do {
+            let fixture = try trustedFixture()
+            defer { fixture.remove() }
+            try #require((await fixture.runQualification(waiversURL: fixture.waiversURL)).exitCode == 0)
+            try plantFIFO(at: fixture.attestationURL)
+            let signing = QualificationRunner.signTrusted(
+                candidateURL: fixture.executableURL,
+                bundleURL: fixture.directory,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: fixture.commitSHA,
+                signingPrivateKeyData: fixture.signingKeyData
+            )
+            #expect(signing.exitCode != 0, "\(signing.stdout)")
+            #expect(signing.stdout.contains("signerFailure"), "\(signing.stdout)")
+        }
+
+        do {
+            let fixture = try promotableFixture()
+            defer { fixture.remove() }
+            _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+            try plantFIFO(at: fixture.attestationURL)
+            let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+            #expect(result.exitCode != 0, "\(result.stdout)\(result.stderr)")
+        }
+    }
+
+    /// RV-1076-01, at the rule. The runner passes an axis on `allChecksPass`, so the verifier
+    /// must read each of those observations from the file rather than the axis's own `status`
+    /// and `verified`. The evidence is the fixture's own passed axis, so the valid starting
+    /// point is what the runner writes, and each observation is flipped on its own.
+    @Test func anAxisCasePassesOnlyOnTheObservationsTheRunnerPassedItOn() async throws {
+        let fixture = try trustedFixture()
+        defer { fixture.remove() }
+        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
+        try #require(qualification.exitCode == 0, "\(qualification.stderr)")
+        let original = try #require(
+            JSONSerialization.jsonObject(
+                with: Data(contentsOf: try Self.passedAxisEvidenceURL(fixture))
+            ) as? [String: Any]
+        )
+        func shapeIsValid(_ edit: (inout [String: Any]) -> Void) throws -> Bool {
+            var object = original
+            edit(&object)
+            let evidence = try JSONDecoder().decode(
+                CaseEvidence.self,
+                from: JSONSerialization.data(withJSONObject: object)
+            )
+            return QualificationRunner.evidenceShapeIsValid(evidence)
+        }
+
+        #expect(try shapeIsValid { _ in }, "the runner's own passed axis is the positive control")
+        // Health warms during cache polling and MCU registration, which is why
+        // `isFailClosedAndStable` leaves it out; the verifier must not ask for more.
+        #expect(try shapeIsValid { $0["health_read_stable"] = false })
+
+        let refusals: [(String, (inout [String: Any]) -> Void)] = [
+            ("negative_write_attempted true", { $0["negative_write_attempted"] = true }),
+            ("negative_write_attempted absent", { $0.removeValue(forKey: "negative_write_attempted") }),
+            ("negative_failclosed false", { $0["negative_failclosed"] = false }),
+            ("negative_state B", { $0["negative_state"] = "B" }),
+            ("negative_state absent", { $0.removeValue(forKey: "negative_state") }),
+            ("catalog_read_stable false", { $0["catalog_read_stable"] = false }),
+            ("handshake_ok false", { $0["handshake_ok"] = false }),
+            ("health_ok false", { $0["health_ok"] = false }),
+            ("catalog_count_match false", { $0["catalog_count_match"] = false }),
+            ("trace_ok false", { $0["trace_ok"] = false }),
+        ]
+        for (label, edit) in refusals {
+            #expect(try !shapeIsValid(edit), "\(label)")
+        }
+    }
+
+    /// RV-1076-01, end to end: the reviewer's counterexample. The passed axis's evidence says its
+    /// probe wrote and did not fail closed, and every digest above it is resealed, so the only
+    /// thing left to refuse is what the file says. Signing must refuse and leave no signature,
+    /// and an authentically signed copy must not verify. The same bundle with its original bytes
+    /// is the control for both, and a force-signed original is the control on the forced
+    /// signature, so neither refusal can come from a digest or a signature this test broke.
+    @Test func anAxisWhoseProbeWroteIsNeitherSignedNorVerified() async throws {
+        let fixture = try trustedFixture()
+        defer { fixture.remove() }
+        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
+        try #require(qualification.exitCode == 0, "\(qualification.stderr)")
+        let evidenceURL = try Self.passedAxisEvidenceURL(fixture)
+        let originals = try [evidenceURL, fixture.manifestURL, fixture.attestationURL].map {
+            ($0, try Data(contentsOf: $0))
+        }
+        func restoreOriginals() throws {
+            for (url, data) in originals { try data.write(to: url, options: .atomic) }
+        }
+        func writeCounterexample() throws {
+            try Self.rewritePassedAxisEvidence(fixture) {
+                $0["negative_write_attempted"] = true
+                $0["negative_failclosed"] = false
+            }
+        }
+        func sign() -> QualificationCommandResult {
+            QualificationRunner.signTrusted(
+                candidateURL: fixture.executableURL,
+                bundleURL: fixture.directory,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: fixture.commitSHA,
+                signingPrivateKeyData: fixture.signingKeyData
+            )
+        }
+        func verify() -> QualificationCommandResult {
+            QualificationRunner.verifyTrusted(
+                candidateURL: fixture.executableURL,
+                bundleURL: fixture.directory,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: fixture.commitSHA,
+                trustedPublicKeyData: fixture.trustedPublicKeyData
+            )
+        }
+
+        try writeCounterexample()
+        let refused = sign()
+        #expect(refused.exitCode != 0, "\(refused.stdout)")
+        try Self.expectOnlyTheAxisShapeRejection(refused)
+        let unsigned = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL)
+        )
+        #expect(unsigned.provenanceSignature == nil, "a refused signing must leave no signature")
+
+        try restoreOriginals()
+        let signed = sign()
+        try #require(signed.exitCode == 0, "the original bytes sign: \(signed.stdout)")
+        let verified = verify()
+        #expect(verified.exitCode == 0, "the signed original verifies: \(verified.stdout)")
+
+        try fixture.forceSignForDiagnosticFixture()
+        let forcedOriginal = verify()
+        #expect(forcedOriginal.exitCode == 0, "a forced signature verifies: \(forcedOriginal.stdout)")
+
+        try writeCounterexample()
+        try fixture.forceSignForDiagnosticFixture()
+        let forcedCounterexample = verify()
+        #expect(forcedCounterexample.exitCode != 0, "\(forcedCounterexample.stdout)")
+        try Self.expectOnlyTheAxisShapeRejection(forcedCounterexample)
+    }
+
+    /// The evidence file of the one axis case the fixture passes, as the attestation names it.
+    private static func passedAxisEvidenceURL(_ fixture: Fixture) throws -> URL {
+        let attestation = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL)
+        )
+        let axisCases = attestation.cases.filter {
+            $0.verificationKind == .independentReadback && $0.status == .passed
+        }
+        try #require(axisCases.count == 1, "\(axisCases.map(\.id))")
+        let path = try #require(axisCases[0].evidenceFiles.first)
+        return fixture.directory.appendingPathComponent(path)
+    }
+
+    /// Rewrites the passed axis's evidence and reseals every digest above it: its manifest
+    /// entry, the manifest, and the attestation's and the provenance's copies of the manifest
+    /// digest. The signature is left as it was, so a caller that wants a signed bundle signs it.
+    private static func rewritePassedAxisEvidence(
+        _ fixture: Fixture,
+        _ edit: (inout [String: Any]) -> Void
+    ) throws {
+        let evidenceURL = try passedAxisEvidenceURL(fixture)
+        let path = String(evidenceURL.path.dropFirst(fixture.directory.path.count + 1))
+        var evidence = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: evidenceURL)) as? [String: Any]
+        )
+        edit(&evidence)
+        let evidenceData = try JSONSerialization.data(withJSONObject: evidence, options: [.sortedKeys])
+        try evidenceData.write(to: evidenceURL, options: .atomic)
+
+        var manifest = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: fixture.manifestURL)) as? [String: Any]
+        )
+        var entries = try #require(manifest["files"] as? [[String: Any]])
+        let entryIndex = try #require(entries.firstIndex { $0["path"] as? String == path })
+        entries[entryIndex]["sha256"] = SupportBundleBuilder.sha256(evidenceData)
+        manifest["files"] = entries
+        let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
+        try manifestData.write(to: fixture.manifestURL, options: .atomic)
+
+        let manifestSHA256 = SupportBundleBuilder.sha256(manifestData)
+        try mutateJSONObject(at: fixture.attestationURL) { attestation in
+            attestation["evidenceManifestSHA256"] = manifestSHA256
+            var provenance = try #require(attestation["provenance"] as? [String: Any])
+            provenance["evidenceManifestSHA256"] = manifestSHA256
+            attestation["provenance"] = provenance
+        }
+    }
+
+    /// Exactly one rejection, and it is the case-evidence check, not a digest or a signature.
+    private static func expectOnlyTheAxisShapeRejection(_ result: QualificationCommandResult) throws {
+        let rejections = try #require(try resultObject(result)["rejections"] as? [[String: Any]])
+        #expect(rejections.count == 1, "\(result.stdout)")
+        #expect(rejections.first?["reason"] as? String == "evidenceBindingMismatch", "\(result.stdout)")
+        #expect(rejections.first?["actual"] as? String == "case evidence binding", "\(result.stdout)")
+    }
+
+    /// #373 Q4 through the shipped `trusted-verifier` executable, not the in-process entry point:
+    /// one signed bundle is accepted as built, rejected once a count is edited, and refused -- by
+    /// returning, not by waiting for a writer -- once its attestation is a FIFO. The in-process
+    /// answer on the same bundle is the control, so a wrapper that lost the exit code, the
+    /// arguments or the trusted key would fail the first comparison rather than pass as a refusal.
+    ///
+    /// A missing executable FAILS rather than skips. `swift test` builds every product in the
+    /// package, this one included (2026-10-01: removed, the next filtered `swift test` rebuilt
+    /// it), so absence means a run that skipped the build or started outside the package root,
+    /// and a skip would have passed a run that never drove the shipped binary.
+    @Test(.timeLimit(.minutes(2)))
+    func theTrustedVerifierExecutableRejectsAnEditedCountAndAFIFOAttestation() async throws {
+        try #require(
+            FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path),
+            "no trusted-verifier at \(Self.trustedVerifierExecutableURL.path): build the product"
+        )
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let inProcess = QualificationRunner.verifyTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            trustedPublicKeyData: fixture.trustedPublicKeyData
+        )
+        try #require(inProcess.exitCode == 0, "\(inProcess.stdout)")
+
+        let control = try Self.runTrustedVerifierExecutable(fixture)
+        #expect(control.exitCode == inProcess.exitCode, "\(control.stdout)\(control.stderr)")
+        let promotable = try #require(try Self.resultObject(control)["promotable"] as? Bool)
+        #expect(promotable)
+
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            let passed = try #require(object["passed"] as? Int)
+            object["passed"] = passed + 1
+        }
+        try Self.expectRejection(try Self.runTrustedVerifierExecutable(fixture), reason: "summaryCountMismatch")
+
+        try FileManager.default.removeItem(at: fixture.attestationURL)
+        try #require(mkfifo(fixture.attestationURL.path, 0o600) == 0)
+        let fifo = try Self.runTrustedVerifierExecutable(fixture)
+        #expect(fifo.exitCode != 0, "\(fifo.stdout)\(fifo.stderr)")
+        let fifoPromotable = try #require(try Self.resultObject(fifo)["promotable"] as? Bool)
+        #expect(!fifoPromotable)
+    }
+
+    private static let trustedVerifierExecutableURL = URL(
+        fileURLWithPath: FileManager.default.currentDirectoryPath,
+        isDirectory: true
+    ).appendingPathComponent(".build/debug/trusted-verifier")
+
+    private static func runTrustedVerifierExecutable(_ fixture: Fixture) throws -> QualificationCommandResult {
+        let process = Process()
+        process.executableURL = trustedVerifierExecutableURL
+        process.arguments = [
+            "verify",
+            "--candidate", fixture.executableURL.path,
+            "--bundle", fixture.directory.path,
+            "--release-version", "1.2.3",
+            "--expected-commit", fixture.commitSHA,
+        ]
+        var environment = ProcessInfo.processInfo.environment
+        environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] =
+            fixture.trustedPublicKeyData.base64EncodedString()
+        process.environment = environment
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        try process.run()
+        let out = stdout.fileHandleForReading.readDataToEndOfFile()
+        let err = stderr.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return QualificationCommandResult(
+            exitCode: Int(process.terminationStatus),
+            stdout: String(decoding: out, as: UTF8.self),
+            stderr: String(decoding: err, as: UTF8.self)
+        )
+    }
+
     @Test func qualificationRequiresCommitIdentityForSignedProvenance() async throws {
         let fixture = try Fixture(
             specs: Array(OperationRegistry.specs.prefix(1)),
@@ -4348,7 +4765,7 @@ struct QualificationRunnerTests {
             )
         }
 
-        private func forceSignForDiagnosticFixture() throws {
+        func forceSignForDiagnosticFixture() throws {
             let original = try JSONDecoder().decode(
                 ReleaseQualificationAttestation.self,
                 from: Data(contentsOf: attestationURL)
