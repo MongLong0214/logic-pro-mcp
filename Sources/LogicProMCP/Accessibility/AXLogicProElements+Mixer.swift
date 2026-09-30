@@ -196,9 +196,9 @@ extension AXLogicProElements {
         // the OTHER volume slider as pan.
         let volumes = volumeFaderCandidates(among: sliders, runtime: runtime)
         guard sliders.count == 2, volumes.count == 1 else {
-            Log.info("findPanControlInHeader: elimination requires two sliders and exactly one "
-                + "volume identity among them (\(sliders.count) sliders, \(volumes.count) volume); "
-                + "refusing", subsystem: "ax")
+            let counts = "\(sliders.count) sliders, \(volumes.count) volume"
+            Log.info("findPanControlInHeader: elimination needs two sliders and one volume identity (\(counts)); refusing",
+                     subsystem: "ax")
             return nil
         }
         let volume = volumes[0]
