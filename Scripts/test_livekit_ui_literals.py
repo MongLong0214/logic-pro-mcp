@@ -11,8 +11,10 @@ The cases drive `offenders()` against a temporary directory, so they do not move
 repository gains or loses a harness — that count is what `KNOWN` tracks, and a test that read it
 too would drift with it.
 """
+import ast
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -292,13 +294,126 @@ found = scan_verify("live/probes.py", 'if button_name == "mute": pass\n', _MUTE)
 case("a marker that begins with a name does not match inside a longer name",
      [f[1] for f in found] == ["mute"], f"found={found!r}")
 
-_mute_scope = [where for m, lit, where in G.PROTOCOL_COMPARISONS if m == 'name == "mute"']
+_mute_scope = [where for m, lit, where in G.PROTOCOL_EXPRESSIONS if m == 'name == "mute"']
 case("the fixture exercises the scope the guard actually carries",
      _mute_scope == [("Scripts/verify/live/probes.py",)], f"scopes={_mute_scope!r}")
 
 _hit = G._hits('if name == "mute" and help == "Mute": pass', _MUTE, G.PYTHON_PREDICATES)
 case("a text with no file behind it gets no scoped exemption",
      [lit for lit, _name in _hit] == ["mute", "Mute"], f"hits={_hit!r}")
+
+# 12c. An expression exemption is the whole comparison (#1078, review R1). The text marker it
+#      replaced bounded only where it began, so `"read" in step` also exempted
+#      `"read" in step_title` and `"read" in step["automation_title"]` -- a localised title -- and
+#      `name == "mute"` a name spelled `button`, U+0301, `name`, which Python reads as one
+#      identifier and `\w` does not. Every entry is scanned in every file it may apply in: its own
+#      comparison exempt however it is quoted, and the same comparison with its other operand
+#      longer, read from something, reading something, joined by an operator or continued by a
+#      combining mark, reported once. Each variant must parse and must be a different comparison,
+#      so a witness the scan cannot read, or one that is the entry again, cannot pass.
+def _files_of(where):
+    if where is G.EVERY_HARNESS:
+        return [("live_case.py", lambda name, body, known: scan(body, known, name))]
+    return [(os.path.relpath(path, "Scripts/verify"), scan_verify) for path in where]
+
+
+def _variants(expression, literal):
+    node = ast.parse(expression, mode="eval").body
+    other = (node.left, node.comparators[0])[1 - G._comparison(expression, literal)[1]]
+    start, end = other.col_offset, other.end_col_offset
+    text = expression[start:end]
+    shapes = ["x" + text, "x́" + text, "obj." + text, "x + " + text,
+              text + ".x", text + '["x"]', text + " + x"]
+    if G._continues_name(text[-1]):
+        shapes += [text + "_x", text + "́x"]
+    return [expression[:start] + shape + expression[end:] for shape in shapes]
+
+
+for _expression, _literal, _where in G.PROTOCOL_EXPRESSIONS:
+    _known = {_literal: "protocolWitness"}
+    _shape = ast.dump(ast.parse(_expression, mode="eval").body)
+    _variant_list = _variants(_expression, _literal)
+    _unreadable = [v for v in _variant_list
+                   if ast.dump(ast.parse(v, mode="eval").body) == _shape]
+    case(f"every variant of {_expression} is a different comparison",
+         _unreadable == [], f"same as the entry: {_unreadable!r}")
+    _exempt, _escaped = [], []
+    for _name, _scan in _files_of(_where):
+        for _spelling in (_expression, _expression.replace('"', "'")):
+            _found = _scan(_name, f"v = {_spelling}\n", _known)
+            if _found:
+                _exempt.append((_name, _spelling, _found))
+        for _variant in _variant_list:
+            _found = _scan(_name, f"v = {_variant}\n", _known)
+            if [f[1].lower() for f in _found] != [_literal]:
+                _escaped.append((_name, _variant, [f[1] for f in _found]))
+    case(f"{_expression} is exempt in each file it applies in, however quoted",
+         _exempt == [], f"reported: {_exempt!r}")
+    case(f"{_expression} exempts no other operand", _escaped == [],
+         f"{len(_variant_list)} variants; not reported once: {_escaped!r}")
+    if _where is not G.EVERY_HARNESS:
+        _found = scan_verify("live/elsewhere.py", f"v = {_expression}\n", _known)
+        case(f"{_expression} is reported outside its files",
+             [f[1].lower() for f in _found] == [_literal], f"found={_found!r}")
+
+# Three shapes the blanking must leave alone, in a file `"read" in step` applies in. A chain
+# compares the literal with a second operand; an escaped spelling is the entry to the parser but
+# not where the line says it is, and blanking there would shift the UI compare beside it; a
+# literal continued onto the next line is not measured against the first line's characters.
+_READ = {"read": "protocolWitness"}
+_found = scan_verify("runner.py", 'v = title == "read" in step\n', _READ)
+case("a chained comparison through an entry's literal is reported",
+     [f[1] for f in _found] == ["read"], f"found={_found!r}")
+_found = scan_verify("runner.py", 'v = "re\\x61d" in step and ui == "read"\n', _READ)
+case("an escaped entry leaves the UI comparison beside it counted once",
+     [f[1] for f in _found] == ["read"], f"found={_found!r}")
+_found = scan_verify("runner.py", 'v = ("read"  # 가\n               "") in step\n', _READ)
+case("a literal continued onto the next line is scanned without error",
+     _found == [], f"found={_found!r}")
+
+# The review's own witness, through the entry point over a copy of the real Scripts/verify, with
+# the copy unmodified in the same run as the control: the copy passes, then fails with one
+# function appended to runner.py, and names that file.
+with tempfile.TemporaryDirectory() as _vcopy:
+    _copy = os.path.join(_vcopy, "verify")
+    shutil.copytree(os.path.join(REPO, "Scripts", "verify"), _copy,
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    _entry = [sys.executable, os.path.join(REPO, "Scripts", "check-livekit-ui-literals.py")]
+    _clean = subprocess.run(_entry, capture_output=True, text=True,
+                            env=dict(os.environ, LPM_VERIFY_DIR=_copy))
+    with open(os.path.join(_copy, "runner.py"), "a", encoding="utf-8") as _h:
+        _h.write('\n\ndef _titled(step):\n    return "read" in step["automation_title"]\n')
+    _dirty = subprocess.run(_entry, capture_output=True, text=True,
+                            env=dict(os.environ, LPM_VERIFY_DIR=_copy))
+case("a copy of the real Scripts/verify passes the entry point",
+     _clean.returncode == 0, (_clean.stdout + _clean.stderr).strip()[-200:])
+case("and the same copy with a title read beside `step` fails it, naming runner.py",
+     _dirty.returncode == 1 and "runner.py" in _dirty.stdout and "'read'" in _dirty.stdout,
+     (_dirty.stdout + _dirty.stderr).strip()[:200])
+
+# The table checks itself: an entry that is not one comparison of its literal with one other
+# operand stops the module instead of exempting nothing.
+for _bad in (('flag', "solo"), ('"a" == "a"', "a"), ('x == "y" == z', "y"), ('x == "y"', "z")):
+    try:
+        G._comparison(*_bad)
+        _refused = False
+    except ValueError:
+        _refused = True
+    case(f"the table refuses {_bad[0]!r} as an entry for {_bad[1]!r}", _refused, "")
+
+# A TEXT marker keeps what it was written for -- exempting whatever its expression is read from --
+# but one that begins with a name no longer matches after a character that continues that name.
+_saved = G.PROTOCOL_COMPARISONS
+G.PROTOCOL_COMPARISONS = (('get("k") == "mute"', "mute", G.EVERY_HARNESS),)
+try:
+    _through = G._hits('v = d.get("k") == "mute"', _MUTE, G.PYTHON_PREDICATES)
+    _joined = G._hits('v = x́get("k") == "mute"', _MUTE, G.PYTHON_PREDICATES)
+finally:
+    G.PROTOCOL_COMPARISONS = _saved
+case("a text marker still exempts what it is read from", _through == [], f"hits={_through!r}")
+ast.parse('v = x́get("k") == "mute"')
+case("a text marker that begins with a name does not match after a combining mark",
+     [lit for lit, _name in _joined] == ["mute"], f"hits={_joined!r}")
 
 found = scan_verify("live/case.py",
                     'CLICK = \'click menu bar item "Mixer" of menu bar 1\'\n', CANONICALS)

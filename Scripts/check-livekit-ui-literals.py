@@ -159,8 +159,13 @@ PYTHON_PREDICATES = [
 # slider hint does not make the envelope localised. A review found this one already baked into
 # KNOWN as a false positive. Keyed by the literal AND the expression it sits in, so the exemption
 # cannot quietly cover a real UI comparison against the same word, and by the files it may apply
-# in: `EVERY_HARNESS`, or a tuple of repository-relative paths. A marker that begins with a name
-# does not match inside a longer one, so `name == "mute"` does not exempt `button_name == "mute"`.
+# in: `EVERY_HARNESS`, or a tuple of repository-relative paths.
+#
+# These are TEXT markers, found in the line. Each one names where its expression ends, not where it
+# begins: the three `control` forms and `["kind"]` exempt whatever they are read from, and the four
+# AppleScript ones sit inside a string no Python parser reads. A marker that begins with a name does
+# not match after a character that would continue that name in Python. A comparison that can be
+# written whole belongs in PROTOCOL_EXPRESSIONS instead, where it is matched as what it is.
 EVERY_HARNESS = None
 PROTOCOL_COMPARISONS = (
     ('"control") == "pan"', "pan", EVERY_HARNESS),
@@ -181,12 +186,6 @@ PROTOCOL_COMPARISONS = (
     ('name is "Logic Pro"', "logic pro", EVERY_HARNESS),
     ('tell process "Logic Pro"', "logic pro", EVERY_HARNESS),
     ('tell application "Logic Pro"', "logic pro", EVERY_HARNESS),
-    # Two comparisons against a name that was ALREADY normalised or already read as a process name.
-    # `evidence.py` strips the non-breaking space on the line above its compare and says so in a
-    # comment older than this guard; `live_614` compares `name of first process whose frontmost is
-    # true`. Keyed by the variable so the exemption cannot spread to a window or menu title.
-    ('owner == "Logic Pro"', "logic pro", EVERY_HARNESS),
-    ('front == "Logic Pro"', "logic pro", EVERY_HARNESS),
     # `r["kind"] == "output"` in the #291 slot harnesses reads the harness's OWN witness key -- the
     # `SLOT` table's key for the row, written by the harness a few lines above the compare -- and
     # not a string Logic displays. The word became localisable on 2026-09-27 when
@@ -194,6 +193,24 @@ PROTOCOL_COMPARISONS = (
     # locales) joined the policy; the compare did not change. Keyed by the subscript so a
     # `whose name contains "output"` on the same line would still be reported.
     ('["kind"] == "output"', "output", EVERY_HARNESS),
+)
+
+# Whole Python comparisons, keyed and scoped as above but matched by what they ARE. A text marker
+# bounds where it starts, and that is not the same expression: review R1 of #1078 found
+# `"read" in step` exempting `"read" in step_title` and `"read" in step["automation_title"]` -- a
+# localised title -- and `name == "mute"` exempting a name spelled `button`, U+0301, `name`, which
+# Python reads as one identifier and `\w` does not. So each entry is parsed as one comparison, and
+# a comparison in the source is exempt only when both its operands are the entry's: the same names
+# and subscripts, nothing read from them, nothing longer, nothing joined by an operator. Quote style
+# and redundant parentheses are not part of an expression, so `'read' in step` is the same one.
+# They apply to Python source only; in an AppleScript string or a Swift file they exempt nothing.
+PROTOCOL_EXPRESSIONS = (
+    # Two comparisons against a name that was ALREADY normalised or already read as a process name.
+    # `evidence.py` strips the non-breaking space on the line above its compare and says so in a
+    # comment older than this guard; `live_614` compares `name of first process whose frontmost is
+    # true`. Keyed by the variable so the exemption cannot spread to a window or menu title.
+    ('owner == "Logic Pro"', "logic pro", EVERY_HARNESS),
+    ('front == "Logic Pro"', "logic pro", EVERY_HARNESS),
     # Scripts/verify protocol vocabulary (ADR-027 P2 PR-1, #1028): dict keys, a lifecycle event
     # name, a runner branch on the step shape, and the walk's own flag name -- not a string typed
     # at Logic. Measured 2026-09-30 at b2fb4ff4 by pointing the scan at Scripts/verify: 13 hits
@@ -216,6 +233,28 @@ PROTOCOL_COMPARISONS = (
      ("Scripts/verify/selftest.py",)),
     ('e[0] == "start"', "start", ("Scripts/verify/selftest.py",)),  # a lifecycle event's kind
 )
+
+
+def _comparison(expression, literal):
+    """`(shape, side)`: the one comparison `expression` is, and which operand is `literal`.
+
+    Read when the module loads, so an entry that is not one comparison of `literal` with one other
+    operand stops the guard instead of becoming an exemption that never matches.
+    """
+    node = ast.parse(expression, mode="eval").body
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+        raise ValueError(f"PROTOCOL_EXPRESSIONS: {expression!r} is not one comparison")
+    sides = [side for side, operand in enumerate((node.left, node.comparators[0]))
+             if isinstance(operand, ast.Constant) and isinstance(operand.value, str)
+             and operand.value.lower() == literal]
+    if len(sides) != 1:
+        raise ValueError(f"PROTOCOL_EXPRESSIONS: {expression!r} does not compare {literal!r} "
+                         "with one other operand")
+    return ast.dump(node), sides[0]
+
+
+_EXPRESSION_SHAPES = tuple((*_comparison(expression, literal), where)
+                           for expression, literal, where in PROTOCOL_EXPRESSIONS)
 ANY_LITERAL = re.compile(r'"([^"\\\n]{1,80})"')
 
 
@@ -250,6 +289,43 @@ def _docstring_nodes(tree):
     return out
 
 
+def _continues_name(character):
+    """Whether `character` can continue a Python identifier. A combining mark can and is not `\\w`."""
+    return bool(character) and ("a" + character).isidentifier()
+
+
+def _protocol_literals(tree, lines, scope):
+    """`(line index, start, end)` of each literal whose comparison IS a PROTOCOL_EXPRESSIONS entry.
+
+    `lines` is the source the tree was parsed from, split on `\\n` (Python also breaks a line at a
+    lone `\\r`, which no file under Scripts has), and the offsets are characters in it; the tree's
+    are UTF-8 bytes. A chain never matches an entry: its
+    shape has a second operator, and in `title == "read" in step` the literal is compared with
+    `title` as well. A literal spread over lines, or one whose line does not spell its value where the
+    tree puts it (an escape), is not returned -- blanking anything else would move what the
+    patterns read beside it.
+    """
+    spans = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Compare):
+            continue
+        shape = ast.dump(node)
+        for exempt_shape, side, where in _EXPRESSION_SHAPES:
+            if shape != exempt_shape or (where is not EVERY_HARNESS and scope not in where):
+                continue
+            literal = (node.left, node.comparators[0])[side]
+            if literal.lineno != literal.end_lineno:
+                continue
+            line = lines[literal.lineno - 1]
+            encoded = line.encode("utf-8")
+            start = len(encoded[:literal.col_offset].decode("utf-8"))
+            end = len(encoded[:literal.end_col_offset].decode("utf-8"))
+            inner = line.find(literal.value, start, end)
+            if inner >= 0:
+                spans.append((literal.lineno - 1, inner, inner + len(literal.value)))
+    return spans
+
+
 def _hits(text, known_canonicals, patterns, site=None):
     """(literal, policy name) once per OCCURRENCE, not once per pattern that matched it.
 
@@ -280,8 +356,10 @@ def _hits(text, known_canonicals, patterns, site=None):
                 continue
             quoted = f'"{lit}"'
             literal_offset = marker.lower().rfind(quoted) + 1
-            bounded = r"(?<!\w)" if re.match(r"\w", marker) else ""
-            for marker_match in re.finditer(bounded + re.escape(marker), line):
+            for marker_match in re.finditer(re.escape(marker), line):
+                if _continues_name(marker[:1]) and \
+                        _continues_name(line[marker_match.start() - 1:marker_match.start()]):
+                    continue
                 if literal_offset:
                     start = marker_match.start() + literal_offset
                     exempt_spans.add((start, start + len(lit)))
@@ -339,9 +417,14 @@ def _scan_root(root, label, key, known_canonicals, swift_recursive=False):
                     found.append((site, literal, getattr(node, "lineno", 0), name))
         # Pass 2: Python comparisons, which live in the source. Docstrings are removed so a
         # paragraph quoting `help.startswith("Tracks")` is prose, not a matcher.
+        # A PROTOCOL_EXPRESSIONS literal is blanked where the tree says it is, keeping every
+        # other character of its line in place, so no pattern can read it and nothing else moves.
         prose = [n.value for n in ast.walk(tree)
                  if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) in skip]
-        code = source
+        lines = source.split("\n")
+        for index, start, end in _protocol_literals(tree, lines, scope):
+            lines[index] = lines[index][:start] + " " * (end - start) + lines[index][end:]
+        code = "\n".join(lines)
         for doc in prose:
             code = code.replace(doc, "")
         for lineno, line in enumerate(code.splitlines(), 1):
