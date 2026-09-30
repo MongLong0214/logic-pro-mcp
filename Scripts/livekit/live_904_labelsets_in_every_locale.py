@@ -325,6 +325,136 @@ def track_named(rows, name):
     return found[0] if len(found) == 1 else None
 
 
+#: Every alert `acknowledge_alert` answered, as {"locale", "call", "button", "text"}, so the summary
+#: shows it; an entry whose button is None is a poll osascript could not read.
+ACKNOWLEDGED_ALERTS = []
+#: Seconds `acknowledge_alert` watches for the alert, and between its polls.
+ALERT_WAIT, ALERT_POLL = 2.0, 0.25
+#: Only a dialog with exactly one button is pressed, and only through its AXDefaultButton when that
+#: is the one button: a save prompt (more than one button, or none AX can reach) is left alone.
+ACKNOWLEDGE_SCRIPT = '''tell application "System Events" to tell process "Logic Pro"
+  repeat with d in (windows whose subrole is "AXDialog")
+    if (count of buttons of d) is 1 then
+      set b to missing value
+      try
+        set candidate to value of attribute "AXDefaultButton" of d
+        if (name of candidate as string) is (name of button 1 of d as string) then set b to candidate
+      end try
+      if b is not missing value then
+        set t to ""
+        try
+          set t to (value of static text 1 of d) as string
+        end try
+        set n to name of b as string
+        click b
+        return "pressed" & linefeed & n & linefeed & t
+      end if
+    end if
+  end repeat
+  return "none"
+end tell'''
+
+
+def acknowledge_alert():
+    """Press the default button of a Logic dialog with exactly one button, if one appears.
+
+    Polls for up to ALERT_WAIT seconds. Returns {"button", "text"} for the dialog it pressed, and
+    None when every poll read no such dialog. A poll osascript could not read is not a poll that saw
+    nothing: when no dialog was pressed and any poll was unreadable, the return is
+    {"button": None, "text": None, "unreadable_polls": n}.
+    """
+    deadline = time.monotonic() + ALERT_WAIT
+    unreadable = 0
+    while True:
+        out = L993.osa(ACKNOWLEDGE_SCRIPT)
+        parts = (out or "").split("\n", 2)
+        if parts[0] == "pressed":
+            parts += ["", ""]
+            return {"button": parts[1], "text": parts[2]}
+        if out != "none":
+            unreadable += 1
+        if time.monotonic() + ALERT_POLL > deadline:
+            break
+        time.sleep(ALERT_POLL)
+    return {"button": None, "text": None, "unreadable_polls": unreadable} if unreadable else None
+
+
+#: Seconds `park_pointer` waits after its move before it reads the pointer back.
+PARK_SETTLE = 0.5
+
+
+def pick_park_point(displays, logic_windows):
+    """The centre of the first display no Logic window overlaps, or None when every one holds one.
+
+    Every rect is [x, y, w, h] in global display points. Overlap is strict: a window that only
+    touches a display's edge does not hold that display. Displays meet edge to edge, so X6's main
+    window, [0, 30, 1920, 1050] on the first display, touches the edges of both displays beside it;
+    counting a touch would leave no display to park on.
+    """
+    def overlaps(a, b):
+        return (a[0] < b[0] + b[2] and b[0] < a[0] + a[2]
+                and a[1] < b[1] + b[3] and b[1] < a[1] + a[3])
+    for display in displays:
+        if not any(overlaps(display, window) for window in logic_windows):
+            return [display[0] + display[2] / 2, display[1] + display[3] / 2]
+    return None
+
+
+def park_pointer(quartz=None):
+    """Move the pointer off every Logic window, to the centre of the first display that holds none.
+
+    Posts one kCGEventMouseMoved through the HID tap and nothing else: no click, no button event.
+    Returns {"from", "to", "after", "parked", "why"}; `parked` is True only when the pointer reads
+    back within 1 pt of `to`. Nothing is moved when every display holds a Logic window, or when the
+    display or window list cannot be read: a list that could not be read does not say where Logic
+    is. Never raises; a Quartz failure is its repr in `why`, and the shot is taken anyway.
+    """
+    out = {"from": None, "to": None, "after": None, "parked": False, "why": None}
+    try:
+        if quartz is None:
+            import Quartz as quartz
+        here = quartz.CGEventGetLocation(quartz.CGEventCreate(None))
+        out["from"] = [here.x, here.y]
+        err, ids, count = quartz.CGGetActiveDisplayList(16, None, None)
+        if err or not count:
+            out["why"] = f"no active display could be read (error {err}, count {count})"
+            return out
+        displays = []
+        for display in list(ids)[:count]:
+            r = quartz.CGDisplayBounds(display)
+            displays.append([r.origin.x, r.origin.y, r.size.width, r.size.height])
+        windows = quartz.CGWindowListCopyWindowInfo(quartz.kCGWindowListOptionOnScreenOnly,
+                                                    quartz.kCGNullWindowID)
+        if windows is None:
+            out["why"] = "the on-screen window list could not be read"
+            return out
+        logic = []
+        for window in windows:
+            if not E._is_logic_owned_window(window):
+                continue
+            b = window.get(quartz.kCGWindowBounds)
+            if not b:
+                out["why"] = "a Logic window's bounds could not be read"
+                return out
+            logic.append([b["X"], b["Y"], b["Width"], b["Height"]])
+        target = pick_park_point(displays, logic)
+        if target is None:
+            out["why"] = f"every display holds a Logic window: displays {displays}, Logic {logic}"
+            return out
+        out["to"] = target
+        quartz.CGEventPost(quartz.kCGHIDEventTap, quartz.CGEventCreateMouseEvent(
+            None, quartz.kCGEventMouseMoved, tuple(target), quartz.kCGMouseButtonLeft))
+        time.sleep(PARK_SETTLE)
+        there = quartz.CGEventGetLocation(quartz.CGEventCreate(None))
+        out["after"] = [there.x, there.y]
+        out["parked"] = abs(there.x - target[0]) <= 1 and abs(there.y - target[1]) <= 1
+        if not out["parked"]:
+            out["why"] = "the pointer did not read back at the target"
+    except Exception as exc:  # noqa: BLE001 - a pointer that could not be parked must not end the run
+        out["parked"], out["why"] = False, repr(exc)
+    return out
+
+
 def run_locale(driver, rows, lproj):
     """Drive every call for one language; every set gets at least one row, reached or not."""
     add = rows.add
@@ -382,19 +512,31 @@ def run_locale(driver, rows, lproj):
         _, current = tracks(driver)
         target = current[0] if current else None
     toggled = driver.tool("logic_navigate", "toggle_view", {"view": "automation"})
+
+    def set_automation(mode, call):
+        reply = driver.tool("logic_tracks", "set_automation", {"index": target["id"], "mode": mode})
+        # Measured 2026-09-30: `mode: write` leaves Logic's one-button Write warning open and the
+        # server returns without dismissing it; left open, the discard-quit that ends this language
+        # crashed Logic 4 of 4 times, and acknowledged it crashed 0 of 1. Every mode is asked, and an
+        # acknowledged alert is recorded, not a failure.
+        alert = acknowledge_alert()
+        if alert is not None:
+            ACKNOWLEDGED_ALERTS.append({"locale": lproj, "call": call, **alert})
+        return reply
+
     for set_name, mode in AUTOMATION_MODES.items():
         if target is None:
             add(set_name, lproj, "toggle_view", toggled)
             continue
         call = f"set_automation:{mode}"
-        reply = driver.tool("logic_tracks", "set_automation", {"index": target["id"], "mode": mode})
+        reply = set_automation(mode, call)
         if set_name == "automationModeRead" and isinstance(reply, dict) and "observed_mode" not in reply:
             # The toggle may have HIDDEN a view the fixture already showed: record the first
             # reading, toggle back, and read again.
             add(set_name, lproj, call, reply)
             driver.tool("logic_navigate", "toggle_view", {"view": "automation"})
             call = f"set_automation:{mode} (after a second toggle_view)"
-            reply = driver.tool("logic_tracks", "set_automation", {"index": target["id"], "mode": mode})
+            reply = set_automation(mode, call)
         add(set_name, lproj, call, reply)
         listing, current = tracks(driver)
         row = track_named(current, target.get("name"))
@@ -477,6 +619,11 @@ def main(argv):
         if baseline.get("arrange_window"):
             band, subject = ev.located_band("Tracks header")
             if band:
+                # Measured 2026-09-30 (X6): the pointer rested at (862,571), inside the E-Piano
+                # strip's audio-FX insert slot. The before shot had that slot's hover highlight and
+                # the after shot did not, so the visual failed on that 113x33 box while the content
+                # was unchanged. Nothing in the run moves the pointer, so both shots park it first.
+                ev.note("904/pointer-parked-before-shot", park_pointer())
                 before_shot = ev.shot("904/korean-fixture-before", settle_region=band,
                                       window_title=baseline["arrange_window"])
         for lproj in lprojs:
@@ -510,6 +657,7 @@ def main(argv):
         # No before capture (the baseline did not open, or the band did not resolve) records no
         # visual, and `E.is_clean` below refuses the run for it: absence is not a pass.
         if before_shot and restored.get("arrange_window"):
+            ev.note("904/pointer-parked-before-after-shot", park_pointer())
             after_shot = ev.shot("904/korean-fixture-after", settle_region=band,
                                  window_title=restored["arrange_window"])
             ev.visual("904/korean-fixture-rail-after-locale-sweep",
@@ -541,7 +689,8 @@ def main(argv):
                "sets": list(SETS), "matrix": matrix, "incomplete_locales": incomplete,
                "unnamed_errors": rows.unnamed, "locale_failures": failures,
                "languages": languages, "korean_restore": restored,
-               "system_events_restarts": list(L993.SYSTEM_EVENTS_RESTARTS)}
+               "system_events_restarts": list(L993.SYSTEM_EVENTS_RESTARTS),
+               "acknowledged_alerts": list(ACKNOWLEDGED_ALERTS)}
     with open(os.path.join(ev.dir, "live_904_labelset_summary.json"), "w", encoding="utf-8") as handle:
         json.dump(summary, handle, ensure_ascii=False, indent=1)
     out = ev.write()
