@@ -933,6 +933,7 @@ package struct QualificationRunner: Sendable {
             completedAt: completedAt,
             evidenceManifestSHA256: manifestSHA256
         )
+        let counts = QualificationSummaryCounts(cases: cases)
         let attestation = ReleaseQualificationAttestation(
             schema: "release-qualification-attestation/v2",
             serverVersion: options.releaseVersion,
@@ -946,10 +947,10 @@ package struct QualificationRunner: Sendable {
             fixture: .empty,
             startedAt: startedAt,
             completedAt: completedAt,
-            total: cases.count,
-            passed: cases.filter { $0.status == .passed }.count,
-            failed: cases.filter { $0.status == .failed }.count,
-            waived: cases.filter { $0.status == .waived }.count,
+            total: counts.total,
+            passed: counts.passed,
+            failed: counts.failed,
+            waived: counts.waived,
             cases: cases,
             waivers: waivers,
             evidenceManifestSHA256: manifestSHA256,
@@ -1467,6 +1468,11 @@ package struct QualificationRunner: Sendable {
             VerificationOutput.Rejection(
                 reason: "duplicateCaseID", caseID: caseID, key: nil,
                 name: nil, expected: nil, actual: nil
+            )
+        case .summaryCountMismatch(let field, let stated, let recomputed):
+            VerificationOutput.Rejection(
+                reason: "summaryCountMismatch", caseID: nil, key: field,
+                name: nil, expected: String(recomputed), actual: String(stated)
             )
         case .releaseVersionMismatch(let expected, let actual):
             VerificationOutput.Rejection(
@@ -2241,7 +2247,7 @@ package struct QualificationRunner: Sendable {
 
         let rootFD = open(
             directory.path,
-            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
         )
         guard rootFD >= 0 else {
             throw RunnerError.invalidArguments("Unable to open evidence directory")
@@ -2258,7 +2264,7 @@ package struct QualificationRunner: Sendable {
             let nextFD = openat(
                 directoryFD,
                 component,
-                O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
+                O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
             )
             guard nextFD >= 0 else {
                 throw RunnerError.invalidArguments("Unable to open evidence directory component")
@@ -2272,10 +2278,13 @@ package struct QualificationRunner: Sendable {
         guard let filename = components.last else {
             throw RunnerError.invalidArguments("Invalid evidence path")
         }
+        // O_NONBLOCK on every open: a blocking O_RDONLY open of a FIFO waits for a writer, so a
+        // bundle or candidate planted as a FIFO hung the verifier before the fstat below could reject
+        // it (#373 Q4). It changes nothing for the regular file that fstat then insists on.
         let fileFD = openat(
             directoryFD,
             filename,
-            O_RDONLY | O_CLOEXEC | O_NOFOLLOW
+            O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
         )
         guard fileFD >= 0 else {
             throw RunnerError.invalidArguments("Unable to open evidence file")

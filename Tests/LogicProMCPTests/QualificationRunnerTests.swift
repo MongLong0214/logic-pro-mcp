@@ -1016,6 +1016,247 @@ struct QualificationRunnerTests {
         }
     }
 
+    private static func summaryCountRejections(_ result: QualificationCommandResult) throws -> [[String: Any]] {
+        let rejections = try resultObject(result)["rejections"] as? [[String: Any]] ?? []
+        return rejections.filter { $0["reason"] as? String == "summaryCountMismatch" }
+    }
+
+    /// #373 Q4. `total`/`passed`/`failed`/`waived` are not in the signed provenance record, so
+    /// before the gate recomputed them a signed bundle with one count edited verified unchanged.
+    /// Each field is edited alone -- a check keyed on one field would pass the other three.
+    @Test func aSignedBundleWhoseCountDisagreesWithItsCasesIsRejected() async throws {
+        for field in ["total", "passed", "failed", "waived"] {
+            let fixture = try await signedTrustedFixture()
+            defer { fixture.remove() }
+            let verify = {
+                QualificationRunner.verifyTrusted(
+                    candidateURL: fixture.executableURL,
+                    bundleURL: fixture.directory,
+                    releaseVersion: "1.2.3",
+                    expectedCommitSHA: fixture.commitSHA,
+                    trustedPublicKeyData: fixture.trustedPublicKeyData
+                )
+            }
+            let control = verify()
+            try #require(control.exitCode == 0, "\(field): \(control.stdout)")
+
+            var recomputed = 0
+            try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+                recomputed = try #require(object[field] as? Int)
+                object[field] = recomputed + 1
+            }
+            let result = verify()
+
+            try Self.expectRejection(result, reason: "summaryCountMismatch")
+            let mismatches = try Self.summaryCountRejections(result)
+            #expect(mismatches.count == 1, "\(field): \(result.stdout)")
+            #expect(mismatches.first?["key"] as? String == field)
+            #expect(mismatches.first?["actual"] as? String == String(recomputed + 1))
+            #expect(mismatches.first?["expected"] as? String == String(recomputed))
+        }
+    }
+
+    @Test func theSignerRefusesCountsItsCasesDoNotImplyAndLeavesTheBundleUnsigned() async throws {
+        let fixture = try trustedFixture()
+        defer { fixture.remove() }
+        try #require((await fixture.runQualification(waiversURL: fixture.waiversURL)).exitCode == 0)
+        let sign = {
+            QualificationRunner.signTrusted(
+                candidateURL: fixture.executableURL,
+                bundleURL: fixture.directory,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: fixture.commitSHA,
+                signingPrivateKeyData: fixture.signingKeyData
+            )
+        }
+        var original = 0
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            original = try #require(object["passed"] as? Int)
+            object["passed"] = original + 1
+        }
+
+        let refused = sign()
+
+        try Self.expectRejection(refused, reason: "summaryCountMismatch")
+        let unsigned = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL)
+        )
+        #expect(unsigned.provenanceSignature == nil)
+
+        // Positive control on the same bundle: put the count back and the same signer signs it,
+        // so the refusal above was the count and nothing else about this fixture.
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            object["passed"] = original
+        }
+        let signed = sign()
+        #expect(signed.exitCode == 0, "\(signed.stdout)")
+    }
+
+    @Test func promotionVerifierRejectsCountsItsCasesDoNotImply() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let control = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        try #require(control.exitCode == 0, "\(control.stdout)")
+
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            object["failed"] = try #require(object["failed"] as? Int) + 1
+        }
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        try Self.expectRejection(result, reason: "summaryCountMismatch")
+        #expect(try Self.summaryCountRejections(result).first?["key"] as? String == "failed")
+    }
+
+    /// #373 Q4. A blocking `O_RDONLY` open of a FIFO waits for a writer, and nothing here ever
+    /// opens one for writing: before `readNoFollow` opened without blocking, each call below
+    /// never returned. Each site is a different read -- the attestation, the evidence manifest,
+    /// the candidate, the bundle directory itself -- through the verifier, the signer and
+    /// `--verify-promotion`.
+    @Test func aFIFOPlantedInTheBundleOrAsTheCandidateIsRefusedWithoutWaitingForAWriter() async throws {
+        func plantFIFO(at url: URL) throws {
+            try FileManager.default.removeItem(at: url)
+            try #require(mkfifo(url.path, 0o600) == 0)
+        }
+        func verifyTrusted(_ fixture: Fixture, bundleURL: URL? = nil) -> QualificationCommandResult {
+            QualificationRunner.verifyTrusted(
+                candidateURL: fixture.executableURL,
+                bundleURL: bundleURL ?? fixture.directory,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: fixture.commitSHA,
+                trustedPublicKeyData: fixture.trustedPublicKeyData
+            )
+        }
+
+        for planted in ["attestation", "evidence-manifest", "candidate"] {
+            let fixture = try await signedTrustedFixture()
+            defer { fixture.remove() }
+            try #require(verifyTrusted(fixture).exitCode == 0, "\(planted): control")
+            switch planted {
+            case "attestation": try plantFIFO(at: fixture.attestationURL)
+            case "evidence-manifest": try plantFIFO(at: fixture.manifestURL)
+            default: try plantFIFO(at: fixture.executableURL)
+            }
+            let result = verifyTrusted(fixture)
+            #expect(result.exitCode != 0, "\(planted): \(result.stdout)")
+            let v1 = try #require(try Self.resultObject(result)["promotable"] as? Bool)
+            #expect(!v1, "\(planted)")
+        }
+
+        do {
+            let fixture = try await signedTrustedFixture()
+            defer { fixture.remove() }
+            let bundleFIFO = fixture.directory.appendingPathComponent("bundle-fifo")
+            try #require(mkfifo(bundleFIFO.path, 0o600) == 0)
+            let result = verifyTrusted(fixture, bundleURL: bundleFIFO)
+            #expect(result.exitCode != 0, "\(result.stdout)")
+            #expect(result.stdout.contains("verifierFailure"), "\(result.stdout)")
+        }
+
+        do {
+            let fixture = try trustedFixture()
+            defer { fixture.remove() }
+            try #require((await fixture.runQualification(waiversURL: fixture.waiversURL)).exitCode == 0)
+            try plantFIFO(at: fixture.attestationURL)
+            let signing = QualificationRunner.signTrusted(
+                candidateURL: fixture.executableURL,
+                bundleURL: fixture.directory,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: fixture.commitSHA,
+                signingPrivateKeyData: fixture.signingKeyData
+            )
+            #expect(signing.exitCode != 0, "\(signing.stdout)")
+            #expect(signing.stdout.contains("signerFailure"), "\(signing.stdout)")
+        }
+
+        do {
+            let fixture = try promotableFixture()
+            defer { fixture.remove() }
+            _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+            try plantFIFO(at: fixture.attestationURL)
+            let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+            #expect(result.exitCode != 0, "\(result.stdout)\(result.stderr)")
+        }
+    }
+
+    /// #373 Q4 through the shipped `trusted-verifier` executable, not the in-process entry point:
+    /// one signed bundle is accepted as built, rejected once a count is edited, and refused -- by
+    /// returning, not by waiting for a writer -- once its attestation is a FIFO. The in-process
+    /// answer on the same bundle is the control, so a wrapper that lost the exit code, the
+    /// arguments or the trusted key would fail the first comparison rather than pass as a refusal.
+    @Test(
+        .enabled(
+            if: FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path),
+            "Requires `swift build` (debug) before driving the trusted-verifier executable."
+        ),
+        .timeLimit(.minutes(2))
+    )
+    func theTrustedVerifierExecutableRejectsAnEditedCountAndAFIFOAttestation() async throws {
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let inProcess = QualificationRunner.verifyTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            trustedPublicKeyData: fixture.trustedPublicKeyData
+        )
+        try #require(inProcess.exitCode == 0, "\(inProcess.stdout)")
+
+        let control = try Self.runTrustedVerifierExecutable(fixture)
+        #expect(control.exitCode == inProcess.exitCode, "\(control.stdout)\(control.stderr)")
+        let promotable = try #require(try Self.resultObject(control)["promotable"] as? Bool)
+        #expect(promotable)
+
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            let passed = try #require(object["passed"] as? Int)
+            object["passed"] = passed + 1
+        }
+        try Self.expectRejection(try Self.runTrustedVerifierExecutable(fixture), reason: "summaryCountMismatch")
+
+        try FileManager.default.removeItem(at: fixture.attestationURL)
+        try #require(mkfifo(fixture.attestationURL.path, 0o600) == 0)
+        let fifo = try Self.runTrustedVerifierExecutable(fixture)
+        #expect(fifo.exitCode != 0, "\(fifo.stdout)\(fifo.stderr)")
+        let fifoPromotable = try #require(try Self.resultObject(fifo)["promotable"] as? Bool)
+        #expect(!fifoPromotable)
+    }
+
+    private static let trustedVerifierExecutableURL = URL(
+        fileURLWithPath: FileManager.default.currentDirectoryPath,
+        isDirectory: true
+    ).appendingPathComponent(".build/debug/trusted-verifier")
+
+    private static func runTrustedVerifierExecutable(_ fixture: Fixture) throws -> QualificationCommandResult {
+        let process = Process()
+        process.executableURL = trustedVerifierExecutableURL
+        process.arguments = [
+            "verify",
+            "--candidate", fixture.executableURL.path,
+            "--bundle", fixture.directory.path,
+            "--release-version", "1.2.3",
+            "--expected-commit", fixture.commitSHA,
+        ]
+        var environment = ProcessInfo.processInfo.environment
+        environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] =
+            fixture.trustedPublicKeyData.base64EncodedString()
+        process.environment = environment
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        try process.run()
+        let out = stdout.fileHandleForReading.readDataToEndOfFile()
+        let err = stderr.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return QualificationCommandResult(
+            exitCode: Int(process.terminationStatus),
+            stdout: String(decoding: out, as: UTF8.self),
+            stderr: String(decoding: err, as: UTF8.self)
+        )
+    }
+
     @Test func qualificationRequiresCommitIdentityForSignedProvenance() async throws {
         let fixture = try Fixture(
             specs: Array(OperationRegistry.specs.prefix(1)),
