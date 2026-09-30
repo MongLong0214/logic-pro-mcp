@@ -861,15 +861,15 @@ package struct QualificationRunner: Sendable {
         // only thing arming it") that the code did not keep. Named by review, 2026-08-29.
         let atlasArmed = FeatureFlags.adr007SelectorAtlas
         let atlasCaptured = atlasArmed ? runtime.atlasPairs() : (pairs: [], dropped: [])
-        if let atlasCase = AtlasQualification.caseFor(
-            AtlasQualification.outcome(
-                armed: atlasArmed,
-                pairs: atlasCaptured.pairs,
-                dropped: atlasCaptured.dropped),
+        if let atlas = AtlasQualification.evidenceCaseFor(
+            armed: atlasArmed,
+            pairs: atlasCaptured.pairs,
+            dropped: atlasCaptured.dropped,
             axis: observedAxis,
             binarySHA256: binarySHA256,
             traceID: "atlas-drift-diff"
         ) {
+            let atlasCase = atlas.qualificationCase
             // AFTER the external-manifest collision check at the top of this function, so this id
             // has to be checked here or not at all. An external manifest declaring
             // `atlas.drift_diff` would otherwise produce two cases with one id, and every consumer
@@ -880,6 +880,19 @@ package struct QualificationRunner: Sendable {
                     "case id \(atlasCase.id) is already present; the ADR-007 step cannot add a "
                         + "second case under the same id")
             }
+            let evidenceData = try Self.encoded(atlas.evidence)
+            let evidencePath = atlasCase.evidenceFiles[0]
+            // Reserve this path consistently on case-sensitive and case-insensitive volumes.
+            guard !manifestEntries.contains(where: {
+                $0.path.caseInsensitiveCompare(evidencePath) == .orderedSame
+            }) else {
+                throw RunnerError.evidenceBindingMismatch(
+                    "evidence path \(evidencePath) is already present; the ADR-007 step cannot overwrite it")
+            }
+            try evidenceData.write(to: outputDirectory.appendingPathComponent(evidencePath), options: .atomic)
+            manifestEntries.append(.init(path: evidencePath,
+                sha256: SupportBundleBuilder.sha256(evidenceData), caseID: atlasCase.id,
+                binarySHA256: binarySHA256, axis: observedAxis, kind: .caseEvidence))
             cases.append(atlasCase)
         }
 
@@ -1992,6 +2005,8 @@ package struct QualificationRunner: Sendable {
             && evidence.mutationRestoreRecordSHA256 == qualificationCase.restore?.recordSHA256
             && evidence.availabilityReason == qualificationCase.availabilityReason
             && evidence.availabilityObservation == qualificationCase.availabilityObservation
+            && (evidence.verificationKind != .atlasComparison
+                || evidence.failureReason == qualificationCase.reason)
     }
 
     private static func operationArtifact(
@@ -2031,7 +2046,10 @@ package struct QualificationRunner: Sendable {
     /// to reach this rule was to build a whole signed bundle. A rule that can only be exercised
     /// end-to-end is a rule nobody writes a case for.
     static func evidenceShapeIsValid(_ evidence: CaseEvidence) -> Bool {
+        if evidence.verificationKind != .atlasComparison, evidence.atlasComparison != nil { return false }
         switch evidence.verificationKind {
+        case .atlasComparison:
+            return AtlasQualification.comparisonBinds(evidence)
         case .readResponse:
             return evidence.status == .passed
                 && evidence.verified

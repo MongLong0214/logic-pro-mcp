@@ -80,7 +80,7 @@ struct PromotionGate {
             return true
         case .verifiedWriteCycle:
             return operationCase.restore?.verified == true
-        case .readResponse, .independentReadback, .protocolSmoke, .typedDeferral:
+        case .atlasComparison, .readResponse, .independentReadback, .protocolSmoke, .typedDeferral:
             return false
         }
     }

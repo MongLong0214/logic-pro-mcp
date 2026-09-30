@@ -36,6 +36,7 @@ enum ProjectFixture: String, Codable, CaseIterable, Sendable {
 }
 
 enum QualificationVerificationKind: String, Codable, Sendable {
+    case atlasComparison = "atlas_comparison"
     case readResponse = "read_response"
     case independentReadback = "independent_readback"
     case semanticReadback = "semantic_readback"
@@ -266,6 +267,7 @@ struct QualificationCase: Codable, Equatable, Sendable {
 }
 
 struct CaseEvidence: Codable, Equatable, Sendable {
+    let atlasComparison: AtlasQualification.ComparisonEvidence?
     let schema: String
     let caseID: String
     let operationID: String
@@ -346,9 +348,11 @@ struct CaseEvidence: Codable, Equatable, Sendable {
         operationWriteAttempted: Bool? = nil,
         mutationRestoreRecordSHA256: String? = nil,
         availabilityReason: QualificationAvailabilityReason? = nil,
-        availabilityObservation: QualificationAvailabilityObservation? = nil
+        availabilityObservation: QualificationAvailabilityObservation? = nil,
+        atlasComparison: AtlasQualification.ComparisonEvidence? = nil
     ) {
         self.schema = schema
+        self.atlasComparison = atlasComparison
         self.caseID = caseID
         self.operationID = operationID
         self.tool = tool
@@ -389,6 +393,7 @@ struct CaseEvidence: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case schema
+        case atlasComparison = "atlas_comparison"
         case caseID = "case_id"
         case operationID = "operation_id"
         case tool
