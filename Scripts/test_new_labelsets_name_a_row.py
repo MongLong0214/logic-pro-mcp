@@ -144,6 +144,28 @@ class TheGuardCatchesWhatItNames(GuardRun):
         self.assertEqual(code, 1)
         self.assertIn("no `why_no_row`", err)
 
+    def test_a_new_labelset_cannot_be_kept_as_measured(self):
+        # `kept_measured` is for sets that predate the rule. Mutation killed: dropping the refusal
+        # of that kind in the loop over ADDED sets, which lets a new set skip naming a row.
+        code, err = self.run_guard(
+            policy(), policy(labelset("added", "Widget")),
+            waivers={"added": {"kind": "kept_measured", "reason": "read live",
+                               "record": "docs/observations/x.json"}},
+            canon=StubCanon())
+        self.assertEqual(code, 1)
+        self.assertIn("added is NEW and its waiver is `kept_measured`", err)
+
+    def test_a_kept_measured_waiver_is_not_an_absence_claim(self):
+        # An existing set kept as measured may well have its canonical in the corpus -- `Save` is
+        # everywhere -- and that is not a refusal: the entry does not claim there is no row.
+        # Mutation killed: running prove_absent over `kept_measured` entries too.
+        code, err = self.run_guard(
+            policy(labelset("kept", "Cycle")), policy(labelset("kept", "Cycle")),
+            waivers={"kept": {"kind": "kept_measured", "reason": "read live",
+                              "record": "docs/observations/x.json"}},
+            canon=StubCanon(present={"Cycle"}))
+        self.assertEqual(code, 0, err)
+
     def test_an_empty_corpus_cannot_prove_an_absence(self):
         code, err = self.run_guard(
             policy(), policy(labelset("added", "Widget")),

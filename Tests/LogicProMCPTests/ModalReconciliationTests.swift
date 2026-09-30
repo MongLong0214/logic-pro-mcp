@@ -405,10 +405,12 @@ private func makeSignals(
     #expect(!AXLocalePolicy.newTrackSheetDescription.matches("Nèw Track"))
 }
 
-@Test func testDeleteTracksPrimaryButtonLabelSetEnglishOnly() {
+@Test func testDeleteTracksPrimaryButtonLabelSetMatchesItsRowInKorean() {
     #expect(AXLocalePolicy.deleteTracksPrimaryButton.matches("Delete Tracks and Content"))
-    // A full localized sentence is not a stored label — must not match a guess.
-    #expect(!AXLocalePolicy.deleteTracksPrimaryButton.matches("트랙 및 콘텐츠 삭제"))
+    // Until #904 this set was English-only, and this Korean sentence had to stay unmatched as a
+    // guess. It is the Korean value of the set's own row, DeleteChannelStrips.strings 30.title,
+    // so the set now carries it by derivation. Mutation: drop it from the set's variants.
+    #expect(AXLocalePolicy.deleteTracksPrimaryButton.matches("트랙 및 콘텐츠 삭제"))
 }
 
 // MARK: - #545: Logic's other delete-confirm sheets carry a bare primary label

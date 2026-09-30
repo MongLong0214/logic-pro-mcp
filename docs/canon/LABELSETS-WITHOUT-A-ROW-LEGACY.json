@@ -1,5 +1,5 @@
 {
-  "note": "LabelSets that name no Apple row. THIS LIST MAY ONLY SHRINK.\n\n`check-labelsets-are-derived.py` proves, offline and per locale, that a LabelSet's members are the values Apple pins at its row -- but only for the sets that DECLARE one. `check-new-labelsets-name-a-row.py` requires a declaration of every set added from now on, measured against the merge base. Between them sits this census: the sets that predate both rules. Nothing asked whether these work in every language, and the answer is UNMEASURED rather than no.\n\nThe list was 58 when it was written and is 61. The three added on 2026-09-20 -- `eventListColumnM`, `eventListColumnName`, `eventListColumnPosition` -- are not new LabelSets: they name no row and always did, and the guard's own parser could not see them because their declarations close on the same line as their last argument. The guard reads them through `check-labelsets-are-derived.py`'s parser now, and it refuses an addition only when the set named a row at the merge base.\n\nEach entry carries what `Scripts/derive_label_variants.py` says about it, so the work is sized rather than guessed. `value` and `namespace` mean a row was found; `ambiguous` means several resolve and somebody has to pick the one that MEANS this control; `no-row` means an absence proof is what closes it.\n\nDO NOT CLOSE THESE MECHANICALLY. Measured while writing this file: `trackTypeMaster`'s best candidate is `ChineseOnly_TI_BassAmpLabel_Master_lowercase`, a Bass Amp label whose value happens to match and whose meaning does not. A row that resolves is not the row a control is named by.\n\n13 lines left on 2026-09-26 (#904) -- transportCycleControl, transportAutopunchControl, tempoFieldLabel, tempoSliderLabel, midiImportTempoAlertText, trackRecordButton, sliderVolumeHint, sliderPanHint, headerPanHint, transportContainerMetadata, undoPluginInsertMenuItem, projectOrSectionMenuItem, trackTypeInstrument -- because for each the candidate row IS the control's own word in the namespace its consumer reads, so each now names it in `derivedFrom`; the other candidates this census records were re-read and left in place (compound negative tables, a Bass Amp label, nib titles of unrelated dialogs, another sheet's button, a `Record Enable` checkbox whose verbatim match resolved to the `Record` menu title), which is what DO NOT CLOSE THESE MECHANICALLY means.\n\n2 lines left on 2026-09-27 (#291) -- inputSlotHelpKeyword, outputSlotHelpKeyword -- because `derive_label_variants.py`'s `no-row` was the census asking the .strings tables about a QuickHelp title: the rows are `QuickHelp/*/INS_012_InputSlot#Title` and `INS_014_OutputSlot#Title`, whose ko values are the two members the 2026-09-04 reading had already seen live, so each now names its row in `derivedFrom`.",
+  "note": "LabelSets that name no Apple row. THIS LIST MAY ONLY SHRINK.\n\n`check-labelsets-are-derived.py` proves, offline and per locale, that a LabelSet's members are the values Apple pins at its row -- but only for the sets that DECLARE one. `check-new-labelsets-name-a-row.py` requires a declaration of every set added from now on, measured against the merge base. Between them sits this census: the sets that predate both rules. Nothing asked whether these work in every language, and the answer is UNMEASURED rather than no.\n\nThe list was 58 when it was written and is 61. The three added on 2026-09-20 -- `eventListColumnM`, `eventListColumnName`, `eventListColumnPosition` -- are not new LabelSets: they name no row and always did, and the guard's own parser could not see them because their declarations close on the same line as their last argument. The guard reads them through `check-labelsets-are-derived.py`'s parser now, and it refuses an addition only when the set named a row at the merge base.\n\nEach entry carries what `Scripts/derive_label_variants.py` says about it, so the work is sized rather than guessed. `value` and `namespace` mean a row was found; `ambiguous` means several resolve and somebody has to pick the one that MEANS this control; `no-row` means an absence proof is what closes it.\n\nDO NOT CLOSE THESE MECHANICALLY. Measured while writing this file: `trackTypeMaster`'s best candidate is `ChineseOnly_TI_BassAmpLabel_Master_lowercase`, a Bass Amp label whose value happens to match and whose meaning does not. A row that resolves is not the row a control is named by.\n\n13 lines left on 2026-09-26 (#904) -- transportCycleControl, transportAutopunchControl, tempoFieldLabel, tempoSliderLabel, midiImportTempoAlertText, trackRecordButton, sliderVolumeHint, sliderPanHint, headerPanHint, transportContainerMetadata, undoPluginInsertMenuItem, projectOrSectionMenuItem, trackTypeInstrument -- because for each the candidate row IS the control's own word in the namespace its consumer reads, so each now names it in `derivedFrom`; the other candidates this census records were re-read and left in place (compound negative tables, a Bass Amp label, nib titles of unrelated dialogs, another sheet's button, a `Record Enable` checkbox whose verbatim match resolved to the `Record` menu title), which is what DO NOT CLOSE THESE MECHANICALLY means.\n\n2 lines left on 2026-09-27 (#291) -- inputSlotHelpKeyword, outputSlotHelpKeyword -- because `derive_label_variants.py`'s `no-row` was the census asking the .strings tables about a QuickHelp title: the rows are `QuickHelp/*/INS_012_InputSlot#Title` and `INS_014_OutputSlot#Title`, whose ko values are the two members the 2026-09-04 reading had already seen live, so each now names its row in `derivedFrom`.\n\n12 lines left on 2026-09-28 (#904) -- automationModeWrite, automationModeTouch, automationModeRead, automationModeOff, pluginWindowControlsViewMenuItem, pluginWindowSmartControlsControl, trackTypeExternalMIDI, trackTypeGMDevice, regionKindMidi, midiEffectSlotHelpKeyword, inspectorChannelStripHelpPrefix, deleteTracksPrimaryButton -- because for each, one row is the control's own word in the namespace its consumer reads (MAMixer's automation family beside `automation`, MAToolKit's plug-in window, `#acc`, the QuickHelp title a help string begins with), so each now names it in `derivedFrom`; deleteTracksPrimaryButton names two, one per sheet button, the second in `alsoDerivedFrom`. The other 28 were classified and stay; three of them -- transportRecordArmExclusion, trackHeadersDescription, trackContentExplicit -- were waived in LABELSETS-WITHOUT-A-ROW.json on the same date and stay all the same. `how_to_shrink` says a waiver in LABELSETS-WITHOUT-A-ROW.json also lets a line go; measured on this date it does not: the completeness half of check-labelset-census-only-shrinks.py counts every set with no `derivedFrom`, waived or not, so deleting showLibraryMenuItem's line -- waived since 2026-09-18 -- fails it. Until that half reads the waivers, only a `derivedFrom` shrinks this list.",
   "how_to_shrink": "Give the LabelSet a `derivedFrom` naming its row, or prove there is none with an entry in docs/canon/LABELSETS-WITHOUT-A-ROW.json. Then delete its line here. Scripts/check-labelset-census-only-shrinks.py refuses any other direction.",
   "counted_on": "2026-09-20",
   "total_labelsets": 195,
@@ -14,50 +14,15 @@
       "candidate": "2 candidate(s)",
       "members": 5
     },
-    "automationModeOff": {
-      "verdict": "ambiguous",
-      "candidate": "10 candidate(s)",
-      "members": 3
-    },
-    "automationModeRead": {
-      "verdict": "ambiguous",
-      "candidate": "5 candidate(s)",
-      "members": 2
-    },
-    "automationModeTouch": {
-      "verdict": "ambiguous",
-      "candidate": "5 candidate(s)",
-      "members": 2
-    },
     "automationModeTrim": {
       "verdict": "no-row",
       "candidate": "0 candidate(s)",
       "members": 2
     },
-    "automationModeWrite": {
-      "verdict": "ambiguous",
-      "candidate": "5 candidate(s)",
-      "members": 2
-    },
-    "deleteTracksPrimaryButton": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Delete#key via #key",
-      "members": 4
-    },
     "horizontalZoomSlider": {
       "verdict": "value",
       "candidate": "ControllerAssignments.strings aGM-qO-ZOT.title",
       "members": 4
-    },
-    "inspectorChannelStripHelpPrefix": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 3
-    },
-    "midiEffectSlotHelpKeyword": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 1
     },
     "nonInsertButtonText": {
       "verdict": "namespace",
@@ -69,16 +34,6 @@
       "candidate": "3 candidate(s)",
       "members": 2
     },
-    "pluginWindowControlsViewMenuItem": {
-      "verdict": "ambiguous",
-      "candidate": "6 candidate(s)",
-      "members": 2
-    },
-    "pluginWindowSmartControlsControl": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 1
-    },
     "projectPickerWindow": {
       "verdict": "ambiguous",
       "candidate": "2 candidate(s)",
@@ -88,11 +43,6 @@
       "verdict": "no-row",
       "candidate": "0 candidate(s)",
       "members": 4
-    },
-    "regionKindMidi": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 1
     },
     "saveConfirmationButton": {
       "verdict": "ambiguous",
@@ -108,11 +58,6 @@
       "verdict": "ambiguous",
       "candidate": "18 candidate(s)",
       "members": 4
-    },
-    "showLibraryMenuItem": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Library#acc via #acc",
-      "members": 10
     },
     "showMixerMenuItem": {
       "verdict": "ambiguous",
@@ -134,20 +79,10 @@
       "candidate": "5 candidate(s)",
       "members": 2
     },
-    "trackContentExplicit": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 7
-    },
     "trackContentGeneric": {
       "verdict": "ambiguous",
       "candidate": "3 candidate(s)",
       "members": 3
-    },
-    "trackHeadersDescription": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 7
     },
     "trackTypeAux": {
       "verdict": "no-row",
@@ -155,16 +90,6 @@
       "members": 1
     },
     "trackTypeDrummer": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 1
-    },
-    "trackTypeExternalMIDI": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 2
-    },
-    "trackTypeGMDevice": {
       "verdict": "no-row",
       "candidate": "0 candidate(s)",
       "members": 1
@@ -184,11 +109,6 @@
       "candidate": "Localizable.strings Loop Browser#acc via #acc",
       "members": 12
     },
-    "transportRecordArmExclusion": {
-      "verdict": "ambiguous",
-      "candidate": "3 candidate(s)",
-      "members": 2
-    },
     "transportSliderHints": {
       "verdict": "namespace",
       "candidate": "Localizable.strings Tempo#mti via #mti",
@@ -198,11 +118,6 @@
       "verdict": "namespace",
       "candidate": "Localizable.strings Tempo#mti via #mti",
       "members": 5
-    },
-    "undoMenuItemPrefix": {
-      "verdict": "ambiguous",
-      "candidate": "13 candidate(s)",
-      "members": 2
     }
   },
   "why_these_three_arrived_late": "Added 2026-09-20. They are not new LabelSets: they named no row before this branch too, and `check-labelset-census-only-shrinks.py` could not see them because its own parser took the end of a declaration to be the next `\\n    )` in the file. It reads the policy through `check-labelsets-are-derived.py`'s parser now. For contrast, the two Event List columns that DO name a row: `eventListColumnTrack` derives from logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Trk#value (`Trk`), and `eventListColumnLength` from the same table's `Length#und`. One row, all ten locales, nothing typed -- which is what these three cannot do yet. CLOSED 2026-09-20, the same day: all three name their row now. The Event List builds its columns in code -- no nib in the bundle names `EventListView` -- and `-[EventListView columnTitle:forMenu:]` looks each header up in Logic.framework's own Localizable.strings under `M`, `Position` and `Name`. Read from the shipped binary, not chosen because a value matched: docs/observations/2026-09-20-the-event-list-names-its-columns-in-code.json."

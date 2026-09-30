@@ -230,7 +230,7 @@ def main() -> int:
     was = {name for name, _, _ in derived.declarations(before)}
     added = sorted(set(now) - was)
     allowed = waivers()
-    failures, waived, named, composed_count = [], 0, 0, 0
+    failures, waived, named, composed_count, kept = [], 0, 0, 0, 0
     canon = None
 
     # EVERY waiver is re-proved on every run, not only while the set it covers is new.
@@ -252,6 +252,13 @@ def main() -> int:
                 f"{name} names a row in `derivedFrom` AND is waived from naming one. One of the "
                 f"two is wrong, and the waiver is the one to drop.")
             continue
+        if entry.get("kind") == "kept_measured":
+            # Not an absence claim: the set keeps what was read off a running Logic because no
+            # row fits how the product matches it, so there is nothing here to re-derive from
+            # Apple's bytes. Its reason and its record are checked by
+            # check-labelset-census-only-shrinks.py, the guard for the sets that predate this rule.
+            kept += 1
+            continue
         if canon is None:
             canon = derived._canon()
         prove_absent(name, entry, canonicals[name], canon, failures)
@@ -269,6 +276,12 @@ def main() -> int:
                 f"there is no row, with an entry in docs/canon/LABELSETS-WITHOUT-A-ROW.json. A new "
                 f"label with neither is two languages waiting to happen.")
             continue
+        if allowed[name].get("kind") == "kept_measured":
+            failures.append(
+                f"{name} is NEW and its waiver is `kept_measured`. That kind is for sets that "
+                f"predate this rule and were measured before anyone asked for a row; a set added "
+                f"today names its row or proves there is none.")
+            continue
         # Its proof already ran in the loop above, which covers every waiver rather than only the
         # new ones.
         waived += 1
@@ -278,7 +291,8 @@ def main() -> int:
         for failure in failures:
             print(f"  {failure}", file=sys.stderr)
         return 1
-    print(f"{len(allowed)} waiver(s) re-proved ({composed_count} of them a checked composition); "
+    print(f"{len(allowed) - kept} waiver(s) re-proved ({composed_count} of them a checked "
+          f"composition), {kept} kept as measured; "
           f"{len(added)} LabelSet(s) added on this branch, {named} naming a row and "
           f"{waived} waived")
     return 0

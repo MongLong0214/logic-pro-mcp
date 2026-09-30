@@ -185,6 +185,16 @@ def _carries(value, text, mode):
         return subject == label
     if mode == "prefix":
         return subject.strip().startswith(label)
+    if mode == "template":
+        # `.template` (#904): the label is a title template with ONE `%@`. The text must start
+        # with what precedes it, end with what follows it, and keep a non-blank middle. A label
+        # with no single `%@` matches nothing, as in `LabelSet.templateMatches`.
+        head, sep, tail = label.partition("%@")
+        if not sep or "%@" in tail:
+            return False
+        s = subject.strip()
+        return (len(s) > len(head) + len(tail) and s.startswith(head) and s.endswith(tail)
+                and s[len(head):len(s) - len(tail)].strip() != "")
     return label in subject
 
 

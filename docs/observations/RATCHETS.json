@@ -308,6 +308,8 @@
       "horizontalZoomSlider→가로 확대",
       "horizontalZoomSlider→가로 확대/축소",
       "inputSlotHelpKeyword→Slot d’entrée",
+      "inspectorChannelStripHelpPrefix→Tranche de console d’inspecteur gauche",
+      "midiEffectSlotHelpKeyword→Slot d’effet MIDI",
       "midiImportTempoAlertText→Tempo-Informationen",
       "nonInsertButtonText→게인 축소",
       "outputSlotHelpKeyword→Slot de sortie",
@@ -343,16 +345,11 @@
         "assignControlHelpKeyword",
         "audioPluginSlotLabel",
         "automationModeTrim",
-        "deleteTracksPrimaryButton",
         "horizontalZoomSlider",
-        "inspectorChannelStripHelpPrefix",
-        "midiEffectSlotHelpKeyword",
-        "pluginWindowControlsViewMenuItem",
         "projectPickerWindow",
         "showMixerMenuItem",
         "sliderZoomHint",
         "trackContentGeneric",
-        "trackTypeGMDevice",
         "transportRecordArmExclusion"
       ],
       "en-US": [
@@ -362,33 +359,25 @@
         "assignControlHelpKeyword",
         "audioPluginSlotLabel",
         "automationModeTrim",
-        "deleteTracksPrimaryButton",
         "horizontalZoomSlider",
-        "inspectorChannelStripHelpPrefix",
-        "midiEffectSlotHelpKeyword",
         "playheadPositionFieldLabel",
-        "pluginWindowControlsViewMenuItem",
         "projectPickerWindow",
         "settingPopupValue",
         "showMixerMenuItem",
         "sliderSendHint",
         "tickSliderLabel",
         "trackContentGeneric",
-        "trackTypeGMDevice",
-        "transportRecordArmExclusion",
-        "undoMenuItemPrefix"
+        "transportRecordArmExclusion"
       ],
       "fr-FR": [
         "assignControlHelpKeyword",
         "audioPluginSlotLabel",
         "automationModeTrim",
-        "deleteTracksPrimaryButton",
         "horizontalZoomSlider",
         "inputSlotHelpKeyword",
         "inspectorChannelStripHelpPrefix",
         "midiEffectSlotHelpKeyword",
         "outputSlotHelpKeyword",
-        "pluginWindowControlsViewMenuItem",
         "projectPickerWindow",
         "sendLevelKnobHelpKeyword",
         "sendSlotHelpKeyword",
@@ -397,52 +386,40 @@
         "sliderSendHint",
         "sliderZoomHint",
         "tickSliderLabel",
-        "trackContentGeneric",
-        "trackTypeGMDevice",
-        "undoMenuItemPrefix"
+        "trackContentGeneric"
       ],
       "it-IT": [
         "assignControlHelpKeyword",
         "audioPluginSlotLabel",
         "automationModeTrim",
-        "deleteTracksPrimaryButton",
         "horizontalZoomSlider",
         "inputSlotHelpKeyword",
         "inspectorChannelStripHelpPrefix",
         "midiEffectSlotHelpKeyword",
         "outputSlotHelpKeyword",
         "playheadPositionFieldLabel",
-        "pluginWindowControlsViewMenuItem",
-        "pluginWindowSmartControlsControl",
         "projectPickerWindow",
         "sendLevelKnobHelpKeyword",
         "sendSlotHelpKeyword",
         "showMixerMenuItem",
         "sliderSendHint",
         "trackContentGeneric",
-        "trackTypeGMDevice",
-        "transportRecordArmExclusion",
-        "undoMenuItemPrefix"
+        "transportRecordArmExclusion"
       ],
       "ja-JP": [
         "assignControlHelpKeyword",
         "automationModeTrim",
-        "midiEffectSlotHelpKeyword",
         "playheadPositionFieldLabel",
         "projectPickerWindow",
         "settingPopupValue",
         "showMixerMenuItem",
         "sliderZoomHint",
-        "trackTypeGMDevice",
-        "transportRecordArmExclusion",
-        "undoMenuItemPrefix"
+        "transportRecordArmExclusion"
       ],
       "ko-KR": [
         "assignControlHelpKeyword",
         "automationModeTrim",
-        "horizontalZoomSlider",
-        "midiEffectSlotHelpKeyword",
-        "trackTypeGMDevice"
+        "horizontalZoomSlider"
       ],
       "pt-BR": [
         "assignControlHelpKeyword",
@@ -454,27 +431,20 @@
         "midiEffectSlotHelpKeyword",
         "outputSlotHelpKeyword",
         "playheadPositionFieldLabel",
-        "pluginWindowControlsViewMenuItem",
         "projectPickerWindow",
         "sendLevelKnobHelpKeyword",
         "sendSlotHelpKeyword",
         "settingPopupValue",
         "showMixerMenuItem",
         "trackContentGeneric",
-        "trackTypeGMDevice",
-        "transportRecordArmExclusion",
-        "undoMenuItemPrefix"
+        "transportRecordArmExclusion"
       ],
       "zh-CN": [
         "assignControlHelpKeyword",
         "audioPluginSlotLabel",
-        "automationModeOff",
         "automationModeTrim",
         "horizontalZoomSlider",
-        "inspectorChannelStripHelpPrefix",
-        "midiEffectSlotHelpKeyword",
         "playheadPositionFieldLabel",
-        "pluginWindowControlsViewMenuItem",
         "projectPickerWindow",
         "regionKindDrummer",
         "saveConfirmationButton",
@@ -486,19 +456,15 @@
         "trackContentGeneric",
         "trackTypeAux",
         "trackTypeDrummer",
-        "trackTypeGMDevice",
         "trackTypeMaster",
         "transportContainerControlKeywords",
         "transportKeywordFalseFriends",
-        "transportRecordArmExclusion",
-        "undoMenuItemPrefix"
+        "transportRecordArmExclusion"
       ],
       "zh-TW": [
         "assignControlHelpKeyword",
         "audioPluginSlotLabel",
-        "automationModeOff",
         "automationModeTrim",
-        "deleteTracksPrimaryButton",
         "horizontalZoomSlider",
         "inputSlotHelpKeyword",
         "inspectorChannelStripHelpPrefix",
@@ -506,8 +472,6 @@
         "nonInsertButtonText",
         "outputSlotHelpKeyword",
         "playheadPositionFieldLabel",
-        "pluginWindowControlsViewMenuItem",
-        "pluginWindowSmartControlsControl",
         "projectPickerWindow",
         "saveConfirmationButton",
         "sendLevelKnobHelpKeyword",
@@ -519,11 +483,9 @@
         "sliderZoomHint",
         "trackContentGeneric",
         "trackTypeDrummer",
-        "trackTypeGMDevice",
         "trackTypeMaster",
         "transportContainerControlKeywords",
-        "transportRecordArmExclusion",
-        "undoMenuItemPrefix"
+        "transportRecordArmExclusion"
       ]
     }
   },
@@ -689,14 +651,12 @@
       "reason": "#892: `supported_locales` went from four to ten, so the ledger asks whether any observation record covers each surface in these six languages. None does, and no derivation can change that: a surface census is a READING taken on a running Logic, and this repository has run Korean, Japanese, German and English. That is the honest difference between this axis and the coverage one -- a label's ten languages come from Apple's rows, and a census of what the mixer looks like on a Spanish Logic does not. These were always absent; the ledger simply had no column to say so. They may only shrink from here, and each closes when somebody runs that language and files a census."
     },
     "undocumented_variants": {
-      "date": "2026-09-27",
+      "date": "2026-09-28",
       "members": [
-        "inputSlotHelpKeyword→Slot d’entrée",
-        "outputSlotHelpKeyword→Slot de sortie",
-        "sendLevelKnobHelpKeyword→Potentiomètre Niveau d’envoi",
-        "sendSlotHelpKeyword→Slot d’envoi"
+        "inspectorChannelStripHelpPrefix→Tranche de console d’inspecteur gauche",
+        "midiEffectSlotHelpKeyword→Slot d’effet MIDI"
       ],
-      "reason": "#291 R1: the four fr-FR QuickHelp titles these sets derive from -- INS_010_SendSlot, INS_011_SendLevelKnob, INS_012_InputSlot, INS_014_OutputSlot -- ship with a TRAILING U+00A0 (`Slot d’envoi\\u00a0`, `Slot de sortie\\u00a0`; read 2026-09-27 with Scripts/logic_canon.py's extract_quickhelp over Logic 12.3 (6674)), and the members drop it. `presence` compares after `normalize`, which trims the ends, and says each ships; the casefold ledger compares the raw value, as #981 decided, and does not. The four sets match by CONTAINMENT on the help string, whose composed form the corpus itself shows without the no-break space (`Slot de sortie. cliquez…`), so the member is the substring the product would look for -- but what a French Logic's AXHelp carries has not been read, and the ko-KR `Logic\\u00a0Pro` case shows Foundation does not equate U+00A0 with U+0020. The cells stay unmeasured until a French Logic is read (#291 R1 t3), rather than credited by a member nobody has matched."
+      "reason": "#904: the fr-FR QuickHelp titles these two sets now derive from -- INS_086_MidiSlot and INS_005_LeftArrangeCS -- ship with a TRAILING U+00A0, read 2026-09-28 with Scripts/logic_canon.py resolve over Logic 12.3 (6674), and the members drop it, exactly as #291 R1 did for the input, output and send slots. `presence` trims the ends and says each ships; the casefold ledger compares the raw value and does not. Both sets match by CONTAINMENT or PREFIX on the help string, and LabelSet.labels trims its members anyway, so the member is the substring the product looks for -- but what a French Logic's AXHelp carries has not been read, so the fr-FR cells stay unmeasured until one is."
     },
     "unmeasured_coverage.es-ES": {
       "date": "2026-09-25",

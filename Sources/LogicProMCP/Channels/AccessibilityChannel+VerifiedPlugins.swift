@@ -4172,7 +4172,7 @@ extension AccessibilityChannel {
                 AXMouseHelper.pressEscape()
                 continue
             }
-            // Only undo OUR insert. The prefix match above finds whatever sits on top of the stack,
+            // Only undo OUR insert. The template match above finds whatever sits on top of the stack,
             // and pressing that undoes the user's last action when it is not ours. Measured live:
             // Logic offers "Undo Insert Plug-in in Channel Strip" for our own write, and entries such
             // as "Undo selected Channel Strips" for things we must not touch.

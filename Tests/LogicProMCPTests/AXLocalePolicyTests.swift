@@ -44,9 +44,9 @@ struct AXLocalePolicyTests {
         #expect(AXLocalePolicy.saveConfirmationButton.matches("확인"))
         #expect(!AXLocalePolicy.saveConfirmationButton.matches("Don't Save"))
 
-        #expect(AXLocalePolicy.undoMenuItemPrefix.matches("Undo Insert Plug-in", mode: .prefix))
-        #expect(AXLocalePolicy.undoMenuItemPrefix.matches("실행 취소 플러그인 삽입", mode: .prefix))
-        #expect(!AXLocalePolicy.undoMenuItemPrefix.matches("Redo Insert Plug-in", mode: .prefix))
+        #expect(AXLocalePolicy.undoMenuItemPrefix.matches("Undo Insert Plug-in", mode: .template))
+        #expect(AXLocalePolicy.undoMenuItemPrefix.matches("플러그인 삽입 실행 취소", mode: .template))
+        #expect(!AXLocalePolicy.undoMenuItemPrefix.matches("Redo Insert Plug-in", mode: .template))
     }
 
     @Test("Marker List Edit/Delete labels include the live-confirmed Korean exact forms")
@@ -260,25 +260,28 @@ struct AXLocalePolicyTests {
     /// widen matching across accented-Latin locales).
     @Test("prefix mode is anchored, case-insensitive, diacritic-SENSITIVE")
     func prefixModeWidening() {
+        // #904: the Undo set is a template now and is read with `.template`; `.prefix` is pinned here
+        // on a plain-word set so the mode's own semantics stay covered.
+        let undo = AXLocalePolicy.LabelSet(canonical: "Undo", variants: ["실행 취소"], rationale: "test")
         // Real prefixes match (operation name follows the localized prefix).
-        #expect(AXLocalePolicy.undoMenuItemPrefix.matches("Undo Insert Plug-in", mode: .prefix))
-        #expect(AXLocalePolicy.undoMenuItemPrefix.matches("실행 취소 플러그인 삽입", mode: .prefix))
+        #expect(undo.matches("Undo Insert Plug-in", mode: .prefix))
+        #expect(undo.matches("실행 취소 플러그인 삽입", mode: .prefix))
 
         // Case-insensitive prefix.
-        #expect(AXLocalePolicy.undoMenuItemPrefix.matches("UNDO Insert Plug-in", mode: .prefix))
+        #expect(undo.matches("UNDO Insert Plug-in", mode: .prefix))
 
         // #60 — diacritic-SENSITIVE: an accented homograph must NOT match
         // (pre-#60 the folded "Ü" → "U" widened this).
-        #expect(!AXLocalePolicy.undoMenuItemPrefix.matches("Ündo Insert Plug-in", mode: .prefix))
+        #expect(!undo.matches("Ündo Insert Plug-in", mode: .prefix))
 
         // NFD vs NFC: the decomposed accented prefix likewise must NOT match
         // (canonical equivalence keeps NFC/NFD together, but "Ü" ≠ "U").
         let undoNFD = "U\u{0308}ndo Insert Plug-in" // U + combining diaeresis
-        #expect(!AXLocalePolicy.undoMenuItemPrefix.matches(undoNFD, mode: .prefix))
+        #expect(!undo.matches(undoNFD, mode: .prefix))
 
         // Anchored: a label that appears mid-string is NOT a prefix match.
-        #expect(!AXLocalePolicy.undoMenuItemPrefix.matches("Redo then Undo", mode: .prefix))
-        #expect(!AXLocalePolicy.undoMenuItemPrefix.matches("Redo Insert Plug-in", mode: .prefix))
+        #expect(!undo.matches("Redo then Undo", mode: .prefix))
+        #expect(!undo.matches("Redo Insert Plug-in", mode: .prefix))
     }
 
     // MARK: - Go-to-Position dialog dismissal (.contains mode)
@@ -403,7 +406,7 @@ struct AXLocalePolicyTests {
         let builder = FakeAXRuntimeBuilder()
         let undoItem = addPolicyMenuItem(builder, 60, title: "Undo Insert Plug-in")
         builder.setAttribute(undoItem, kAXEnabledAttribute as String, true)
-        let koreanUndo = addPolicyMenuItem(builder, 61, title: "실행 취소 플러그인 삽입")
+        let koreanUndo = addPolicyMenuItem(builder, 61, title: "플러그인 삽입 실행 취소")
         builder.setAttribute(koreanUndo, kAXEnabledAttribute as String, false)
         let menu = builder.element(62)
         builder.setAttribute(menu, kAXRoleAttribute as String, kAXMenuRole as String)
@@ -420,7 +423,7 @@ struct AXLocalePolicyTests {
         let foundEnabled = AXLocalePolicy.findMenuItem(
             under: editBarItem,
             matching: AXLocalePolicy.undoMenuItemPrefix,
-            mode: .prefix,
+            mode: .template,
             runtime: runtime
         )
         #expect(foundEnabled == undoItem)
@@ -432,7 +435,7 @@ struct AXLocalePolicyTests {
         let foundDisabled = AXLocalePolicy.findMenuItem(
             under: koreanEditBarItem,
             matching: AXLocalePolicy.undoMenuItemPrefix,
-            mode: .prefix,
+            mode: .template,
             runtime: runtime
         )
         #expect(foundDisabled == koreanUndo)

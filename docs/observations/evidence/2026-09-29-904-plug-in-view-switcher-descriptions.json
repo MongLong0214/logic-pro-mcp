@@ -1,0 +1,166 @@
+{
+  "record": "2026-09-29-904-the-plug-in-view-switcher-carries-the-toolkit-view-row",
+  "what": "The AXMenuButton descriptions a read-only watcher recorded in each plug-in window while live_904_labelsets_in_every_locale.py ran in fr, pt and ko, verbatim, and the set_param_verified rows from that run and from the ten-language run before it; local file paths removed.",
+  "built_head": "e4e5edbe6f6eb6959147db27b036c0f0e7afd01f",
+  "binary_sha256": "63a9a35559d96ab0ff63cb05e6d364add1115584d4be68e8fe42b65a3b2ed491",
+  "watcher": {
+    "how": "watch_switcher.py polled Logic's AXWindows every 50 ms, skipped AXHelpTag windows and windows whose title starts with lpm-locale-campaign, walked each remaining window to depth 5, and appended one line the first time it saw a (window AXTitle, AXMenuButton AXDescription) pair. `lang` is `defaults read com.apple.logic10 AppleLanguages` at that moment, whitespace removed; `t` is local wall-clock time. It reads only. It is not in the repository.",
+    "script_sha256": "7a1a60291032d339f2506f3d8c5dc6a5575b3c23734703223028b763c11fdc28",
+    "output_sha256": "a74115708333bff141dbe7bca8ebf6866d70279ddad227aec01a5f2b72c108ba",
+    "output_lines": [
+      "{\"t\": \"19:14:20\", \"lang\": \"(fr)\", \"window\": \"Audio 2\", \"description\": \"affichage\", \"scalars\": [\"U+0061\", \"U+0066\", \"U+0066\", \"U+0069\", \"U+0063\", \"U+0068\", \"U+0061\", \"U+0067\", \"U+0065\"], \"title\": \"100 %\"}",
+      "{\"t\": \"19:15:58\", \"lang\": \"(\\\"pt-BR\\\")\", \"window\": \"Áudio 2\", \"description\": \"visualização\", \"scalars\": [\"U+0076\", \"U+0069\", \"U+0073\", \"U+0075\", \"U+0061\", \"U+006C\", \"U+0069\", \"U+007A\", \"U+0061\", \"U+00E7\", \"U+00E3\", \"U+006F\"], \"title\": \"100%\"}",
+      "{\"t\": \"19:17:32\", \"lang\": \"(ko)\", \"window\": \"오디오 2\", \"description\": \"보기\", \"scalars\": [\"U+BCF4\", \"U+AE30\"], \"title\": \"100%\"}"
+    ]
+  },
+  "run_fr_pt_ko": {
+    "lprojs": [
+      "fr",
+      "pt",
+      "ko"
+    ],
+    "languages": {
+      "fr": {
+        "language_setting": [
+          "fr"
+        ],
+        "arrange_window": "lpm-locale-campaign - Pistes"
+      },
+      "pt": {
+        "language_setting": [
+          "pt-BR"
+        ],
+        "arrange_window": "lpm-locale-campaign - Pistas"
+      },
+      "ko": {
+        "language_setting": [
+          "ko"
+        ],
+        "arrange_window": "lpm-locale-campaign - 트랙"
+      }
+    },
+    "korean_restore_ok": true,
+    "set_param_verified_rows": [
+      {
+        "locale": "fr-FR",
+        "lproj": "fr",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "not_reached",
+        "raw_reply_excerpt": "{\"error\": \"plugin_view_not_confirmed\", \"plugin_view_switch_phase\": \"switcher_locale_unmeasured\", \"state\": \"C\"}"
+      },
+      {
+        "locale": "pt-BR",
+        "lproj": "pt",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "not_reached",
+        "raw_reply_excerpt": "{\"error\": \"plugin_view_not_confirmed\", \"plugin_view_switch_phase\": \"switcher_locale_unmeasured\", \"state\": \"C\"}"
+      },
+      {
+        "locale": "ko-KR",
+        "lproj": "ko",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "set",
+        "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+      }
+    ]
+  },
+  "run_ten_languages": {
+    "lprojs": [
+      "de",
+      "en",
+      "es",
+      "fr",
+      "it",
+      "ja",
+      "ko",
+      "pt",
+      "zh_CN",
+      "zh_TW"
+    ],
+    "set_param_verified_rows": [
+      {
+        "locale": "de-DE",
+        "lproj": "de",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "set",
+        "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+      },
+      {
+        "locale": "en-US",
+        "lproj": "en",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "set",
+        "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+      },
+      {
+        "locale": "es-ES",
+        "lproj": "es",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "set",
+        "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+      },
+      {
+        "locale": "fr-FR",
+        "lproj": "fr",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "not_reached",
+        "raw_reply_excerpt": "{\"error\": \"plugin_view_not_confirmed\", \"plugin_view_switch_phase\": \"switcher_locale_unmeasured\", \"state\": \"C\"}"
+      },
+      {
+        "locale": "it-IT",
+        "lproj": "it",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "set",
+        "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+      },
+      {
+        "locale": "ja-JP",
+        "lproj": "ja",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "set",
+        "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+      },
+      {
+        "locale": "ko-KR",
+        "lproj": "ko",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "set",
+        "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+      },
+      {
+        "locale": "pt-BR",
+        "lproj": "pt",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "not_reached",
+        "raw_reply_excerpt": "{\"error\": \"plugin_view_not_confirmed\", \"plugin_view_switch_phase\": \"switcher_locale_unmeasured\", \"state\": \"C\"}"
+      },
+      {
+        "locale": "zh-CN",
+        "lproj": "zh_CN",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "set",
+        "raw_reply_excerpt": "{\"error\": \"param_control_not_found\", \"plugin_view_restore_attempted\": true, \"state\": \"C\"}"
+      },
+      {
+        "locale": "zh-TW",
+        "lproj": "zh_TW",
+        "set": "pluginWindowControlsViewMenuItem",
+        "call": "set_param_verified",
+        "matched_via": "set",
+        "raw_reply_excerpt": "{\"error\": \"param_control_not_found\", \"plugin_view_restore_attempted\": true, \"state\": \"C\"}"
+      }
+    ]
+  }
+}

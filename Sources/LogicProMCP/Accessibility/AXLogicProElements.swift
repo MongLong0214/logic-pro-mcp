@@ -845,11 +845,12 @@ enum AXLogicProElements {
     ///      matching (never substring over the joined search text) keeps a
     ///      button that merely mentions the phrase in a longer label or tooltip
     ///      from matching.
-    /// The label is English-only (`pluginWindowSmartControlsControl` has empty
-    /// `variants`, OQ-1 — the localized string is unverified), so a non-EN DMD
-    /// pane fails conjunct 3 and conservatively STAYS blocking (fail-closed),
-    /// mirroring the bypass-label OQ-1 posture. No known modal carries a control
-    /// labeled exactly `Smart Controls`, and a titled one is excluded by
+    /// The label was English-only until #904 (OQ-1), so a non-EN DMD pane failed
+    /// conjunct 3 and STAYED blocking (fail-closed). `pluginWindowSmartControlsControl`
+    /// now carries the ten values of Apple's `Smart Controls#acc` row, so a pane in any
+    /// language Logic ships passes conjunct 3 on Apple's word; no non-English pane has
+    /// been read live. No known modal carries a control labeled exactly `Smart Controls`;
+    /// for the other values that was not checked live, and a titled modal is excluded by
     /// conjunct 2 regardless.
     static func isSmartControlsWindow(
         _ window: AXUIElement,

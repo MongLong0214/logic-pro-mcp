@@ -1,0 +1,292 @@
+{
+  "schema": 3,
+  "id": "2026-09-29-904-the-plug-in-view-switcher-carries-the-toolkit-view-row",
+  "date": "2026-09-29",
+  "subject": "The AXDescription of the plug-in window's Controls/editor AXMenuButton in French, Portuguese and Korean, against the two Apple rows whose English is View",
+  "question": "Is the plug-in window's View switcher described by MAToolKit's `view` row, the value pluginWindowViewSwitcher now carries, rather than by the menu bar's `View#mti` row it was derived from on 2026-09-16?",
+  "verdict": "works",
+  "surface": "plugin.window",
+  "issues": [
+    904
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_904_labelsets_in_every_locale.py <worktree> <full-40-char-head> fr pt ko",
+    "expected": "with a release build of a head that carries this change, the pluginWindowControlsViewMenuItem set_param_verified row reads `set` in fr, pt and ko, and neither fr nor pt answers plugin_view_switch_phase switcher_locale_unmeasured",
+    "cost": "needs LPM_LIVE_LOCK naming an existing lock file the caller holds, LPM_EVIDENCE_ROOT exported as an absolute path outside the repository, and a running Logic with the lpm-locale-campaign fixture; it changes Logic's language once per locale and switches back to Korean at the end. The harness does not record the switcher's AXDescription; reading it again needs a watcher beside the run like the one the evidence file describes"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:pluginWindowViewSwitcher",
+    "Sources/LogicProMCP/HostParameters/ControlsViewBooleanParameterWriter.swift:measuredViewSwitcherOnce"
+  ],
+  "evidence": [
+    "evidence/2026-09-29-904-plug-in-view-switcher-descriptions.json"
+  ],
+  "method": "live_904_labelsets_in_every_locale.py ran against a release binary built at e4e5edbe, before this change, in fr, pt and ko, switching Logic's AppleLanguages and reopening the lpm-locale-campaign fixture for each. Its set_param_verified compressor limiter_on call opens a Compressor window on a new audio track. Beside it a read-only watcher polled Logic's windows other than the project's and appended each new (window title, AXMenuButton AXDescription) pair. Each description was compared, as written, with the value `Scripts/logic_canon.py resolve` returns for MAToolKit's `view` row and for Logic.framework's `View#mti` row in that language.",
+  "observations": [
+    {
+      "what": "the run",
+      "built_head": "e4e5edbe6f6eb6959147db27b036c0f0e7afd01f",
+      "binary_sha256": "63a9a35559d96ab0ff63cb05e6d364add1115584d4be68e8fe42b65a3b2ed491",
+      "lprojs": [
+        "fr",
+        "pt",
+        "ko"
+      ],
+      "korean_restore_ok": true
+    },
+    {
+      "what": "each plug-in window's AXMenuButton description the watcher recorded, with the two rows' values in that language",
+      "rows": [
+        {
+          "locale": "fr-FR",
+          "apple_languages": "(fr)",
+          "window": "Audio 2",
+          "role": "AXMenuButton",
+          "attribute": "AXDescription",
+          "description": "affichage",
+          "scalars": [
+            "U+0061",
+            "U+0066",
+            "U+0066",
+            "U+0069",
+            "U+0063",
+            "U+0068",
+            "U+0061",
+            "U+0067",
+            "U+0065"
+          ],
+          "title": "100 %",
+          "toolkit_view_value": "affichage",
+          "menu_bar_view_mti_value": "Présentation",
+          "equals_toolkit_view": true,
+          "equals_menu_bar_view_mti": false
+        },
+        {
+          "locale": "pt-BR",
+          "apple_languages": "(\"pt-BR\")",
+          "window": "Áudio 2",
+          "role": "AXMenuButton",
+          "attribute": "AXDescription",
+          "description": "visualização",
+          "scalars": [
+            "U+0076",
+            "U+0069",
+            "U+0073",
+            "U+0075",
+            "U+0061",
+            "U+006C",
+            "U+0069",
+            "U+007A",
+            "U+0061",
+            "U+00E7",
+            "U+00E3",
+            "U+006F"
+          ],
+          "title": "100%",
+          "toolkit_view_value": "visualização",
+          "menu_bar_view_mti_value": "Visualizar",
+          "equals_toolkit_view": true,
+          "equals_menu_bar_view_mti": false
+        },
+        {
+          "locale": "ko-KR",
+          "apple_languages": "(ko)",
+          "window": "오디오 2",
+          "role": "AXMenuButton",
+          "attribute": "AXDescription",
+          "description": "보기",
+          "scalars": [
+            "U+BCF4",
+            "U+AE30"
+          ],
+          "title": "100%",
+          "toolkit_view_value": "보기",
+          "menu_bar_view_mti_value": "보기",
+          "equals_toolkit_view": true,
+          "equals_menu_bar_view_mti": true
+        }
+      ]
+    },
+    {
+      "what": "set_param_verified compressor limiter_on through the binary built at e4e5edbe, in this run",
+      "rows": [
+        {
+          "locale": "fr-FR",
+          "lproj": "fr",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "not_reached",
+          "raw_reply_excerpt": "{\"error\": \"plugin_view_not_confirmed\", \"plugin_view_switch_phase\": \"switcher_locale_unmeasured\", \"state\": \"C\"}"
+        },
+        {
+          "locale": "pt-BR",
+          "lproj": "pt",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "not_reached",
+          "raw_reply_excerpt": "{\"error\": \"plugin_view_not_confirmed\", \"plugin_view_switch_phase\": \"switcher_locale_unmeasured\", \"state\": \"C\"}"
+        },
+        {
+          "locale": "ko-KR",
+          "lproj": "ko",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "set",
+          "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+        }
+      ]
+    },
+    {
+      "what": "the same call in the ten-language run before it, same binary; no watcher ran",
+      "rows": [
+        {
+          "locale": "de-DE",
+          "lproj": "de",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "set",
+          "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+        },
+        {
+          "locale": "en-US",
+          "lproj": "en",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "set",
+          "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+        },
+        {
+          "locale": "es-ES",
+          "lproj": "es",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "set",
+          "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+        },
+        {
+          "locale": "fr-FR",
+          "lproj": "fr",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "not_reached",
+          "raw_reply_excerpt": "{\"error\": \"plugin_view_not_confirmed\", \"plugin_view_switch_phase\": \"switcher_locale_unmeasured\", \"state\": \"C\"}"
+        },
+        {
+          "locale": "it-IT",
+          "lproj": "it",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "set",
+          "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+        },
+        {
+          "locale": "ja-JP",
+          "lproj": "ja",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "set",
+          "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+        },
+        {
+          "locale": "ko-KR",
+          "lproj": "ko",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "set",
+          "raw_reply_excerpt": "{\"plugin_view_restore_attempted\": true, \"state\": \"A\"}"
+        },
+        {
+          "locale": "pt-BR",
+          "lproj": "pt",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "not_reached",
+          "raw_reply_excerpt": "{\"error\": \"plugin_view_not_confirmed\", \"plugin_view_switch_phase\": \"switcher_locale_unmeasured\", \"state\": \"C\"}"
+        },
+        {
+          "locale": "zh-CN",
+          "lproj": "zh_CN",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "set",
+          "raw_reply_excerpt": "{\"error\": \"param_control_not_found\", \"plugin_view_restore_attempted\": true, \"state\": \"C\"}"
+        },
+        {
+          "locale": "zh-TW",
+          "lproj": "zh_TW",
+          "set": "pluginWindowControlsViewMenuItem",
+          "call": "set_param_verified",
+          "matched_via": "set",
+          "raw_reply_excerpt": "{\"error\": \"param_control_not_found\", \"plugin_view_restore_attempted\": true, \"state\": \"C\"}"
+        }
+      ]
+    }
+  ],
+  "conclusion": "In French the plug-in window's View switcher was described as 'affichage' and in Portuguese as 'visualização', MAToolKit's `view` values in those languages; neither is the menu bar's 'Présentation' or 'Visualizar', which pluginWindowViewSwitcher carried, and through that set the binary answered switcher_locale_unmeasured in both. In Korean it was '보기', which both rows carry, and the call reached `set`. pluginWindowViewSwitcher now carries MAToolKit's `view` row.",
+  "limits": [
+    "The binary that ran is the one before this change. The value this record supports is the policy's, not a product result: set_param_verified reaching `set` in fr and pt through the fixed binary has not been measured.",
+    "host.locale is ko-KR because the host was in Korean before and after the run; each row names the language it was read in.",
+    "One run per language, one host, one plug-in (Compressor), one window each. This is not a rate.",
+    "The watcher writes a line per distinct (window title, description) pair, so one line per window says one description was seen there, not that the window had one AXMenuButton.",
+    "The watcher is not in the repository and the harness does not record the description; the evidence file carries the watcher's lines verbatim with its script's and output's sha256.",
+    "In the ten-language run de, en, es, it, ja, ko, zh_CN and zh_TW reached `set` for this call, which needs the switcher to match; zh_CN and zh_TW then answered param_control_not_found. No watcher ran then, so their descriptions were not recorded; in those languages the set's values rest on Apple's row, not on a reading.",
+    "The harness reported evidence_clean false for this run. Recomputed from its evidence.json: 3 of 3 checks passed, with 0 captures and 0 visual assertions under a declared ui surface. This record rests on the watcher lines and the reply excerpts, not on that verdict.",
+    "View, Visualización and Vista stay as members because `.exact` compares with caseInsensitiveCompare and they equal this row's view, visualización and vista up to case; no English, Spanish or Italian description was read in this run."
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FMAToolKit.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/view#value",
+      "value": "affichage",
+      "used_for": "the fr-FR value of MAToolKit's view row, which the fr-FR plug-in window's View switcher carried as its AXDescription",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FMAToolKit.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/pt/view#value",
+      "value": "visualização",
+      "used_for": "the pt-BR value of MAToolKit's view row, which the pt-BR plug-in window's View switcher carried as its AXDescription",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FMAToolKit.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/view#value",
+      "value": "보기",
+      "used_for": "the ko-KR value of MAToolKit's view row, which the ko-KR plug-in window's View switcher carried as its AXDescription",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/fr/View%23mti#value",
+      "value": "Présentation",
+      "used_for": "the fr-FR value of the menu bar's View#mti row the set was derived from, which the fr-FR switcher did not carry",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/pt/View%23mti#value",
+      "value": "Visualizar",
+      "used_for": "the pt-BR value of the menu bar's View#mti row the set was derived from, which the pt-BR switcher did not carry",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    }
+  ]
+}
