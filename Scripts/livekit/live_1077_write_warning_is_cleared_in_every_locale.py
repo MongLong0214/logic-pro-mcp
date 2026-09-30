@@ -75,6 +75,7 @@ COVERS = [
 WATCH_INTERVAL = 0.02
 SURVIVAL_SECONDS = 1.5
 CRASH_WAIT = 8.0
+EDGE_POINTS = 16
 # Two launches, two phases and two quits per language measured about 150 s on the #904 runs.
 RECORDING_SECONDS_PER_LANGUAGE = 170
 DIAGNOSTIC_REPORTS = os.path.expanduser("~/Library/Logs/DiagnosticReports")
@@ -233,11 +234,23 @@ class WindowWatch:
         return {"reads": self.reads, "unread": self.unread, "new_windows": list(self.seen.values())}
 
 
+def inner_region(w, h):
+    """The dialog inside its rounded edge, in window points.
+
+    Measured 2026-10-01 (#1077, de pilot): two captures of the same warning 1.5 s apart differed in
+    5 pixels of 594x500, by at most 2 levels, every one within 7 points of the edge, beside the
+    top-right and bottom-left corners. Every pixel further in was identical. That the rounded
+    outline is blended with what Logic draws behind it is the likely cause and was not measured,
+    so the comparison and the settling are judged 16 points inside the edge.
+    """
+    return (EDGE_POINTS, EDGE_POINTS, max(0, w - 2 * EDGE_POINTS), max(0, h - 2 * EDGE_POINTS))
+
+
 def capture(ev, tag, window):
-    """Capture one window by number, settled on the whole window."""
+    """Capture one window by number, settled inside its edge."""
     bounds = window.get("bounds") or {}
     w, h = bounds.get("Width", 0), bounds.get("Height", 0)
-    return ev.shot(tag, settle_region=(0, 0, w, h),
+    return ev.shot(tag, settle_region=inner_region(w, h),
                    window={"id": window["id"], "title": "", "x": bounds.get("X", 0),
                            "y": bounds.get("Y", 0), "w": w, "h": h})
 
@@ -291,10 +304,11 @@ def drive(ev, binary, tag, photograph):
             second_shot = capture(ev, f"{tag}-dialog-after-survival", after[0])
             size = (first_shot["window"]["w"], first_shot["window"]["h"])
             ev.visual(f"{tag}-dialog-unchanged", first_shot["file"], second_shot["file"],
-                      (0, 0) + size, expect_change=False,
+                      inner_region(*size), expect_change=False,
                       why="nothing dismissed or changed the window the Write press raised",
-                      subject="the Logic window below the pop-up menu level that the window server "
-                              "first listed after this control's Write press",
+                      subject="the inside of the rounded edge of the Logic window below the pop-up "
+                              "menu level that the window server first listed after this "
+                              "control's Write press",
                       window_points=size)
         return result
     finally:
@@ -303,6 +317,16 @@ def drive(ev, binary, tag, photograph):
         result["server_pids_after_close"] = stray.stdout.split()
         for pid in result["server_pids_after_close"]:
             subprocess.run(["/bin/kill", "-9", pid], capture_output=True)
+
+
+def host_block(worktree):
+    """Scripts/observation_host.py's host block, or the error it gave."""
+    result = subprocess.run([sys.executable, os.path.join(worktree, "Scripts", "observation_host.py")],
+                            capture_output=True, text=True)
+    try:
+        return json.loads(result.stdout)
+    except ValueError:
+        return {"error": (result.stderr or "")[-300:]}
 
 
 def crash_reports():
@@ -399,14 +423,19 @@ def main():
                         or language.get("language_setting", [])[:1] != [L993.CODES[lproj]]:
                     failures[lproj] = f"the fixture did not open in this language for the {role}"
                     break
+                # Generated while Logic is in this language, so a record written from this run
+                # takes its host block from the run rather than from the Korean it ends in.
+                row[f"{role}_host"] = host_block(args.worktree)
                 phase = drive(ev, binary, tag, photograph=role == "control")
                 row[role] = phase
                 if role == "control" and lproj not in args.crash_control:
                     row["control_acknowledged"] = L993.osa(ACKNOWLEDGE)
                     row["control_after_acknowledge"] = one_button_dialogs()
                 row[f"{role}_quit"] = quit_and_read()
-                ev.note(tag, {"phase": phase, "quit": row[f"{role}_quit"],
-                              "acknowledged": row.get("control_acknowledged")})
+                ev.note(tag, {"host": row[f"{role}_host"], "launch": language, "phase": phase,
+                              "quit": row[f"{role}_quit"],
+                              "acknowledged": row.get("control_acknowledged"),
+                              "after_acknowledge": row.get("control_after_acknowledge")})
                 reply = phase.get("write") if isinstance(phase.get("write"), dict) else {}
                 print(json.dumps({"lproj": lproj, "role": role, "error": phase.get("error"),
                                   "state": reply.get("state"),
