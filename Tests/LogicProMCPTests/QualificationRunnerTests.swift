@@ -1923,7 +1923,7 @@ struct QualificationRunnerTests {
         ))
 
         #expect(result.handshakeOK)
-        #expect(result.catalog?.operationCount == 116)   // #884 system.setup_control_surface, #862 mixer.bank, #965 project.inspect_session
+        #expect(result.catalog?.operationCount == 118)   // #884 system.setup_control_surface, #862 mixer.bank, #965 project.inspect_session
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
 
@@ -1933,7 +1933,7 @@ struct QualificationRunnerTests {
         let liveGate = QualificationLiveGateSummary(operationResults: operationResults)
 
         #expect(operationResults.count == OperationRegistry.specs.count)
-        #expect(mutating.count == 92)
+        #expect(mutating.count == 93)
         #expect(readOnly.count == 25)   // #965 project.inspect_session is read-only
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)

@@ -163,7 +163,7 @@ struct Issue966RetainedPlanTests {
                 ["names": .array([.object(["target": .string("track"), "name": .string("Good")]),
                                   .object(["target": .string("unknown"), "name": .string("Bad")])])],
                 ["create_track": .bool(true)], ["names": .array([.object([
-                    "target": .string("track"), "name": .string("   ")])])]
+                    "target": .string("track"), "name": .string("")])])]
             ] {
                 var params: [String: Value] = ["snapshot_id": .string(snapshot), "policy": policy(reference: reference)]
                 params.merge(extra) { _, new in new }
@@ -223,6 +223,106 @@ struct Issue966RetainedPlanTests {
                 #expect(failure["error"] as? String == "stale_snapshot")
                 #expect(!failure.keys.contains("plan_id"))
             }
+        }
+    }
+
+    @Test func approvedWhitespaceIsPreservedAndChangesTheCanonicalDigest() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, snapshot, reference) = try await fixture()
+            func parameters(_ name: String) -> [String: Value] {
+                ["snapshot_id": .string(snapshot), "policy": policy(reference: reference),
+                 "names": .array([.object(["target": .string("track"), "name": .string(name)])])]
+            }
+            let unchanged = await plan(parameters("Original"), cache: cache, registry: registry)
+            let unchangedBody = try #require(sharedJSONObject(sharedToolText(unchanged)))
+            let wanted = " Original "
+            let changed = await plan(parameters(wanted), cache: cache, registry: registry)
+            let body = try #require(sharedJSONObject(sharedToolText(changed)))
+            let steps = try #require(body["steps"] as? [[String: Any]])
+            #expect(steps.count == 1)
+            let approved = try #require(body["approved_names"] as? [[String: Any]])
+            #expect(approved.first?["name"] as? String == wanted)
+            let digest = try #require(body["digest"] as? String)
+            let unchangedDigest = try #require(unchangedBody["digest"] as? String)
+            #expect(digest != unchangedDigest)
+            let executable = try #require(body["executable"] as? Bool)
+            #expect(!executable)
+        }
+    }
+
+    @Test func invalidRawLaterNameRefusesAValidEarlierTask() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, snapshot, reference) = try await fixture()
+            let inputPolicy: Value = .object([
+                "schema": .string(ProjectSessionAudit.intentPolicySchema),
+                "targets": .array([
+                    .object(["handle": .string("track"), "track_ref": .string(reference)]),
+                    .object(["handle": .string("later"), "track_ref": .string("trk_unobserved_later")])]),
+                "roles": .array([]), "outputs": .array([])])
+            let result = await plan(["snapshot_id": .string(snapshot), "policy": inputPolicy,
+                "names": .array([
+                    .object(["target": .string("track"), "name": .string("Valid first name")]),
+                    .object(["target": .string("later"), "name": .string(" " + String(repeating: "x", count: 128))])])],
+                cache: cache, registry: registry)
+            let isError = try #require(result.isError)
+            #expect(isError)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(body["error"] as? String == "invalid_params")
+            #expect(!body.keys.contains("plan_id"))
+            #expect(!body.keys.contains("steps"))
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!attempted)
+        }
+    }
+
+    @Test func ninthPlanEvictsOnlyTheOldestPlanWithoutEvictingItsCapture() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, snapshot, _) = try await fixture(clock: RepairPlanTestClock())
+            var plans: [(String, String)] = []
+            for _ in 0...StateCache.sessionCaptureLimit {
+                let result = await plan(["snapshot_id": .string(snapshot), "policy": policy()], cache: cache, registry: registry)
+                let body = try #require(sharedJSONObject(sharedToolText(result)))
+                plans.append((try #require(body["plan_id"] as? String), sharedToolText(result)))
+            }
+            let oldest = try #require(plans.first)
+            let evicted = await plan(["plan_id": .string(oldest.0)], cache: cache, registry: registry)
+            let isError = try #require(evicted.isError)
+            #expect(isError)
+            let next = plans[1]
+            let preserved = await plan(["plan_id": .string(next.0)], cache: cache, registry: registry)
+            #expect(sharedToolText(preserved) == next.1)
+            let inspection = try #require(await cache.retainedInspection(id: snapshot))
+            #expect(inspection.capture.captureID == snapshot)
+        }
+    }
+
+    @Test func oversizedCanonicalPreviewRefusesWithoutEvictingAValidPlan() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, snapshot, reference) = try await fixture()
+            let original = await plan(["snapshot_id": .string(snapshot), "policy": policy()], cache: cache, registry: registry)
+            let body = try #require(sharedJSONObject(sharedToolText(original)))
+            let id = try #require(body["plan_id"] as? String)
+            // A prefix-valid unknown reference is accounted for as blocked. Its original
+            // bytes recur in policy, steps and preview, exercising the plan limit itself.
+            let handle = "track"
+            let largeReference = "trk_" + String(repeating: "r", count: 800_000)
+            let input: [String: Value] = ["snapshot_id": .string(snapshot),
+                "policy": .object(["schema": .string(ProjectSessionAudit.intentPolicySchema),
+                    "targets": .array([.object(["handle": .string(handle), "track_ref": .string(largeReference)])]),
+                    "roles": .array([]), "outputs": .array([])]),
+                "names": .array([.object(["target": .string(handle), "name": .string("Renamed")])])]
+            let encoded = try encodeJSONStrict(Value.object(input), compact: true)
+            #expect(encoded.utf8.count < StateCache.sessionCaptureByteLimit)
+            let refused = await plan(input, cache: cache, registry: registry)
+            let isError = try #require(refused.isError)
+            #expect(isError)
+            let failure = try #require(sharedJSONObject(sharedToolText(refused)))
+            #expect(failure["error"] as? String == "stale_snapshot")
+            #expect(!failure.keys.contains("plan_id"))
+            let attempted = try #require(failure["write_attempted"] as? Bool)
+            #expect(!attempted)
+            let preserved = await plan(["plan_id": .string(id)], cache: cache, registry: registry)
+            #expect(sharedToolText(preserved) == sharedToolText(original))
         }
     }
 

@@ -23,9 +23,8 @@ extension ProjectSessionAudit {
                   case .string(let target)? = fields["target"], handles.contains(target),
                   seen.insert(target).inserted,
                   case .string(let raw)? = fields["name"] else { return nil }
-            let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard TrackDispatcher.renameNameFailure(name) == nil else { return nil }
-            result.append(ApprovedName(target: target, name: name))
+            guard TrackDispatcher.renameNameFailure(raw) == nil else { return nil }
+            result.append(ApprovedName(target: target, name: raw))
         }
         return result.sorted { $0.target < $1.target }
     }
