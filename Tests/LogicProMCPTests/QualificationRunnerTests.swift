@@ -2767,6 +2767,47 @@ struct QualificationRunnerTests {
         #expect(attestation.evidenceManifestSHA256 == SupportBundleBuilder.sha256(manifestData))
     }
 
+    @Test func atlasEvidenceCannotOverwriteExternalEvidence() async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        setenv(flag, "1", 1)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        for (path, reason) in [
+            ("evidence/atlas-drift-diff.json", "External evidence binding mismatch"),
+            ("evidence/./atlas-drift-diff.json", "Invalid evidence path"),
+            ("evidence/ATLAS-DRIFT-DIFF.JSON", "External evidence binding mismatch"),
+        ] {
+            let spec = try #require(OperationRegistry.spec(tool: "logic_system", command: "health"))
+            let fixture = try Fixture(specs: [spec])
+            defer { fixture.remove() }
+            let external = QualificationCase(id: "external/atlas-path-control", status: .failed,
+                tool: "external", command: "observe", traceID: "controlled-external-case", verified: false,
+                evidenceFiles: [path], reason: "controlled failure", binarySHA256: fixture.binarySHA256,
+                axis: .defaultAxis, operationID: "qualification.external-control", verificationKind: .typedDeferral)
+            let evidence = CaseEvidence(schema: "qualification-case-evidence/v3", caseID: external.id,
+                operationID: external.operationID, tool: external.tool, command: external.command,
+                registrySpecFound: false, handlerBound: false, traceStarted: false, traceCompleted: false,
+                failureReason: external.reason, binarySHA256: fixture.binarySHA256, axis: .defaultAxis,
+                status: .failed, verified: false, verificationKind: .typedDeferral)
+            #expect(QualificationRunner.evidence(evidence, binds: external))
+            #expect(QualificationRunner.evidenceShapeIsValid(evidence))
+            let original = try JSONEncoder().encode(evidence)
+            let evidenceURL = fixture.directory.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: evidenceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try original.write(to: evidenceURL)
+            try JSONEncoder().encode(QualificationCaseManifest(schema: "qualification-case-manifest/v1",
+                binarySHA256: fixture.binarySHA256, cases: [external])).write(to: fixture.externalCasesURL)
+            let result = await fixture.runner.run(arguments: ["LogicProMCP", "--qualify",
+                "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
+                "--cases", fixture.externalCasesURL.path])
+            #expect(try Data(contentsOf: evidenceURL) == original, "\(path)")
+            #expect(result.exitCode != 0)
+            #expect(result.stderr.contains(reason), "\(path)")
+        }
+    }
+
     @Test func externalCasesRequireExactManifestBinding() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
         defer { fixture.remove() }
