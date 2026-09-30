@@ -7,11 +7,11 @@ import Testing
 /// Controlled cache fixtures exercise the public dispatcher; no host is contacted.
 @Suite("Retained canonical repair plans", .serialized)
 struct Issue966RetainedPlanTests {
-    private func fixture(clock: RepairPlanTestClock? = nil) async throws -> (StateCache, TargetRegistry, String, String) {
+    private func fixture(clock: RepairPlanTestClock? = nil, initialName: String = "Original") async throws -> (StateCache, TargetRegistry, String, String) {
         let cache = StateCache(sessionCaptureNow: { clock?.now() ?? .now })
         let registry = TargetRegistry()
         await cache.updateProject(ProjectInfo(name: "Fixture", filePath: "/tmp/Fixture.logicx"))
-        await cache.updateTracks([TrackState(id: 0, name: "Original", type: .audio)])
+        await cache.updateTracks([TrackState(id: 0, name: initialName, type: .audio)])
         let result = await ProjectDispatcher.handle(command: "inspect_session", params: [
             "domains": .array([.string("tracks"), .string("strips"), .string("routing")])
         ], router: ChannelRouter(), cache: cache, targetRegistry: registry,
@@ -57,6 +57,50 @@ struct Issue966RetainedPlanTests {
             #expect(steps.isEmpty)
             let digest = try #require(body["digest"] as? String)
             #expect(digest.count == 64)
+        }
+    }
+
+    @Test func byteDistinctUnicodeNamesRemainBlockedTasks() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            for (observed, wanted) in [("\u{00E9}", "e\u{0301}"), ("e\u{0301}", "\u{00E9}")] {
+                let (cache, registry, snapshot, reference) = try await fixture(initialName: observed)
+                let result = await plan([
+                    "snapshot_id": .string(snapshot), "policy": policy(reference: reference),
+                    "names": .array([.object(["target": .string("track"), "name": .string(wanted)])])
+                ], cache: cache, registry: registry)
+                let body = try #require(sharedJSONObject(sharedToolText(result)))
+                let executable = try #require(body["executable"] as? Bool)
+                #expect(!executable)
+                let unchanged = try #require(body["unchanged_tasks"] as? [String])
+                #expect(!unchanged.contains("name_track"))
+                let steps = try #require(body["steps"] as? [[String: Any]])
+                #expect(steps.count == 1)
+                let step = try #require(steps.first)
+                let before = try #require(step["before"] as? [String: Any])
+                let after = try #require(step["after"] as? [String: Any])
+                let beforeName = try #require(before["name"] as? String)
+                let afterName = try #require(after["name"] as? String)
+                #expect(beforeName.utf8.elementsEqual(observed.utf8))
+                #expect(afterName.utf8.elementsEqual(wanted.utf8))
+                let blocked = try #require(step["blocked_reasons"] as? [String])
+                #expect(blocked.contains("naming_preservation_adapter_unavailable"))
+            }
+        }
+    }
+
+    @Test func byteIdenticalUnicodeNameRemainsANoChangeTask() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let observed = "e\u{0301}"
+            let (cache, registry, snapshot, reference) = try await fixture(initialName: observed)
+            let result = await plan([
+                "snapshot_id": .string(snapshot), "policy": policy(reference: reference),
+                "names": .array([.object(["target": .string("track"), "name": .string(observed)])])
+            ], cache: cache, registry: registry)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let steps = try #require(body["steps"] as? [[String: Any]])
+            #expect(steps.isEmpty)
+            let unchanged = try #require(body["unchanged_tasks"] as? [String])
+            #expect(unchanged.contains("name_track"))
         }
     }
 

@@ -99,7 +99,8 @@ extension ProjectSessionAudit {
                 let rows = capture.tracks.filter { $0.id == index }
                 if rows.count == 1, let row = rows.first {
                     before["name"] = .string(row.name)
-                    if row.name == desired.name {
+                    // Only identical UTF-8 bytes represent an unchanged approved name.
+                    if row.name.utf8.elementsEqual(desired.name.utf8) {
                         unchanged.append(.string("name_" + desired.target))
                         continue
                     }
