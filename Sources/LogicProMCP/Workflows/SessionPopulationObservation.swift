@@ -553,6 +553,28 @@ enum SessionPopulationObservation {
         }
     }
 
+    /// Why the rows in `capture` cannot stand for a track's CURRENT name, however complete the
+    /// rail is. Each is a tracks-domain reason `build` gives for the same capture about the rows
+    /// that WERE read. The completeness reasons (hidden tracks, a count as the only end witness,
+    /// collapsed stacks) are about rows that were not read, so they are left out: an identical
+    /// name over a fresh but partial rail is still an observation of that name (#966).
+    static func trackRowReadbackReasons(capture: Capture) -> [Reason] {
+        var reasons: [Reason] = []
+        if capture.before != capture.after { reasons.append(.cacheMovedDuringCapture) }
+        if !capture.before.hasDocument { reasons.append(.noDocument) }
+        if capture.tracksFetchedAt == .distantPast {
+            reasons.append(.noLiveTrackReadYet)
+        } else if capture.endedAt.timeIntervalSince(capture.tracksFetchedAt) > ProjectSessionAudit.staleThresholdSeconds {
+            reasons.append(.trackCacheStale)
+        }
+        if TrackReferenceIssuance.liveInventory(capture.tracks).isEmpty && !capture.tracks.isEmpty {
+            reasons.append(.inspectorSubtreeContamination)
+        }
+        if capture.referencesEnabled && capture.issued == nil { reasons.append(.targetSnapshotStale) }
+        if capture.before.axOccluded { reasons.append(.axOccluded) }
+        return reasons
+    }
+
     // MARK: - Build
 
     /// Pure: the same capture and request always produce the same report.

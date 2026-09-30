@@ -370,6 +370,155 @@ struct Issue966RetainedPlanTests {
         }
     }
 
+    // MARK: - #1073 RF-001: a matching name over an unreadable row is not an unchanged task
+
+    private func inspect(_ domains: [String], cache: StateCache,
+                         registry: TargetRegistry) async throws -> [String: Any] {
+        let result = await ProjectDispatcher.handle(command: "inspect_session", params: [
+            "domains": .array(domains.map(Value.string))
+        ], router: ChannelRouter(), cache: cache, targetRegistry: registry,
+           cleanupAuditFileReader: .unavailable)
+        return try #require(sharedJSONObject(sharedToolText(result)))
+    }
+
+    /// The plan body, whether `name_track` is an unchanged task, and its step when it is not.
+    private func namePlan(snapshot: String, reference: String, name: String, cache: StateCache,
+                          registry: TargetRegistry) async throws -> ([String: Any], Bool, [String: Any]?) {
+        let result = await plan([
+            "snapshot_id": .string(snapshot), "policy": policy(reference: reference),
+            "names": .array([.object(["target": .string("track"), "name": .string(name)])])
+        ], cache: cache, registry: registry)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let unchanged = try #require(body["unchanged_tasks"] as? [String])
+        let steps = try #require(body["steps"] as? [[String: Any]])
+        return (body, unchanged.contains("name_track"), steps.first { $0["id"] as? String == "name_track" })
+    }
+
+    /// The same capture with its track read `seconds` older than its end, under a new identity.
+    private func aged(_ c: SessionPopulationObservation.Capture,
+                      by seconds: TimeInterval) -> SessionPopulationObservation.Capture {
+        SessionPopulationObservation.Capture(
+            before: c.before, after: c.after, projectEpoch: c.projectEpoch, project: c.project,
+            tracks: c.tracks, tracksFetchedAt: c.endedAt.addingTimeInterval(-seconds),
+            channelStrips: c.channelStrips, mixerFetchedAt: c.mixerFetchedAt,
+            fileTrackCount: c.fileTrackCount, projectFileNotBound: c.projectFileNotBound,
+            requestedProjectMatches: c.requestedProjectMatches, referencesEnabled: c.referencesEnabled,
+            targetSnapshot: c.targetSnapshot, issued: c.issued, projectIssuance: c.projectIssuance,
+            beganAt: c.beganAt, endedAt: c.endedAt)
+    }
+
+    private func reportTrackReasons(_ inspection: StateCache.RetainedInspection) throws -> [String] {
+        let report = SessionPopulationObservation.build(request: inspection.request, capture: inspection.capture)
+        let body = try #require(sharedJSONObject(encodeJSONStrict(report, compact: true)))
+        let tracks = try #require(body["tracks"] as? [String: Any])
+        return try #require(tracks["reasons"] as? [String])
+    }
+
+    @Test func aStaleTrackReadMatchingTheApprovedNameStaysABlockedTask() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, snapshot, reference) = try await fixture()
+            // Control: the same name over the fresh read is an unchanged task.
+            let (_, controlUnchanged, controlStep) = try await namePlan(
+                snapshot: snapshot, reference: reference, name: "Original", cache: cache, registry: registry)
+            #expect(controlUnchanged)
+            #expect(controlStep == nil)
+
+            let fresh = try #require(await cache.retainedInspection(id: snapshot))
+            let old = aged(fresh.capture, by: ProjectSessionAudit.staleThresholdSeconds + 1)
+            let staleReport = SessionPopulationObservation.build(request: fresh.request, capture: old)
+            let retained = await cache.retainSessionReport(
+                id: old.captureID, json: try encodeJSONStrict(staleReport, compact: true),
+                capturedEpoch: old.projectEpoch, capturedPath: old.project.filePath,
+                capture: old, request: fresh.request)
+            try #require(retained)
+            // The inspection itself says the rows are stale; the plan must not read past it.
+            let staleInspection = try #require(await cache.retainedInspection(id: old.captureID))
+            #expect(try reportTrackReasons(staleInspection).contains("track_cache_stale"))
+
+            let (body, unchanged, maybeStep) = try await namePlan(
+                snapshot: old.captureID, reference: reference, name: "Original", cache: cache, registry: registry)
+            #expect(!unchanged)
+            let step = try #require(maybeStep)
+            // The seam: the stale row was located and read, so only the reason can block it.
+            let before = try #require(step["before"] as? [String: Any])
+            #expect(before["name"] as? String == "Original")
+            let blocked = try #require(step["blocked_reasons"] as? [String])
+            #expect(blocked.contains("track_cache_stale"))
+            let executable = try #require(body["executable"] as? Bool)
+            #expect(!executable)
+        }
+    }
+
+    @Test func anOccludedTrackReadMatchingTheApprovedNameStaysABlockedTask() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, snapshot, reference) = try await fixture()
+            let (_, controlUnchanged, _) = try await namePlan(
+                snapshot: snapshot, reference: reference, name: "Original", cache: cache, registry: registry)
+            #expect(controlUnchanged)
+
+            await cache.updateAXOccluded(true)
+            let body = try await inspect(["tracks", "strips", "routing"], cache: cache, registry: registry)
+            let occluded = try #require(body["snapshot_id"] as? String)
+            let tracks = try #require(body["tracks"] as? [String: Any])
+            let reasons = try #require(tracks["reasons"] as? [String])
+            #expect(reasons.contains("ax_occluded"))
+            let rows = try #require(tracks["rows"] as? [[String: Any]])
+            let occludedReference = try #require(rows.first?["track_ref"] as? String)
+
+            let (_, unchanged, maybeStep) = try await namePlan(
+                snapshot: occluded, reference: occludedReference, name: "Original", cache: cache, registry: registry)
+            #expect(!unchanged)
+            let step = try #require(maybeStep)
+            let before = try #require(step["before"] as? [String: Any])
+            #expect(before["name"] as? String == "Original")
+            let blocked = try #require(step["blocked_reasons"] as? [String])
+            #expect(blocked.contains("ax_occluded"))
+        }
+    }
+
+    @Test func anUnrequestedTrackDomainMatchingTheApprovedNameStaysABlockedTask() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, snapshot, reference) = try await fixture()
+            let (_, controlUnchanged, _) = try await namePlan(
+                snapshot: snapshot, reference: reference, name: "Original", cache: cache, registry: registry)
+            #expect(controlUnchanged)
+
+            let body = try await inspect(["strips", "routing"], cache: cache, registry: registry)
+            let partial = try #require(body["snapshot_id"] as? String)
+            let (_, unchanged, maybeStep) = try await namePlan(
+                snapshot: partial, reference: reference, name: "Original", cache: cache, registry: registry)
+            #expect(!unchanged)
+            let step = try #require(maybeStep)
+            let before = try #require(step["before"] as? [String: Any])
+            #expect(before["name"] as? String == "Original")
+            let blocked = try #require(step["blocked_reasons"] as? [String])
+            #expect(blocked.contains("tracks_not_requested"))
+        }
+    }
+
+    /// The planner's row reasons are the report's own, so a reason the report adds cannot be one
+    /// the planner reads past without this failing.
+    @Test func thePlannersRowReasonsAreASubsetOfTheReportsTrackReasons() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, snapshot, _) = try await fixture()
+            let fresh = try #require(await cache.retainedInspection(id: snapshot))
+            #expect(SessionPopulationObservation.trackRowReadbackReasons(capture: fresh.capture).isEmpty)
+            let old = StateCache.RetainedInspection(
+                capture: aged(fresh.capture, by: ProjectSessionAudit.staleThresholdSeconds + 1),
+                request: fresh.request, expiresAt: fresh.expiresAt)
+            await cache.updateAXOccluded(true)
+            let body = try await inspect(["tracks", "strips", "routing"], cache: cache, registry: registry)
+            let occludedID = try #require(body["snapshot_id"] as? String)
+            let occluded = try #require(await cache.retainedInspection(id: occludedID))
+            for (inspection, expected) in [(old, "track_cache_stale"), (occluded, "ax_occluded")] {
+                let helper = SessionPopulationObservation.trackRowReadbackReasons(capture: inspection.capture)
+                    .map(\.rawValue)
+                #expect(helper.contains(expected))
+                #expect(Set(helper).isSubset(of: Set(try reportTrackReasons(inspection))))
+            }
+        }
+    }
+
 }
 
 private final class RepairPlanTestClock: @unchecked Sendable {
@@ -377,4 +526,167 @@ private final class RepairPlanTestClock: @unchecked Sendable {
     private var instant = ContinuousClock.now
     func now() -> ContinuousClock.Instant { lock.withLock { instant } }
     func advance(_ duration: Duration) { lock.withLock { instant = instant.advanced(by: duration) } }
+}
+
+/// #1073 RF-002: the planner probe the qualification sweep sends, driven through the dispatcher and
+/// classified by the live gate. Each step is the sweep's own: a cache-only `inspect_session` seed
+/// with no parameters, `probeParams`, the planner, and the independent readback.
+@Suite("Planner qualification probe over a seeded inspection", .serialized)
+struct Issue966PlannerProbeWitnessTests {
+    private func planner() throws -> OperationSpec {
+        try #require(OperationRegistry.specs.first { $0.id == .projectPlanSessionRepair })
+    }
+
+    private func cache(filePath: String?) async -> (StateCache, TargetRegistry) {
+        let cache = StateCache()
+        await cache.updateProject(ProjectInfo(name: "Fixture", filePath: filePath))
+        await cache.updateTracks([TrackState(id: 0, name: "Original", type: .audio)])
+        return (cache, TargetRegistry())
+    }
+
+    private func seed(_ cache: StateCache, _ registry: TargetRegistry) async throws -> String {
+        let result = await ProjectDispatcher.handle(command: "inspect_session", params: [:],
+            router: ChannelRouter(), cache: cache, targetRegistry: registry,
+            cleanupAuditFileReader: .unavailable)
+        let isError = try #require(result.isError)
+        #expect(!isError)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let id = try #require(body["snapshot_id"] as? String)
+        try #require(!id.isEmpty)
+        return id
+    }
+
+    private func probe(_ cache: StateCache, _ registry: TargetRegistry,
+                       handle: String?) async throws -> QualificationOperationResult {
+        let spec = try planner()
+        let raw = QualificationTransport.probeParams(for: spec, traceID: "trace", sessionSnapshotID: handle)
+        let params = try JSONDecoder().decode([String: Value].self,
+                                              from: JSONSerialization.data(withJSONObject: raw))
+        let result = await ProjectDispatcher.handle(command: spec.command, params: params,
+            router: ChannelRouter(), cache: cache, targetRegistry: registry,
+            cleanupAuditFileReader: .unavailable)
+        let text = sharedToolText(result)
+        let typed = sharedJSONObject(text)
+        let source = QualificationTransport.readbackSource(for: spec)
+        let readback = try await ResourceHandlers.read(uri: source, cache: cache, router: ChannelRouter(),
+            targetRegistry: registry, fileReader: .unavailable)
+        return QualificationOperationResult(
+            operationID: spec.id.rawValue, tool: spec.tool.rawValue, command: spec.command,
+            mutability: spec.mutability, requestID: "2", responseData: Data(text.utf8),
+            isError: result.isError, state: typed?["state"] as? String,
+            error: typed?["error"] as? String, hint: typed?["hint"] as? String,
+            writeAttempted: typed?["write_attempted"] as? Bool, readbackSource: source,
+            readbackRequestID: "3", readbackData: Data(sharedResourceText(readback).utf8),
+            verification: spec.verification, deadline: spec.deadline, failureReason: nil)
+    }
+
+    @Test func aSavedProjectsSeededPlannerProbePassesTheLiveGate() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry) = await cache(filePath: "/tmp/Fixture.logicx")
+            // Control, same run: the probe the sweep sent before the seed plans nothing.
+            let unseeded = try await probe(cache, registry, handle: nil)
+            #expect(unseeded.error == "invalid_params")
+            #expect(unseeded.liveGateDisposition == .failed)
+
+            let seeded = try await probe(cache, registry, handle: try await seed(cache, registry))
+            let isError = try #require(seeded.isError)
+            #expect(!isError)
+            let response = try #require(seeded.responseData)
+            let readback = try #require(seeded.readbackData)
+            let oracle = try #require(SemanticOracleTable.byOperationID[.projectPlanSessionRepair])
+            let verdict = try #require(oracle.evaluate(responseData: response, readbackData: readback))
+            #expect(verdict)
+            #expect(seeded.status == .passed)
+            #expect(seeded.liveGateDisposition == .passed)
+            let summary = QualificationLiveGateSummary(operationResults: [unseeded, seeded])
+            #expect(summary.inScopePassed == 1)
+            #expect(summary.failures.map(\.operationID) == [seeded.operationID])
+        }
+    }
+
+    @Test func anUnsavedProjectsPlannerRefusalIsAnEnvironmentalPrerequisite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (unsaved, unsavedRegistry) = await cache(filePath: nil)
+            let refused = try await probe(unsaved, unsavedRegistry, handle: try await seed(unsaved, unsavedRegistry))
+            #expect(refused.error == "stale_snapshot")
+            #expect(refused.hint == ProjectDispatcher.planSessionRepairUnboundProjectHint)
+            #expect(refused.liveGateUnmetEnvironmentalPrecondition
+                == "requires a project saved to a file, so its session inspection is retained")
+            #expect(refused.liveGateDisposition == .environmentalPrecondition)
+            #expect(refused.status != .passed)
+
+            // Controls, same run: a saved project's unknown handle is the generic refusal, which
+            // stays a failure, and so does the unseeded probe over the unsaved project.
+            let (saved, savedRegistry) = await cache(filePath: "/tmp/Fixture.logicx")
+            _ = try await seed(saved, savedRegistry)
+            let unknown = try await probe(saved, savedRegistry, handle: "snap_unknown")
+            #expect(unknown.error == "stale_snapshot")
+            #expect(unknown.hint != ProjectDispatcher.planSessionRepairUnboundProjectHint)
+            #expect(unknown.liveGateDisposition == .failed)
+            let unseeded = try await probe(unsaved, unsavedRegistry, handle: nil)
+            #expect(unseeded.liveGateDisposition == .failed)
+
+            let summary = QualificationLiveGateSummary(operationResults: [refused])
+            #expect(summary.environmentalPreconditions == [.init(operationID: refused.operationID,
+                reason: "requires a project saved to a file, so its session inspection is retained")])
+            #expect(summary.failures.isEmpty)
+            #expect(summary.inScopePassed == 0)
+        }
+    }
+
+    private static let debugExecutableURL = ProcessInfo.processInfo.environment[
+        "LPMCP_TEST_DEBUG_SERVER_EXECUTABLE"
+    ].map { URL(fileURLWithPath: $0) } ?? URL(
+        fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true
+    ).appendingPathComponent(".build/debug/LogicProMCP")
+
+    /// The inner tool text of a recorded `tools/call` response, or the arguments of its request.
+    private static func frameJSON(_ frame: QualificationWireFrame) throws -> [String: Any] {
+        try #require(JSONSerialization.jsonObject(with: Data(frame.payload.utf8)) as? [String: Any])
+    }
+
+    private static func responseText(_ frame: QualificationWireFrame) throws -> [String: Any] {
+        let result = try #require(frameJSON(frame)["result"] as? [String: Any])
+        let content = try #require(result["content"] as? [[String: Any]])
+        let text = try #require(content.first?["text"] as? String)
+        return try #require(sharedJSONObject(text))
+    }
+
+    /// The real server, driven by the sweep itself: its seed, its probe and its classification.
+    /// Where no saved project is open (CI) the planner's answer is the unsaved-project
+    /// prerequisite; over a saved project it is the plan. Anything else is a failure either way.
+    @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: Self.debugExecutableURL.path),
+                   "Requires `swift build` (debug) before driving the real server."),
+          .timeLimit(.minutes(2)))
+    func theSweepSeedsTheRealServersPlannerWithItsOwnInspection() throws {
+        let spec = try planner()
+        let result = try QualificationTransport(requestTimeout: 30, shutdownGrace: 1).drive(.init(
+            executableURL: Self.debugExecutableURL, environment: ProcessInfo.processInfo.environment,
+            expectedOperationCount: OperationRegistry.specs.count, operations: [spec]))
+        let operation = try #require(result.operationResults[spec.id.rawValue])
+
+        // The seam: the seed's exchange is on the wire, and the probe sent the handle it returned.
+        let seed = result.wireFrames.filter { $0.operationID == "session_inspection_seed" }
+        #expect(seed.map(\.direction) == [.request, .response])
+        let seedResponse = try #require(seed.last)
+        let seededID = try #require(Self.responseText(seedResponse)["snapshot_id"] as? String)
+        let probe = result.wireFrames.filter {
+            $0.operationID == "operation_probe.\(spec.id.rawValue)" && $0.direction == .request
+        }
+        #expect(probe.count == 1)
+        let request = try #require(probe.first)
+        let params = try #require(Self.frameJSON(request)["params"] as? [String: Any])
+        let arguments = try #require(params["arguments"] as? [String: Any])
+        let sent = try #require(arguments["params"] as? [String: Any])
+        #expect(sent["snapshot_id"] as? String == seededID)
+
+        switch operation.liveGateDisposition {
+        case .passed:
+            #expect(operation.status == .passed)
+        case .environmentalPrecondition:
+            #expect(operation.hint == ProjectDispatcher.planSessionRepairUnboundProjectHint)
+        default:
+            Issue.record("planner probe was \(operation.liveGateDisposition.rawValue): \(operation.liveGateFailureReason ?? "no reason")")
+        }
+    }
 }

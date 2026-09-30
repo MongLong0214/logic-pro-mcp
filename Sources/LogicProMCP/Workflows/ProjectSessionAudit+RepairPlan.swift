@@ -93,14 +93,17 @@ extension ProjectSessionAudit {
             }
             var blocked = Set<String>()
             if !request.domains.contains(.tracks) { blocked.insert("tracks_not_requested") }
+            blocked.formUnion(SessionPopulationObservation.trackRowReadbackReasons(capture: capture).map(\.rawValue))
             var before: [String: Value] = [:]
             if capture.referencesEnabled, let issued = capture.issued,
                case .located(let index) = locate(target.trackRef, in: issued) {
                 let rows = capture.tracks.filter { $0.id == index }
                 if rows.count == 1, let row = rows.first {
                     before["name"] = .string(row.name)
-                    // Only identical UTF-8 bytes represent an unchanged approved name.
-                    if row.name.utf8.elementsEqual(desired.name.utf8) {
+                    // Only identical UTF-8 bytes represent an unchanged approved name, and only
+                    // over a requested, current read. A stale or unrequested row matching the
+                    // approved name is missing evidence, so it stays a task carrying its reasons.
+                    if blocked.isEmpty, row.name.utf8.elementsEqual(desired.name.utf8) {
                         unchanged.append(.string("name_" + desired.target))
                         continue
                     }

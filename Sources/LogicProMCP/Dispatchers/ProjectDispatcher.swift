@@ -4,6 +4,10 @@ import MCP
 struct ProjectDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicProject)
+    /// `plan_session_repair`'s refusal when the cache holds a project with no bound file path.
+    /// One spelling shared with the qualification classifier that matches it exactly.
+    static let planSessionRepairUnboundProjectHint =
+        "planning reads a retained inspection, and the current project has no bound file path, so none of its inspections is retained; save the project and inspect again"
     /// A stem plan may only reuse a recent, complete project/track/region
     /// snapshot. The scanner is deliberately cache-only: dry-run planning
     /// does not open a requested project merely to manufacture subjects.
@@ -546,6 +550,12 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 return refused("planning requires snapshot_id and an approved policy object")
             }
             guard let inspection = await cache.retainedInspection(id: snapshot) else {
+                // Said apart from the other causes because inspecting again cannot help: nothing
+                // about an unsaved project is retained, and qualification classifies this exact
+                // refusal as a missing prerequisite rather than a product failure.
+                if !StateCache.sessionReportHasBoundPath(await cache.getProject().filePath) {
+                    return refused(Self.planSessionRepairUnboundProjectHint, stale: true)
+                }
                 return refused("snapshot is unknown, expired, evicted or unbound; inspect again to obtain a new handle", stale: true)
             }
             let policy: ProjectSessionAudit.IntentPolicy
