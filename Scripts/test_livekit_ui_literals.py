@@ -371,6 +371,18 @@ _found = scan_verify("runner.py", 'v = ("read"  # 가\n               "") in ste
 case("a literal continued onto the next line is scanned without error",
      _found == [], f"found={_found!r}")
 
+# What blanking leaves alone is not therefore reported: the line patterns read a literal only as its
+# line spells it, so an escaped, split or adjacent-string spelling is invisible to them whether its
+# comparison is an entry or a UI read. This pins that limit, with the plain spelling as the control.
+_found = scan_verify("runner.py", 'v = "read" in step_title\n', _READ)
+case("the control: a plainly spelled UI comparison is reported", [f[1] for f in _found] == ["read"],
+     f"found={_found!r}")
+for _unspelled in ('"re\\x61d"', '("read"\n     "")', '"re" "ad"'):
+    for _operand in ("step", "step_title"):
+        _found = scan_verify("runner.py", f"v = {_unspelled} in {_operand}\n", _READ)
+        case(f"{_unspelled!r} in {_operand} is neither exempted nor reported: the patterns miss it",
+             _found == [], f"found={_found!r}")
+
 # The review's own witness, through the entry point over a copy of the real Scripts/verify, with
 # the copy unmodified in the same run as the control: the copy passes, then fails with one
 # function appended to runner.py, and names that file.

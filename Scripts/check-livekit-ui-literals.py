@@ -204,6 +204,9 @@ PROTOCOL_COMPARISONS = (
 # and subscripts, nothing read from them, nothing longer, nothing joined by an operator. Quote style
 # and redundant parentheses are not part of an expression, so `'read' in step` is the same one.
 # They apply to Python source only; in an AppleScript string or a Swift file they exempt nothing.
+# Blanking follows the line's spelling, and so do the patterns: a literal written with an escape,
+# split over lines or joined from adjacent strings is neither exempted nor reported, as an entry or
+# as a UI comparison, because no pattern reads it as that word in the first place.
 PROTOCOL_EXPRESSIONS = (
     # Two comparisons against a name that was ALREADY normalised or already read as a process name.
     # `evidence.py` strips the non-breaking space on the line above its compare and says so in a
