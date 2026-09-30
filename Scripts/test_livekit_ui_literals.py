@@ -225,6 +225,85 @@ case("an exemption does not silence the other localisable strings on its line",
 
 case("and the exempt literal itself is still exempt",
      _exempt_literal not in {lit.lower() for lit in _lits}, f"found {_lits!r}")
+
+_same_word = ('SCRIPT = \'tell process "Logic Pro" to click button "Logic Pro"\'\n')
+_found = scan(_same_word, {"logic pro": "applicationMenuBarItem"})
+case("a process name does not exempt a UI button with the same spelling",
+     [f[1] for f in _found] == ["Logic Pro"], f"found={_found!r}")
+
+_broad_process = ('SCRIPT = \'every process whose name contains "Logic Pro"; '
+                  'button "Logic Pro"\'\n')
+_found = scan(_broad_process, {"logic pro": "applicationMenuBarItem"})
+case("a process-name predicate exempts only its own literal",
+     [f[1] for f in _found] == ["Logic Pro"], f"found={_found!r}")
+
+# 12. Scripts/verify (ADR-027 P2 PR-1, #1028): a second root, scanned the same way, but keyed
+#     relative to itself rather than by basename -- Scripts/verify/probes.py and
+#     Scripts/verify/live/probes.py would otherwise share one KNOWN key. Both roots are patched
+#     to temporary directories so this case sees only what it wrote, not the real trees.
+_empty_livekit = tempfile.mkdtemp()
+
+
+def scan_verify(filename, body, canonicals):
+    path = os.path.join(tmp, filename)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    original_livekit, original_verify = G.LIVEKIT, G.VERIFY
+    G.LIVEKIT, G.VERIFY = _empty_livekit, tmp
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        return G.offenders(canonicals)
+    finally:
+        G.LIVEKIT, G.VERIFY = original_livekit, original_verify
+        os.remove(path)
+
+
+found = scan_verify("live/protocol_and_ui.py",
+                    'if name == "mute" and ui_title == "Mute": pass\n',
+                    {"mute": "trackMuteButton"})
+case("a verify protocol comparison does not exempt a same-word UI comparison",
+     [f[1] for f in found] == ["Mute"], f"found={found!r}")
+
+found = scan_verify("live/two_ui_matches.py",
+                    'if name == "mute" and ui_title == "Mute" and other_title == "Mute": pass\n',
+                    {"mute": "trackMuteButton"})
+case("two same-word UI comparisons beside a protocol comparison both count",
+     [f[1] for f in found] == ["Mute", "Mute"], f"found={found!r}")
+
+found = scan_verify("live/case.py",
+                    'CLICK = \'click menu bar item "Mixer" of menu bar 1\'\n', CANONICALS)
+case("a Scripts/verify-root file carrying a real UI matcher is a site",
+     [(f[0], f[1]) for f in found] == [("live/case.py", "Mixer")], f"found={found!r}")
+
+# 12a. Scripts/verify/probes.py and Scripts/verify/live/probes.py share a basename; each must be
+#      its own site, or one KNOWN entry would absorb the other's count.
+_twin = os.path.join(tmp, "probes.py")
+with open(_twin, "w", encoding="utf-8") as fh:
+    fh.write('CLICK = \'click menu bar item "Mixer" of menu bar 1\'\n')
+try:
+    found = scan_verify("live/probes.py",
+                        'CLICK = \'click menu bar item "Mixer" of menu bar 1\'\n', CANONICALS)
+finally:
+    os.remove(_twin)
+case("two Scripts/verify files sharing a basename are two sites, keyed relative to Scripts/verify",
+     sorted(f[0] for f in found) == ["live/probes.py", "probes.py"], f"found={found!r}")
+
+# 12b. THE ENTRY POINT over the second root: `LPM_VERIFY_DIR` at a directory carrying a real UI
+#      matcher, with Scripts/livekit left at the real tree so KNOWN is compared with what it
+#      ratchets. The guard must refuse and name the verify-relative site.
+with tempfile.TemporaryDirectory() as _vtmp:
+    os.makedirs(os.path.join(_vtmp, "live"))
+    with open(os.path.join(_vtmp, "live", "ui.py"), "w", encoding="utf-8") as _h:
+        _h.write("X = 'click menu bar item \"Mixer\" of menu bar 1'\n")
+    _vbad = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                         "check-livekit-ui-literals.py")],
+                           capture_output=True, text=True,
+                           env=dict(os.environ, LPM_VERIFY_DIR=_vtmp))
+    case("the entry point refuses a UI literal under the Scripts/verify root",
+         _vbad.returncode == 1 and "live/ui.py" in _vbad.stdout + _vbad.stderr,
+         (_vbad.stdout + _vbad.stderr).strip()[:200])
+
+os.rmdir(_empty_livekit)
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
 sys.exit(1 if failed else 0)

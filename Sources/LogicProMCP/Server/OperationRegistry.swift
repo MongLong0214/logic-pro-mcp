@@ -30,6 +30,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case audioAnalyzeFile = "audio.analyze_file"
     case audioAnalyzeSpectrum = "audio.analyze_spectrum"
     case audioRecommendEQ = "audio.recommend_eq"
+    case audioCompareSpectra = "audio.compare_spectra"
     case systemHealth = "system.health"
     case systemPermissions = "system.permissions"
     case systemRefreshCache = "system.refresh_cache"
@@ -308,6 +309,7 @@ enum OperationRegistry {
             "audio.analyze_file",
             "audio.analyze_spectrum",
             "audio.recommend_eq",
+            "audio.compare_spectra",
         ],
         ToolID.logicSystem.rawValue: [
             "system.health", "system.permissions", "system.refresh_cache",
@@ -367,6 +369,7 @@ enum OperationRegistry {
             "analyze_file",
             "analyze_spectrum",
             "recommend_eq",
+            "compare_spectra",
         ],
         ToolID.logicSystem.rawValue: [
             "health", "permissions", "refresh_cache", "export_support_bundle", "help",
@@ -651,6 +654,7 @@ enum OperationRegistry {
         ),
         (.audioAnalyzeSpectrum, "analyze_spectrum", Mutability.readOnly, ["path"]),
         (.audioRecommendEQ, "recommend_eq", Mutability.readOnly, ["path", "minimum_level"]),
+        (.audioCompareSpectra, "compare_spectra", Mutability.readOnly, ["before_path", "after_path", "output_root"]),
     ] as [(OperationID, String, Mutability, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,

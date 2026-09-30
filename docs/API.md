@@ -257,6 +257,8 @@ Destructive or file-writing paths require confirmation. `save_as` verifies the r
 
 `analyze_file` inspects an existing audio artifact and reports duration, level, silence ratio, and verification status. It does not mutate Logic.
 
+`compare_spectra` takes `before_path`, `after_path` (absolute audio paths), and optional `output_root` (allowlist root). It uses the existing bounded native-format spectral decoder for both files, requires matching sample rate, channel interpretation and analysis policy, and binds each analysis to a SHA-256 of its file bytes. A changing, unsafe, incomplete or incompatible input is refused. Each band reports raw `after - before` energy in dB; unmeasured bands and values at the analysis floor have no `deltaDb` and carry `unavailableReason`. `complete` is true only when every band has an uncensored measured difference. The response includes both analyses and explicit limitations, including unequal temporal coverage where applicable. It does not time-align, normalize level, judge musical quality, apply EQ, or mutate files or Logic.
+
 ### `logic_system`
 
 Common commands: `health`, `permissions`, `refresh_cache`, `export_support_bundle`, `setup_arm_key`, `list_recent_traces`, `get_trace`, `clear_traces`, `saga_preflight`, `saga_execute`, `saga_status`, `saga_cancel`, `help`.

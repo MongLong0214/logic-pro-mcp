@@ -1,5 +1,6 @@
 import Accelerate
 import AVFoundation
+import CryptoKit
 import Foundation
 
 /// ADR-012 rollout-1 DSP core (#300). Read-only spectral feature extraction over safe audio
@@ -13,7 +14,7 @@ enum AudioFeatureExtractionEngine {
     /// Pinned DSP configuration (ADR-012 pinned DSP configuration). Mutable only to let the determinism harness
     /// perturb it and prove the harness would catch a real change; production always uses
     /// `.default`.
-    struct Config: Equatable, Sendable {
+    struct Config: Codable, Equatable, Sendable {
         var bandsPerOctave: Int = 6
         var fMinHz: Double = 20
         var fMaxHz: Double = 20_000
@@ -36,6 +37,7 @@ enum AudioFeatureExtractionEngine {
         case decode(String)
         // The path stopped resolving to the descriptor's bound inode between open and use.
         case pathIdentityChanged
+        case contentChanged
     }
 
     /// Injectable path-identity probe so the descriptor↔path binding check is testable
@@ -199,7 +201,8 @@ enum AudioFeatureExtractionEngine {
             analysisRef: analysisRef,
             artifactFingerprint: artifactFingerprint,
             config: config,
-            grid: grid
+            grid: grid,
+            removesDC: removeDC
         )
     }
 
@@ -239,7 +242,8 @@ enum AudioFeatureExtractionEngine {
         analysisRef: String,
         artifactFingerprint: String,
         config: Config,
-        grid: BandGrid
+        grid: BandGrid,
+        removesDC: Bool = true
     ) -> SpectralAnalysisResult {
         let mode = ChannelMode(channelCount: channelCount)
         let denom = Double(max(channelCount, 1))
@@ -286,7 +290,8 @@ enum AudioFeatureExtractionEngine {
             windowsAnalyzed: windowsAnalyzed,
             channelMode: mode,
             spectralCentroidHz: centroid,
-            frequencyPeaks: peaks
+            frequencyPeaks: peaks,
+            analysisPolicy: SpectralAnalysisPolicy(config: config, removesDC: removesDC)
         )
     }
 
@@ -300,7 +305,8 @@ enum AudioFeatureExtractionEngine {
         runtime: AudioAnalyzer.Runtime = .production,
         config: Config = .default,
         chunkFrames: Int = 64_000,
-        identityProbe: IdentityProbe = .production
+        identityProbe: IdentityProbe = .production,
+        computeArtifactFingerprint: Bool = false
     ) throws -> SpectralAnalysisResult {
         // Reuse the SHIPPED path-safety model (absolute-only, traversal/iCloud rejected,
         // symlink-resolved-then-containment). Rethrows AudioAnalyzer.AnalysisError.
@@ -310,7 +316,11 @@ enum AudioFeatureExtractionEngine {
         // Bind file identity across the check→use gap: open once, require a regular file,
         // and hold the descriptor (O_NOFOLLOW guards a swapped final component) so the inode
         // cannot be replaced from under the decoder.
-        let fd = open(resolved, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        // The content-bound route must reject symlinks in every component of the
+        // already-resolved path, including a parent replaced after validation.
+        let noFollow = computeArtifactFingerprint ? O_NOFOLLOW_ANY : O_NOFOLLOW
+        let openPath = computeArtifactFingerprint ? try comparisonOpenPath(resolved) : resolved
+        let fd = open(openPath, O_RDONLY | noFollow | O_NONBLOCK)
         guard fd >= 0 else {
             throw FeatureExtractionError.unreadable(String(cString: strerror(errno)))
         }
@@ -335,10 +345,18 @@ enum AudioFeatureExtractionEngine {
             )
         }
         let fdIdentity = (dev: Int64(fdInfo.st_dev), ino: UInt64(fdInfo.st_ino))
+        // Hash the held regular-file descriptor, not a caller-supplied label. Read only its
+        // initial size; a growing file cannot extend the work indefinitely. Metadata is
+        // checked again after the decoder's two passes before publishing the binding.
+        let fingerprint = computeArtifactFingerprint
+            ? try fingerprint(fd: fd, info: fdInfo) : artifactFingerprint
 
         let file: AVAudioFile
         do {
-            file = try AVAudioFile(forReading: url)
+            // For content-bound comparisons the decoder opens the held descriptor itself.
+            // Reopening the pathname would allow a replacement between hash and decode.
+            let decodeURL = computeArtifactFingerprint ? URL(fileURLWithPath: "/dev/fd/\(fd)") : url
+            file = try AVAudioFile(forReading: decodeURL)
         } catch {
             throw FeatureExtractionError.decode(error.localizedDescription)
         }
@@ -389,12 +407,12 @@ enum AudioFeatureExtractionEngine {
             return out
         }
 
-        return analyzeStreaming(
+        let result = analyzeStreaming(
             declaredFrameLength: declared,
             sampleRate: sampleRate,
             channelCount: channelCount,
             analysisRef: analysisRef,
-            artifactFingerprint: artifactFingerprint,
+            artifactFingerprint: fingerprint,
             config: config,
             chunkFrames: chunkFrames,
             maxDurationSeconds: policy.maximumInputDurationSeconds,
@@ -402,6 +420,59 @@ enum AudioFeatureExtractionEngine {
             reset: reset,
             nextChunk: nextChunk
         )
+        if computeArtifactFingerprint {
+            try requireUnchanged(fd: fd, original: fdInfo)
+            let finalIdentity = try identityProbe.statIdentity(resolved)
+            guard finalIdentity.dev == fdIdentity.dev, finalIdentity.ino == fdIdentity.ino else {
+                throw FeatureExtractionError.pathIdentityChanged
+            }
+            try requireUnchanged(fd: fd, original: fdInfo)
+        }
+        return result
+    }
+
+    private static func comparisonOpenPath(_ resolved: String) throws -> String {
+        // Foundation standardizes /private/var back to /var, which is itself a
+        // symlink. Recover the physical spelling without accepting a different
+        // logical target: a parent substituted after validation must still fail.
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        guard realpath(resolved, &buffer) != nil else {
+            throw FeatureExtractionError.unreadable("could not resolve the validated input")
+        }
+        let physical = String(cString: buffer)
+        guard URL(fileURLWithPath: physical).standardizedFileURL.path == resolved else {
+            throw FeatureExtractionError.pathIdentityChanged
+        }
+        return physical
+    }
+
+    private static func requireUnchanged(fd: Int32, original: stat) throws {
+        var current = stat()
+        guard fstat(fd, &current) == 0 else { throw FeatureExtractionError.unreadable("fstat failed") }
+        guard current.st_dev == original.st_dev, current.st_ino == original.st_ino,
+              current.st_size == original.st_size,
+              current.st_mtimespec.tv_sec == original.st_mtimespec.tv_sec,
+              current.st_mtimespec.tv_nsec == original.st_mtimespec.tv_nsec,
+              current.st_ctimespec.tv_sec == original.st_ctimespec.tv_sec,
+              current.st_ctimespec.tv_nsec == original.st_ctimespec.tv_nsec else {
+            throw FeatureExtractionError.contentChanged
+        }
+    }
+
+    private static func fingerprint(fd: Int32, info: stat) throws -> String {
+        var hash = SHA256()
+        var buffer = [UInt8](repeating: 0, count: 65_536)
+        var offset: Int64 = 0
+        while offset < info.st_size {
+            let wanted = Int(min(Int64(buffer.count), Int64(info.st_size) - offset))
+            let count = buffer.withUnsafeMutableBytes { pread(fd, $0.baseAddress, wanted, off_t(offset)) }
+            if count < 0, errno == EINTR { continue }
+            guard count > 0 else { throw FeatureExtractionError.contentChanged }
+            hash.update(data: Data(buffer.prefix(count)))
+            offset += Int64(count)
+        }
+        try requireUnchanged(fd: fd, original: info)
+        return "sha256:" + hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: - Bounded streaming core (two-pass; O(window+bands) memory)

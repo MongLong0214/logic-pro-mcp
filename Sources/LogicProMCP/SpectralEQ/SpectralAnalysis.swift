@@ -102,6 +102,7 @@ struct SpectralAnalysisResult: Codable, Equatable, Sendable {
     let durationSeconds: Double
     let windowsAnalyzed: Int
     let channelMode: ChannelMode
+    let analysisPolicy: SpectralAnalysisPolicy?
     let complete: Bool
     let partialReason: String?
     let bands: [SpectralBand]
@@ -137,7 +138,8 @@ struct SpectralAnalysisResult: Codable, Equatable, Sendable {
         windowsAnalyzed: Int = 0,
         channelMode: ChannelMode = .mono,
         spectralCentroidHz: Double? = nil,
-        frequencyPeaks: [AudioAnalyzer.FrequencyPeak] = []
+        frequencyPeaks: [AudioAnalyzer.FrequencyPeak] = [],
+        analysisPolicy: SpectralAnalysisPolicy? = nil
     ) {
         self.analysisRef = analysisRef
         self.artifactFingerprint = artifactFingerprint
@@ -146,6 +148,7 @@ struct SpectralAnalysisResult: Codable, Equatable, Sendable {
         self.durationSeconds = durationSeconds
         self.windowsAnalyzed = windowsAnalyzed
         self.channelMode = channelMode
+        self.analysisPolicy = analysisPolicy
         self.bands = bands
         self.resonances = resonances
         self.spectralCentroidHz = spectralCentroidHz
@@ -187,7 +190,8 @@ struct SpectralAnalysisResult: Codable, Equatable, Sendable {
             windowsAnalyzed: try values.decodeIfPresent(Int.self, forKey: .windowsAnalyzed) ?? 0,
             channelMode: try values.decodeIfPresent(ChannelMode.self, forKey: .channelMode) ?? .mono,
             spectralCentroidHz: try values.decodeIfPresent(Double.self, forKey: .spectralCentroidHz),
-            frequencyPeaks: try values.decodeIfPresent([AudioAnalyzer.FrequencyPeak].self, forKey: .frequencyPeaks) ?? []
+            frequencyPeaks: try values.decodeIfPresent([AudioAnalyzer.FrequencyPeak].self, forKey: .frequencyPeaks) ?? [],
+            analysisPolicy: try values.decodeIfPresent(SpectralAnalysisPolicy.self, forKey: .analysisPolicy)
         )
     }
 }

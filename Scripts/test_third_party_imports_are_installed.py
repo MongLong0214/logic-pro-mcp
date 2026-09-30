@@ -138,6 +138,43 @@ class TheGuardOverConstructedRoots(unittest.TestCase):
         self.assertIn("requests", out)
         self.assertIn("Scripts/helper.py", out)
 
+    def test_a_namespace_submodule_is_local_without_a_package_marker(self):
+        self.root.write("Scripts/test_plain.py", "from helper.predicates import value\n")
+        self.root.write("Scripts/helper/predicates.py", "import json\nvalue = 1\n")
+        imported = subprocess.run(
+            [sys.executable, os.path.join(self.root.path, "Scripts/test_plain.py")],
+            capture_output=True, text=True)
+        self.assertEqual(imported.returncode, 0, imported.stderr)
+        code, out = self.root.run()
+        self.assertEqual(code, 0, out)
+
+    def test_a_dependency_in_a_namespace_submodule_still_counts(self):
+        self.root.write("Scripts/test_plain.py", "from helper.predicates import value\n")
+        self.root.write("Scripts/helper/predicates.py", "import requests\nvalue = 1\n")
+        code, out = self.root.run()
+        self.assertEqual(code, 1, out)
+        self.assertIn("requests", out)
+        self.assertIn("Scripts/helper/predicates.py", out)
+        self.root.write_workflow(workflow("requests"))
+        self.assertEqual(self.root.run()[0], 0)
+
+    def test_a_submodule_import_also_scans_package_initialization(self):
+        self.root.write("Scripts/test_plain.py", "import helper.predicates\n")
+        self.root.write("Scripts/helper/__init__.py", "import requests\n")
+        self.root.write("Scripts/helper/predicates.py", "import json\n")
+        code, out = self.root.run()
+        self.assertEqual(code, 1, out)
+        self.assertIn("requests", out)
+        self.assertIn("Scripts/helper/__init__.py", out)
+
+    def test_from_a_namespace_imports_its_named_child(self):
+        self.root.write("Scripts/test_plain.py", "from helper import predicates\n")
+        self.root.write("Scripts/helper/predicates.py", "import requests\n")
+        code, out = self.root.run()
+        self.assertEqual(code, 1, out)
+        self.assertIn("requests", out)
+        self.assertIn("Scripts/helper/predicates.py", out)
+
     def test_a_file_the_runner_does_not_drive_is_not_scanned(self):
         # `Scripts/livekit/live_*.py` are run by hand against a live Logic, never by the runner.
         # Counting them would demand PyObjC in CI for a file CI never launches.

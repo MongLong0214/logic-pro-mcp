@@ -76,6 +76,11 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #: unconditionally stays green; Scripts/mutation-sweep-guard-tests.py measured exactly
 #: that for this guard on 2026-09-18.
 LIVEKIT = os.environ.get("LPM_LIVEKIT_DIR") or os.path.join(REPO, "Scripts", "livekit")
+#: A second root (ADR-027 P2 PR-1, #1028): `Scripts/verify` drives the real application exactly as
+#: Scripts/livekit does, so the same rule applies to it. Keyed relative to this root rather than by
+#: basename -- `Scripts/verify/probes.py` and `Scripts/verify/live/probes.py` would otherwise share
+#: one KNOWN key.
+VERIFY = os.environ.get("LPM_VERIFY_DIR") or os.path.join(REPO, "Scripts", "verify")
 
 # Sites that existed when this rule was written, keyed by (file, literal) rather than by line, so
 # editing a file elsewhere does not silently re-arm or disarm an entry. This list may only shrink.
@@ -186,6 +191,20 @@ PROTOCOL_COMPARISONS = (
     # locales) joined the policy; the compare did not change. Keyed by the subscript so a
     # `whose name contains "output"` on the same line would still be reported.
     ('["kind"] == "output"', "output"),
+    # Scripts/verify protocol vocabulary (ADR-027 P2 PR-1, #1028): dict keys, a lifecycle event
+    # name, a runner branch on the step shape, and the walk's own flag name -- not a string typed
+    # at Logic. Measured 2026-09-30 at b2fb4ff4 by pointing the scan at Scripts/verify: 13 hits
+    # across 8 files, all these ten words, none a UI matcher.
+    ('flag == "solo"', "solo"),  # live/probes.py: the solo-implies-mute comparison
+    ('name == "mute"', "mute"),  # live/probes.py: same line as the entry above
+    ('"arm" in row["value_errors"]', "arm"),  # live/spec_probes.py: which flag's read error
+    ('"tracks" in observation', "tracks"),  # live/tests/test_controls_known.py: probe shape switch
+    ('e["dir"] == "send"', "send"),  # live/tests/test_mcp.py: transcript message direction
+    ('"read" in step', "read"),  # engine.py and runner.py: a step's own kind
+    ('"delete" in op', "delete"),  # selftest.py: a fixture-mutation op's own kind
+    ('"move" in op', "move"),  # selftest.py: a fixture-mutation op's own kind
+    ('case["cmd"][0] == "record"', "record"),  # selftest.py: a self-test case's own command
+    ('e[0] == "start"', "start"),  # selftest.py: a lifecycle event's own kind
 )
 ANY_LITERAL = re.compile(r'"([^"\\\n]{1,80})"')
 
@@ -242,17 +261,33 @@ def _hits(text, known_canonicals, patterns):
         # string sharing that line. Found 2026-09-15 by adding a marker for `tell process "Logic
         # Pro"`: three real `'Save'` findings vanished with it. A line-wide skip is an exemption
         # that grows on its own.
-        exempt = {lit for marker, lit in PROTOCOL_COMPARISONS if marker in line}
+        exempt_spans = set()
+        for marker, lit in PROTOCOL_COMPARISONS:
+            quoted = f'"{lit}"'
+            literal_offset = marker.lower().rfind(quoted) + 1
+            for marker_match in re.finditer(re.escape(marker), line):
+                if literal_offset:
+                    start = marker_match.start() + literal_offset
+                    exempt_spans.add((start, start + len(lit)))
+                elif marker == 'every process whose ':
+                    # This marker ends before the process name. Only its name predicate is exempt.
+                    process_name = re.match(
+                        r'name\s+(?:is|contains|starts with|ends with)\s+"(Logic Pro)"',
+                        line[marker_match.end():])
+                    if process_name:
+                        start = marker_match.end() + process_name.start(1)
+                        exempt_spans.add((start, start + len(process_name.group(1))))
         for pattern in patterns:
             for match in pattern.finditer(line):
                 literal = match.group("lit") if "lit" in (match.re.groupindex or {}) else match.group(1)
-                if literal.strip().lower() in exempt:
+                literal_span = match.span("lit") if "lit" in (match.re.groupindex or {}) \
+                    else match.span(1)
+                if literal_span in exempt_spans:
                     continue
                 name = known_canonicals.get(literal.strip().lower())
                 if not name:
                     continue
-                span = (lineno, match.start("lit") if "lit" in (match.re.groupindex or {})
-                        else match.start(1), literal)
+                span = (lineno, literal_span[0], literal)
                 if span in seen_spans:
                     continue
                 seen_spans.add(span)
@@ -260,22 +295,28 @@ def _hits(text, known_canonicals, patterns):
     return found
 
 
-def offenders(known_canonicals):
+def _scan_root(root, key, known_canonicals, swift_recursive=False):
+    """found entries `(key(path), literal, lineno, policy_name)` for every `*.py` and `*.swift`
+    file under `root`. `key` turns a path into the identity `KNOWN` is keyed on -- a basename for
+    Scripts/livekit, a root-relative path for Scripts/verify, where two files can share a
+    basename. `swift_recursive` defaults False so Scripts/livekit's swift scan is exactly the
+    top-level-only glob it always was; Scripts/verify has no swift today, and the outcome this
+    root was added for is `Scripts/verify/**`, so it opts into `**`."""
     found = []
-    for path in sorted(glob.glob(os.path.join(LIVEKIT, "**", "*.py"), recursive=True)):
-        base = os.path.basename(path)
+    for path in sorted(glob.glob(os.path.join(root, "**", "*.py"), recursive=True)):
+        site = key(path)
         source = open(path, encoding="utf-8", errors="replace").read()
         try:
             tree = ast.parse(source)
         except SyntaxError:
-            print(f"  {base}: does not parse — not scanned")
+            print(f"  {site}: does not parse — not scanned")
             continue
         skip = _docstring_nodes(tree)
         # Pass 1: AppleScript, which lives inside string constants.
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skip:
                 for literal, name in _hits(node.value, known_canonicals, APPLESCRIPT_PREDICATES):
-                    found.append((base, literal, getattr(node, "lineno", 0), name))
+                    found.append((site, literal, getattr(node, "lineno", 0), name))
         # Pass 2: Python comparisons, which live in the source. Docstrings are removed so a
         # paragraph quoting `help.startswith("Tracks")` is prose, not a matcher.
         prose = [n.value for n in ast.walk(tree)
@@ -285,17 +326,25 @@ def offenders(known_canonicals):
             code = code.replace(doc, "")
         for lineno, line in enumerate(code.splitlines(), 1):
             for literal, name in _hits(line, known_canonicals, PYTHON_PREDICATES):
-                found.append((base, literal, lineno, name))
+                found.append((site, literal, lineno, name))
     # Swift drivers have no docstrings; a leading `//` is the only prose marker they use.
-    for path in sorted(glob.glob(os.path.join(LIVEKIT, "*.swift"))):
-        base = os.path.basename(path)
+    swift_glob = os.path.join(root, "**", "*.swift") if swift_recursive else os.path.join(root, "*.swift")
+    for path in sorted(glob.glob(swift_glob, recursive=swift_recursive)):
+        site = key(path)
         for lineno, line in enumerate(open(path, encoding="utf-8", errors="replace"), 1):
             for literal, name in _hits(line, known_canonicals,
                                        APPLESCRIPT_PREDICATES + PYTHON_PREDICATES):
-                found.append((base, literal, lineno, name))
-    # Every occurrence is returned. `main` aggregates by (file, literal) and compares the COUNT
+                found.append((site, literal, lineno, name))
+    return found
+
+
+def offenders(known_canonicals):
+    # Every occurrence is returned. `main` aggregates by (site, literal) and compares the COUNT
     # against `KNOWN`, which is what stops an already-listed site from absorbing further copies.
     # Deduplicating here — the earlier shape — threw away exactly the number the ratchet needs.
+    found = _scan_root(LIVEKIT, os.path.basename, known_canonicals)
+    found += _scan_root(VERIFY, lambda path: os.path.relpath(path, VERIFY), known_canonicals,
+                        swift_recursive=True)
     return found
 
 

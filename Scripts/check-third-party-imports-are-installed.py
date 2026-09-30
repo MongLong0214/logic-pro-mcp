@@ -71,25 +71,32 @@ def discovered():
 
 
 def _unconditional_imports(tree):
-    """Module roots imported at module level, outside any function, class, `try` or `if`."""
+    """Modules imported at module level, outside any function, class, `try` or `if`."""
     out = []
     for node in tree.body:
         if isinstance(node, ast.Import):
-            out += [alias.name.split(".")[0] for alias in node.names]
+            out += [alias.name for alias in node.names]
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            out.append(node.module.split(".")[0])
+            children = [node.module + "." + alias.name for alias in node.names
+                        if _local_modules(node.module + "." + alias.name)]
+            if _local_modules(node.module) or not children:
+                out.append(node.module)
+            out.extend(children)
     return out
 
 
-def _local_module(name):
-    """The file a repository-local import resolves to, or None."""
-    for candidate in (os.path.join(REPO, "Scripts", name + ".py"),
-                      os.path.join(REPO, "Scripts", name, "__init__.py"),
-                      os.path.join(REPO, "Scripts", "livekit", name + ".py"),
-                      # The verifier's tests put Scripts/verify on sys.path and import `live`.
-                      os.path.join(REPO, "Scripts", "verify", name, "__init__.py")):
-        if os.path.exists(candidate):
-            return candidate
+def _local_modules(name):
+    """The local module and package initializers a qualified import executes, or None."""
+    parts = name.split(".")
+    for root in (os.path.join(REPO, "Scripts"),
+                 os.path.join(REPO, "Scripts", "livekit"),
+                 os.path.join(REPO, "Scripts", "verify")):
+        path = os.path.join(root, *parts)
+        for candidate in (os.path.join(path, "__init__.py"), path + ".py"):
+            if os.path.isfile(candidate):
+                parents = [os.path.join(root, *parts[:i], "__init__.py")
+                           for i in range(1, len(parts))]
+                return [p for p in parents if os.path.isfile(p)] + [candidate]
     return None
 
 
@@ -110,13 +117,14 @@ def required(entry_points):
             wanted.setdefault("<unparsed>", []).append(path)
             continue
         for name in _unconditional_imports(tree):
-            if name in stdlib:
+            root_name = name.split(".")[0]
+            if root_name in stdlib:
                 continue
-            local = _local_module(name)
+            local = _local_modules(name)
             if local:
-                queue.append(local)
+                queue.extend(local)
                 continue
-            wanted.setdefault(name, []).append(path)
+            wanted.setdefault(root_name, []).append(path)
     return wanted
 
 
