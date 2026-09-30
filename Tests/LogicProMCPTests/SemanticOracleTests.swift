@@ -422,8 +422,8 @@ struct SemanticOracleCensusTests {
     /// of its names disagree with the registry: `edit.select_all` is registered
     /// MUTATING (so it is out), and `system.clear_traces` is registered
     /// read-only (so it is in). Both were reconciled toward the registry.
-    @Test func reconciledReadOnlySurfaceIsTwentyThreeOperations() {
-        #expect(SemanticOracleTable.coveredSpecIDs.count == 23)
+    @Test func reconciledReadOnlySurfaceIsTwentyFourOperations() {
+        #expect(SemanticOracleTable.coveredSpecIDs.count == 24)
         #expect(!SemanticOracleTable.coveredSpecIDs.contains(.editSelectAll))
         #expect(SemanticOracleTable.coveredSpecIDs.contains(.systemClearTraces))
 
@@ -1457,17 +1457,17 @@ struct SemanticOracleB0CensusTests {
     /// The read-only census is a STANDING invariant across phases. B0 added
     /// framework only; B1/B2/B3/B4 add mutating increments WITHOUT perturbing the
     /// fully-covered read-only surface. #965 added one read-only operation
-    /// (project.inspect_session), so the read-only census is exactly 23,
-    /// and the table's total is the read-only 23 plus the pinned B1 + B2 + B3 + B4
+    /// (project.inspect_session), so the read-only census is exactly 24,
+    /// and the table's total is the read-only 24 plus the pinned B1 + B2 + B3 + B4
     /// increments — a premature or miscounted mutating oracle fails here.
-    @Test func readOnlyCensusStaysTwentyThreeAndMutatingIncrementsAreAdditive() {
-        #expect(SemanticOracleTable.coveredSpecIDs.count == 23)
+    @Test func readOnlyCensusStaysTwentyFourAndMutatingIncrementsAreAdditive() {
+        #expect(SemanticOracleTable.coveredSpecIDs.count == 24)
         let readOnlyOracles = Set(SemanticOracleTable.byOperationID.keys)
             .intersection(SemanticOracleTable.coveredSpecIDs)
-        #expect(readOnlyOracles.count == 23)
+        #expect(readOnlyOracles.count == 24)
         #expect(
             SemanticOracleTable.all.count
-                == 23
+                == 24
                 + SemanticOracleTable.phaseB1MutatingOperationIDs.count
                 + SemanticOracleTable.phaseB2MutatingOperationIDs.count
                 + SemanticOracleTable.phaseB3MutatingOperationIDs.count

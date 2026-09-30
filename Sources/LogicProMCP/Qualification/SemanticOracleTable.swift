@@ -528,6 +528,7 @@ enum SemanticOracleTable {
         projectExportPlan,
         projectAudit,
         projectInspectSession,
+        projectPlanSessionRepair,
         projectCleanupPlan,
         audioAnalyzeFile,
         audioAnalyzeSpectrum,
@@ -965,6 +966,18 @@ enum SemanticOracleTable {
     // must be a real boolean and `tracks.coverage` one of the four coverage
     // states — a report that omits either has stopped saying what it could not
     // observe.
+    // Shape checks for a read-only draft, not qualification of a future write adapter.
+    static let projectPlanSessionRepair = OperationOracle(
+        .projectPlanSessionRepair,
+        strength: .shapeAndDomain,
+        constraints: [
+            .valueEquals(key: "schema", expected: .string(ProjectSessionAudit.sessionRepairPlanSchema)),
+            .valueEquals(key: "read_only", expected: .bool(true)),
+            .valueEquals(key: "requires_plan_confirmation", expected: .bool(true)),
+            .typedField(key: "executable", type: .bool),
+        ]
+    )
+
     static let projectInspectSession = OperationOracle(
         .projectInspectSession,
         strength: .shapeAndDomain,

@@ -543,7 +543,7 @@ enum WorkflowSkillCatalog {
             "new", "open", "save", "save_as", "close", "bounce",
             "is_running", "get_regions",
             "export_plan", "export_run", "export_resume",
-            "audit", "cleanup_plan", "inspect_session", "cleanup_apply", "launch", "quit",
+            "audit", "cleanup_plan", "inspect_session", "plan_session_repair", "cleanup_apply", "launch", "quit",
         ],
         "logic_system": [
             "health", "permissions", "refresh_cache", "export_support_bundle", "help",

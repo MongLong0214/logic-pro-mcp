@@ -592,6 +592,7 @@ struct OperationRegistryTests {
         ("project.export_resume", "export_resume", .mutating, .long, .readbackRequired),
         ("project.audit", "audit", .readOnly, .short, .none),
         ("project.cleanup_plan", "cleanup_plan", .readOnly, .short, .none),
+        ("project.plan_session_repair", "plan_session_repair", .readOnly, .short, .none),
         ("project.inspect_session", "inspect_session", .readOnly, .short, .none),
         ("project.cleanup_apply", "cleanup_apply", .mutating, .medium, .readbackRequired),
     ]
@@ -678,7 +679,7 @@ struct OperationRegistryTests {
 
     @Test("project deadlines exactly match registry short medium and long tiers")
     func projectDeadlineParity() {
-        #expect(Self.projectCommands.filter { $0.deadline == .short }.count == 7)
+        #expect(Self.projectCommands.filter { $0.deadline == .short }.count == 8)
         #expect(Self.projectCommands.filter { $0.deadline == .medium }.count == 5)
         #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 5)
 

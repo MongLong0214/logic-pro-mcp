@@ -1934,7 +1934,7 @@ struct QualificationRunnerTests {
 
         #expect(operationResults.count == OperationRegistry.specs.count)
         #expect(mutating.count == 92)
-        #expect(readOnly.count == 24)   // #965 project.inspect_session is read-only
+        #expect(readOnly.count == 25)   // #965 project.inspect_session is read-only
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
         // The exactness is right and stays. What was wrong is that it reported a

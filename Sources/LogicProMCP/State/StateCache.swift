@@ -15,7 +15,25 @@ actor StateCache {
         let projectEpoch: UInt64
         let projectPath: String?
         let hasDocument: Bool
+        let capture: SessionPopulationObservation.Capture?
+        let request: SessionPopulationObservation.Request?
         let expiresAt: ContinuousClock.Instant
+    }
+    struct RetainedInspection: Sendable {
+        let capture: SessionPopulationObservation.Capture
+        let request: SessionPopulationObservation.Request
+        let expiresAt: ContinuousClock.Instant
+    }
+    private struct RetainedRepairPlan: Sendable {
+        let plan: ProjectSessionAudit.CanonicalRepairPlan
+        let snapshotID: String
+        let expiresAt: ContinuousClock.Instant
+    }
+    private var repairPlans: [RetainedRepairPlan] = []
+    private struct InspectionContent: Encodable {
+        let project: ProjectInfo
+        let tracks: [TrackState]
+        let strips: [ChannelStripState]
     }
     private var sessionReports: [RetainedSessionReport] = []
     private let sessionCaptureNow: @Sendable () -> ContinuousClock.Instant
@@ -30,16 +48,27 @@ actor StateCache {
     }
 
     func retainSessionReport(id: String, json: String,
-                             capturedEpoch: UInt64, capturedPath: String?) -> Bool {
+                             capturedEpoch: UInt64, capturedPath: String?,
+                             capture: SessionPopulationObservation.Capture? = nil,
+                             request: SessionPopulationObservation.Request? = nil) -> Bool {
         let now = sessionCaptureNow()
         sessionReports.removeAll { $0.expiresAt <= now || $0.projectEpoch != projectEpoch }
         guard Self.sessionReportHasBoundPath(capturedPath),
               json.utf8.count <= Self.sessionCaptureByteLimit,
               capturedEpoch == projectEpoch, capturedPath == project.filePath else { return false }
+        // Native values preserve provenance fields deliberately omitted by Codable (for
+        // example TrackState.liveIdentityBacked). Encoding here only measures bounded storage.
+        if let capture {
+            guard capture.captureID == id, capture.projectEpoch == capturedEpoch,
+                  capture.project.filePath == capturedPath,
+                  let data = try? JSONEncoder().encode(InspectionContent(
+                    project: capture.project, tracks: capture.tracks, strips: capture.channelStrips)),
+                  data.count + json.utf8.count <= Self.sessionCaptureByteLimit else { return false }
+        }
         if sessionReports.count == Self.sessionCaptureLimit { sessionReports.removeFirst() }
         sessionReports.append(RetainedSessionReport(
             id: id, json: json, projectEpoch: capturedEpoch, projectPath: capturedPath,
-            hasDocument: hasDocument,
+            hasDocument: hasDocument, capture: capture, request: request,
             expiresAt: now.advanced(by: Self.sessionCaptureLifetime)
         ))
         return true
@@ -51,6 +80,38 @@ actor StateCache {
             $0.expiresAt <= now || $0.projectEpoch != projectEpoch || $0.projectPath != project.filePath || $0.hasDocument != hasDocument
         }
         return sessionReports.first { $0.id == id }?.json
+    }
+
+    func retainedInspection(id: String) -> RetainedInspection? {
+        guard retainedSessionReport(id: id) != nil,
+              let report = sessionReports.first(where: { $0.id == id }),
+              let capture = report.capture, let request = report.request else { return nil }
+        return RetainedInspection(capture: capture, request: request, expiresAt: report.expiresAt)
+    }
+
+    func inspectionIsCurrent(_ capture: SessionPopulationObservation.Capture) -> Bool {
+        capture.before == capture.after &&
+            capture.after == captureBoundary(watching: SessionPopulationObservation.watchedSections)
+    }
+
+    func retainRepairPlan(_ plan: ProjectSessionAudit.CanonicalRepairPlan, snapshotID: String) -> Bool {
+        guard let source = retainedInspection(id: snapshotID),
+              plan.json.utf8.count <= Self.sessionCaptureByteLimit else { return false }
+        let now = sessionCaptureNow()
+        repairPlans.removeAll { $0.expiresAt <= now }
+        if repairPlans.count == Self.sessionCaptureLimit { repairPlans.removeFirst() }
+        repairPlans.append(RetainedRepairPlan(plan: plan, snapshotID: snapshotID,
+            expiresAt: min(source.expiresAt, now.advanced(by: Self.sessionCaptureLifetime))))
+        return true
+    }
+
+    func retainedRepairPlan(id: String, digest: String?) -> String? {
+        let now = sessionCaptureNow()
+        repairPlans.removeAll { $0.expiresAt <= now }
+        guard let record = repairPlans.first(where: { $0.plan.id == id }),
+              digest == nil || digest == record.plan.digest,
+              retainedInspection(id: record.snapshotID) != nil else { return nil }
+        return record.plan.json
     }
 
     /// The cache version a reader captures immediately before starting a

@@ -327,6 +327,14 @@ enum SemanticOracleFixtures {
         // #965: the cache-only population report on a cold cache. Nothing was
         // read yet, so every domain is `unavailable` with a named reason and
         // `overall.complete` is false — the honest shape, not a green one.
+        // Mock draft shape only; this fixture is not an observation or mutation receipt.
+        .projectPlanSessionRepair: SemanticOracleFixture(
+            response: """
+                {"schema":"logic_pro_mcp_session_repair_plan.v1","read_only":true,
+                "requires_plan_confirmation":true,"executable":false}
+                """,
+            readback: "{}"
+        ),
         .projectInspectSession: SemanticOracleFixture(
             response: """
                 {"schema":"logic_pro_mcp_session_population.v1","read_only":true,\
