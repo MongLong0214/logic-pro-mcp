@@ -216,7 +216,7 @@ _line = ('A = \'tell application "System Events" to tell process "Logic Pro" to 
 _exempt_literal = "logic pro"
 # The fixture has to USE a real table entry, or it proves something about a marker nobody ships.
 case("the fixture exercises a marker the guard actually carries",
-     any(m in _line and lit == _exempt_literal for m, lit in G.PROTOCOL_COMPARISONS),
+     any(m in _line and lit == _exempt_literal for m, lit, _where in G.PROTOCOL_COMPARISONS),
      _line.strip()[:70])
 _found = scan(_line, dict(CANONICALS, **{_exempt_literal: "applicationMenuBarItem"}))
 _lits = [lit for _base, lit, _line_no, _name in _found]
@@ -258,17 +258,47 @@ def scan_verify(filename, body, canonicals):
         os.remove(path)
 
 
-found = scan_verify("live/protocol_and_ui.py",
-                    'if name == "mute" and ui_title == "Mute": pass\n',
-                    {"mute": "trackMuteButton"})
+# The `name == "mute"` exemption is scoped to live/probes.py, where it was measured, so these
+# cases write there. `found` must hold exactly the literals that are not the flag-name compare.
+_MUTE = {"mute": "trackMuteButton"}
+found = scan_verify("live/probes.py", 'if name == "mute": pass\n', _MUTE)
+case("the flag-name compare is exempt in the file it is scoped to",
+     found == [], f"found={found!r}")
+
+found = scan_verify("live/probes.py",
+                    'if name == "mute" and ui_title == "Mute": pass\n', _MUTE)
 case("a verify protocol comparison does not exempt a same-word UI comparison",
      [f[1] for f in found] == ["Mute"], f"found={found!r}")
 
-found = scan_verify("live/two_ui_matches.py",
+# The review's same-LITERAL witness: the UI compare is spelled exactly as the protocol one.
+found = scan_verify("live/probes.py",
+                    'if name == "mute" and ui_title == "mute": pass\n', _MUTE)
+case("a same-literal UI comparison beside the protocol comparison is reported",
+     [(f[0], f[1]) for f in found] == [("live/probes.py", "mute")], f"found={found!r}")
+
+found = scan_verify("live/probes.py",
                     'if name == "mute" and ui_title == "Mute" and other_title == "Mute": pass\n',
-                    {"mute": "trackMuteButton"})
+                    _MUTE)
 case("two same-word UI comparisons beside a protocol comparison both count",
      [f[1] for f in found] == ["Mute", "Mute"], f"found={found!r}")
+
+# A review asked that the exemption not travel. The same text in any other file, or with the
+# marker inside a longer name in its own file, is a UI compare until it is shown not to be.
+found = scan_verify("live/other_probes.py", 'if name == "mute": pass\n', _MUTE)
+case("the flag-name exemption does not apply outside its file",
+     [(f[0], f[1]) for f in found] == [("live/other_probes.py", "mute")], f"found={found!r}")
+
+found = scan_verify("live/probes.py", 'if button_name == "mute": pass\n', _MUTE)
+case("a marker that begins with a name does not match inside a longer name",
+     [f[1] for f in found] == ["mute"], f"found={found!r}")
+
+_mute_scope = [where for m, lit, where in G.PROTOCOL_COMPARISONS if m == 'name == "mute"']
+case("the fixture exercises the scope the guard actually carries",
+     _mute_scope == [("Scripts/verify/live/probes.py",)], f"scopes={_mute_scope!r}")
+
+_hit = G._hits('if name == "mute" and help == "Mute": pass', _MUTE, G.PYTHON_PREDICATES)
+case("a text with no file behind it gets no scoped exemption",
+     [lit for lit, _name in _hit] == ["mute", "Mute"], f"hits={_hit!r}")
 
 found = scan_verify("live/case.py",
                     'CLICK = \'click menu bar item "Mixer" of menu bar 1\'\n', CANONICALS)
