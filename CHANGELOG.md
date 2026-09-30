@@ -33,6 +33,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **`track.set_automation` on MCU no longer leaves Logic's Write warning up behind its reply
+  (#1077).** Logic answered the Write press with a one-button warning and left it up, and quitting
+  Logic under it crashed Logic in 4 of 4 runs on a German Logic. Every poll after the mode press now
+  reads Logic's modal set after the mode, and clears a one-button informational alert or a stray
+  menu through the preflight reconciler, at most once per kind; any other dialog or sheet is left
+  as it is and the reply is State B `modal_left_open`. The poll stops early only once the mode
+  matches and two consecutive complete reads found no blocker. `modal_after_press` says what the
+  last read found (`clear`, `open`, `unreadable`) and `reconciled_modal_kind` / `reconciled_action`
+  name the blocker seen; a modal set that did not read keeps a matched mode out of State A.
 - **`transport.goto_position`'s CGEvent fallback types nothing until the Go To Position dialog is
   on screen (#1038).** It used to post the position and Return right after the key that opens the
   dialog, so when the dialog did not open they went to whatever held the keyboard. The opening key

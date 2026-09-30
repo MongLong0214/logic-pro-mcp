@@ -492,6 +492,25 @@ extension AccessibilityChannel {
         )
     }
 
+    /// The modal reader an MCU automation press polls with (#1077). `act` false observes only;
+    /// `act` true runs the preflight scope, which clears a one-button informational alert or a
+    /// stray menu and never presses Create or confirms a delete.
+    static func automationModalReconciler(
+        runtime: AXLogicProElements.Runtime = .production,
+        witnessAttempts: Int = 30,
+        witnessDelayNanoseconds: UInt64 = 100_000_000
+    ) -> @Sendable (_ act: Bool) async -> ModalReconcileOutcome {
+        { act in
+            guard act else { return observeModalAfterMutation(isDeleteContext: false, runtime: runtime) }
+            return await reconcilePreflight(
+                clearMandatoryNewTrack: false,
+                runtime: runtime,
+                witnessAttempts: witnessAttempts,
+                witnessDelayNanoseconds: witnessDelayNanoseconds
+            )
+        }
+    }
+
     private static func reconcile(
         isDeleteContext: Bool,
         preflight: Bool,

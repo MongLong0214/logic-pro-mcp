@@ -41,6 +41,10 @@ enum HonestContract {
         case sendOnlyNoReadback
         case sagaReconciliationRequired
         case sagaCancellationPending
+        /// A Logic modal was still up when the operation stopped polling (#1077).
+        /// `readbackUnavailable` would say the attribute could not be read; here the fact the
+        /// client must act on is the open modal, which the reply's `reconciled_modal_kind` names.
+        case modalLeftOpen
 
         var rawValue: String {
             switch self {
@@ -53,6 +57,7 @@ enum HonestContract {
             case .sendOnlyNoReadback: return "send_only_no_readback"
             case .sagaReconciliationRequired: return "saga_reconciliation_required"
             case .sagaCancellationPending: return "saga_cancellation_pending"
+            case .modalLeftOpen: return "modal_left_open"
             }
         }
     }
