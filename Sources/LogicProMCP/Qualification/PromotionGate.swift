@@ -15,6 +15,9 @@ enum PromotionRejectionReason: Equatable, Sendable {
     case invalidWaiver(caseID: String, field: String)
     case duplicateWaiver(caseID: String)
     case duplicateCaseID(caseID: String)
+    /// A summary count disagrees with the cases it summarises. `QualificationSummaryCounts` says
+    /// why this is checked here rather than trusted: the counts are outside the signed provenance.
+    case summaryCountMismatch(field: String, stated: Int, recomputed: Int)
     case releaseVersionMismatch(expected: String, actual: String)
     /// Distinct from a mismatch: one or both versions are not a semantic version at all, so there
     /// was nothing to compare. Folding this into `releaseVersionMismatch` printed
@@ -175,6 +178,14 @@ struct PromotionGate {
         })
         for caseID in duplicateCaseIDs.sorted() {
             rejections.append(.duplicateCaseID(caseID: caseID))
+        }
+        for mismatch in QualificationSummaryCounts(statedBy: attestation)
+            .mismatches(against: QualificationSummaryCounts(cases: attestation.cases)) {
+            rejections.append(.summaryCountMismatch(
+                field: mismatch.field,
+                stated: mismatch.stated,
+                recomputed: mismatch.recomputed
+            ))
         }
         let waiverIssues = QualificationWaiverValidator.issues(in: attestation.waivers)
         for issue in waiverIssues {

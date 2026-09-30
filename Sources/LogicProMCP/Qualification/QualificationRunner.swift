@@ -8,23 +8,8 @@ package struct QualificationCommandResult: Sendable {
     package let stderr: String
 }
 
-/// WHY THERE IS NO `trusted-verifier` PRODUCT YET, and why `Package.swift` is byte-identical to
-/// main.
-///
-/// #284 wants a release checked by a binary that is NOT the candidate, and #882 declared that
-/// binary as an executable product. Two measurements on CI say not yet:
-///
-/// 1. Declaring the product made the runner resolve 25 packages where main resolves 9 --
-///    async-http-client, the swift-nio family, swift-crypto, swift-certificates and twelve more,
-///    because an executable product forces SwiftPM to resolve everything `LogicProMCP` can reach.
-/// 2. Removing the product did NOT fix it. `originHash` is a hash of the MANIFEST, so the one
-///    comment left behind was enough to invalidate it, force a full re-resolution, and produce the
-///    same 25 pins. Main is green because its manifest is unchanged and SwiftPM skips resolution
-///    entirely -- the committed 9-pin file is stable only while nobody touches `Package.swift`.
-///
-/// So the manifest is left alone and this note lives in source instead. The product returns with
-/// the gate that would execute it, and that change owns the dependency-graph decision: sixteen
-/// packages is a real cost and it should be paid deliberately, once, by whoever wires the gate.
+/// Shared offline runner for the candidate and standalone verifier entry points.
+/// CLI availability does not establish independently deployed trust or live release qualification.
 package struct QualificationRunner: Sendable {
     struct Runtime: Sendable {
         let executableURL: @Sendable () throws -> URL
@@ -948,6 +933,7 @@ package struct QualificationRunner: Sendable {
             completedAt: completedAt,
             evidenceManifestSHA256: manifestSHA256
         )
+        let counts = QualificationSummaryCounts(cases: cases)
         let attestation = ReleaseQualificationAttestation(
             schema: "release-qualification-attestation/v2",
             serverVersion: options.releaseVersion,
@@ -961,10 +947,10 @@ package struct QualificationRunner: Sendable {
             fixture: .empty,
             startedAt: startedAt,
             completedAt: completedAt,
-            total: cases.count,
-            passed: cases.filter { $0.status == .passed }.count,
-            failed: cases.filter { $0.status == .failed }.count,
-            waived: cases.filter { $0.status == .waived }.count,
+            total: counts.total,
+            passed: counts.passed,
+            failed: counts.failed,
+            waived: counts.waived,
             cases: cases,
             waivers: waivers,
             evidenceManifestSHA256: manifestSHA256,
@@ -1482,6 +1468,11 @@ package struct QualificationRunner: Sendable {
             VerificationOutput.Rejection(
                 reason: "duplicateCaseID", caseID: caseID, key: nil,
                 name: nil, expected: nil, actual: nil
+            )
+        case .summaryCountMismatch(let field, let stated, let recomputed):
+            VerificationOutput.Rejection(
+                reason: "summaryCountMismatch", caseID: nil, key: field,
+                name: nil, expected: String(recomputed), actual: String(stated)
             )
         case .releaseVersionMismatch(let expected, let actual):
             VerificationOutput.Rejection(
@@ -2111,6 +2102,11 @@ package struct QualificationRunner: Sendable {
                 && evidence.readback?.verified == false
                 && evidence.availabilityObservation == nil
         case .independentReadback:
+            // An axis passes on the observations the runner passed it on (`allChecksPass`), read
+            // from this file, not on its own `status` and `verified`. The negative probe's
+            // conjuncts are `QualificationNegativeResult.isFailClosedAndStable`'s, less the two it
+            // does not record (`toolIsError`, `error`); `healthReadStable` stays out, as there,
+            // because health warms during cache polling and MCU registration.
             return evidence.status == .passed
                 && evidence.verified
                 && evidence.operationID.hasPrefix("qualification.")
@@ -2118,6 +2114,14 @@ package struct QualificationRunner: Sendable {
                 && evidence.operationRequestID == nil
                 && evidence.readback != nil
                 && evidence.availabilityObservation != nil
+                && evidence.handshakeOK
+                && evidence.healthOK
+                && evidence.catalogCountMatch
+                && evidence.traceOK
+                && evidence.negativeFailclosed
+                && evidence.negativeState == "C"
+                && evidence.negativeWriteAttempted == false
+                && evidence.catalogReadStable
         case .typedDeferral:
             if evidence.status == .failed {
                 return !evidence.verified
@@ -2256,7 +2260,7 @@ package struct QualificationRunner: Sendable {
 
         let rootFD = open(
             directory.path,
-            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
         )
         guard rootFD >= 0 else {
             throw RunnerError.invalidArguments("Unable to open evidence directory")
@@ -2273,7 +2277,7 @@ package struct QualificationRunner: Sendable {
             let nextFD = openat(
                 directoryFD,
                 component,
-                O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
+                O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
             )
             guard nextFD >= 0 else {
                 throw RunnerError.invalidArguments("Unable to open evidence directory component")
@@ -2287,10 +2291,13 @@ package struct QualificationRunner: Sendable {
         guard let filename = components.last else {
             throw RunnerError.invalidArguments("Invalid evidence path")
         }
+        // O_NONBLOCK on every open: a blocking O_RDONLY open of a FIFO waits for a writer, so a
+        // bundle or candidate planted as a FIFO hung the verifier before the fstat below could reject
+        // it (#373 Q4). It changes nothing for the regular file that fstat then insists on.
         let fileFD = openat(
             directoryFD,
             filename,
-            O_RDONLY | O_CLOEXEC | O_NOFOLLOW
+            O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
         )
         guard fileFD >= 0 else {
             throw RunnerError.invalidArguments("Unable to open evidence file")
