@@ -198,7 +198,7 @@ struct RoutingGraph: Codable, Equatable, Sendable {
     let nodes: [RoutingNode]
     let edges: [RoutingEdge]
     let provenance: [RoutingProvenance]
-    /// The cache revision the graph was read from, `SessionPopulationObservation.snapshotID(for:)`
+    /// The opaque identity of the capture, `SessionPopulationObservation.snapshotID(for:)`
     /// of the same capture, so it equals `inspect_session`'s `snapshot_id` for that capture.
     let snapshotId: String
     let coverage: RoutingCoverage

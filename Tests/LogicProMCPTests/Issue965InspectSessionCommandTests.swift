@@ -215,9 +215,9 @@ struct Issue965InspectSessionCommandTests {
     }
 
     /// #291. Kills: a hard-coded routing section, or one built from a different read than
-    /// `logic://mixer` — the section's `graph` must be the mixer graph's `coverage` and its
-    /// `snapshot_id` the mixer graph's, over the same unchanged cache and registry.
-    @Test("the routing section carries logic://mixer's graph coverage and snapshot_id")
+    /// `logic://mixer` — graph coverage must match over the same unchanged cache and registry,
+    /// while the section ID belongs to its enclosing report, not a separate resource capture.
+    @Test("the routing section carries matching graph coverage and its own capture identity")
     func routingSectionMirrorsTheMixerGraph() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let cache = await populatedCache()
@@ -248,8 +248,12 @@ struct Issue965InspectSessionCommandTests {
             #expect(routing["coverage"] as? String == "partial")
             #expect(routing["reasons"] as? [String] == ["routing_graph_partial"])
             #expect(NSDictionary(dictionary: sectionGraph).isEqual(to: graphCoverage))
-            #expect(routing["snapshot_id"] as? String == graph["snapshot_id"] as? String)
-            #expect(body["snapshot_id"] as? String == graph["snapshot_id"] as? String)
+            let reportID = try #require(body["snapshot_id"] as? String)
+            let routingID = try #require(routing["snapshot_id"] as? String)
+            let mixerID = try #require(graph["snapshot_id"] as? String)
+            #expect(routingID == reportID)
+            #expect(reportID != mixerID)
+            #expect(!reportID.isEmpty)
             let edges = try #require(graph["edges"] as? [[String: Any]])
             #expect(edges.map { $0["destination"] as? String } == ["bus_4"])
         }

@@ -861,7 +861,7 @@ enum OperationRegistry {
             ConfirmationPolicy.none,
             VerificationPolicy.none,
             DeadlineClass.short,
-            ["allow_ui_navigation", "domains", "project_ref", "scope"]
+            ["allow_ui_navigation", "domains", "project_ref", "scope", "snapshot_id"]
         ),
         (
             .projectCleanupApply,

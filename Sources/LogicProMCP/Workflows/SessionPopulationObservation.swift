@@ -123,6 +123,49 @@ enum SessionPopulationObservation {
         let projectIssuance: ProjectIssuance?
         let beganAt: Date
         let endedAt: Date
+        /// An opaque capture identity, independent of revision counters and session state.
+        let captureID: String
+
+        init(
+            before: StateCache.CaptureBoundary,
+            after: StateCache.CaptureBoundary,
+            projectEpoch: UInt64,
+            project: ProjectInfo,
+            tracks: [TrackState],
+            tracksFetchedAt: Date,
+            channelStrips: [ChannelStripState],
+            mixerFetchedAt: Date,
+            fileTrackCount: Int?,
+            projectFileNotBound: Bool,
+            requestedProjectMatches: Bool?,
+            referencesEnabled: Bool,
+            targetSnapshot: TargetRegistrySnapshot?,
+            issued: IssuedTrackReferences?,
+            projectIssuance: ProjectIssuance?,
+            beganAt: Date,
+            endedAt: Date,
+            captureID: String = "snap_" + UUID().uuidString
+        ) {
+            self.before = before
+            self.after = after
+            self.projectEpoch = projectEpoch
+            self.project = project
+            self.tracks = tracks
+            self.tracksFetchedAt = tracksFetchedAt
+            self.channelStrips = channelStrips
+            self.mixerFetchedAt = mixerFetchedAt
+            self.fileTrackCount = fileTrackCount
+            self.projectFileNotBound = projectFileNotBound
+            self.requestedProjectMatches = requestedProjectMatches
+            self.referencesEnabled = referencesEnabled
+            self.targetSnapshot = targetSnapshot
+            self.issued = issued
+            self.projectIssuance = projectIssuance
+            self.beganAt = beganAt
+            self.endedAt = endedAt
+            self.captureID = captureID
+        }
+
     }
 
     /// The sections whose movement during capture makes the report unstable.
@@ -231,15 +274,28 @@ enum SessionPopulationObservation {
 
     // MARK: - Report
 
+    struct SnapshotRetention: Encodable, Sendable {
+        let retained: Bool
+        let reason: String?
+        let ttlSeconds = StateCache.sessionCaptureLifetimeSeconds
+        let capacity = StateCache.sessionCaptureLimit
+        let maxBytes = StateCache.sessionCaptureByteLimit
+
+        enum CodingKeys: String, CodingKey {
+            case retained, reason, capacity
+            case ttlSeconds = "ttl_seconds"
+            case maxBytes = "max_bytes"
+        }
+    }
+
     struct Report: Encodable, Sendable {
         let schema: String
         let readOnly: Bool
-        /// Names the cache revision the report was built from: `snap_<epoch>_t<tracks>_m<mixer>_p<project>`
-        /// from the versions captured before the read. Emitted only; nothing consumes it in this
-        /// increment. Retention rule: it names a cache revision, not a stored capture, so a later
-        /// call can compare it against its own to see whether the cache moved, but nothing can be
-        /// fetched by it.
+        /// Opaque identity of this immutable capture; inspect_session retains the original
+        /// report for bounded lookup within this cache, never regenerating it by revision.
         let snapshotId: String
+        /// Set by the dispatcher after deciding whether this report can be retained.
+        var snapshotRetention: SnapshotRetention? = nil
         let scope: Scope
         let requestedDomains: [Domain]
         let project: ProjectSection
@@ -258,6 +314,7 @@ enum SessionPopulationObservation {
             case schema
             case readOnly = "read_only"
             case snapshotId = "snapshot_id"
+            case snapshotRetention = "snapshot_retention"
             case scope
             case requestedDomains = "requested_domains"
             case project
@@ -764,13 +821,7 @@ enum SessionPopulationObservation {
     }
 
     static func snapshotID(for capture: Capture) -> String {
-        let epoch = capture.before.versions[.project]?.projectEpoch
-            ?? capture.before.versions[.tracks]?.projectEpoch
-            ?? capture.projectEpoch
-        func revision(_ section: CacheSectionID) -> UInt64 {
-            capture.before.versions[section]?.sectionRevision ?? 0
-        }
-        return "snap_\(epoch)_t\(revision(.tracks))_m\(revision(.mixer))_p\(revision(.project))"
+        capture.captureID
     }
 
     /// Whether the bundle the file reader read is the cached project's bundle. Both sides are

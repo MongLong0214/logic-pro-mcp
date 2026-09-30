@@ -189,7 +189,7 @@ struct OperationCatalogTests {
             "outputRoot", "output_root", "path", "project", "projects",
         ],
         .projectCleanupApply: ["confirmed", "name", "names", "new_name", "stepId", "step_id"],
-        .projectInspectSession: ["allow_ui_navigation", "domains", "scope"],
+        .projectInspectSession: ["allow_ui_navigation", "domains", "scope", "snapshot_id"],
         .midiSendNote: ["channel", "duration_ms", "note", "port", "velocity"],
         .midiSendChord: ["channel", "duration_ms", "notes", "port", "velocity"],
         .midiSendCC: ["channel", "controller", "port", "value"],

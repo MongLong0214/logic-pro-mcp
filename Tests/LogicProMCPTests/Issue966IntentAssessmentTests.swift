@@ -25,8 +25,8 @@ private let baselineVersions: [CacheSectionID: StateCache.SectionVersion] = [
     .mixer: StateCache.SectionVersion(projectEpoch: 3, sectionRevision: 2),
     .project: StateCache.SectionVersion(projectEpoch: 3, sectionRevision: 1),
 ]
-/// `SessionPopulationObservation.snapshotID(for:)` of every capture built from `baselineVersions`.
-private let baselineSnapshotId = "snap_3_t7_m2_p1"
+/// Explicit identity for constructed matching capture/graph fixtures, not a production revision ID.
+private let baselineSnapshotId = "fixture_population_capture"
 private let songReference = TargetReference(rawValue: "prj_song")
 
 // MARK: - Capture fixtures (the #965 shape)
@@ -82,7 +82,9 @@ private func makeCapture(
         issued: issued,
         projectIssuance: enabled ? projectIssuance : nil,
         beganAt: fixedNow.addingTimeInterval(-0.01),
-        endedAt: fixedNow
+        endedAt: fixedNow,
+        // Constructed fixture identity shared with its matching graph fixtures.
+        captureID: "fixture_population_capture"
     )
 }
 

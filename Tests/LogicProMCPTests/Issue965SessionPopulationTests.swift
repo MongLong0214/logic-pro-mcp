@@ -88,7 +88,9 @@ private func makeCapture(
         issued: issued,
         projectIssuance: projectIssuance,
         beganAt: fixedNow.addingTimeInterval(-0.01),
-        endedAt: fixedNow
+        endedAt: fixedNow,
+        // Constructed fixture identity shared with its matching graph fixtures.
+        captureID: "fixture_population_capture"
     )
 }
 
@@ -408,9 +410,9 @@ struct Issue965StripsAndDomainsTests {
 
 @Suite("#965 session population: stability, scope, references")
 struct Issue965StabilityScopeReferenceTests {
-    @Test func snapshotIdNamesTheVersionsCapturedBefore() throws {
+    @Test func snapshotIdNamesTheImmutableCapture() throws {
         let report = try encodedReport(makeCapture(tracks: liveTracks(2), fileTrackCount: 2))
-        #expect(report["snapshot_id"] as? String == "snap_3_t7_m2_p1")
+        #expect(report["snapshot_id"] as? String == "fixture_population_capture")
     }
 
     @Test func aCacheThatMovedDuringCaptureMakesEveryRequestedDomainUnstable() throws {
@@ -433,7 +435,7 @@ struct Issue965StabilityScopeReferenceTests {
         }
         let complete = try overallComplete(report)
         #expect(!complete)
-        #expect(report["snapshot_id"] as? String == "snap_3_t7_m2_p1")
+        #expect(report["snapshot_id"] as? String == "fixture_population_capture")
     }
 
     @Test func selectionScopeKeepsOriginalRowNumbers() throws {

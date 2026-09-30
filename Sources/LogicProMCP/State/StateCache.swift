@@ -3,6 +3,56 @@ import Foundation
 /// Thread-safe in-memory cache for Logic Pro project state.
 /// Read by tools for instant response; written by the StatePoller.
 actor StateCache {
+    /// Retained reports are historical observations, not current-state assertions. They do not
+    /// refresh on lookup and cannot be looked up in a different cache or project epoch.
+    static let sessionCaptureLimit = 8
+    static let sessionCaptureByteLimit = 2 * 1024 * 1024
+    static let sessionCaptureLifetimeSeconds = 60
+    static let sessionCaptureLifetime: Duration = .seconds(sessionCaptureLifetimeSeconds)
+    private struct RetainedSessionReport: Sendable {
+        let id: String
+        let json: String
+        let projectEpoch: UInt64
+        let projectPath: String?
+        let hasDocument: Bool
+        let expiresAt: ContinuousClock.Instant
+    }
+    private var sessionReports: [RetainedSessionReport] = []
+    private let sessionCaptureNow: @Sendable () -> ContinuousClock.Instant
+
+    init(sessionCaptureNow: @escaping @Sendable () -> ContinuousClock.Instant = { .now }) {
+        self.sessionCaptureNow = sessionCaptureNow
+    }
+
+    /// Names can repeat between documents; they cannot substitute for an observed bundle path.
+    static func sessionReportHasBoundPath(_ path: String?) -> Bool {
+        canonicalProjectPath(path) != nil
+    }
+
+    func retainSessionReport(id: String, json: String,
+                             capturedEpoch: UInt64, capturedPath: String?) -> Bool {
+        let now = sessionCaptureNow()
+        sessionReports.removeAll { $0.expiresAt <= now || $0.projectEpoch != projectEpoch }
+        guard Self.sessionReportHasBoundPath(capturedPath),
+              json.utf8.count <= Self.sessionCaptureByteLimit,
+              capturedEpoch == projectEpoch, capturedPath == project.filePath else { return false }
+        if sessionReports.count == Self.sessionCaptureLimit { sessionReports.removeFirst() }
+        sessionReports.append(RetainedSessionReport(
+            id: id, json: json, projectEpoch: capturedEpoch, projectPath: capturedPath,
+            hasDocument: hasDocument,
+            expiresAt: now.advanced(by: Self.sessionCaptureLifetime)
+        ))
+        return true
+    }
+
+    func retainedSessionReport(id: String) -> String? {
+        let now = sessionCaptureNow()
+        sessionReports.removeAll {
+            $0.expiresAt <= now || $0.projectEpoch != projectEpoch || $0.projectPath != project.filePath || $0.hasDocument != hasDocument
+        }
+        return sessionReports.first { $0.id == id }?.json
+    }
+
     /// The cache version a reader captures immediately before starting a
     /// section refresh. Present it to a conditional write when the refresh
     /// completes so the actor can reject a value from a superseded read.

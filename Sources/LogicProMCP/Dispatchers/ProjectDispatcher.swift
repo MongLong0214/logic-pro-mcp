@@ -18,7 +18,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_project",
-        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, inspect_session, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only. Stem is narrower than the generic projects shape: it refuses unless exactly one currently scanned project has a fresh complete region inventory proving its populated tracks, and output_root is an existing directory; the Export panel must also expose that folder in its browser at execution. Stem filenames and output format are late-bound and unpromised. fail_if_exists examines only top-level non-directory entries with suffix wav|wave|aif|aiff|aifc|m4a|mp3, and it refuses if enumeration fails; skip_existing is refused for stem. export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, drives the stem Export panel or bounces as appropriate, analyzes before/after-observed eligible stem outputs without guessing filename-to-track associations, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume for known-path artifacts; it refuses stem runs because Logic assigns filenames only after export; audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; inspect_session -> { scope?: \"whole_project\"|\"selection\", domains?: [tracks|strips|associations|hierarchy|routing|color], allow_ui_navigation?: Bool, project_ref?: String } read-only logic_pro_mcp_session_population.v1 JSON built from the state cache alone: every requested domain carries coverage complete|partial|unavailable|unstable plus reasons, tracks/strips rows come with witnesses, and unread data is reported as unread rather than absent. allow_ui_navigation=true is refused (State C not_implemented) in this increment; cleanup_apply -> { step_id: String, confirmed: Bool, names?: [String] (exact names aligned to the step's target track indices) | \"newA,newB\" (legacy CSV) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
+        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, inspect_session, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only. Stem is narrower than the generic projects shape: it refuses unless exactly one currently scanned project has a fresh complete region inventory proving its populated tracks, and output_root is an existing directory; the Export panel must also expose that folder in its browser at execution. Stem filenames and output format are late-bound and unpromised. fail_if_exists examines only top-level non-directory entries with suffix wav|wave|aif|aiff|aifc|m4a|mp3, and it refuses if enumeration fails; skip_existing is refused for stem. export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, drives the stem Export panel or bounces as appropriate, analyzes before/after-observed eligible stem outputs without guessing filename-to-track associations, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume for known-path artifacts; it refuses stem runs because Logic assigns filenames only after export; audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; inspect_session -> { scope?: \"whole_project\"|\"selection\", domains?: [tracks|strips|associations|hierarchy|routing|color], allow_ui_navigation?: Bool, project_ref?: String, snapshot_id?: String } read-only logic_pro_mcp_session_population.v1 JSON built from the state cache alone: every requested domain carries coverage complete|partial|unavailable|unstable plus reasons, tracks/strips rows come with witnesses, and unread data is reported as unread rather than absent. A fresh report has an opaque snapshot_id. snapshot_retention reports whether its observed project bundle path permits retention; an unbound project remains readable but retained=false (project_identity_unobserved) and its ID cannot be looked up. Bound reports are retained for 60 seconds, with at most 8 reports of at most 2 MiB each in this process-local cache. snapshot_id alone returns the original report bytes and original capture interval, not a fresh observation; expired, evicted, cross-session or changed-project handles fail stale_snapshot without regenerating. Lookup cannot combine project_ref or override scope/domains/navigation. allow_ui_navigation=true is refused (State C not_implemented) in this increment; cleanup_apply -> { step_id: String, confirmed: Bool, names?: [String] (exact names aligned to the step's target track indices) | \"newA,newB\" (legacy CSV) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
         commandDescription: "Project command to execute"
     )
 
@@ -439,6 +439,20 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
 
         case "inspect_session":
+            if let supplied = params["snapshot_id"] {
+                guard case .string(let id) = supplied, !id.isEmpty,
+                      !["scope", "domains", "allow_ui_navigation", "project_ref"].contains(where: { params[$0] != nil }) else {
+                    return toolStateCResult(.invalidParams,
+                        hint: "snapshot_id must be a nonempty string and cannot be combined with scope, domains, project_ref or allow_ui_navigation; lookup returns the original report",
+                        extras: ["write_attempted": false])
+                }
+                guard let json = await cache.retainedSessionReport(id: id) else {
+                    return toolStateCResult(.staleSnapshot,
+                        hint: "snapshot_id is unknown, expired, evicted, or belongs to another project or session; no replacement report was generated",
+                        extras: ["write_attempted": false])
+                }
+                return toolTextResult(json)
+            }
             // #965 O1 first increment: a population report read from the state
             // cache alone. Stable references are issued under the same gate as
             // `logic://tracks`; nothing here navigates Logic's UI, and the
@@ -474,9 +488,23 @@ struct ProjectDispatcher: OperationTraceDispatching {
                     hint: "project_ref does not name the project the state cache holds (it changed after the reference was issued); no report was built"
                 )
             }
-            let report = SessionPopulationObservation.build(request: request, capture: capture)
+            var report = SessionPopulationObservation.build(request: request, capture: capture)
+            let bound = StateCache.sessionReportHasBoundPath(capture.project.filePath)
+            report.snapshotRetention = .init(retained: bound,
+                reason: bound ? nil : "project_identity_unobserved")
             do {
-                return toolTextResult(try encodeJSONStrict(report, compact: true))
+                let json = try encodeJSONStrict(report, compact: true)
+                // Keep incomplete/cold reads available, but do not create a name-bound handle.
+                if !bound { return toolTextResult(json) }
+                guard await cache.retainSessionReport(
+                    id: report.snapshotId, json: json,
+                    capturedEpoch: capture.projectEpoch, capturedPath: capture.project.filePath
+                ) else {
+                    return toolStateCResult(.staleSnapshot,
+                        hint: "capture could not be retained (project changed, document closed, or report exceeds 2 MiB); no reusable snapshot was issued",
+                        extras: ["write_attempted": false])
+                }
+                return toolTextResult(json)
             } catch {
                 // Honest Contract: a serialization failure must NOT be returned
                 // as a success-shaped body. Fail loud with isError=true.

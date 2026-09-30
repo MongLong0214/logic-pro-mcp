@@ -190,7 +190,7 @@ struct Issue291EndpointClassificationTests {
         #expect(moved.partialReason == "cache moved during capture")
         #expect(moved.nodes.isEmpty)
         #expect(moved.edges.isEmpty)
-        #expect(moved.snapshotId == control.snapshotId)
+        #expect(moved.snapshotId != control.snapshotId)
         #expect(moved.isConsistent)
     }
 
@@ -199,10 +199,11 @@ struct Issue291EndpointClassificationTests {
     /// and its bus-to-aux edges unobserved. Each domain's state is asserted so a domain promoted to
     /// `complete` is caught by name.
     @Test func aCleanReadIsStillPartialInThisIncrement() {
-        let graph = publish(makeCapture(
+        let capture = makeCapture(
             tracks: tracks(["Source"]),
             strips: [strip(0, output: "Bus 1")]
-        ))
+        )
+        let graph = publish(capture)
 
         #expect(!graph.complete)
         #expect(graph.coverage.population.state == .partial)
@@ -224,7 +225,7 @@ struct Issue291EndpointClassificationTests {
                 #expect(partialReason.contains(reason), "\(reason)")
             }
         }
-        #expect(graph.snapshotId == "snap_3_t7_m2_p1")
+        #expect(graph.snapshotId == capture.captureID)
         #expect(graph.projectReference == projectReference)
         #expect(graph.projectEpoch == 3)
 
@@ -341,12 +342,20 @@ struct Issue291MixerParityTests {
                 capture: capture,
                 project: try ResourceHandlers.routingProjectBinding(for: issuance)
             )
-            #expect(published == expected)
+            // Separate producer reads have distinct capture identities. Every other graph
+            // field must still agree over the unchanged cache and registry.
+            var publishedFields = graphObject
+            var expectedFields = try #require(sharedJSONObject(try encodeJSONStrict(expected, compact: true)))
+            publishedFields.removeValue(forKey: "snapshot_id")
+            expectedFields.removeValue(forKey: "snapshot_id")
+            #expect(NSDictionary(dictionary: publishedFields).isEqual(to: expectedFields))
+            #expect(published.snapshotId != expected.snapshotId)
+            #expect(!published.snapshotId.isEmpty)
             #expect(published.edges.map(\.destination) == ["bus_3"])
             #expect(published.projectReference != nil)
 
             let report = Observation.build(request: Observation.Request(domains: [.routing]), capture: capture)
-            #expect(report.snapshotId == published.snapshotId)
+            #expect(report.snapshotId == expected.snapshotId)
             #expect(report.routing?.graph == published.coverage)
         }
     }
