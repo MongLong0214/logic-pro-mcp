@@ -72,7 +72,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # the 27th on its own branch. Its ten counterexamples are each derived from the live observation
 # with one earlier defect put in -- a null output, absent send_slots, occupancy read from level,
 # `edges: []` beside a bus output.
-FLOOR = 28
+# 28 -> 29 on 2026-10-01: live_942_post_leaf_settlement_in_every_locale, whose counterexample for
+# each settled hold is the binary without the settlement on the same arranged screen, and for each
+# control hold the candidate's, so neither predicate can accept both binaries.
+FLOOR = 29
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )
