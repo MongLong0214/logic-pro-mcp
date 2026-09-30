@@ -2102,6 +2102,11 @@ package struct QualificationRunner: Sendable {
                 && evidence.readback?.verified == false
                 && evidence.availabilityObservation == nil
         case .independentReadback:
+            // An axis passes on the observations the runner passed it on (`allChecksPass`), read
+            // from this file, not on its own `status` and `verified`. The negative probe's
+            // conjuncts are `QualificationNegativeResult.isFailClosedAndStable`'s, less the two it
+            // does not record (`toolIsError`, `error`); `healthReadStable` stays out, as there,
+            // because health warms during cache polling and MCU registration.
             return evidence.status == .passed
                 && evidence.verified
                 && evidence.operationID.hasPrefix("qualification.")
@@ -2109,6 +2114,14 @@ package struct QualificationRunner: Sendable {
                 && evidence.operationRequestID == nil
                 && evidence.readback != nil
                 && evidence.availabilityObservation != nil
+                && evidence.handshakeOK
+                && evidence.healthOK
+                && evidence.catalogCountMatch
+                && evidence.traceOK
+                && evidence.negativeFailclosed
+                && evidence.negativeState == "C"
+                && evidence.negativeWriteAttempted == false
+                && evidence.catalogReadStable
         case .typedDeferral:
             if evidence.status == .failed {
                 return !evidence.verified
