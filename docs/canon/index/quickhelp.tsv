@@ -20,6 +20,9 @@ QuickHelp	de	GMN_014_CreateMarker	Title#cit	6526d0559a1a
 QuickHelp	de	GMV_008_ShowInspector	Title	d6472d00b1db
 QuickHelp	de	GMV_008_ShowInspector	Title#ci	955d11fc1e03
 QuickHelp	de	GMV_008_ShowInspector	Title#cit	955d11fc1e03
+QuickHelp	de	INS_005_LeftArrangeCS	Title	482243d0e7e0
+QuickHelp	de	INS_005_LeftArrangeCS	Title#ci	380d4d07d216
+QuickHelp	de	INS_005_LeftArrangeCS	Title#cit	380d4d07d216
 QuickHelp	de	INS_010_SendSlot	Title	18b9e272cb26
 QuickHelp	de	INS_010_SendSlot	Title#ci	d9d8d872f926
 QuickHelp	de	INS_010_SendSlot	Title#cit	d9d8d872f926
@@ -32,6 +35,9 @@ QuickHelp	de	INS_012_InputSlot	Title#cit	fa91f064a5c0
 QuickHelp	de	INS_014_OutputSlot	Title	7aceec004b4d
 QuickHelp	de	INS_014_OutputSlot	Title#ci	75f302afea19
 QuickHelp	de	INS_014_OutputSlot	Title#cit	75f302afea19
+QuickHelp	de	INS_086_MidiSlot	Title	e48f20ab1904
+QuickHelp	de	INS_086_MidiSlot	Title#ci	e3d662c63035
+QuickHelp	de	INS_086_MidiSlot	Title#cit	e3d662c63035
 QuickHelp	de	KCE_024_Record	composed	e1dbb9837ad6
 QuickHelp	de	KCE_024_Record	composed#ci	e113592eb330
 QuickHelp	de	KCE_024_Record	composed#cit	e113592eb330
@@ -77,6 +83,9 @@ QuickHelp	en	GMN_014_CreateMarker	Title#cit	2b73b310d247
 QuickHelp	en	GMV_008_ShowInspector	Title	66cbe88aa0f8
 QuickHelp	en	GMV_008_ShowInspector	Title#ci	0408497600a3
 QuickHelp	en	GMV_008_ShowInspector	Title#cit	0408497600a3
+QuickHelp	en	INS_005_LeftArrangeCS	Title	34f642c8096b
+QuickHelp	en	INS_005_LeftArrangeCS	Title#ci	c89ae361c1ff
+QuickHelp	en	INS_005_LeftArrangeCS	Title#cit	c89ae361c1ff
 QuickHelp	en	INS_010_SendSlot	Title	333be74368fe
 QuickHelp	en	INS_010_SendSlot	Title#ci	367c7dcade2f
 QuickHelp	en	INS_010_SendSlot	Title#cit	367c7dcade2f
@@ -89,6 +98,9 @@ QuickHelp	en	INS_012_InputSlot	Title#cit	7154ec4fd551
 QuickHelp	en	INS_014_OutputSlot	Title	29a2ad508fde
 QuickHelp	en	INS_014_OutputSlot	Title#ci	b24ab396f0f9
 QuickHelp	en	INS_014_OutputSlot	Title#cit	b24ab396f0f9
+QuickHelp	en	INS_086_MidiSlot	Title	c2843b413d31
+QuickHelp	en	INS_086_MidiSlot	Title#ci	d6f4dfad7689
+QuickHelp	en	INS_086_MidiSlot	Title#cit	d6f4dfad7689
 QuickHelp	en	KCE_024_Record	Title	aa956bc83484
 QuickHelp	en	KCE_024_Record	Title#ci	cb2b60fc5b0c
 QuickHelp	en	KCE_024_Record	Title#cit	cb2b60fc5b0c
@@ -137,6 +149,9 @@ QuickHelp	es	GMN_014_CreateMarker	Title#cit	3d5a4eccefb3
 QuickHelp	es	GMV_008_ShowInspector	Title	75b4ae286406
 QuickHelp	es	GMV_008_ShowInspector	Title#ci	539c6d11c488
 QuickHelp	es	GMV_008_ShowInspector	Title#cit	539c6d11c488
+QuickHelp	es	INS_005_LeftArrangeCS	Title	344708509ec8
+QuickHelp	es	INS_005_LeftArrangeCS	Title#ci	c7a34374a5db
+QuickHelp	es	INS_005_LeftArrangeCS	Title#cit	c7a34374a5db
 QuickHelp	es	INS_010_SendSlot	Title	6dfd567a525f
 QuickHelp	es	INS_010_SendSlot	Title#ci	77545b0d93b8
 QuickHelp	es	INS_010_SendSlot	Title#cit	77545b0d93b8
@@ -149,6 +164,9 @@ QuickHelp	es	INS_012_InputSlot	Title#cit	4e661c482b76
 QuickHelp	es	INS_014_OutputSlot	Title	c656d9fdee33
 QuickHelp	es	INS_014_OutputSlot	Title#ci	fe46a4138217
 QuickHelp	es	INS_014_OutputSlot	Title#cit	fe46a4138217
+QuickHelp	es	INS_086_MidiSlot	Title	1691fe09c311
+QuickHelp	es	INS_086_MidiSlot	Title#ci	2c972566ce0a
+QuickHelp	es	INS_086_MidiSlot	Title#cit	2c972566ce0a
 QuickHelp	es	KCE_024_Record	composed	9faed2b09726
 QuickHelp	es	KCE_024_Record	composed#ci	70e68c8d624a
 QuickHelp	es	KCE_024_Record	composed#cit	70e68c8d624a
@@ -194,6 +212,9 @@ QuickHelp	fr	GMN_014_CreateMarker	Title#cit	a1180b268f15
 QuickHelp	fr	GMV_008_ShowInspector	Title	e9701ee8d6cc
 QuickHelp	fr	GMV_008_ShowInspector	Title#ci	3947995a764f
 QuickHelp	fr	GMV_008_ShowInspector	Title#cit	d1ad2ff15fd6
+QuickHelp	fr	INS_005_LeftArrangeCS	Title	d503962fbfa8
+QuickHelp	fr	INS_005_LeftArrangeCS	Title#ci	8833c8be703b
+QuickHelp	fr	INS_005_LeftArrangeCS	Title#cit	6db5f8dab5bb
 QuickHelp	fr	INS_010_SendSlot	Title	32bfea9600f0
 QuickHelp	fr	INS_010_SendSlot	Title#ci	ee08cc0898ae
 QuickHelp	fr	INS_010_SendSlot	Title#cit	53ed4c4f886e
@@ -206,6 +227,9 @@ QuickHelp	fr	INS_012_InputSlot	Title#cit	397ba678d485
 QuickHelp	fr	INS_014_OutputSlot	Title	15128861aa09
 QuickHelp	fr	INS_014_OutputSlot	Title#ci	aee7ab0c5b4a
 QuickHelp	fr	INS_014_OutputSlot	Title#cit	c477de2cf8c7
+QuickHelp	fr	INS_086_MidiSlot	Title	abbeffc78075
+QuickHelp	fr	INS_086_MidiSlot	Title#ci	19275d9285ff
+QuickHelp	fr	INS_086_MidiSlot	Title#cit	76bc7eeb7dcb
 QuickHelp	fr	KCE_024_Record	composed	47ebb0fc099e
 QuickHelp	fr	KCE_024_Record	composed#ci	0068b53ad2c8
 QuickHelp	fr	KCE_024_Record	composed#cit	0068b53ad2c8
@@ -251,6 +275,9 @@ QuickHelp	it	GMN_014_CreateMarker	Title#cit	not_localized
 QuickHelp	it	GMV_008_ShowInspector	Title	not_localized
 QuickHelp	it	GMV_008_ShowInspector	Title#ci	not_localized
 QuickHelp	it	GMV_008_ShowInspector	Title#cit	not_localized
+QuickHelp	it	INS_005_LeftArrangeCS	Title	not_localized
+QuickHelp	it	INS_005_LeftArrangeCS	Title#ci	not_localized
+QuickHelp	it	INS_005_LeftArrangeCS	Title#cit	not_localized
 QuickHelp	it	INS_010_SendSlot	Title	not_localized
 QuickHelp	it	INS_010_SendSlot	Title#ci	not_localized
 QuickHelp	it	INS_010_SendSlot	Title#cit	not_localized
@@ -263,6 +290,9 @@ QuickHelp	it	INS_012_InputSlot	Title#cit	not_localized
 QuickHelp	it	INS_014_OutputSlot	Title	not_localized
 QuickHelp	it	INS_014_OutputSlot	Title#ci	not_localized
 QuickHelp	it	INS_014_OutputSlot	Title#cit	not_localized
+QuickHelp	it	INS_086_MidiSlot	Title	not_localized
+QuickHelp	it	INS_086_MidiSlot	Title#ci	not_localized
+QuickHelp	it	INS_086_MidiSlot	Title#cit	not_localized
 QuickHelp	it	KCE_024_Record	composed	not_localized
 QuickHelp	it	KCE_024_Record	composed#ci	not_localized
 QuickHelp	it	KCE_024_Record	composed#cit	not_localized
@@ -308,6 +338,9 @@ QuickHelp	ja	GMN_014_CreateMarker	Title#cit	98086c1d0f91
 QuickHelp	ja	GMV_008_ShowInspector	Title	d99ff6533d6c
 QuickHelp	ja	GMV_008_ShowInspector	Title#ci	d99ff6533d6c
 QuickHelp	ja	GMV_008_ShowInspector	Title#cit	d99ff6533d6c
+QuickHelp	ja	INS_005_LeftArrangeCS	Title	457aa44f02b3
+QuickHelp	ja	INS_005_LeftArrangeCS	Title#ci	457aa44f02b3
+QuickHelp	ja	INS_005_LeftArrangeCS	Title#cit	457aa44f02b3
 QuickHelp	ja	INS_010_SendSlot	Title	b16e9ce071c6
 QuickHelp	ja	INS_010_SendSlot	Title#ci	b16e9ce071c6
 QuickHelp	ja	INS_010_SendSlot	Title#cit	b16e9ce071c6
@@ -320,6 +353,9 @@ QuickHelp	ja	INS_012_InputSlot	Title#cit	7133b7b78aa1
 QuickHelp	ja	INS_014_OutputSlot	Title	3aa3ad9f6dbb
 QuickHelp	ja	INS_014_OutputSlot	Title#ci	3aa3ad9f6dbb
 QuickHelp	ja	INS_014_OutputSlot	Title#cit	3aa3ad9f6dbb
+QuickHelp	ja	INS_086_MidiSlot	Title	cb0fda9cebb7
+QuickHelp	ja	INS_086_MidiSlot	Title#ci	6c40aa7fe67f
+QuickHelp	ja	INS_086_MidiSlot	Title#cit	6c40aa7fe67f
 QuickHelp	ja	KCE_024_Record	composed	64f1e387b22b
 QuickHelp	ja	KCE_024_Record	composed#ci	64f1e387b22b
 QuickHelp	ja	KCE_024_Record	composed#cit	64f1e387b22b
@@ -368,6 +404,9 @@ QuickHelp	ko	GMN_014_CreateMarker	Title#cit	de3f8710b2a3
 QuickHelp	ko	GMV_008_ShowInspector	Title	8fd90304ec1c
 QuickHelp	ko	GMV_008_ShowInspector	Title#ci	8fd90304ec1c
 QuickHelp	ko	GMV_008_ShowInspector	Title#cit	8fd90304ec1c
+QuickHelp	ko	INS_005_LeftArrangeCS	Title	6d266203f0c0
+QuickHelp	ko	INS_005_LeftArrangeCS	Title#ci	6d266203f0c0
+QuickHelp	ko	INS_005_LeftArrangeCS	Title#cit	6d266203f0c0
 QuickHelp	ko	INS_010_SendSlot	Title	9a2a4084eb02
 QuickHelp	ko	INS_010_SendSlot	Title#ci	9a2a4084eb02
 QuickHelp	ko	INS_010_SendSlot	Title#cit	9a2a4084eb02
@@ -380,6 +419,9 @@ QuickHelp	ko	INS_012_InputSlot	Title#cit	2408aa51580e
 QuickHelp	ko	INS_014_OutputSlot	Title	635a2923606e
 QuickHelp	ko	INS_014_OutputSlot	Title#ci	635a2923606e
 QuickHelp	ko	INS_014_OutputSlot	Title#cit	635a2923606e
+QuickHelp	ko	INS_086_MidiSlot	Title	ab19d2a03a12
+QuickHelp	ko	INS_086_MidiSlot	Title#ci	473d85174fbf
+QuickHelp	ko	INS_086_MidiSlot	Title#cit	473d85174fbf
 QuickHelp	ko	KCE_024_Record	composed	3672f17d15e9
 QuickHelp	ko	KCE_024_Record	composed#ci	3672f17d15e9
 QuickHelp	ko	KCE_024_Record	composed#cit	3672f17d15e9
@@ -425,6 +467,9 @@ QuickHelp	pt	GMN_014_CreateMarker	Title#cit	not_localized
 QuickHelp	pt	GMV_008_ShowInspector	Title	not_localized
 QuickHelp	pt	GMV_008_ShowInspector	Title#ci	not_localized
 QuickHelp	pt	GMV_008_ShowInspector	Title#cit	not_localized
+QuickHelp	pt	INS_005_LeftArrangeCS	Title	not_localized
+QuickHelp	pt	INS_005_LeftArrangeCS	Title#ci	not_localized
+QuickHelp	pt	INS_005_LeftArrangeCS	Title#cit	not_localized
 QuickHelp	pt	INS_010_SendSlot	Title	not_localized
 QuickHelp	pt	INS_010_SendSlot	Title#ci	not_localized
 QuickHelp	pt	INS_010_SendSlot	Title#cit	not_localized
@@ -437,6 +482,9 @@ QuickHelp	pt	INS_012_InputSlot	Title#cit	not_localized
 QuickHelp	pt	INS_014_OutputSlot	Title	not_localized
 QuickHelp	pt	INS_014_OutputSlot	Title#ci	not_localized
 QuickHelp	pt	INS_014_OutputSlot	Title#cit	not_localized
+QuickHelp	pt	INS_086_MidiSlot	Title	not_localized
+QuickHelp	pt	INS_086_MidiSlot	Title#ci	not_localized
+QuickHelp	pt	INS_086_MidiSlot	Title#cit	not_localized
 QuickHelp	pt	KCE_024_Record	composed	not_localized
 QuickHelp	pt	KCE_024_Record	composed#ci	not_localized
 QuickHelp	pt	KCE_024_Record	composed#cit	not_localized
@@ -482,6 +530,9 @@ QuickHelp	zh_CN	GMN_014_CreateMarker	Title#cit	76fd489d2c72
 QuickHelp	zh_CN	GMV_008_ShowInspector	Title	d6454575bbc9
 QuickHelp	zh_CN	GMV_008_ShowInspector	Title#ci	d6454575bbc9
 QuickHelp	zh_CN	GMV_008_ShowInspector	Title#cit	d6454575bbc9
+QuickHelp	zh_CN	INS_005_LeftArrangeCS	Title	8587179256f9
+QuickHelp	zh_CN	INS_005_LeftArrangeCS	Title#ci	8587179256f9
+QuickHelp	zh_CN	INS_005_LeftArrangeCS	Title#cit	8587179256f9
 QuickHelp	zh_CN	INS_010_SendSlot	Title	fc510e623fc2
 QuickHelp	zh_CN	INS_010_SendSlot	Title#ci	fc510e623fc2
 QuickHelp	zh_CN	INS_010_SendSlot	Title#cit	fc510e623fc2
@@ -494,6 +545,9 @@ QuickHelp	zh_CN	INS_012_InputSlot	Title#cit	932731939ec7
 QuickHelp	zh_CN	INS_014_OutputSlot	Title	7ecab589020d
 QuickHelp	zh_CN	INS_014_OutputSlot	Title#ci	7ecab589020d
 QuickHelp	zh_CN	INS_014_OutputSlot	Title#cit	7ecab589020d
+QuickHelp	zh_CN	INS_086_MidiSlot	Title	4b055b8572c6
+QuickHelp	zh_CN	INS_086_MidiSlot	Title#ci	dd22e925b012
+QuickHelp	zh_CN	INS_086_MidiSlot	Title#cit	dd22e925b012
 QuickHelp	zh_CN	KCE_024_Record	composed	48b746bba725
 QuickHelp	zh_CN	KCE_024_Record	composed#ci	48b746bba725
 QuickHelp	zh_CN	KCE_024_Record	composed#cit	48b746bba725
@@ -539,6 +593,9 @@ QuickHelp	zh_TW	GMN_014_CreateMarker	Title#cit	not_localized
 QuickHelp	zh_TW	GMV_008_ShowInspector	Title	not_localized
 QuickHelp	zh_TW	GMV_008_ShowInspector	Title#ci	not_localized
 QuickHelp	zh_TW	GMV_008_ShowInspector	Title#cit	not_localized
+QuickHelp	zh_TW	INS_005_LeftArrangeCS	Title	not_localized
+QuickHelp	zh_TW	INS_005_LeftArrangeCS	Title#ci	not_localized
+QuickHelp	zh_TW	INS_005_LeftArrangeCS	Title#cit	not_localized
 QuickHelp	zh_TW	INS_010_SendSlot	Title	not_localized
 QuickHelp	zh_TW	INS_010_SendSlot	Title#ci	not_localized
 QuickHelp	zh_TW	INS_010_SendSlot	Title#cit	not_localized
@@ -551,6 +608,9 @@ QuickHelp	zh_TW	INS_012_InputSlot	Title#cit	not_localized
 QuickHelp	zh_TW	INS_014_OutputSlot	Title	not_localized
 QuickHelp	zh_TW	INS_014_OutputSlot	Title#ci	not_localized
 QuickHelp	zh_TW	INS_014_OutputSlot	Title#cit	not_localized
+QuickHelp	zh_TW	INS_086_MidiSlot	Title	not_localized
+QuickHelp	zh_TW	INS_086_MidiSlot	Title#ci	not_localized
+QuickHelp	zh_TW	INS_086_MidiSlot	Title#cit	not_localized
 QuickHelp	zh_TW	KCE_024_Record	composed	not_localized
 QuickHelp	zh_TW	KCE_024_Record	composed#ci	not_localized
 QuickHelp	zh_TW	KCE_024_Record	composed#cit	not_localized

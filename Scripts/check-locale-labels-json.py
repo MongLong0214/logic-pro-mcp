@@ -234,12 +234,17 @@ def scope_problems(name, entry, surfaces):
 
 
 
-MATCH_MODES = ("exact", "exact_strict", "prefix", "contains")
+MATCH_MODES = ("exact", "exact_strict", "prefix", "contains", "template")
 
 
 def swift_prefix(repo=REPO):
     """Delegates to Scripts/locale_labels.py, for the same reason the other two do."""
     return _module().swift_prefix(repo)
+
+
+def swift_template(repo=REPO):
+    """Delegates to Scripts/locale_labels.py, for the same reason the other modes do."""
+    return _module().swift_template(repo)
 
 
 def swift_exact_strict(repo=REPO):
@@ -279,6 +284,9 @@ _exact_strict = _exact_strict - _containment
 # would have the same ambiguity the three above do, and none is, so the subtraction is a guard
 # against a future one rather than a live case.
 _prefix = swift_prefix() - _containment
+# The fifth mode, `.template` (#904): one MenuPath may use it. It is not prefix and not containment,
+# so the ledger must hold the label to the product's own rule.
+_template = swift_template()
 # Which labels the product still reads, for auditing `retired`. Same derivation site as the
 # containment sets, because a rule with two implementations is a rule that drifts.
 _live_label_uses = _module().swift_label_uses()
@@ -495,6 +503,16 @@ def carries(value, text, mode):
         # ANCHORED, and the candidate is trimmed — `.prefix` takes the same trimming path `.exact`
         # does in `LabelSet.matches`; only `.exactStrict` returns before it.
         return subject.strip().startswith(label)
+    if mode == "template":
+        # `.template` (#904): the label is a title template with ONE `%@`. The text must start
+        # with what precedes it, end with what follows it, and keep a non-blank middle. A label
+        # with no single `%@` matches nothing, as in `LabelSet.templateMatches`.
+        head, sep, tail = label.partition("%@")
+        if not sep or "%@" in tail:
+            return False
+        s = subject.strip()
+        return (len(s) > len(head) + len(tail) and s.startswith(head) and s.endswith(tail)
+                and s[len(head):len(s) - len(tail)].strip() != "")
     return label in subject
 
 
@@ -637,6 +655,10 @@ def label_match(name, entry):
         out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
                    f"`.prefix`, which ANCHORS — the evidence rule must be the product's, and "
                    f"`contains` accepts a sighting mid-value that it refuses")
+    if name in _template and mode != "template":
+        out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
+                   f"`.template`, which needs both the text before and the text after the `%@` — "
+                   f"the evidence rule must be the product's")
     if name in _exact_strict and mode != "exact_strict":
         out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
                    f"`.exactStrict`, which does not trim the observed text — the evidence rule "

@@ -36,6 +36,7 @@ enum ProjectFixture: String, Codable, CaseIterable, Sendable {
 }
 
 enum QualificationVerificationKind: String, Codable, Sendable {
+    case atlasComparison = "atlas_comparison"
     case readResponse = "read_response"
     case independentReadback = "independent_readback"
     case semanticReadback = "semantic_readback"
@@ -266,6 +267,7 @@ struct QualificationCase: Codable, Equatable, Sendable {
 }
 
 struct CaseEvidence: Codable, Equatable, Sendable {
+    let atlasComparison: AtlasQualification.ComparisonEvidence?
     let schema: String
     let caseID: String
     let operationID: String
@@ -346,9 +348,11 @@ struct CaseEvidence: Codable, Equatable, Sendable {
         operationWriteAttempted: Bool? = nil,
         mutationRestoreRecordSHA256: String? = nil,
         availabilityReason: QualificationAvailabilityReason? = nil,
-        availabilityObservation: QualificationAvailabilityObservation? = nil
+        availabilityObservation: QualificationAvailabilityObservation? = nil,
+        atlasComparison: AtlasQualification.ComparisonEvidence? = nil
     ) {
         self.schema = schema
+        self.atlasComparison = atlasComparison
         self.caseID = caseID
         self.operationID = operationID
         self.tool = tool
@@ -389,6 +393,7 @@ struct CaseEvidence: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case schema
+        case atlasComparison = "atlas_comparison"
         case caseID = "case_id"
         case operationID = "operation_id"
         case tool
@@ -606,6 +611,43 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
         self.evidenceManifestSHA256 = evidenceManifestSHA256
         self.provenance = provenance
         self.provenanceSignature = provenanceSignature
+    }
+}
+
+/// `total`, `passed`, `failed` and `waived` as a list of cases implies them.
+///
+/// #373 Q4: the producer writes an attestation's counts through this type and the promotion gate
+/// recomputes them through it, so a count and its cases are judged by one rule. The counts are NOT
+/// in the signed provenance record, so this recomputation -- not the signature -- is what binds them:
+/// before it, a signed bundle with every count edited to zero verified unchanged.
+struct QualificationSummaryCounts: Equatable, Sendable {
+    let total: Int
+    let passed: Int
+    let failed: Int
+    let waived: Int
+
+    init(cases: [QualificationCase]) {
+        total = cases.count
+        passed = cases.filter { $0.status == .passed }.count
+        failed = cases.filter { $0.status == .failed }.count
+        waived = cases.filter { $0.status == .waived }.count
+    }
+
+    init(statedBy attestation: ReleaseQualificationAttestation) {
+        total = attestation.total
+        passed = attestation.passed
+        failed = attestation.failed
+        waived = attestation.waived
+    }
+
+    /// Every field on which these counts disagree with `recomputed`, named by its attestation key.
+    func mismatches(against recomputed: QualificationSummaryCounts) -> [(field: String, stated: Int, recomputed: Int)] {
+        [
+            ("total", total, recomputed.total),
+            ("passed", passed, recomputed.passed),
+            ("failed", failed, recomputed.failed),
+            ("waived", waived, recomputed.waived),
+        ].filter { $0.1 != $0.2 }.map { (field: $0.0, stated: $0.1, recomputed: $0.2) }
     }
 }
 

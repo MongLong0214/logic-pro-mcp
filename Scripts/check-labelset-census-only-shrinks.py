@@ -20,12 +20,26 @@ in here. Without that half, deleting a line would "close" an entry while the gap
 tree -- the count would fall and nothing would have improved, which is the failure mode a
 shrink-only list invites. Completeness is what makes the number mean something.
 
+**A set on the waiver file is not legacy.** `docs/canon/LABELSETS-WITHOUT-A-ROW.json` answers the
+same question for a set with an entry there, so such a set counts as RESOLVED here and may not also
+sit on the legacy list. Two kinds of entry, proved in two places:
+
+  - `why_no_row`, optionally with `composed_from`: the absence (or the multiplication) is
+    re-derived from Apple's bytes on every run by `check-new-labelsets-name-a-row.py`, so this
+    guard takes the entry's presence and leaves its proof to that one.
+  - `kind: "kept_measured"`: the set keeps what was read off a running Logic because no row fits
+    how the product matches it. Nothing re-derives that from Apple's data, so the entry is checked
+    HERE: a non-empty one-sentence `reason`, and a `record` under `docs/observations/` that exists
+    and names the set in its `depends` (`Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:<set>`).
+    A record that does not name the set is a pointer to somebody else's readings.
+
 The census carries what `derive_label_variants.py` said about each entry, so the remaining work is
 sized rather than guessed. Those verdicts are NOT checked here: the tool needs Logic's bundle, and
 a guard that cannot run on a machine without Logic is a guard CI cannot run. The name set is the
 contract; the verdicts are a note to whoever picks one up.
 
-Exit: 0 = complete and not grown · 1 = grown, or a policy set is missing from it
+Exit: 0 = complete and not grown · 1 = grown, a policy set is missing from it, or a waiver
+that claims to resolve a set does not
 """
 import json
 import os
@@ -38,6 +52,15 @@ POLICY = os.environ.get("LPM_POLICY_SWIFT") or os.path.join(
     REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
 CENSUS = os.environ.get("LPM_LABELSET_CENSUS") or os.path.join(
     REPO, "docs", "canon", "LABELSETS-WITHOUT-A-ROW-LEGACY.json")
+WAIVERS = os.environ.get("LPM_LABELSET_WAIVERS") or os.path.join(
+    REPO, "docs", "canon", "LABELSETS-WITHOUT-A-ROW.json")
+#: Where a `kept_measured` entry's `record` is looked up. The repository in production; a
+#: temporary tree in the self-test, so a record that exists and one that does not can both be made.
+RECORDS_ROOT = os.environ.get("LPM_LABELSET_RECORDS_ROOT") or REPO
+#: How an observation record names a LabelSet: the `depends` form check-observation-records.py
+#: already validates (the symbol must exist in the file).
+POLICY_DEPENDS = "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+KEPT_MEASURED = "kept_measured"
 BASE_REF = os.environ.get("LPM_LABELSET_BASE_REF", "origin/main")
 #: The base's two files, as CONTENT rather than as a ref. `git show <base>:<path>` can only reach a
 #: path the base carries, so a case that points the seams above at a temporary tree cannot produce
@@ -83,6 +106,51 @@ def declared_count(source: str) -> int:
 def census_names(path: str) -> set:
     with open(path, encoding="utf-8") as handle:
         return set((json.load(handle).get("undeclared") or {}).keys())
+
+
+def kept_measured_problem(name: str, entry: dict):
+    """Why a `kept_measured` entry does not resolve its set, or None when it does."""
+    reason = entry.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        return (f"{name}: `kept_measured` with an empty `reason`. Keeping a measured value instead "
+                f"of a row is a decision, and a decision nobody wrote down is a list entry.")
+    record = entry.get("record")
+    if not isinstance(record, str) or not record.startswith("docs/observations/") \
+            or os.path.isabs(record) or ".." in record.split("/"):
+        return (f"{name}: `kept_measured` needs `record`, a path under docs/observations/, "
+                f"got {record!r}.")
+    path = os.path.join(RECORDS_ROOT, record)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            depends = json.load(handle).get("depends") or []
+    except FileNotFoundError:
+        return f"{name}: `kept_measured` cites {record}, which does not exist."
+    except (OSError, ValueError, AttributeError) as exc:
+        return f"{name}: `kept_measured` cites {record}, which cannot be read: {exc}"
+    if f"{POLICY_DEPENDS}:{name}" not in depends:
+        return (f"{name}: `kept_measured` cites {record}, whose `depends` does not name "
+                f"{POLICY_DEPENDS}:{name}. A record about other sets holds none of this one's "
+                f"readings.")
+    return None
+
+
+def waived(path: str):
+    """(resolved names, problems) from the waiver file. A missing file waives nothing."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            entries = json.load(handle).get("labelsets") or {}
+    except FileNotFoundError:
+        return set(), []
+    resolved, problems = set(), []
+    for name, entry in sorted(entries.items()):
+        if (entry or {}).get("kind") == KEPT_MEASURED:
+            problem = kept_measured_problem(name, entry)
+            if problem:
+                problems.append(problem)
+                continue
+        # Any other entry is a `why_no_row` waiver, re-proved by check-new-labelsets-name-a-row.py.
+        resolved.add(name)
+    return resolved, problems
 
 
 def _at_base(rel: str) -> str:
@@ -142,13 +210,24 @@ def main() -> int:
         print(f"cannot read the census at {CENSUS}: {exc}", file=sys.stderr)
         return 1
 
-    problems = []
+    try:
+        resolved, problems = waived(WAIVERS)
+    except (OSError, ValueError, AttributeError) as exc:
+        print(f"cannot read the waivers at {WAIVERS}: {exc}", file=sys.stderr)
+        return 1
+    both = sorted(listed & resolved)
+    if both:
+        problems.append(
+            f"{len(both)} LabelSet(s) are on the legacy census AND answered in "
+            f"{os.path.basename(WAIVERS)}, first {both[0]}. Delete the legacy line -- a set "
+            f"counted twice is a number that does not fall when the work is done.")
+    policy = policy - resolved
     missing = sorted(policy - listed)
     if missing:
         problems.append(
             f"{len(missing)} LabelSet(s) name no row and are not in the census, first "
             f"{missing[0]}. A census with a hole in it makes its own number meaningless.")
-    stale = sorted(listed - policy)
+    stale = sorted(listed - policy - set(both))
     if stale:
         problems.append(
             f"{len(stale)} census entr(y/ies) name a LabelSet that now declares a row or no "
@@ -196,7 +275,7 @@ def main() -> int:
     with open(POLICY, encoding="utf-8") as handle:
         total = declared_count(handle.read())
     print(f"the census is complete and gained no new set: {len(listed)} LabelSet(s) name no row, "
-          f"of {total}")
+          f"of {total}; {len(resolved)} answered in {os.path.basename(WAIVERS)}")
     return 0
 
 

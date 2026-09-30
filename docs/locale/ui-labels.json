@@ -293,7 +293,14 @@
    "canonical": "off",
    "variants": [
     "끔",
-    "オフ"
+    "オフ",
+    "Aus",
+    "Desactivado",
+    "Non",
+    "Non attiva",
+    "Desativado",
+    "关",
+    "關閉"
    ],
    "rationale": "Classifies an explicit track-header automation Off token; read-only classifier. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector track outline's automation popup.",
    "roles": [
@@ -309,8 +316,8 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "automationModeRead": {
@@ -1559,21 +1566,37 @@
    "variants": [
     "Delete",
     "삭제",
-    "削除"
+    "削除",
+    "트랙 및 콘텐츠 삭제",
+    "トラックとコンテンツを削除",
+    "Spuren und Inhalte löschen",
+    "Eliminar pistas y contenido",
+    "Supprimer les pistes et le contenu",
+    "Elimina tracce e contenuti",
+    "Apagar as Pistas e o Conteúdo",
+    "删除轨道和内容",
+    "刪除音軌和內容",
+    "Löschen",
+    "Eliminar",
+    "Supprimer",
+    "Elimina",
+    "Apagar",
+    "删除",
+    "刪除"
    ],
-   "rationale": "Primary destructive button on a track-delete confirm sheet; the reconciler presses only the classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a button label: \"Delete Tracks and Content\" on the channel-strip sheet, and a bare \"Delete\" on \"Delete Track and Regions?\" (track carries regions) and \"Delete Track and Cells?\" (Live Loops cells) — both measured live on 12.3. The bare label is why #545 happened: the structural fallback tested `hasPrefix(\"Delete \")`, with a trailing space, which \"Delete\" does not satisfy, so those sheets classified as unknown and were left on screen. Accepting the bare label is safe because `decide` only confirms a delete when `isDeleteContext` is true and preflight never acts on `.deleteConfirm` at all.\n\n        NOT MEASURED: the KO and JA forms of this bare button. A revision of this set carried 삭제 and         削除, which were translated by hand rather than read from the live sheet — the one thing the         header of this file forbids, and forbids because a hand translation was already wrong here once         (New is 신규, not the 새로 만들기 a translator reaches for). Outside English the bare-label         sheets therefore still classify as unknown, which is the pre-#545 behaviour: fail-closed, dialog         left on screen. That is a real remaining gap, tracked with the other locale work in #519, and it         is stated rather than papered over with a guess that would silently press an unidentified         destructive button.",
+   "rationale": "Primary destructive button on a track-delete confirm sheet; the reconciler presses only the classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a button label: \"Delete Tracks and Content\" on the channel-strip sheet, and a bare \"Delete\" on \"Delete Track and Regions?\" (track carries regions) and \"Delete Track and Cells?\" (Live Loops cells) — both measured live on 12.3. The bare label is why #545 happened: the structural fallback tested `hasPrefix(\"Delete \")`, with a trailing space, which \"Delete\" does not satisfy, so those sheets classified as unknown and were left on screen. Accepting the bare label is safe because `decide` only confirms a delete when `isDeleteContext` is true and preflight never acts on `.deleteConfirm` at all.\n\n        NOT MEASURED on record outside English. A revision of this set carried 삭제 and 削除 translated by hand rather than read from the live sheet — the one thing the header of this file forbids, and forbids because a hand translation was already wrong here once (New is 신규, not the 새로 만들기 a translator reaches for). Since 2026-09-28 every non-English member is a value of one of the two rows this set names, read out of Logic's own tables rather than typed: DeleteChannelStrips.strings 30.title for the channel-strip sheet's button, and the plain `Delete` row of Logic.framework's Localizable.strings, the table the Regions and Cells alerts' own text is in, for the bare one. Which row that bare button reads is not identified; the other English `Delete` titles in Logic's tables agree with this one in all ten locales except one Portuguese dialog title and the `#key` and `#und` namespaces. Issue545DeleteConfirmBareLabelTests says the Korean and Japanese forms were read off live sheets on 2026-08-17; no observation record carries that reading. No German, Spanish, French, Italian, Portuguese or Chinese sheet has been read, so in those languages a delete sheet now classifies as a delete confirmation on Apple's word rather than on a reading (#904).",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "displayModePopupLabel": {
@@ -2831,7 +2854,11 @@
    "canonical": "left inspector channel strip",
    "variants": [
     "왼쪽 인스펙터 채널 스트립",
-    "インスペクタの左チャンネルストリップ"
+    "インスペクタの左チャンネルストリップ",
+    "Linkes Informationsfenster für Channel-Strip",
+    "Canal de inspector izquierdo",
+    "Tranche de console d’inspecteur gauche",
+    "左检查器通道条"
    ],
    "rationale": "Identifies the inspector's channel strip for the selected track; read-only locator. Matched as a PREFIX: the right inspector strip's help contains the left strip's phrase in a later sentence (ko-KR census 2026-09-05), so a substring match selects the wrong element.",
    "provenance": {
@@ -2864,12 +2891,12 @@
     "en-US": "derived",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
+    "de-DE": "derived",
+    "es-ES": "derived",
     "fr-FR": "unmeasured",
     "it-IT": "unmeasured",
     "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "unmeasured"
    }
   },
@@ -3126,19 +3153,26 @@
   },
   "midiEffectSlotHelpKeyword": {
    "canonical": "midi effect slot",
-   "variants": [],
+   "variants": [
+    "MIDI 이펙트 슬롯",
+    "MIDIエフェクトスロット",
+    "MIDI-Effekt-Slot",
+    "Ranura de efectos MIDI",
+    "Slot d’effet MIDI",
+    "MIDI 效果插槽"
+   ],
    "rationale": "Detects a channel strip's MIDI effect slot by its AXHelp string; read-only classifier.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
     "fr-FR": "unmeasured",
     "it-IT": "unmeasured",
     "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "unmeasured"
    }
   },
@@ -4840,7 +4874,13 @@
   "pluginWindowControlsViewMenuItem": {
    "canonical": "Controls",
    "variants": [
-    "컨트롤"
+    "컨트롤",
+    "コントロール",
+    "Regler",
+    "Controles",
+    "Commandes",
+    "Controlli",
+    "控制"
    ],
    "rationale": "Measured live on 2026-09-02 in Compressor's scoped View menu; use to select Controls only.",
    "match": "exact",
@@ -4848,13 +4888,13 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "pluginWindowEditorViewMenuItem": {
@@ -4890,8 +4930,13 @@
   },
   "pluginWindowSmartControlsControl": {
    "canonical": "smart controls",
-   "variants": [],
-   "rationale": "Locates the Smart Controls toggle in a Drummer track's docked Smart Controls pane for the non-blocking classifier; English canonical only (OQ-1: localized label unverified → non-EN panes stay blocking, fail-closed). Read-only classifier.",
+   "variants": [
+    "Smart Controls",
+    "Smart Control",
+    "智能控制",
+    "智慧型控制項目"
+   ],
+   "rationale": "Locates the Smart Controls toggle in a Drummer track's docked Smart Controls pane for the non-blocking classifier; read-only classifier. Until 2026-09-28 English only (OQ-1: the localized label was unverified, so non-English panes stayed blocking, fail-closed).",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -4900,10 +4945,10 @@
     "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "unmeasured",
+    "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "pluginWindowViewSwitcher": {
@@ -4913,13 +4958,13 @@
     "表示",
     "Ansicht",
     "Visualización",
-    "Présentation",
+    "affichage",
     "Vista",
-    "Visualizar",
+    "visualização",
     "显示",
     "顯示方式"
    ],
-   "rationale": "Measured live on 2026-09-02 in Compressor: the Controls/editor AXMenuButton identifies itself by AXDescription (View/보기); AXTitle is not a view readback.",
+   "rationale": "Identifies the plug-in window's Controls/editor AXMenuButton by AXDescription; AXTitle is not a view readback (measured live 2026-09-02 in Compressor, View/보기). The description is the value of MAToolKit's `view` row: read live on 2026-09-29 as affichage (fr), visualização (pt) and 보기 (ko).",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -6660,7 +6705,13 @@
     "tracks content",
     "tracks contents",
     "トラックコンテンツ",
-    "Spuren enthält"
+    "Spuren enthält",
+    "Contenido de Pistas",
+    "Pistes contenus",
+    "Contenuto di Tracce",
+    "Conteúdos de Pistas",
+    "“轨道”内容",
+    "音軌 內容"
    ],
    "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier. German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
    "provenance": {
@@ -6742,7 +6793,13 @@
     "tracks headers",
     "트랙 헤더",
     "Spuren Titel",
-    "トラックヘッダ"
+    "トラックヘッダ",
+    "Cabecera de Pistas",
+    "En-tête Pistes",
+    "Intestazione di Tracce",
+    "Cabeçalho de Pistas",
+    "轨道 标头",
+    "音軌 標題"
    ],
    "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred). German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
    "match": "exact_strict",
@@ -7059,7 +7116,15 @@
   "trackTypeExternalMIDI": {
    "canonical": "external",
    "variants": [
-    "midi"
+    "midi",
+    "External MIDI",
+    "외부 MIDI",
+    "外部MIDI",
+    "Externes MIDI",
+    "MIDI externo",
+    "MIDI externe",
+    "MIDI esterno",
+    "外部 MIDI"
    ],
    "rationale": "Classifies an external-MIDI track; read-only classifier.",
    "match": "exact",
@@ -7078,20 +7143,28 @@
   },
   "trackTypeGMDevice": {
    "canonical": "gm device",
-   "variants": [],
+   "variants": [
+    "GM 기기",
+    "GMデバイス",
+    "GM-Gerät",
+    "Dispositivo GM",
+    "Appareil GM",
+    "通用 MIDI 设备",
+    "GM 裝置"
+   ],
    "rationale": "Classifies a GM Device external-MIDI strip; MUST win over .audio (#131 silent-bounce guard); read-only.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "trackTypeInstrument": {
@@ -7473,49 +7546,42 @@
    }
   },
   "undoMenuItemPrefix": {
-   "canonical": "Undo",
+   "canonical": "Undo %@",
    "variants": [
-    "실행 취소"
+    "%@ 실행 취소",
+    "取り消す- %@",
+    "„%@“ widerrufen",
+    "Deshacer %@",
+    "Annuler %@",
+    "Annulla %@",
+    "Desfazer %@",
+    "撤销%@",
+    "還原「%@」"
    ],
-   "rationale": "Menu item includes the operation name after the localized Undo prefix.",
-   "provenance": {
-    "실행 취소": {
-     "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "ko-KR",
-     "match": "prefix",
-     "observed": "실행 취소할 수 없음",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "role": "AXMenuItem"
-    }
-   },
+   "rationale": "The Edit menu's Undo entry is a title TEMPLATE, not a prefix: Apple ships `Undo %@`, and ko `%@ 실행 취소`, de `„%@“ widerrufen` and zh_TW `還原「%@」` put the `%@` first or inside quotes (read from Apple's data 2026-09-28; no Logic has been read showing our insert's entry outside English).",
    "roles": [
     "AXMenuItem"
    ],
-   "match": "prefix",
+   "match": "template",
    "coverage": {
     "en-US": "measured",
-    "ko-KR": "measured",
-    "ja-JP": "unmeasured",
-    "de-DE": "measured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    },
    "coverage_records": {
-    "de-DE": "2026-09-12-de-DE-arrange-menus-census",
     "en-US": "2026-09-05-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "de-DE": "AXMenuItem",
     "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "de-DE": "title",
     "en-US": "title"
    }
   },

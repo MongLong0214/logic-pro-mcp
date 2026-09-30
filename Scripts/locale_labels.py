@@ -633,6 +633,32 @@ def swift_prefix(repo=REPO):
     return names
 
 
+def swift_template(repo=REPO):
+    """LabelSet names the product reads with `.template` (#904), read from the Swift.
+
+    `.template` matches a title against a label holding one `%@`: the text before it, the text
+    after it, and something between. Only the `MenuPath(..., itemMode: .template)` form and the
+    `AXLocalePolicy.<name>.matches(..., mode: .template)` form name the LabelSet.
+    """
+    names = set()
+    for root, _, files in os.walk(os.path.join(repo, "Sources")):
+        for f in files:
+            if not f.endswith(".swift"):
+                continue
+            try:
+                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            names |= set(re.findall(
+                r"MenuPath\((?:[^()]|\([^()]*\))*?item:\s*(\w+)"
+                r"(?:[^()]|\([^()]*\))*?itemMode:\s*\.template",
+                body, re.S))
+            names |= set(re.findall(
+                r"AXLocalePolicy\s*\.\s*(\w+)\s*\.matches\((?:[^()]|\([^()]*\))*mode:\s*\.template",
+                body, re.S))
+    return names
+
+
 def swift_label_uses(repo=REPO):
     """Every LabelSet the product still reads, by name, from `AXLocalePolicy.<name>` in Sources/.
 
@@ -664,6 +690,7 @@ def swift_label_uses(repo=REPO):
 _CONTAINMENT = swift_containment()
 _EXACT_STRICT = swift_exact_strict()
 _PREFIX = swift_prefix()
+_TEMPLATE = swift_template()
 
 
 # Fields a person wrote by hand, which the Swift projection cannot regenerate.
@@ -744,7 +771,9 @@ def build(existing=None, dropped=None):
         # `prefix` is ANCHORED, so containment is looser than it: a label read with `.prefix` and
         # declared `contains` lets the ledger certify a sighting mid-value the product refuses.
         # Same shape as the `exact_strict` gap, and found while fixing that one.
-        if name in _PREFIX and name not in _CONTAINMENT:
+        if name in _TEMPLATE and name not in _CONTAINMENT:
+            entry["match"] = "template"
+        elif name in _PREFIX and name not in _CONTAINMENT:
             entry["match"] = "prefix"
         elif name in _CONTAINMENT:
             entry["match"] = "contains"

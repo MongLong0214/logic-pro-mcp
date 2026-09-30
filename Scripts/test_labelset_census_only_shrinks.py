@@ -108,17 +108,21 @@ _r = run(LPM_POLICY_SWIFT=broken_path)
 case("a declaration the parser cannot read stops the run", _r.returncode != 0,
      (_r.stdout + _r.stderr).strip()[:200])
 
-# (7) A census short of the tree is refused -- the completeness half, at a REAL entry rather than
-#     a planted one, so the two halves are shown to disagree about the same names.
-short = json.loads(json.dumps(census))
-del short["undeclared"]["fixtureNotInThePolicy"]
-first_real = sorted(short["undeclared"])[0]
-del short["undeclared"][first_real]
-short_path = os.path.join(tmp, "census-short-by-one.json")
+# (7) A set that is neither listed nor answered is refused -- the completeness half, at a REAL set
+#     rather than a planted one, so the two halves are shown to disagree about the same names. The
+#     real set is one the waiver file answers, because the legacy list is meant to reach zero and a
+#     case resting on one of its lines would expire the day it does.
+WAIVERS = os.path.join(REPO, "docs", "canon", "LABELSETS-WITHOUT-A-ROW.json")
+with open(WAIVERS, encoding="utf-8") as handle:
+    waivers = json.load(handle)
+short = json.loads(json.dumps(waivers))
+first_real = sorted(short["labelsets"])[0]
+del short["labelsets"][first_real]
+short_path = os.path.join(tmp, "waivers-short-by-one.json")
 with open(short_path, "w", encoding="utf-8") as handle:
     json.dump(short, handle, ensure_ascii=False, indent=2)
-_r = run(LPM_LABELSET_CENSUS=short_path)
-case("a census missing a real undeclared set is refused", _r.returncode == 1,
+_r = run(LPM_LABELSET_WAIVERS=short_path)
+case("a real set neither on the census nor waived is refused", _r.returncode == 1,
      (_r.stdout + _r.stderr).strip()[:200])
 case("and it names the one that is missing", first_real in _r.stderr, _r.stderr.strip()[:200])
 
@@ -167,6 +171,59 @@ case("a NEW set filed in the census is refused", _r.returncode == 1,
      (_r.stdout + _r.stderr).strip()[:200])
 case("and the refusal says it did not exist at the base",
      "fixtureNamesNoRow" in _r.stderr and "at the base" in _r.stderr, _r.stderr.strip()[:300])
+
+# (10)-(14) `kept_measured`: a set that keeps its live readings is resolved only by an entry that
+#     says why, in one sentence, and cites a record that exists and names it. Driven at the planted
+#     set, which the census does not list, with the record written into a temporary tree.
+records_root = os.path.join(tmp, "records-root")
+os.makedirs(os.path.join(records_root, "docs", "observations"))
+DEPENDS = "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:"
+
+
+def record(stem, names):
+    rel = f"docs/observations/{stem}.json"
+    with open(os.path.join(records_root, rel), "w", encoding="utf-8") as handle:
+        json.dump({"id": stem, "depends": [DEPENDS + name for name in names]}, handle)
+    return rel
+
+
+def kept(entry, census_path=CENSUS):
+    body = json.loads(json.dumps(waivers))
+    body["labelsets"]["fixtureNamesNoRow"] = dict({"kind": "kept_measured"}, **entry)
+    path = os.path.join(tmp, "waivers-kept.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(body, handle, ensure_ascii=False, indent=2)
+    return run(LPM_POLICY_SWIFT=planted_path, LPM_LABELSET_WAIVERS=path,
+               LPM_LABELSET_RECORDS_ROOT=records_root, LPM_LABELSET_CENSUS=census_path)
+
+
+names_it = record("names-the-fixture", ["cancelButton", "fixtureNamesNoRow"])
+names_another = record("names-another-set", ["cancelButton"])
+_r = kept({"reason": "Read live; no row fits.", "record": names_it})
+case("CONTROL: a kept_measured entry with a reason and a record naming the set resolves it",
+     _r.returncode == 0, (_r.stdout + _r.stderr).strip()[:200])
+# Mutation killed: answering a record that is not there as resolved.
+_r = kept({"reason": "Read live; no row fits.", "record": "docs/observations/not-there.json"})
+case("a kept_measured entry citing a missing record is refused",
+     _r.returncode == 1 and "does not exist" in _r.stderr, (_r.stdout + _r.stderr).strip()[:200])
+# Mutation killed: dropping the `depends` comparison.
+_r = kept({"reason": "Read live; no row fits.", "record": names_another})
+case("a kept_measured entry citing a record that does not name the set is refused",
+     _r.returncode == 1 and "does not name" in _r.stderr, (_r.stdout + _r.stderr).strip()[:200])
+# Mutation killed: dropping the reason check.
+_r = kept({"reason": "  ", "record": names_it})
+case("a kept_measured entry with an empty reason is refused",
+     _r.returncode == 1 and "empty `reason`" in _r.stderr, (_r.stdout + _r.stderr).strip()[:200])
+# Mutation killed: letting a waived set stay on the legacy list, where it is counted twice.
+listed_too = json.loads(json.dumps(census))
+del listed_too["undeclared"]["fixtureNotInThePolicy"]
+listed_too["undeclared"]["fixtureNamesNoRow"] = {"verdict": "no-row", "candidate": "", "members": 1}
+listed_too_path = os.path.join(tmp, "census-listing-a-waived-set.json")
+with open(listed_too_path, "w", encoding="utf-8") as handle:
+    json.dump(listed_too, handle, ensure_ascii=False, indent=2)
+_r = kept({"reason": "Read live; no row fits.", "record": names_it}, census_path=listed_too_path)
+case("a set both on the legacy census and waived is refused",
+     _r.returncode == 1 and "AND answered" in _r.stderr, (_r.stdout + _r.stderr).strip()[:200])
 
 print()
 print(f"FAILED ({failed} unexpected)" if failed

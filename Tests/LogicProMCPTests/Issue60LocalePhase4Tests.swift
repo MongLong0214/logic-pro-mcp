@@ -84,13 +84,21 @@ struct Issue60LocalePhase4Tests {
             // somebody read that the product cannot match is a language the product does not work
             // in, so that guard fails on it now -- and this was the last entry standing between it
             // and being able to.
+            // Extended 2026-09-28 (#904) by composition, not from a row: Apple's `%@ header`
+            // template with the `Tracks` noun, whose Korean, Japanese and German products are the
+            // three members already here. LABELSETS-WITHOUT-A-ROW.json records both factors and
+            // check-new-labelsets-name-a-row.py multiplies them against this set.
             ("trackHeadersDescription", AXLocalePolicy.trackHeadersDescription.labels,
              ["track headers", "track header", "tracks header", "tracks headers", "트랙 헤더",
-              "Spuren Titel", "トラックヘッダ"]),
+              "Spuren Titel", "トラックヘッダ", "Cabecera de Pistas", "En-tête Pistes", "Intestazione di Tracce", "Cabeçalho de Pistas", "轨道 标头", "音軌 標題"]),
             ("projectPickerWindow", AXLocalePolicy.projectPickerWindow.labels, ["프로젝트 선택", "choose a project", "choose project", "new from template"]),
             ("transportTextFieldHint", AXLocalePolicy.transportTextFieldHint.labels, ["tempo", "bpm", "position", "템포", "재생헤드 위치"]),
             // `Spuren enthält` added 2026-09-12 (#876), same census, same reason as the row above.
-            ("trackContentExplicit", AXLocalePolicy.trackContentExplicit.labels, ["트랙 콘텐츠", "track content", "track contents", "tracks content", "tracks contents", "トラックコンテンツ", "Spuren enthält"]),
+            // Extended 2026-09-28 (#904) by composition, not from a row: Apple's `%@ contents`
+            // template with the `Tracks` noun, whose Korean, Japanese and German products are the
+            // three members already here. LABELSETS-WITHOUT-A-ROW.json records both factors and
+            // check-new-labelsets-name-a-row.py multiplies them against this set.
+            ("trackContentExplicit", AXLocalePolicy.trackContentExplicit.labels, ["트랙 콘텐츠", "track content", "track contents", "tracks content", "tracks contents", "トラックコンテンツ", "Spuren enthält", "Contenido de Pistas", "Pistes contenus", "Contenuto di Tracce", "Conteúdos de Pistas", "“轨道”内容", "音軌 內容"]),
             ("trackContentGeneric", AXLocalePolicy.trackContentGeneric.labels, ["콘텐츠", "content", "contents"]),
             ("regionKindDrummer", AXLocalePolicy.regionKindDrummer.labels, ["drummer", "session player", "드러머", "세션 플레이어"]),
             ("regionKindMidi", AXLocalePolicy.regionKindMidi.labels, ["midi"]),

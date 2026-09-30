@@ -38,6 +38,89 @@
         ],
         "why_extra": "The bare panel noun. It is a value of the noun row rather than of the composition, kept because dropping it would narrow a match that has been live, and listed here so that `members - composed` is never silently non-empty."
       }
+    },
+    "trackContentExplicit": {
+      "why_no_row": "Logic ASSEMBLES this description; Apple ships no string for it. `%@ contents` is the template and the `Tracks` noun is the argument, so `Tracks contents` is the value of nothing in any source's English corpus. The Korean, Japanese, German members this set carried before 2026-09-28 (트랙 콘텐츠, トラックコンテンツ, Spuren enthält) are that composition, which is what names the template and the noun. `check-labelsets-are-derived.py` verifies a row, so nothing offline checks the composition itself; that gap is #910.",
+      "date": "2026-09-28",
+      "issue": 904,
+      "composed_from": {
+        "template": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/%25%40%20contents#value",
+        "noun": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tracks#value",
+        "why_this_noun": "Two rows hold the noun, and their values agree in all ten locales: the plain `Tracks` row and `StrTabBtnLabel|||Tracks`, so the choice changes no composed member. The plain row is named because the tab-button namespace labels another control. PrefsDisplay.strings `480.label` is English only, and the QuickHelp title `CSS_019_ChannelStriipViewTracks` has no Italian, Portuguese or Traditional Chinese value, a trailing no-break space in French and a colon in Simplified Chinese, so neither composes the members this set carried.",
+        "template_values": {
+          "ko": "%@ 콘텐츠",
+          "ja": "%@コンテンツ",
+          "de": "%@ enthält",
+          "es": "Contenido de %@",
+          "fr": "%@ contenus",
+          "it": "Contenuto di %@",
+          "pt": "Conteúdos de %@",
+          "zh_CN": "“%@”内容",
+          "zh_TW": "%@ 內容"
+        },
+        "noun_values": {
+          "ko": "트랙",
+          "ja": "トラック",
+          "de": "Spuren",
+          "es": "Pistas",
+          "fr": "Pistes",
+          "it": "Tracce",
+          "pt": "Pistas",
+          "zh_CN": "轨道",
+          "zh_TW": "音軌"
+        },
+        "extra": [
+          "track content",
+          "track contents",
+          "tracks content",
+          "tracks contents"
+        ],
+        "why_extra": "English spellings the normalized match has carried since before this entry: singular and plural of each word, lowercased. English is left out of both value maps on purpose. Its composition, `Tracks contents`, differs from the member `tracks contents` only by case, and check-probe-product-drift.py refuses two members that case-folded matching would merge, so the lowercase spelling this set has always carried stands for it. The other three no row or composition produces. All four are kept because removing a member narrows a match already in the product, and listed here so that `members - composed` is never silently non-empty."
+      }
+    },
+    "trackHeadersDescription": {
+      "why_no_row": "Logic ASSEMBLES this description; Apple ships no string for it. `%@ header` is the template and the `Tracks` noun is the argument, so `Tracks header` is the value of nothing in any source's English corpus. The Korean, Japanese, German members this set carried before 2026-09-28 (트랙 헤더, トラックヘッダ, Spuren Titel) are that composition, which is what names the template and the noun. `check-labelsets-are-derived.py` verifies a row, so nothing offline checks the composition itself; that gap is #910.",
+      "date": "2026-09-28",
+      "issue": 904,
+      "composed_from": {
+        "template": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/%25%40%20header#value",
+        "noun": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tracks#value",
+        "why_this_noun": "Two rows hold the noun, and their values agree in all ten locales: the plain `Tracks` row and `StrTabBtnLabel|||Tracks`, so the choice changes no composed member. The plain row is named because the tab-button namespace labels another control. PrefsDisplay.strings `480.label` is English only, and the QuickHelp title `CSS_019_ChannelStriipViewTracks` has no Italian, Portuguese or Traditional Chinese value, a trailing no-break space in French and a colon in Simplified Chinese, so neither composes the members this set carried.",
+        "template_values": {
+          "ko": "%@ 헤더",
+          "ja": "%@ヘッダ",
+          "de": "%@ Titel",
+          "es": "Cabecera de %@",
+          "fr": "En-tête %@",
+          "it": "Intestazione di %@",
+          "pt": "Cabeçalho de %@",
+          "zh_CN": "%@ 标头",
+          "zh_TW": "%@ 標題"
+        },
+        "noun_values": {
+          "ko": "트랙",
+          "ja": "トラック",
+          "de": "Spuren",
+          "es": "Pistas",
+          "fr": "Pistes",
+          "it": "Tracce",
+          "pt": "Pistas",
+          "zh_CN": "轨道",
+          "zh_TW": "音軌"
+        },
+        "extra": [
+          "track headers",
+          "track header",
+          "tracks header",
+          "tracks headers"
+        ],
+        "why_extra": "English spellings the normalized match has carried since before this entry: singular and plural of each word, lowercased. English is left out of both value maps on purpose. Its composition, `Tracks header`, differs from the member `tracks header` only by case, and check-probe-product-drift.py refuses two members that case-folded matching would merge, so the lowercase spelling this set has always carried stands for it. The other three no row or composition produces. All four are kept because removing a member narrows a match already in the product, and listed here so that `members - composed` is never silently non-empty."
+      }
+    },
+    "transportRecordArmExclusion": {
+      "why_no_row": "`arm` is a lowercase fragment, never a whole label: the transport reader looks for it inside a control's lowercased description so that a record-arm control is not read as the transport's Record (AXValueExtractors, beside transportRecordControl). It is the value of no English row in any pinned corpus. The one other member, the Korean reading, is not a value of an `arm` row either: in Korean it is the value of two `Enable` rows in ControllerAssignments.strings and of `Active` in PrefsAudio.strings, none of them keyed to this control, so naming one would carry a different word into nine languages than the one this exclusion was written for.",
+      "date": "2026-09-28",
+      "issue": 904
     }
   }
 }

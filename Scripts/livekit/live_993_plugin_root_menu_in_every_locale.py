@@ -24,6 +24,7 @@ that other projects or Logic builds have the same menu shape. No result is infer
 """
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -50,7 +51,10 @@ CODES = {"en": "en", "ko": "ko", "ja": "ja", "de": "de", "es": "es", "fr": "fr",
 APP = "/Applications/Logic Pro.app"
 STRINGS = (APP + "/Contents/Frameworks/Logic.framework/Versions/A/Resources/%s.lproj/"
            "Localizable.strings")
-FIXTURE = os.path.expanduser("~/Music/Logic/lpm-locale-campaign.logicx")
+# LPM_LOCALE_FIXTURE names a copy outside ~/Music: a shell with no Files & Folders grant for Music
+# (the fleet tmux shell) gets EPERM there, and the server's project/info then answers `default`.
+FIXTURE = (os.environ.get("LPM_LOCALE_FIXTURE")
+           or os.path.expanduser("~/Music/Logic/lpm-locale-campaign.logicx"))
 FIXTURE_NAME = os.path.splitext(os.path.basename(FIXTURE))[0]
 RESTORE = "ko"
 LAUNCH_TIMEOUT = 150.0
@@ -87,13 +91,33 @@ def arguments():
     return args
 
 
+#: Every System Events restart `osa` made, as {"at", "stderr_tail"}, so a run record can show it.
+SYSTEM_EVENTS_RESTARTS = []
+#: Seconds after `killall "System Events"` before the retry; System Events relaunches on demand.
+SYSTEM_EVENTS_RELAUNCH_WAIT = 2.0
+
+
 def osa(script, timeout=20):
-    try:
-        result = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True,
-                                text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return None
-    return (result.stdout or "").strip() if result.returncode == 0 else None
+    # Measured 2026-09-29 (#904 r5): a System Events respawned mid-run answered every GUI read with
+    # -25211 while python AX kept working, and killing it made the next on-demand instance answer.
+    # So -25211 alone earns one kill and one retry; every other failure is returned as before.
+    for attempt in range(2):
+        try:
+            result = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True,
+                                    text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return None
+        if result.returncode == 0:
+            return (result.stdout or "").strip()
+        stderr = result.stderr or ""
+        if attempt or "-25211" not in stderr:
+            return None
+        SYSTEM_EVENTS_RESTARTS.append({
+            "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+            "stderr_tail": stderr.strip()[-300:]})
+        subprocess.run(["/usr/bin/killall", "System Events"], capture_output=True, text=True)
+        time.sleep(SYSTEM_EVENTS_RELAUNCH_WAIT)
+    return None
 
 
 def apple_string(lproj, key):
