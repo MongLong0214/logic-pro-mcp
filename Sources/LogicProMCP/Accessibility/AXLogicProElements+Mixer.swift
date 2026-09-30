@@ -189,8 +189,14 @@ extension AXLogicProElements {
         // No slider named itself. Elimination is the last resort, and it is only correct while
         // there are exactly two sliders and the other one IS named — an asymmetry the code relied
         // on without stating. Saying so means a tree where it stops holding leaves a trace.
-        let volume = findVolumeFader(in: header, runtime: runtime)
-        let eliminated = sliders.first { volume == nil || !CFEqual($0, volume!) }
+        guard sliders.count == 2,
+              let volume = findVolumeFader(in: header, runtime: runtime),
+              sliders.contains(where: { CFEqual($0, volume) }) else {
+            Log.info("findPanControlInHeader: elimination requires two sliders and a unique "
+                + "volume identity in the same inventory; refusing", subsystem: "ax")
+            return nil
+        }
+        let eliminated = sliders.first { !CFEqual($0, volume) }
         if eliminated != nil {
             Log.info("findPanControlInHeader: no slider among \(sliders.count) carries a pan "
                 + "identity; selecting by elimination against the volume fader", subsystem: "ax")
