@@ -52,7 +52,7 @@ struct OperationRegistryTests {
         "delete_marker": .defaultInstall,
     ]
 
-    private static let smallToolCount = 21
+    private static let smallToolCount = 22
     private static let expectedRegistryCount =
         commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
             + editCommands.count + projectCommands.count + midiCommands.count + trackCommands.count
@@ -354,6 +354,7 @@ struct OperationRegistryTests {
         ("logic_audio", "audio.analyze_file", "analyze_file", .readOnly, .short, .none),
         ("logic_audio", "audio.analyze_spectrum", "analyze_spectrum", .readOnly, .short, .none),
         ("logic_audio", "audio.recommend_eq", "recommend_eq", .readOnly, .short, .none),
+        ("logic_audio", "audio.compare_spectra", "compare_spectra", .readOnly, .short, .none),
         ("logic_system", "system.health", "health", .readOnly, .short, .none),
         ("logic_system", "system.permissions", "permissions", .readOnly, .short, .none),
         ("logic_system", "system.refresh_cache", "refresh_cache", .readOnly, .short, .none),

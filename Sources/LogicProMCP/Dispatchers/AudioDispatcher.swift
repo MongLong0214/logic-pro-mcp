@@ -12,7 +12,7 @@ struct AudioDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_audio",
-        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path }; recommend_eq -> { path: absolute audio file path, minimum_level?: number }; each recommended band carries reason, prominenceDb (how far the peak stood above its local baseline), resolutionLimited, and a confidence derived from those two — 0 where the peak only just cleared the detection threshold, 1 where it cleared it by as much again, capped at 0.5 when Q is a lower bound. analyze_spectrum returns per-band energy; a band whose edges enclose no FFT bin at the file's sample rate is marked measured:false and its energyDb is the floor sentinel, not a reading. `classification` is a coarse advisory heuristic — it reads white noise as drums and a pure tone as vocal — and `levelConfidence` is a loudness figure, not a measure of how sure that classification is. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
+        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq, compare_spectra. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path }; recommend_eq -> { path: absolute audio file path, minimum_level?: number }; compare_spectra -> { before_path: absolute audio file path, after_path: absolute audio file path, output_root?: absolute allowlist root }; comparison returns content-bound native-format analyses and raw after-minus-before band energy differences under matching analysis policy and channel interpretation; unavailable or floor-censored bands have no deltaDb, complete means every band is comparable, and limitations disclose unequal duration/window coverage; no time alignment, level normalization, quality judgment or EQ application; each recommended band carries reason, prominenceDb (how far the peak stood above its local baseline), resolutionLimited, and a confidence derived from those two — 0 where the peak only just cleared the detection threshold, 1 where it cleared it by as much again, capped at 0.5 when Q is a lower bound. analyze_spectrum returns per-band energy; a band whose edges enclose no FFT bin at the file's sample rate is marked measured:false and its energyDb is the floor sentinel, not a reading. `classification` is a coarse advisory heuristic — it reads white noise as drums and a pure tone as vocal — and `levelConfidence` is a loudness figure, not a measure of how sure that classification is. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
         commandDescription: "Audio command to execute"
     )
 
@@ -48,6 +48,9 @@ struct AudioDispatcher: OperationTraceDispatching {
         // advisory is what it says.
         case "analyze_spectrum":
             return spectralAnalysisResult(command: command, params: params)
+
+        case "compare_spectra":
+            return spectrumComparisonResult(params: params, runtime: runtime)
 
         case "recommend_eq":
             return eqRecommendationResult(command: command, params: params)
@@ -132,6 +135,41 @@ struct AudioDispatcher: OperationTraceDispatching {
         )
     }
 
+    private static func spectrumComparisonResult(
+        params: [String: Value], runtime: AudioAnalyzer.Runtime
+    ) -> CallTool.Result {
+        let beforePath = stringParam(params, "before_path").trimmingCharacters(in: .whitespacesAndNewlines)
+        let afterPath = stringParam(params, "after_path").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !beforePath.isEmpty, !afterPath.isEmpty else {
+            return toolInvalidParamsResult(
+                "compare_spectra requires non-empty strings 'before_path' and 'after_path'",
+                extras: ["operation": "audio.compare_spectra", "write_attempted": false]
+            )
+        }
+        // Only output_root is exposed here; both artifacts use the same shipped compute caps.
+        let confinement = params["output_root"].map { ["output_root": $0] } ?? [:]
+        let inputPolicy = policy(from: confinement)
+        do {
+            let before = try AudioFeatureExtractionEngine.analyzeFile(
+                path: beforePath, analysisRef: "audio.compare_spectra.before", artifactFingerprint: "",
+                policy: inputPolicy, runtime: runtime, computeArtifactFingerprint: true
+            )
+            let after = try AudioFeatureExtractionEngine.analyzeFile(
+                path: afterPath, analysisRef: "audio.compare_spectra.after", artifactFingerprint: "",
+                policy: inputPolicy, runtime: runtime, computeArtifactFingerprint: true
+            )
+            return toolTextResult(encodeJSON(try SpectralComparisonResult(before: before, after: after)))
+        } catch let failure as SpectralComparisonResult.Failure {
+            return toolStateCResult(
+                .spectralAnalysisFailed, hint: "Spectra cannot be compared: \(failure.rawValue)",
+                extras: ["operation": "audio.compare_spectra", "analysis_error": failure.rawValue,
+                         "write_attempted": false]
+            )
+        } catch {
+            return spectralAnalysisFailureResult(error, operation: "audio.compare_spectra")
+        }
+    }
+
     private static func spectralAnalysisFailureResult(
         _ error: Error,
         operation: String
@@ -159,6 +197,7 @@ struct AudioDispatcher: OperationTraceDispatching {
             case .unsupportedFormat(let detail): return ("unsupported_format", detail)
             case .decode(let detail): return ("decode", detail)
             case .pathIdentityChanged: return ("path_identity_changed", "path identity changed during analysis")
+            case .contentChanged: return ("content_changed", "artifact content changed during analysis")
             }
         }
         return ("unknown", error.localizedDescription)

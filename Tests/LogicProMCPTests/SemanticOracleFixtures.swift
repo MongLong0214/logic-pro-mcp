@@ -94,7 +94,24 @@ enum SemanticOracleFixtures {
         Read health via resource: logic://system/health
         """
 
+    // Shape fixture only: these mock fingerprints are not content-provenance evidence.
+    // Use the real encoder over generated silence so unavailable-band keys and complete
+    // semantics stay realistic. File binding and numerical checks use dispatcher fixtures.
+    private static let spectrumComparison = { () -> SemanticOracleFixture in
+        func analysis(_ reference: String) -> SpectralAnalysisResult {
+            AudioFeatureExtractionEngine.analyze(
+                channels: [[Double](repeating: 0, count: 8_192)], sampleRate: 48_000,
+                analysisRef: reference, artifactFingerprint: "sha256:" + String(repeating: "0", count: 64)
+            )
+        }
+        let comparison = try? SpectralComparisonResult(
+            before: analysis("audio.compare_spectra.before"), after: analysis("audio.compare_spectra.after")
+        )
+        return SemanticOracleFixture(response: comparison.map { encodeJSON($0) } ?? "{}", readback: health)
+    }()
+
     static let byOperationID: [OperationID: SemanticOracleFixture] = [
+        .audioCompareSpectra: spectrumComparison,
         .systemPermissions: SemanticOracleFixture(
             response: """
                 Accessibility: granted

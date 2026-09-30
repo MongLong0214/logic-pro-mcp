@@ -532,6 +532,7 @@ enum SemanticOracleTable {
         audioAnalyzeFile,
         audioAnalyzeSpectrum,
         audioRecommendEQ,
+        audioCompareSpectra,
         midiListPorts,
         tracksListLibrary,
         tracksScanLibrary,
@@ -1060,6 +1061,38 @@ enum SemanticOracleTable {
             .typedField(key: "frequencyPeaks", type: .array),
             .enumMember(key: "classification", allowed: ["vocal", "drums", "bass", "fullMix", "unknown"]),
             .numericRange(key: "levelConfidence", min: 0, max: 1),
+        ]
+    )
+
+    // This standing shape/domain oracle checks compatible metadata. It does not
+    // establish independent artifact hashes or numerical accuracy; generated
+    // dispatcher fixtures cover those separately.
+    static let audioCompareSpectra = OperationOracle(
+        .audioCompareSpectra,
+        strength: .shapeAndDomain,
+        constraints: [
+            .valueEquals(key: "before.complete", expected: .bool(true)),
+            .valueEquals(key: "after.complete", expected: .bool(true)),
+            .typedField(key: "before.artifactFingerprint", type: .string),
+            .typedField(key: "after.artifactFingerprint", type: .string),
+            .typedField(key: "before.sampleRate", type: .number),
+            .fieldsEqual(keyA: "before.sampleRate", keyB: "after.sampleRate"),
+            .typedField(key: "before.channelCount", type: .number),
+            .fieldsEqual(keyA: "before.channelCount", keyB: "after.channelCount"),
+            .enumMember(key: "before.channelMode", allowed: [
+                "mono", "stereo_energy_average", "multichannel_energy_average",
+            ]),
+            .fieldsEqual(keyA: "before.channelMode", keyB: "after.channelMode"),
+            .typedField(key: "before.analysisPolicy", type: .object),
+            .fieldsEqual(keyA: "before.analysisPolicy", keyB: "after.analysisPolicy"),
+            .typedField(key: "before.durationSeconds", type: .number),
+            .typedField(key: "after.durationSeconds", type: .number),
+            .typedField(key: "before.windowsAnalyzed", type: .number),
+            .typedField(key: "after.windowsAnalyzed", type: .number),
+            .typedField(key: "complete", type: .bool),
+            .nonEmptyArray(key: "bands"),
+            .numericRange(key: "bands.0.centerHz", min: 20, max: 20_000),
+            .nonEmptyArray(key: "limitations"),
         ]
     )
 
