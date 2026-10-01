@@ -68,6 +68,13 @@ enum LogicOnScreenWindows {
     /// normal-level window was Logic's, so a reader of layer 0 alone said Logic had the keyboard.
     /// A floating window (layer 3) is still passed over, as before: another app's floating panel
     /// in front of Logic does not take Logic's keyboard by being there.
+    ///
+    /// Driven the same day under one of those prompts: a server on the layer-0 rule answered
+    /// `already_frontmost`; one on this rule found the keyboard elsewhere and activated Logic, and
+    /// Logic's dialog came back to layer 8 in front of the prompt. Once that dialog closed, the
+    /// prompt was again the first window at either level while `lsappinfo front` named Logic, so
+    /// this reads the prompt's owner and the frontmost gate refuses until the prompt is answered:
+    /// a refusal that may be needless, never a keystroke into the prompt.
     static func keyboardWindow(_ windows: [[String: Any]]) -> [String: Any]? {
         let modalPanel = modalPanelLevel
         return windows.first { window in
