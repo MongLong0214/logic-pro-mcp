@@ -728,7 +728,7 @@ extension ProjectSessionAudit {
     }
 
     /// A reason that holds for every target of one assessment, with the status it forces.
-    private struct AssessmentGate {
+    struct AssessmentGate {
         let status: IntentStatus
         let reason: IntentReason
     }
@@ -742,7 +742,7 @@ extension ProjectSessionAudit {
 
     /// The one captured row a reference names, or the status and token a target carrying it gets.
     /// A direct target and each of a role's candidates both read `locate(_:in:)`.
-    private enum ReferenceLocation {
+    enum ReferenceLocation {
         case located(trackIndex: Int)
         case unlocated(IntentStatus, IntentReason)
     }
@@ -928,7 +928,7 @@ extension ProjectSessionAudit {
 
     /// Whether this graph can be read against this capture at all, and whether the policy is for
     /// the captured project. In a fixed order, first hit wins.
-    private static func assessmentGate(
+    static func assessmentGate(
         policy: IntentPolicy,
         capture: SessionPopulationObservation.Capture,
         graph: RoutingGraph
@@ -981,7 +981,7 @@ extension ProjectSessionAudit {
     /// Every captured row is searched, so row order never picks one: no row is `outside_scope`
     /// with `target_not_in_snapshot`, and more than one is `unverified` with
     /// `target_ambiguous_in_snapshot`.
-    private static func locate(_ trackRef: TargetReference, in issued: IssuedTrackReferences) -> ReferenceLocation {
+    static func locate(_ trackRef: TargetReference, in issued: IssuedTrackReferences) -> ReferenceLocation {
         let trackIndices = issued.byTrackIndex.filter { $0.value == trackRef }.keys.sorted()
         guard let trackIndex = trackIndices.first else { return .unlocated(.outsideScope, .targetNotInSnapshot) }
         guard trackIndices.count == 1 else { return .unlocated(.unverified, .targetAmbiguousInSnapshot) }

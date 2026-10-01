@@ -189,8 +189,20 @@ extension AXLogicProElements {
         // No slider named itself. Elimination is the last resort, and it is only correct while
         // there are exactly two sliders and the other one IS named — an asymmetry the code relied
         // on without stating. Saying so means a tree where it stops holding leaves a trace.
-        let volume = findVolumeFader(in: header, runtime: runtime)
-        let eliminated = sliders.first { volume == nil || !CFEqual($0, volume!) }
+        //
+        // Volume identity is judged over `sliders` itself, not by `findVolumeFader`, which walks
+        // the header again. A second walk is a second inventory: a subtree that read once and then
+        // read empty left that walk one volume slider to call unique, and elimination handed back
+        // the OTHER volume slider as pan.
+        let volumes = volumeFaderCandidates(among: sliders, runtime: runtime)
+        guard sliders.count == 2, volumes.count == 1 else {
+            let counts = "\(sliders.count) sliders, \(volumes.count) volume"
+            Log.info("findPanControlInHeader: elimination needs two sliders and one volume identity (\(counts)); refusing",
+                     subsystem: "ax")
+            return nil
+        }
+        let volume = volumes[0]
+        let eliminated = sliders.first { !CFEqual($0, volume) }
         if eliminated != nil {
             Log.info("findPanControlInHeader: no slider among \(sliders.count) carries a pan "
                 + "identity; selecting by elimination against the volume fader", subsystem: "ax")
@@ -1016,6 +1028,20 @@ extension AXLogicProElements {
         return nil
     }
 
+    /// The sliders among `sliders` that satisfy `volumeFaderSelector`, judged one at a time.
+    ///
+    /// #290. Shared so a caller that has ALREADY enumerated a subtree judges volume identity over
+    /// that same array rather than over a fresh walk of the tree, which can read differently.
+    static func volumeFaderCandidates(
+        among sliders: [AXUIElement],
+        runtime: AXHelpers.Runtime
+    ) -> [AXUIElement] {
+        sliders.filter { slider in
+            let candidate = AXResolvableCandidate.make(from: slider, runtime: runtime)
+            return resolve(volumeFaderSelector, in: [candidate], locale: "any") == .exact(index: 0)
+        }
+    }
+
     static func findVolumeFader(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
@@ -1028,10 +1054,7 @@ extension AXLogicProElements {
         // `sliders.first` — position 0 — when none did. Routing it through the resolver removes
         // both, because `failClosed` refuses an ambiguous set and there is no positional path to
         // fall into.
-        let candidates = sliders.filter { slider in
-            let candidate = AXResolvableCandidate.make(from: slider, runtime: runtime)
-            return resolve(volumeFaderSelector, in: [candidate], locale: "any") == .exact(index: 0)
-        }
+        let candidates = volumeFaderCandidates(among: sliders, runtime: runtime)
         if candidates.count == 1 { return candidates[0] }
         if candidates.count > 1 {
             Log.info("findVolumeFader: \(candidates.count) sliders satisfy the volume selector; "
