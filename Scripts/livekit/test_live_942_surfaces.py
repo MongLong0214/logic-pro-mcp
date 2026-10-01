@@ -63,6 +63,24 @@ def classify(windows, owner=True):
     return H.classify(windows, BASELINE_IDS, level=MENU_LEVEL, keyboard_owner=owner)
 
 
+def clean_up_over(readings):
+    """`(clean, toggles, escapes)` for the harness's clean-up fed `readings` in order, the last one
+    repeating, with no wait between them."""
+    queue = list(readings)
+    toggles, escapes = [], []
+    saved = (H.surfaces, H.toggle_keyboard, H.P.post_escape, H.time.sleep, H.ARRANGE_WAIT)
+    H.surfaces = lambda baseline_ids: classify(queue.pop(0) if len(queue) > 1 else queue[0])
+    H.toggle_keyboard = lambda kb: toggles.append(kb)
+    H.P.post_escape = lambda: escapes.append(1)
+    H.time.sleep = lambda seconds: None
+    H.ARRANGE_WAIT = 0.5
+    try:
+        result = H.clean_up({"baseline_ids": sorted(BASELINE_IDS)}, {"window": "w", "item": "i"})
+    finally:
+        H.surfaces, H.toggle_keyboard, H.P.post_escape, H.time.sleep, H.ARRANGE_WAIT = saved
+    return result["clean"], len(toggles), len(escapes)
+
+
 def main():
     failures = []
     counted = [0]
@@ -115,6 +133,19 @@ def main():
     expect("and it is not a menu", lambda: classify(BASELINE + [above])["menus"], 0)
     expect("the keyboard owner is carried through unread",
            lambda: classify(BASELINE, owner=None)["keyboard_owner_is_logic"], None)
+
+    # The clean-up waits for the keyboard window's id to leave. Measured 2026-10-02 in Korean: after
+    # the toggle Logic keeps the same id on screen, unnamed and shrinking, for about 1.3 s; the pilot
+    # at c7fa26af read it as a window left behind and stopped before the control.
+    keyboard = window(1665, 3, f"{PROJECT} - {KEYBOARD[1]}", 0, 813, 799, 267)
+    closing = window(1665, 3, "", 8, 815, 783, 263)
+    expect("the clean-up waits out the keyboard window closing under the same id, then reads clean",
+           lambda: clean_up_over([BASELINE + [keyboard], BASELINE + [keyboard], BASELINE + [closing],
+                                  BASELINE + [closing], BASELINE]),
+           (True, 1, 0))
+    expect("a window that stays after the keyboard closed is still left behind",
+           lambda: clean_up_over([BASELINE + [keyboard], BASELINE + [keyboard], BASELINE + [closing]])[0],
+           False)
 
     if failures:
         print("FAIL (%d): " % len(failures) + "; ".join(failures))

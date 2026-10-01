@@ -300,8 +300,13 @@ def clean_up(result, kb):
         time.sleep(0.6)
     reading = surfaces(baseline_ids)
     if reading is not None and reading["keyboard_windows"]:
+        closing = {w["id"] for w in reading["keyboard_windows"]}
         toggle_keyboard(kb)
-        reading = wait_surfaces(baseline_ids, lambda r: not r["keyboard_windows"])
+        # The window leaves by its id, not its name: after the toggle Logic keeps the same id on
+        # screen, unnamed and shrinking, for about 1.3 s (measured 2026-10-02 in Korean), and a
+        # wait on the name ended at once and read that closing window as one left behind.
+        reading = wait_surfaces(baseline_ids,
+                                lambda r: not closing & {w["id"] for w in r["new_windows"]})
     clean = (reading is not None and reading["menus"] == 0 and not reading["new_windows"])
     return {"reading": reading, "clean": clean}
 
