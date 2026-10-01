@@ -136,10 +136,16 @@ case("one matcher counts once however many patterns match it",
 
 # 4b-v. A comparison against a protocol field this repository defines is not a UI matcher, even
 #       when the policy happens to carry the same word. `control == "pan"` was a false positive
-#       already baked into KNOWN.
-found = scan('ok = (envelope.get("target_identity") or {}).get("control") == "pan"\n',
-             {"pan": "sliderPanHint"})
+#       already baked into KNOWN. It is exempt in the harness it was measured in, where `envelope`
+#       is the set_pan reply; with nothing binding `envelope` it is a comparison of something else.
+_PAN_FILE = "live_290_selectors_resolve_by_identity.py"
+_PAN_READ = 'ok = (envelope.get("target_identity") or {}).get("control") == "pan"\n'
+found = scan('envelope = d.tool("logic_mixer", "set_pan", {"track": 0, "value": target})\n' + _PAN_READ,
+             {"pan": "sliderPanHint"}, _PAN_FILE)
 case("a protocol-field comparison is not a UI matcher", found == [], f"found={found!r}")
+found = scan(_PAN_READ, {"pan": "sliderPanHint"}, _PAN_FILE)
+case("the same comparison with nothing binding its name is reported", [f[1] for f in found] == ["pan"],
+     f"found={found!r}")
 
 # 4c. ...and the same shape quoted in a docstring is still prose.
 found = scan('"""Matched with help.startswith("Tracks") before #766."""\nX = 1\n', CANONICALS)
@@ -260,41 +266,48 @@ def scan_verify(filename, body, canonicals):
         os.remove(path)
 
 
-# The `name == "mute"` exemption is scoped to live/probes.py, where it was measured, so these
-# cases write there. `found` must hold exactly the literals that are not the flag-name compare.
+# The `name == "mute"` exemption is scoped to live/probes.py, where it was measured, and to the
+# loop over FLAGS that binds `name` there, so these cases write that loop in that file. `found` must
+# hold exactly the literals that are not the flag-name compare.
 _MUTE = {"mute": "trackMuteButton"}
-found = scan_verify("live/probes.py", 'if name == "mute": pass\n', _MUTE)
+
+
+def _in_flags(line):
+    return f"for name in FLAGS:\n    {line}\n"
+
+
+found = scan_verify("live/probes.py", _in_flags('if name == "mute": pass'), _MUTE)
 case("the flag-name compare is exempt in the file it is scoped to",
      found == [], f"found={found!r}")
 
 found = scan_verify("live/probes.py",
-                    'if name == "mute" and ui_title == "Mute": pass\n', _MUTE)
+                    _in_flags('if name == "mute" and ui_title == "Mute": pass'), _MUTE)
 case("a verify protocol comparison does not exempt a same-word UI comparison",
      [f[1] for f in found] == ["Mute"], f"found={found!r}")
 
 # The review's same-LITERAL witness: the UI compare is spelled exactly as the protocol one.
 found = scan_verify("live/probes.py",
-                    'if name == "mute" and ui_title == "mute": pass\n', _MUTE)
+                    _in_flags('if name == "mute" and ui_title == "mute": pass'), _MUTE)
 case("a same-literal UI comparison beside the protocol comparison is reported",
      [(f[0], f[1]) for f in found] == [("live/probes.py", "mute")], f"found={found!r}")
 
 found = scan_verify("live/probes.py",
-                    'if name == "mute" and ui_title == "Mute" and other_title == "Mute": pass\n',
+                    _in_flags('if name == "mute" and ui_title == "Mute" and other_title == "Mute": pass'),
                     _MUTE)
 case("two same-word UI comparisons beside a protocol comparison both count",
      [f[1] for f in found] == ["Mute", "Mute"], f"found={found!r}")
 
 # A review asked that the exemption not travel. The same text in any other file, or with the
 # marker inside a longer name in its own file, is a UI compare until it is shown not to be.
-found = scan_verify("live/other_probes.py", 'if name == "mute": pass\n', _MUTE)
+found = scan_verify("live/other_probes.py", _in_flags('if name == "mute": pass'), _MUTE)
 case("the flag-name exemption does not apply outside its file",
      [(f[0], f[1]) for f in found] == [("live/other_probes.py", "mute")], f"found={found!r}")
 
-found = scan_verify("live/probes.py", 'if button_name == "mute": pass\n', _MUTE)
+found = scan_verify("live/probes.py", _in_flags('if button_name == "mute": pass'), _MUTE)
 case("a marker that begins with a name does not match inside a longer name",
      [f[1] for f in found] == ["mute"], f"found={found!r}")
 
-_mute_scope = [where for m, lit, where in G.PROTOCOL_EXPRESSIONS if m == 'name == "mute"']
+_mute_scope = [where for m, lit, where, _bound in G.PROTOCOL_EXPRESSIONS if m == 'name == "mute"']
 case("the fixture exercises the scope the guard actually carries",
      _mute_scope == [("Scripts/verify/live/probes.py",)], f"scopes={_mute_scope!r}")
 
@@ -314,22 +327,42 @@ case("a text with no file behind it gets no scoped exemption",
 def _files_of(where):
     if where is G.EVERY_HARNESS:
         return [("live_case.py", lambda name, body, known: scan(body, known, name))]
-    return [(os.path.relpath(path, "Scripts/verify"), scan_verify) for path in where]
+    return [(os.path.relpath(path, "Scripts/livekit"), lambda name, body, known: scan(body, known, name))
+            if path.startswith("Scripts/livekit/") else (os.path.relpath(path, "Scripts/verify"), scan_verify)
+            for path in where]
+
+
+def _bound(binding, line):
+    """`v = line` where the entry's name has the binding it was measured with, and no other."""
+    if binding.startswith(("def ", "for ")):
+        return f"{binding}:\n    v = {line}\n"
+    if binding.startswith("lambda"):
+        return f"v = {binding}: {line}\n"
+    return f"{binding}\nv = {line}\n"
+
+
+def _bindings_of(bindings):
+    return (bindings,) if isinstance(bindings, str) else bindings
 
 
 def _variants(expression, literal):
+    """The entry with its name longer, continued by a combining mark or read from something, and
+    with its operand reading something, joined by an operator or read further. The name is changed
+    where it stands, so an operand that opens with a parenthesis still parses."""
     node = ast.parse(expression, mode="eval").body
     other = (node.left, node.comparators[0])[1 - G._comparison(expression, literal)[1]]
     start, end = other.col_offset, other.end_col_offset
     text = expression[start:end]
-    shapes = ["x" + text, "x́" + text, "obj." + text, "x + " + text,
-              text + ".x", text + '["x"]', text + " + x"]
-    if G._continues_name(text[-1]):
-        shapes += [text + "_x", text + "́x"]
-    return [expression[:start] + shape + expression[end:] for shape in shapes]
+    root = next(n for n in ast.walk(other) if isinstance(n, ast.Name))
+    name = expression[root.col_offset:root.end_col_offset]
+    at_name = [expression[:root.col_offset] + shape + expression[root.end_col_offset:]
+               for shape in ("x" + name, "x́" + name, "obj." + name, name + "_x", name + "́x")]
+    at_operand = [expression[:start] + shape + expression[end:]
+                  for shape in ("x + " + text, text + ".x", text + '["x"]', text + " + x")]
+    return at_name + at_operand
 
 
-for _expression, _literal, _where in G.PROTOCOL_EXPRESSIONS:
+for _expression, _literal, _where, _bindings in G.PROTOCOL_EXPRESSIONS:
     _known = {_literal: "protocolWitness"}
     _shape = ast.dump(ast.parse(_expression, mode="eval").body)
     _variant_list = _variants(_expression, _literal)
@@ -337,51 +370,138 @@ for _expression, _literal, _where in G.PROTOCOL_EXPRESSIONS:
                    if ast.dump(ast.parse(v, mode="eval").body) == _shape]
     case(f"every variant of {_expression} is a different comparison",
          _unreadable == [], f"same as the entry: {_unreadable!r}")
-    _exempt, _escaped = [], []
+    _name_read = G._comparison(_expression, _literal)[2]
+    _exempt, _escaped, _rebound = [], [], []
     for _name, _scan in _files_of(_where):
-        for _spelling in (_expression, _expression.replace('"', "'")):
-            _found = _scan(_name, f"v = {_spelling}\n", _known)
-            if _found:
-                _exempt.append((_name, _spelling, _found))
-        for _variant in _variant_list:
-            _found = _scan(_name, f"v = {_variant}\n", _known)
-            if [f[1].lower() for f in _found] != [_literal]:
-                _escaped.append((_name, _variant, [f[1] for f in _found]))
-    case(f"{_expression} is exempt in each file it applies in, however quoted",
+        for _binding in _bindings_of(_bindings):
+            for _spelling in (_expression, _expression.replace('"', "'")):
+                _found = _scan(_name, _bound(_binding, _spelling), _known)
+                if _found:
+                    _exempt.append((_name, _binding, _spelling, _found))
+            for _variant in _variant_list:
+                _found = _scan(_name, _bound(_binding, _variant), _known)
+                if [f[1].lower() for f in _found] != [_literal]:
+                    _escaped.append((_name, _variant, [f[1] for f in _found]))
+            # Review R2's alias, on every entry: the measured binding, then the name rebound to
+            # something read from it. A lambda cannot assign, so its rebinding is a walrus.
+            if _binding.startswith("lambda"):
+                _alias = f'v = {_binding}: [{_name_read} := {_name_read}["automation_title"], {_expression}][1]\n'
+            elif _binding.startswith(("def ", "for ")):
+                _alias = (f'{_binding}:\n    {_name_read} = {_name_read}["automation_title"]\n'
+                          f"    v = {_expression}\n")
+            else:
+                _alias = f'{_binding}\n{_name_read} = {_name_read}["automation_title"]\nv = {_expression}\n'
+            for _label, _body in (("rebound after its binding", _alias),
+                                  ("bound to something else", f"{_name_read} = ui_title\nv = {_expression}\n"),
+                                  ("not bound at all", f"v = {_expression}\n"),
+                                  ("bound by another function", f"def other({_name_read}):\n    v = {_expression}\n")):
+                _found = _scan(_name, _body, _known)
+                if [f[1].lower() for f in _found] != [_literal]:
+                    _rebound.append((_name, _label, [f[1] for f in _found]))
+    case(f"{_expression} is exempt under its binding in each file it applies in, however quoted",
          _exempt == [], f"reported: {_exempt!r}")
     case(f"{_expression} exempts no other operand", _escaped == [],
          f"{len(_variant_list)} variants; not reported once: {_escaped!r}")
+    case(f"{_expression} is reported once wherever its name is not bound as measured", _rebound == [],
+         f"not reported once: {_rebound!r}")
     if _where is not G.EVERY_HARNESS:
-        _found = scan_verify("live/elsewhere.py", f"v = {_expression}\n", _known)
-        case(f"{_expression} is reported outside its files",
+        _found = scan_verify("live/elsewhere.py", _bound(_bindings_of(_bindings)[0], _expression), _known)
+        case(f"{_expression} is reported outside its files, under its own binding",
              [f[1].lower() for f in _found] == [_literal], f"found={_found!r}")
 
-# Three shapes the blanking must leave alone, in a file `"read" in step` applies in. A chain
-# compares the literal with a second operand; an escaped spelling is the entry to the parser but
-# not where the line says it is, and blanking there would shift the UI compare beside it; a
-# literal continued onto the next line is not measured against the first line's characters.
+# Every way of binding a name that no entry is written as, in the function `"read" in step` was
+# measured in, after the parameter that is its binding. Each is a second binding, so the comparison
+# is a read of something else and is reported, once. The control is the function alone.
 _READ = {"read": "protocolWitness"}
-_found = scan_verify("runner.py", 'v = title == "read" in step\n', _READ)
-case("a chained comparison through an entry's literal is reported",
+_TAKE = "def _take(ctx: dict, step: dict) -> str:\n"
+_found = scan_verify("runner.py", _TAKE + '    return "read" in step\n', _READ)
+case("the control: under its measured binding `\"read\" in step` is exempt", _found == [], f"found={_found!r}")
+for _label, _lines in (
+        ("an assignment from what it read (review R2)", ['step = step["automation_title"]']),
+        ("an augmented assignment", ['step += ""']),
+        ("an annotated assignment", ["step: str = title"]),
+        ("a walrus", ['(step := step["automation_title"])']),
+        ("a walrus inside a comprehension", ["[step := t for t in titles]"]),
+        ("a for loop", ["for step in titles:", "    pass"]),
+        ("a with", ["with open(p) as step:", "    pass"]),
+        ("an except", ["try:", "    pass", "except OSError as step:", "    pass"]),
+        ("an import", ["import step"]),
+        ("a nested def", ["def step():", "    pass"]),
+        ("a nested class", ["class step:", "    pass"]),
+        ("a del", ["del step"]),
+        ("a tuple target", ["step, other = title, 1"]),
+        ("a match capture", ["match title:", "    case {\"t\": step}:", "        pass"])):
+    _body = _TAKE + "".join(f"    {line}\n" for line in _lines) + '    return "read" in step\n'
+    _found = scan_verify("runner.py", _body, _READ)
+    case(f"`\"read\" in step` after {_label} is reported once", [f[1] for f in _found] == ["read"],
+         f"found={_found!r}")
+_found = scan_verify("runner.py", _TAKE + '    def inner(step):\n        return "read" in step\n', _READ)
+case("a nested function's own parameter is another binding, and is reported",
      [f[1] for f in _found] == ["read"], f"found={_found!r}")
-_found = scan_verify("runner.py", 'v = "re\\x61d" in step and ui == "read"\n', _READ)
-case("an escaped entry leaves the UI comparison beside it counted once",
-     [f[1] for f in _found] == ["read"], f"found={_found!r}")
-_found = scan_verify("runner.py", 'v = ("read"  # 가\n               "") in step\n', _READ)
-case("a literal continued onto the next line is scanned without error",
+_found = scan_verify("runner.py", _TAKE + '    def inner():\n        return "read" in step\n', _READ)
+case("a nested function that reads the measured parameter is the same comparison, and exempt",
      _found == [], f"found={_found!r}")
+_found = scan_verify("selftest.py", 'def f():\n    global op\n    for op in ops:\n'
+                     '        v = "delete" in op\n', {"delete": "protocolWitness"})
+case("a global declaration beside the measured binding is reported",
+     [f[1] for f in _found] == ["delete"], f"found={_found!r}")
 
-# What blanking leaves alone is not therefore reported: the line patterns read a literal only as its
-# line spells it, so an escaped, split or adjacent-string spelling is invisible to them whether its
-# comparison is an entry or a UI read. This pins that limit, with the plain spelling as the control.
-_found = scan_verify("runner.py", 'v = "read" in step_title\n', _READ)
-case("the control: a plainly spelled UI comparison is reported", [f[1] for f in _found] == ["read"],
-     f"found={_found!r}")
-for _unspelled in ('"re\\x61d"', '("read"\n     "")', '"re" "ad"'):
-    for _operand in ("step", "step_title"):
-        _found = scan_verify("runner.py", f"v = {_unspelled} in {_operand}\n", _READ)
-        case(f"{_unspelled!r} in {_operand} is neither exempted nor reported: the patterns miss it",
-             _found == [], f"found={_found!r}")
+# A chained comparison compares the literal with a second operand, so it is no entry, under the
+# binding or not; and an entry spelled with an escape, or continued onto the next line, is the same
+# comparison and stays exempt beside a UI read on the same line.
+_found = scan_verify("runner.py", _TAKE + '    return title == "read" in step\n', _READ)
+case("a chained comparison through an entry's literal is reported once",
+     [f[1] for f in _found] == ["read"], f"found={_found!r}")
+_found = scan_verify("runner.py", _TAKE + '    return "re\\x61d" in step and ui == "read"\n', _READ)
+case("an escaped entry is exempt and the UI comparison beside it is counted once",
+     [f[1] for f in _found] == ["read"], f"found={_found!r}")
+_found = scan_verify("runner.py", _TAKE + '    return ("read"  # 가\n            "") in step\n', _READ)
+case("an entry continued onto the next line is the same comparison, and exempt",
+     _found == [], f"found={_found!r}")
+for _folded in ('f"read"', '"re" + "ad"'):
+    _found = scan_verify("runner.py", _TAKE + f"    return {_folded} in step\n", _READ)
+    case(f"the entry spelled {_folded} is the same comparison, and exempt", _found == [], f"found={_found!r}")
+_found = scan_verify("runner.py", _TAKE + "    class C:\n        step = title\n\n"
+                     '        def m(self):\n            return "read" in step\n', _READ)
+case("a class body between a method and the parameter it reads is not a scope for it",
+     _found == [], f"found={_found!r}")
+_found = scan_verify("runner.py", _TAKE + "    class C:\n        step = title\n"
+                     '        v = "read" in step\n', _READ)
+case("a class body is the scope of a comparison written in it directly",
+     [f[1] for f in _found] == ["read"], f"found={_found!r}")
+
+# Review R2's sweep: every position, in both Python roots, spelled every way the parser joins into
+# one string or the language folds into one value. Each must be reported exactly once, with the
+# plain spelling as the control in the same run. Before #1078 R2 only the plain one was.
+_SPELLINGS = ('"read"', '"re\\x61d"', '"\\u0072ead"', '"re" "ad"', '("re"\n     "ad")', 'f"read"',
+              '"re" + "ad"', 'r"read"')
+_POSITIONS = ("title == {s}", "{s} == title", "title != {s}", "{s} != title", "{s} in title", "{s} not in title", "{s} in (title)",
+              "{s} in (step['automation_title'])", "title in ({s},)", "title in [{s}]", "title in {{{s}}}",
+              "title.startswith({s})", "title.endswith({s})", "title.startswith(({s}, 'x'))")
+_swept = []
+for _root, _scan_one in (("Scripts/livekit", lambda body: scan(body, _READ)),
+                         ("Scripts/verify", lambda body: scan_verify("runner.py", body, _READ))):
+    for _position in _POSITIONS:
+        for _spelling in _SPELLINGS:
+            _line = "v = " + _position.format(s=_spelling) + "\n"
+            ast.parse(_line)
+            _found = _scan_one(_line)
+            if [f[1] for f in _found] != ["read"]:
+                _swept.append((_root, _line.strip(), [f[1] for f in _found]))
+case(f"each of {len(_SPELLINGS)} spellings at each of {len(_POSITIONS)} positions in both roots is "
+     "reported once", _swept == [], f"not reported once: {_swept[:6]!r} ({len(_swept)})")
+_found = scan('v = f"{prefix}read" == title\n', _READ)
+case("an f-string that interpolates is computed, and not read as a word", _found == [], f"found={_found!r}")
+_found = scan('"""The step title == "read" is prose."""\n# title == "read"\nv = 1\n', _READ)
+case("a docstring and a comment are not comparisons", _found == [], f"found={_found!r}")
+
+# Swift is read by line; a `\u{...}` escape is written out first, so it spells its word there too.
+for _swift, _want in (('if title == "read" { }', ["read"]), ('if title == "re\\u{61}d" { }', ["read"]),
+                      ('if title.hasPrefix("\\u{72}ead") { }', []),
+                      ('let s = "x\\u{22} == \\u{22}read"', [])):
+    _found = scan_verify("live/Probe.swift", _swift + "\n", _READ)
+    case(f"Swift {_swift!r} is reported {len(_want)} time(s)", [f[1] for f in _found] == _want,
+         f"found={_found!r}")
 
 # The review's own witness, through the entry point over a copy of the real Scripts/verify, with
 # the copy unmodified in the same run as the control: the copy passes, then fails with one
@@ -393,25 +513,47 @@ with tempfile.TemporaryDirectory() as _vcopy:
     _entry = [sys.executable, os.path.join(REPO, "Scripts", "check-livekit-ui-literals.py")]
     _clean = subprocess.run(_entry, capture_output=True, text=True,
                             env=dict(os.environ, LPM_VERIFY_DIR=_copy))
-    with open(os.path.join(_copy, "runner.py"), "a", encoding="utf-8") as _h:
-        _h.write('\n\ndef _titled(step):\n    return "read" in step["automation_title"]\n')
-    _dirty = subprocess.run(_entry, capture_output=True, text=True,
-                            env=dict(os.environ, LPM_VERIFY_DIR=_copy))
+    with open(os.path.join(_copy, "runner.py"), encoding="utf-8") as _h:
+        _runner = _h.read()
+    _witness_runs = {}
+    for _label, _function in (
+            ("titled", 'def _titled(step):\n    return "read" in step["automation_title"]\n'),
+            ("aliased", 'def _aliased(step):\n    step = step["automation_title"]\n    return "read" in step\n'),
+            ("escaped", 'def _escaped(step):\n    return "re\\x61d" in (step["automation_title"])\n')):
+        with open(os.path.join(_copy, "runner.py"), "w", encoding="utf-8") as _h:
+            _h.write(_runner + "\n\n" + _function)
+        _witness_runs[_label] = subprocess.run(_entry, capture_output=True, text=True,
+                                               env=dict(os.environ, LPM_VERIFY_DIR=_copy))
+    _dirty = _witness_runs["titled"]
 case("a copy of the real Scripts/verify passes the entry point",
      _clean.returncode == 0, (_clean.stdout + _clean.stderr).strip()[-200:])
 case("and the same copy with a title read beside `step` fails it, naming runner.py",
      _dirty.returncode == 1 and "runner.py" in _dirty.stdout and "'read'" in _dirty.stdout,
      (_dirty.stdout + _dirty.stderr).strip()[:200])
+for _label in ("aliased", "escaped"):
+    _run = _witness_runs[_label]
+    case(f"and with review R2's {_label} witness appended it fails, naming runner.py",
+         _run.returncode == 1 and "runner.py" in _run.stdout and "'read'" in _run.stdout,
+         (_run.stdout + _run.stderr).strip()[:200])
 
 # The table checks itself: an entry that is not one comparison of its literal with one other
 # operand stops the module instead of exempting nothing.
-for _bad in (('flag', "solo"), ('"a" == "a"', "a"), ('x == "y" == z', "y"), ('x == "y"', "z")):
+for _bad in (('flag', "solo"), ('"a" == "a"', "a"), ('x == "y" == z', "y"), ('x == "y"', "z"),
+             ('x + y == "s"', "s"), ('"s" == 1', "s")):
     try:
         G._comparison(*_bad)
         _refused = False
     except ValueError:
         _refused = True
     case(f"the table refuses {_bad[0]!r} as an entry for {_bad[1]!r}", _refused, "")
+for _bad_binding in (("for x in y", "step"), ("a = b = c", "a"), ("step += 1", "step"), ("def f(x)", "step"),
+                     ("lambda o", "step")):
+    try:
+        G._binding_key(*_bad_binding)
+        _refused = False
+    except (ValueError, SyntaxError):
+        _refused = True
+    case(f"the table refuses {_bad_binding[0]!r} as the binding of {_bad_binding[1]!r}", _refused, "")
 
 # A TEXT marker keeps what it was written for -- exempting whatever its expression is read from --
 # but one that begins with a name no longer matches after a character that continues that name.
