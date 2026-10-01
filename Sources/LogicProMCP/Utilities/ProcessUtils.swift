@@ -144,14 +144,11 @@ enum ProcessUtils {
         guard let infos = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
         ) as? [[String: Any]] else { return false }
-        // The list is ordered front to back; the first normal-layer window belongs to the app that
-        // owns the keyboard.
-        for info in infos {
-            guard (info[kCGWindowLayer as String] as? Int) == 0 else { continue }
-            guard let pid = info[kCGWindowOwnerPID as String] as? pid_t else { return false }
-            return isKnownLogicPID(pid)
-        }
-        return false
+        // The list is ordered front to back; `keyboardWindow` names the window whose owner the
+        // keyboard belongs to, an alert at the modal-panel level included.
+        guard let window = LogicOnScreenWindows.keyboardWindow(infos),
+              let pid = window[kCGWindowOwnerPID as String] as? pid_t else { return false }
+        return isKnownLogicPID(pid)
     }
 
     static func isKnownLogicPID(_ pid: pid_t) -> Bool {

@@ -119,14 +119,17 @@ def logic_windows():
 
 
 def keyboard_owner_is_logic():
-    """Whether the first layer-0 window on screen is Logic's, as the server judges it; None if unread."""
+    """Whether the window that holds the keyboard is Logic's, as the server judges it
+    (`LogicOnScreenWindows.keyboardWindow`): the first window at the normal or the modal-panel
+    level, so a permission prompt at layer 8 in front of Logic is the owner; None if unread."""
     import Quartz
     windows = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly,
                                                 Quartz.kCGNullWindowID)
     if windows is None:
         return None
+    modal_panel = int(Quartz.CGWindowLevelForKey(Quartz.kCGModalPanelWindowLevelKey))
     for window in windows:
-        if int(window.get(Quartz.kCGWindowLayer) or 0) == 0:
+        if int(window.get(Quartz.kCGWindowLayer) or 0) in (0, modal_panel):
             return E._is_logic_owned_window(window)
     return None
 

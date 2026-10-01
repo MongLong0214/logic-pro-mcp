@@ -56,18 +56,34 @@ enum LogicOnScreenWindows {
         return logicOwned(windows, logicPID: logicPID).filter { $0.layer == level }.count
     }
 
-    /// Whether the process that owns the keyboard is Logic, read the way
-    /// `ProcessUtils.logicOwnsTheKeyboard` reads it: the list is ordered front to back and the
-    /// first normal-layer window belongs to the app keystrokes go to. This one answers nil, rather
-    /// than false, when there is no such window or its owner cannot be read: an Escape must not be
-    /// sent on the strength of a reading that was not taken.
-    static func keyboardOwnerIsLogic(_ windows: [[String: Any]], logicPID: pid_t) -> Bool? {
-        for window in windows {
-            guard intValue(window[kCGWindowLayer as String]) == 0 else { continue }
-            guard let owner = ProcessUtils.pidValue(from: window[kCGWindowOwnerPID as String]) else { return nil }
-            return owner == logicPID
+    /// The layer the window server gives a modal panel, read from CoreGraphics like the menu's.
+    static var modalPanelLevel: Int { Int(CGWindowLevelForKey(.modalPanelWindow)) }
+
+    /// The window whose owner keystrokes go to: the first one, front to back, at the normal level
+    /// or at the modal-panel level. The modal-panel level is there because an alert another process
+    /// raises sits at it in front of Logic and takes the keyboard. Measured 2026-10-02: two
+    /// UserNotificationCenter permission prompts at layer 8 over a frontmost Logic, Logic's own Go
+    /// To Position dialog demoted from 8 to 0 behind them, `lsappinfo front` naming
+    /// UserNotificationCenter, and key 53 at the HID tap closing nothing of Logic's. The first
+    /// normal-level window was Logic's, so a reader of layer 0 alone said Logic had the keyboard.
+    /// A floating window (layer 3) is still passed over, as before: another app's floating panel
+    /// in front of Logic does not take Logic's keyboard by being there.
+    static func keyboardWindow(_ windows: [[String: Any]]) -> [String: Any]? {
+        let modalPanel = modalPanelLevel
+        return windows.first { window in
+            let layer = intValue(window[kCGWindowLayer as String])
+            return layer == 0 || layer == modalPanel
         }
-        return nil
+    }
+
+    /// Whether the process that owns the keyboard is Logic, read from `keyboardWindow` as
+    /// `ProcessUtils.logicOwnsTheKeyboard` reads it. This one answers nil, rather than false, when
+    /// there is no such window or its owner cannot be read: an Escape must not be sent on the
+    /// strength of a reading that was not taken.
+    static func keyboardOwnerIsLogic(_ windows: [[String: Any]], logicPID: pid_t) -> Bool? {
+        guard let window = keyboardWindow(windows),
+              let owner = ProcessUtils.pidValue(from: window[kCGWindowOwnerPID as String]) else { return nil }
+        return owner == logicPID
     }
 
     /// Logic-owned windows that were not on screen in `baseline`, the menu layer excluded. The

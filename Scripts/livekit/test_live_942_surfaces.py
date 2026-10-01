@@ -63,13 +63,13 @@ def classify(windows, owner=True):
     return H.classify(windows, BASELINE_IDS, level=MENU_LEVEL, keyboard_owner=owner)
 
 
-def clean_up_over(readings):
+def clean_up_over(readings, owner=True):
     """`(clean, toggles, escapes)` for the harness's clean-up fed `readings` in order, the last one
-    repeating, with no wait between them."""
+    repeating, with no wait between them, and `owner` as the keyboard owner every reading names."""
     queue = list(readings)
     toggles, escapes = [], []
     saved = (H.surfaces, H.toggle_keyboard, H.P.post_escape, H.time.sleep, H.ARRANGE_WAIT)
-    H.surfaces = lambda baseline_ids: classify(queue.pop(0) if len(queue) > 1 else queue[0])
+    H.surfaces = lambda baseline_ids: classify(queue.pop(0) if len(queue) > 1 else queue[0], owner)
     H.toggle_keyboard = lambda kb: toggles.append(kb)
     H.P.post_escape = lambda: escapes.append(1)
     H.time.sleep = lambda seconds: None
@@ -143,6 +143,14 @@ def main():
            lambda: clean_up_over([BASELINE + [keyboard], BASELINE + [keyboard], BASELINE + [closing],
                                   BASELINE + [closing], BASELINE]),
            (True, 1, 0))
+    # An Escape goes to whatever holds the keyboard. With a permission prompt holding it the
+    # clean-up sends none, and reads the screen as not clean (measured 2026-10-02).
+    expect("a menu left up while Logic does not hold the keyboard gets no Escape",
+           lambda: clean_up_over([BASELINE + [MENU]], owner=False), (False, 0, 0))
+    expect("nor while the keyboard owner is unread",
+           lambda: clean_up_over([BASELINE + [MENU]], owner=None), (False, 0, 0))
+    expect("the control: a menu left up while Logic holds the keyboard gets Escapes",
+           lambda: clean_up_over([BASELINE + [MENU], BASELINE])[0:3:2], (True, 1))
     expect("a window that stays after the keyboard closed is still left behind",
            lambda: clean_up_over([BASELINE + [keyboard], BASELINE + [keyboard], BASELINE + [closing]])[0],
            False)

@@ -248,6 +248,12 @@ def hold(driver, folder, name, kind, path, kb):
     if before is None:
         result["error"] = "the window list was not read before the hold"
         return result
+    owner = P.keyboard_owner_is_logic()
+    if owner is not True:
+        # Measured 2026-10-02: a permission prompt held the keyboard over Logic, and every Escape
+        # aimed at Logic's dialog went to the prompt. Nothing is arranged or sent then.
+        result["error"] = f"the keyboard is not Logic's before the hold (read {owner!r})"
+        return result
     baseline_ids = {w["id"] for w in before}
     box = {}
 
@@ -296,6 +302,8 @@ def clean_up(result, kb):
         reading = surfaces(baseline_ids)
         if reading is not None and reading["menus"] == 0 and not reading["dialogs"]:
             break
+        if reading is None or reading["keyboard_owner_is_logic"] is not True:
+            break  # an Escape goes to whatever holds the keyboard, and that is not Logic
         P.post_escape()
         time.sleep(0.6)
     reading = surfaces(baseline_ids)
