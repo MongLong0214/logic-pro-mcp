@@ -609,7 +609,15 @@ struct QualificationOperationResult: Equatable, Sendable {
     /// above, the exact refusal is part of the classification so a new error
     /// from the same operation stays visible as a failure.
     var liveGateUnmetEnvironmentalPrecondition: String? {
-        guard isError == true, error == "channels_exhausted" else { return nil }
+        guard isError == true else { return nil }
+        // #966: the planner reads a retained inspection, and an unsaved project's inspections are
+        // never retained. The dispatcher names that cause apart from unknown or expired handles.
+        if OperationID(rawValue: operationID) == .projectPlanSessionRepair {
+            guard error == "stale_snapshot",
+                  hint == ProjectDispatcher.planSessionRepairUnboundProjectHint else { return nil }
+            return "requires a project saved to a file, so its session inspection is retained"
+        }
+        guard error == "channels_exhausted" else { return nil }
         switch OperationID(rawValue: operationID) {
         case .tracksScanPluginPresets
             where hint == "No plugin window with Setting dropdown found. Open an instrument plugin window first.":
@@ -1553,6 +1561,14 @@ struct QualificationTransport: Sendable {
                                 seededTraceID = newest.traceID
                             }
                         }
+                        var seededSessionSnapshotID: String?
+                        if spec.id == .projectPlanSessionRepair {
+                            let seedID = nextID
+                            nextID += 1
+                            // A failed seed sends no handle, so the planner's refusal is recorded
+                            // as the failure it is rather than skipped.
+                            seededSessionSnapshotID = try? sessionInspectionSeed(session, id: seedID)
+                        }
                         let responseID = nextID
                         nextID += 1
                         responseRequestID = String(responseID)
@@ -1564,6 +1580,7 @@ struct QualificationTransport: Sendable {
                             id: responseID,
                             spec: spec,
                             traceID: seededTraceID,
+                            sessionSnapshotID: seededSessionSnapshotID,
                             timeout: probeTimeout
                         )
                     }
@@ -1838,6 +1855,7 @@ struct QualificationTransport: Sendable {
         id: Int,
         spec: OperationSpec,
         traceID: String,
+        sessionSnapshotID: String? = nil,
         timeout: TimeInterval? = nil
     ) throws -> (text: String, isError: Bool) {
         let result: ToolCallResult = try session.request(
@@ -1847,7 +1865,8 @@ struct QualificationTransport: Sendable {
                 "name": spec.tool.rawValue,
                 "arguments": [
                     "command": spec.command,
-                    "params": Self.probeParams(for: spec, traceID: traceID),
+                    "params": Self.probeParams(
+                        for: spec, traceID: traceID, sessionSnapshotID: sessionSnapshotID),
                 ],
             ],
             phase: "operation_probe.\(spec.id.rawValue)",
@@ -4174,7 +4193,11 @@ struct QualificationTransport: Sendable {
     static let sagaProbeIdempotencyKey = "qualification-read-probe"
     static let qualificationAudioProbePath = "/System/Library/Sounds/Ping.aiff"
 
-    static func probeParams(for spec: OperationSpec, traceID: String) -> [String: Any] {
+    static func probeParams(
+        for spec: OperationSpec,
+        traceID: String,
+        sessionSnapshotID: String? = nil
+    ) -> [String: Any] {
         if spec.mutability == .mutating {
             return ["__adr001b_no_write_probe": true]
         }
@@ -4236,6 +4259,20 @@ struct QualificationTransport: Sendable {
             return [
                 "project": "/__qualification_probe__/absent.logicx",
                 "output_root": "/tmp",
+            ]
+        case .projectPlanSessionRepair:
+            // #966. The planner reads a RETAINED inspection, so `{}` could only ever be refused.
+            // `sessionSnapshotID` is the handle this subprocess's own `inspect_session` returned
+            // just before, and the empty approved policy asks for no change: the read-only draft
+            // path runs end to end. With no handle the probe sends none and the refusal stays
+            // the failure it is.
+            guard let sessionSnapshotID else { return [:] }
+            return [
+                "snapshot_id": sessionSnapshotID,
+                "policy": [
+                    "schema": ProjectSessionAudit.intentPolicySchema,
+                    "targets": [] as [Any], "roles": [] as [Any], "outputs": [] as [Any],
+                ] as [String: Any],
             ]
         case .pluginsGetInventory:
             // Track 0 exists whenever a project does: `project.new` reports
@@ -4401,6 +4438,46 @@ struct QualificationTransport: Sendable {
             )
         }
         return (true, body, text)
+    }
+
+    /// #966: the handle the planner probe plans over, taken from a cache-only `inspect_session`
+    /// in the same subprocess. Only the handle is read; whether it was retained is the planner's
+    /// to answer, and its refusal for an unsaved project is classified where refusals are.
+    private func sessionInspectionSeed(
+        _ session: QualificationSubprocessSession,
+        id: Int
+    ) throws -> String {
+        guard let inspect = OperationRegistry.specs.first(where: { $0.id == .projectInspectSession }) else {
+            throw QualificationTransportError.protocolViolation("session_inspection_seed: no inspect_session operation")
+        }
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": inspect.tool.rawValue,
+                "arguments": [
+                    "command": inspect.command,
+                    "params": [:] as [String: Any],
+                ],
+            ],
+            phase: "session_inspection_seed"
+        )
+        guard result.isError != true else {
+            throw QualificationTransportError.protocolViolation("session_inspection_seed: tool returned isError")
+        }
+        let seed: SessionInspectionSeed = try Self.decodeInner(
+            result.text(phase: "session_inspection_seed"),
+            phase: "session_inspection_seed"
+        )
+        guard !seed.snapshotID.isEmpty else {
+            throw QualificationTransportError.protocolViolation("session_inspection_seed: empty snapshot_id")
+        }
+        return seed.snapshotID
+    }
+
+    private struct SessionInspectionSeed: Decodable {
+        let snapshotID: String
+        enum CodingKeys: String, CodingKey { case snapshotID = "snapshot_id" }
     }
 
     private static func decodeInner<Value: Decodable>(
