@@ -136,15 +136,28 @@ def menu_level():
     return int(Quartz.CGWindowLevelForKey(Quartz.kCGPopUpMenuWindowLevelKey))
 
 
-def menus(windows):
-    return None if windows is None else [w for w in windows if w["layer"] >= menu_level()]
-
-
-def dialogs(windows, baseline_ids, titles):
+def menus(windows, level=None):
+    """Logic windows at the pop-up menu level exactly, as `LogicOnScreenWindows.popupMenuCount`
+    counts them. Counting `>=` read a nameless 89 x 19 Logic window at layer 103 as a menu in the
+    ko pilot of live_942 (#942); it was on screen before the hold and it was not a menu."""
     if windows is None:
         return None
-    return [w for w in windows if w["id"] not in baseline_ids and w["name"] in titles
-            and w["layer"] < menu_level()]
+    level = menu_level() if level is None else level
+    return [w for w in windows if w["layer"] == level]
+
+
+def appeared(windows, baseline_ids, level=None):
+    """Logic windows not in the baseline and not at the menu level, as `appearedSince` reads them."""
+    if windows is None:
+        return None
+    level = menu_level() if level is None else level
+    return [w for w in windows if w["id"] not in baseline_ids and w["layer"] != level]
+
+
+def dialogs(windows, baseline_ids, titles, level=None):
+    if windows is None:
+        return None
+    return [w for w in appeared(windows, baseline_ids, level) if w["name"] in titles]
 
 
 def wait_for(predicate, seconds=WAIT_SECONDS):

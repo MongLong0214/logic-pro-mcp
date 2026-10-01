@@ -177,18 +177,34 @@ class Titles:
     keyboard = P.names("stepInputKeyboardWindowTitle")
 
 
+def keyboard_window(name):
+    """Whether a window name is the Step Input Keyboard's, read as the product reads it: the title
+    is contained, without regard to case (`stepInputKeyboardWindowTitle`, mode `.contains`). Logic
+    titles the window `<project> - <title>`; the ko pilot's whole-name comparison never saw it."""
+    lowered = (name or "").lower()
+    return any(title.lower() in lowered for title in Titles.keyboard)
+
+
+def classify(windows, baseline_ids, level, keyboard_owner):
+    """One reading of a window list against the baseline, by the server's rules: the menus are the
+    Logic windows at the menu level exactly, an appeared window is any other Logic window not in
+    the baseline, the dialog is named exactly and the keyboard window by containment."""
+    if windows is None:
+        return None
+    new = P.appeared(windows, baseline_ids, level)
+    return {"menus": len(P.menus(windows, level)),
+            "dialogs": [w for w in new if w["name"] in Titles.dialog],
+            "keyboard_windows": [w for w in new if keyboard_window(w["name"])],
+            "new_windows": new,
+            "keyboard_owner_is_logic": keyboard_owner}
+
+
 def surfaces(baseline_ids):
     """What is on screen against the Logic windows listed before the hold; None when unread."""
     windows = P.logic_windows()
     if windows is None:
         return None
-    level = P.menu_level()
-    new = [w for w in windows if w["id"] not in baseline_ids and w["layer"] < level]
-    return {"menus": len(P.menus(windows)),
-            "dialogs": [w for w in new if w["name"] in Titles.dialog],
-            "keyboard_windows": [w for w in new if w["name"] in Titles.keyboard],
-            "new_windows": new,
-            "keyboard_owner_is_logic": P.keyboard_owner_is_logic()}
+    return classify(windows, baseline_ids, P.menu_level(), P.keyboard_owner_is_logic())
 
 
 def wait_surfaces(baseline_ids, predicate, seconds=ARRANGE_WAIT):
