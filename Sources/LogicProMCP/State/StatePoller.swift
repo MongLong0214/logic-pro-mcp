@@ -393,11 +393,25 @@ actor StatePoller {
     /// returns having written nothing (window not visible below threshold,
     /// backing off under an occluding dialog) must report `false`, not merely
     /// "the function returned" (#544 review).
+    ///
+    /// It also publishes the sections a yielded cycle wrote (`yieldCycle`), which were held back.
     @discardableResult
     private func finishPoll(_ cacheKeys: [ResourceCacheKey]) async -> Bool {
-        guard !cacheKeys.isEmpty else { return false }
-        await postPoll(cacheKeys)
-        return true
+        var publishing = keysHeldByAYield
+        keysHeldByAYield = []
+        for key in cacheKeys where !publishing.contains(key) { publishing.append(key) }
+        if !publishing.isEmpty { await postPoll(publishing) }
+        return !cacheKeys.isEmpty
+    }
+
+    /// #1079 review R2: how a background cycle ends when it yields to text editing. Its sections
+    /// are not published now, because publishing reads resources back -- the project path query,
+    /// a live transport read -- and those are the reads the yield exists to hold off. They are
+    /// held and published by the next cycle that reaches `finishPoll`. Whether the cache advanced
+    /// is answered as `finishPoll` answers it.
+    private func yieldCycle(_ cacheKeys: [ResourceCacheKey]) -> Bool {
+        for key in cacheKeys where !keysHeldByAYield.contains(key) { keysHeldByAYield.append(key) }
+        return !cacheKeys.isEmpty
     }
 
     /// #1079 review R1: the focus read at the top of a tick does not cover a user who starts an
@@ -443,23 +457,29 @@ actor StatePoller {
         // their outcome. `nil` when no blocking dialog owns the Logic window.
         await cache.updateBlockingDialogButtons(runtime.blockingDialogInfo()?.buttonTitles)
 
-        if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
+        if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let projectReady = await poll(
             operation: "project.get_info", label: "ProjectInfo",
             section: .project,
             axChannel: axChannel, cache: cache, as: ProjectInfo.self
         ) { cache, info, observed in
             var identityBacked = info
-            if (identityBacked.filePath ?? "").isEmpty,
-               !(yieldingToTextEditing && Self.backgroundTickYields(to: runtime.keyboardFocus())),
-               let metadata = await LogicProjectFileReader.read(runtime: runtime.projectFileReader) {
-                identityBacked.filePath = metadata.bundlePath.path
+            if (identityBacked.filePath ?? "").isEmpty {
+                // #1079 review R2: a yield here must not write the pathless info. The cache reads a
+                // path that went missing as a different project and clears every section, so the
+                // write is skipped and the cycle ends at the next check.
+                if yieldingToTextEditing && Self.backgroundTickYields(to: runtime.keyboardFocus()) {
+                    return false
+                }
+                if let metadata = await LogicProjectFileReader.read(runtime: runtime.projectFileReader) {
+                    identityBacked.filePath = metadata.bundlePath.path
+                }
             }
             return await cache.updateProject(identityBacked, ifCurrent: observed)
         }
         // #668: readability drives `hasDocument`; only an APPLIED write is reported as refreshed.
         if projectReady.applied { cacheKeys.append(.project) }
-        if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
+        if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let tracksReady: PollOutcome
         let tracksVersion = await cache.currentVersion(for: .tracks)
         // #1079: the track walk reads AXHelp of every header's elements, and that read ends an
@@ -473,7 +493,7 @@ actor StatePoller {
         } else {
             trackRead = (await axChannel.readTrackStates(), false)
         }
-        if trackRead.yielded { return await finishPoll(cacheKeys) }
+        if trackRead.yielded { return yieldCycle(cacheKeys) }
         if let tracks = trackRead.states {
             // The read succeeded, so tracks are readable regardless of what the write does. The
             // write outcome is a separate answer and has to come from the CAS, not be assumed:
@@ -539,7 +559,7 @@ actor StatePoller {
             return await finishPoll(cacheKeys)
         }
 
-        if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
+        if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let transportReady = await poll(
             operation: "transport.get_state", label: "Transport",
             section: .transport,
@@ -548,7 +568,7 @@ actor StatePoller {
             await cache.updateTransport(state, ifCurrent: observed)
         }
         if transportReady.applied { cacheKeys.append(.transport) }
-        if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
+        if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let mixerReady = await poll(
             operation: "mixer.get_state", label: "Mixer",
             section: .mixer,
@@ -559,7 +579,7 @@ actor StatePoller {
         if mixerReady.applied { cacheKeys.append(.mixer) }
         markerPollTick += 1
         if markerPollTick >= Self.markerPollInterval {
-            if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
+            if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
             markerPollTick = 0
             let markersReady = await pollUnversioned(
                 operation: "nav.get_markers", label: "Marker",
@@ -584,6 +604,8 @@ actor StatePoller {
     private var consecutiveWindowMisses = 0
     private var consecutivePollMisses = 0
     private var markerPollTick = 4
+    /// Sections a yielded cycle wrote and has not yet published (`yieldCycle`).
+    private var keysHeldByAYield: [ResourceCacheKey] = []
 
     private static let iso8601Decoder: JSONDecoder = {
         let d = JSONDecoder()

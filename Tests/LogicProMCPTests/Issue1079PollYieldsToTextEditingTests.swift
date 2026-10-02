@@ -73,7 +73,10 @@ struct Issue1079PollYieldsToTextEditingTests {
     /// `headers`, when set, makes the background poll's track read a walk of that many headers
     /// that asks its `stop` before each one, as the production walk does; each header read is
     /// counted as `.trackHeader`.
-    private static func countingChannel(_ log: ReadLog, headers: Int? = nil) -> AccessibilityChannel {
+    private static func countingChannel(
+        _ log: ReadLog, headers: Int? = nil, projectInfo: (@Sendable (Int) -> ChannelResult)? = nil
+    ) -> AccessibilityChannel {
+        let projectReads = Counter()
         var stoppable: (@Sendable (@escaping @Sendable () -> Bool) -> (states: [TrackState]?, yielded: Bool))?
         if let count = headers {
             stoppable = { @Sendable (stop: @escaping @Sendable () -> Bool) -> (states: [TrackState]?, yielded: Bool) in
@@ -104,7 +107,10 @@ struct Issue1079PollYieldsToTextEditingTests {
             mixerState: { log.bump(.mixer); return .success("[]") },
             channelStrip: { _ in .error("not under test") },
             setMixerValue: { _, _ in .error("not under test") },
-            projectInfo: { log.bump(.project); return .success(projectJSON) },
+            projectInfo: {
+                log.bump(.project)
+                return projectInfo?(projectReads.next()) ?? .success(projectJSON)
+            },
             markers: { log.bump(.markers); return .success("[]") }
         ))
     }
@@ -114,6 +120,9 @@ struct Issue1079PollYieldsToTextEditingTests {
         headers: Int? = nil,
         focus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus,
         mutationInFlight: Bool = false,
+        cache: StateCache = StateCache(),
+        projectInfo: (@Sendable (Int) -> ChannelResult)? = nil,
+        postPoll: @escaping @Sendable ([ResourceCacheKey]) async -> Void = { _ in },
         sleep: @escaping @Sendable (UInt64) async throws -> Void = { _ in throw CancellationError() }
     ) -> StatePoller {
         var runtime = StatePoller.Runtime(
@@ -131,7 +140,10 @@ struct Issue1079PollYieldsToTextEditingTests {
             keyboardFocus: { log.bump(.focus); return focus() }
         )
         runtime.mutationInFlight = { mutationInFlight }
-        return StatePoller(axChannel: countingChannel(log, headers: headers), cache: StateCache(), runtime: runtime)
+        return StatePoller(
+            axChannel: countingChannel(log, headers: headers, projectInfo: projectInfo),
+            cache: cache, runtime: runtime, postPoll: postPoll
+        )
     }
 
     /// Runs the background loop for exactly `ticks` iterations and returns what it read. The loop
@@ -141,11 +153,17 @@ struct Issue1079PollYieldsToTextEditingTests {
         ticks: Int,
         mutationInFlight: Bool = false,
         headers: Int? = nil,
+        cache: StateCache = StateCache(),
+        projectInfo: (@Sendable (Int) -> ChannelResult)? = nil,
+        postPoll: @escaping @Sendable ([ResourceCacheKey]) async -> Void = { _ in },
         focus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus
     ) async -> ReadLog {
         let log = ReadLog()
         let (loopEnded, endLoop) = AsyncStream<Void>.makeStream()
-        let poller = makePoller(log: log, headers: headers, focus: focus, mutationInFlight: mutationInFlight) { _ in
+        let poller = makePoller(
+            log: log, headers: headers, focus: focus, mutationInFlight: mutationInFlight,
+            cache: cache, projectInfo: projectInfo, postPoll: postPoll
+        ) { _ in
             if log.nextSleep() >= ticks {
                 endLoop.finish()
                 throw CancellationError()
@@ -308,17 +326,148 @@ struct Issue1079PollYieldsToTextEditingTests {
         }
         let runtime = builder.makeLogicRuntime(appElement: app)
 
+        // Each header is asked about twice: before it, and inside it before its help reads.
         let asked = Counter()
-        let stopped = AccessibilityChannel.defaultGetTrackStates(runtime: runtime, stoppingWhen: { asked.next() >= 2 })
+        let stopped = AccessibilityChannel.defaultGetTrackStates(runtime: runtime, stoppingWhen: { asked.next() >= 3 })
         #expect(stopped.yielded)
         #expect(stopped.states == nil)
-        #expect(asked.next() == 3, "asked before header 1 and header 2, then stopped")
+        #expect(asked.next() == 4, "asked twice for header 1 and once before header 2, then stopped")
 
         let all = Counter()
         let read = AccessibilityChannel.defaultGetTrackStates(runtime: runtime, stoppingWhen: { _ = all.next(); return false })
         #expect(!read.yielded)
         #expect(read.states?.count == 3)
-        #expect(all.next() == 4, "asked once before each of the three headers")
+        #expect(all.next() == 7, "asked twice for each of the three headers")
+    }
+
+    // MARK: - Review R2
+
+    final class AXReadLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var helpReads = 0
+        private var editing = false
+        func read(_ attribute: String, onHeaderOne: Bool, editingBeginsOn trigger: String?) {
+            lock.lock(); defer { lock.unlock() }
+            if attribute == kAXHelpAttribute as String { helpReads += 1 }
+            if onHeaderOne, attribute == trigger { editing = true }
+        }
+        var help: Int { lock.lock(); defer { lock.unlock() }; return helpReads }
+        var isEditing: Bool { lock.lock(); defer { lock.unlock() }; return editing }
+    }
+
+    /// Two headers with one child each, read by the production walk. `trigger` names an attribute
+    /// whose read on header 1 starts the edit -- the user opening a rename while that header's
+    /// earlier reads are under way, after the walk has asked before it.
+    private static func walkWithEditingBeginningOn(_ trigger: String?) -> (states: [TrackState]?, yielded: Bool, help: Int) {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(1)
+        let window = builder.element(2)
+        let list = builder.element(3)
+        let headers = [builder.element(4), builder.element(5)]
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setChildren(window, [list])
+        builder.setAttribute(list, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(list, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setChildren(list, headers)
+        for (offset, header) in headers.enumerated() {
+            builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            builder.setAttribute(header, kAXDescriptionAttribute as String, "Track \(offset)")
+            let child = builder.element(10 + offset)
+            builder.setAttribute(child, kAXRoleAttribute as String, kAXButtonRole as String)
+            builder.setChildren(header, [child])
+        }
+        let reads = AXReadLog()
+        let headerOne = builder.elementID(headers[0])
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueHandler: { element, attribute in
+                reads.read(attribute, onHeaderOne: builder.elementID(element) == headerOne, editingBeginsOn: trigger)
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+        let walk = AccessibilityChannel.defaultGetTrackStates(runtime: runtime, stoppingWhen: { reads.isEditing })
+        return (walk.states, walk.yielded, reads.help)
+    }
+
+    /// F1079-02: the walk asks before each header, but a header's own reads come before its help
+    /// reads, so editing that begins during them used to reach the help reads anyway. Mutation this
+    /// kills: the check inside `inferTrackType` removed (header 1's two help reads run). The control
+    /// is the same walk with no edit: every element's help is read and both states come back.
+    @Test("editing that begins during a header's earlier reads stops the walk before any help read")
+    func editingDuringAHeaderStopsBeforeItsHelpReads() {
+        let midHeader = Self.walkWithEditingBeginningOn(kAXDescriptionAttribute as String)
+        #expect(midHeader.yielded)
+        #expect(midHeader.states == nil)
+        #expect(midHeader.help == 0, "\(midHeader.help) help reads after editing began")
+
+        let control = Self.walkWithEditingBeginningOn(nil)
+        #expect(!control.yielded)
+        #expect(control.states?.count == 2)
+        #expect(control.help == 4, "help read \(control.help) times, not once per header and child")
+    }
+
+    /// F1079-01: the cached project has a path; the project read answers without one, so the cycle
+    /// asks for the document path, and editing begins at that check (focus reading 3). Skipping
+    /// the query and writing the pathless info read as a project change and cleared every
+    /// section. Mutation this kills: the yield at the path query writing the info anyway. The
+    /// control is the same cycle with no edit, where the path query runs.
+    @Test("a yield at the document-path query keeps the cached project and its sections")
+    func aYieldAtThePathQueryKeepsTheCache() async {
+        let path = "/Users/fixture/Fixture.logicx"
+        let cache = StateCache()
+        var known = ProjectInfo()
+        known.name = "Fixture"
+        known.filePath = path
+        await cache.updateProject(known)
+        await cache.updateTracks([TrackState(id: 0, name: "Vox", type: .audio), TrackState(id: 1, name: "Bass", type: .audio)])
+
+        let readings = Counter()
+        let log = await Self.runBackgroundLoop(ticks: 1, cache: cache) {
+            readings.next() >= 3 ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) : .notTextEditing
+        }
+        #expect(log.count(.project) == 1, "the project read is what reaches the path check")
+        #expect(log.count(.documentPath) == 0)
+        #expect(await cache.getProject().filePath == path, "the cached path was replaced by none")
+        #expect(await cache.getTracks().count == 2, "the cached tracks were cleared")
+
+        let control = await Self.runBackgroundLoop(ticks: 1) { .notTextEditing }
+        #expect(control.count(.documentPath) == 1, "the control asked for the path")
+    }
+
+    final class Published: @unchecked Sendable {
+        private let lock = NSLock()
+        private var batches: [[ResourceCacheKey]] = []
+        func add(_ keys: [ResourceCacheKey]) { lock.lock(); defer { lock.unlock() }; batches.append(keys) }
+        var all: [[ResourceCacheKey]] { lock.lock(); defer { lock.unlock() }; return batches }
+    }
+
+    /// F1079-02: publishing a cycle's sections reads resources back, so a cycle that yields must
+    /// not publish. Tick 1 writes the project and yields before the track read (focus reading 4);
+    /// tick 2 runs whole, and its own project read fails, so the project key it publishes can only
+    /// be the one tick 1 held. Mutations this kills: a yield publishing at once (tick 1 publishes),
+    /// and the held keys dropped (tick 2 publishes no project key).
+    @Test("a yielded cycle publishes nothing, and the next whole cycle publishes what it wrote")
+    func aYieldedCycleHoldsItsNotifications() async {
+        let published = Published()
+        let readings = Counter()
+        let log = await Self.runBackgroundLoop(
+            ticks: 2,
+            projectInfo: { call in call == 1 ? .success(Self.projectJSON) : .error("unreadable") },
+            postPoll: { published.add($0) }
+        ) {
+            readings.next() == 4 ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) : .notTextEditing
+        }
+        #expect(log.count(.project) == 2, "both ticks read the project")
+        #expect(log.count(.tracks) == 1, "only tick 2 reached the track read")
+        let batches = published.all
+        #expect(batches.count == 1, "published \(batches.count) times, not once")
+        // Not `batches.first?.contains(.project) == true`: under this toolchain's swift-testing that
+        // expectation passed with the key absent (measured, 2026-10-02).
+        let publishedKeys = batches.first ?? []
+        #expect(publishedKeys.contains(.project), "tick 1's project write was not published")
+        #expect(publishedKeys.contains(.tracks))
     }
 
     @Test("an explicit refreshNow runs while a text field holds the focus, and does not ask")

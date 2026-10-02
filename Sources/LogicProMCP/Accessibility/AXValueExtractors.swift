@@ -312,6 +312,20 @@ enum AXValueExtractors {
         index: Int,
         runtime: AXHelpers.Runtime = .production
     ) -> TrackState {
+        // With no stop there is nothing to answer true, so the read is never cut short.
+        extractTrackState(from: header, index: index, runtime: runtime, stoppingBeforeHelp: { false })
+            ?? TrackState(id: index, name: "", type: .unknown)
+    }
+
+    /// #1079 review R2: the same read, asking `stop` once more right before the type inference
+    /// reads AXHelp -- the read measured to end an inline rename -- and returning nil, with no help
+    /// read, once it answers true. The header's other reads come first and do not end one.
+    static func extractTrackState(
+        from header: AXUIElement,
+        index: Int,
+        runtime: AXHelpers.Runtime = .production,
+        stoppingBeforeHelp stop: () -> Bool
+    ) -> TrackState? {
         let extractedName = extractTrackName(from: header, runtime: runtime)
         // #1040: a toggle that was not found, or whose value would not read, stays nil. These ended
         // in `?? false`, which published "off" for a control nobody had read; `extractTrackStackState`
@@ -325,7 +339,9 @@ enum AXValueExtractors {
         // is unread (nil) on the same terms.
         let inputMonitoring = extractTrackButtonState(from: header, prefix: "Input Monitoring", runtime: runtime)
         let selected = extractSelectedState(header, runtime: runtime) ?? false
-        let trackType = inferTrackType(from: header, runtime: runtime)
+        guard let trackType = inferTrackType(from: header, runtime: runtime, stoppingBeforeHelp: stop) else {
+            return nil
+        }
         let stack = extractTrackStackState(from: header, runtime: runtime)
 
         return TrackState(
@@ -782,7 +798,9 @@ enum AXValueExtractors {
         return nil
     }
 
-    private static func inferTrackType(from header: AXUIElement, runtime: AXHelpers.Runtime) -> TrackType {
+    private static func inferTrackType(
+        from header: AXUIElement, runtime: AXHelpers.Runtime, stoppingBeforeHelp stop: () -> Bool
+    ) -> TrackType? {
         // Logic 12.2 often puts the human track name on the AXLayoutItem and
         // the type hint on a descendant icon/control, so scan both levels.
         // #766 — the aggregate is built from Logic-AUTHORED text only. A name a user typed is not
@@ -811,20 +829,26 @@ enum AXValueExtractors {
                 }
                 return text.replacingOccurrences(of: quoted, with: " ")
             }
-        var signals = [
+        // #1079: every read but help comes first, then `stop` is asked, then the help reads. The
+        // signals keep the order they always had: each element's description, title, identifier,
+        // help.
+        let headerSignals = [
             namelessDescription,
             AXHelpers.getTitle(header, runtime: runtime),
-            AXHelpers.getIdentifier(header, runtime: runtime),
-            AXHelpers.getHelp(header, runtime: runtime)
+            AXHelpers.getIdentifier(header, runtime: runtime)
         ]
         let descendants = AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
-        for element in descendants {
-            signals.append(contentsOf: [
+        let descendantSignals = descendants.map { element in
+            [
                 AXHelpers.getDescription(element, runtime: runtime),
                 AXHelpers.getTitle(element, runtime: runtime),
-                AXHelpers.getIdentifier(element, runtime: runtime),
-                AXHelpers.getHelp(element, runtime: runtime)
-            ])
+                AXHelpers.getIdentifier(element, runtime: runtime)
+            ]
+        }
+        if stop() { return nil }
+        var signals = headerSignals + [AXHelpers.getHelp(header, runtime: runtime)]
+        for (element, readFirst) in zip(descendants, descendantSignals) {
+            signals.append(contentsOf: readFirst + [AXHelpers.getHelp(element, runtime: runtime)])
         }
         let trackName = extractTrackName(from: header, runtime: runtime).name
             .trimmingCharacters(in: .whitespacesAndNewlines)
