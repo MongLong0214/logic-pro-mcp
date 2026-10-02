@@ -1,0 +1,450 @@
+{
+  "schema": 3,
+  "id": "2026-10-02-zh-TW-go-to-position-post-leaf-settlement-acts-on-logics-screen",
+  "date": "2026-10-02",
+  "subject": "transport.goto_position after the leaf click: the post-leaf settlement's reading, Escapes and result on Logic's own screen",
+  "question": "Held at each of five arranged screens, does the settlement name what is on screen, close the Navigate menu and the Go To Position dialog it opened, send nothing at a window it did not open, and does a binary without it leave every arranged surface up?",
+  "verdict": "works",
+  "surface": "arrange.menus",
+  "issues": [
+    942
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "zh-TW",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_942_post_leaf_settlement_in_every_locale.py <worktree> <full-40-char-head> <candidate-binary> <control-binary>",
+    "expected": "every candidate hold and every control hold passes its check, and every clean-up reads clean",
+    "cost": "needs LPM_LIVE_LOCK naming a held lock, LPM_EVIDENCE_ROOT an absolute directory, LPM_LOCALE_FIXTURE the campaign fixture, a debug candidate and a debug control built with the settlement block removed; it relaunches Logic per language"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+GotoPostLeafSettlement.swift:settlePostLeafScreen",
+    "Sources/LogicProMCP/Accessibility/LogicOnScreenWindows.swift:keyboardWindow",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+GotoPostLeafLiveHold.swift:postLeafLiveHoldResult",
+    "Scripts/livekit/live_942_post_leaf_settlement_in_every_locale.py:classify",
+    "Scripts/livekit/live_942_post_leaf_settlement_in_every_locale.py:clean_up"
+  ],
+  "evidence": [
+    "evidence/2026-10-02-942-post-leaf-settlement.json"
+  ],
+  "method": "One run of Scripts/livekit/live_942_post_leaf_settlement_in_every_locale.py at a7913248, with a debug candidate and a debug control without the settlement, both holding the Go To Position script through LOGIC_MCP_942_POST_LEAF_HOLD_DIR while the harness arranged the screen. The harness read Logic's windows itself before and after each reply.",
+  "observations": [
+    {
+      "locale": "zh-TW",
+      "role": "candidate",
+      "kind": "nothing",
+      "result": "select_all_ledger",
+      "reply": {
+        "state": "C",
+        "error": "ax_write_failed",
+        "fallback_unsafe": true,
+        "safe_to_retry": false
+      },
+      "reply_seconds": 1.642,
+      "settlement": {
+        "action": "none",
+        "escape_targets": [],
+        "escapes_sent": 0,
+        "settled": true,
+        "read": {
+          "menu": "closed",
+          "dialog": "absent",
+          "keyboard_owner": "logic",
+          "appeared_windows": []
+        },
+        "after": {
+          "menu": "closed",
+          "dialog": "absent",
+          "keyboard_owner": "logic",
+          "appeared_windows": []
+        }
+      },
+      "arranged": {
+        "menus": 0,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "after_reply": {
+        "menus": 0,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "after_survival": {
+        "menus": 0,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "clean_up_clean": true,
+      "check_passed": true
+    },
+    {
+      "locale": "zh-TW",
+      "role": "candidate",
+      "kind": "menu",
+      "result": "select_all_focus",
+      "reply": {
+        "state": "C",
+        "error": "ax_write_failed",
+        "fallback_unsafe": true,
+        "safe_to_retry": false
+      },
+      "reply_seconds": 0.917,
+      "settlement": {
+        "action": "menu_escape_loop",
+        "escape_targets": [
+          "menu"
+        ],
+        "escapes_sent": 1,
+        "settled": true,
+        "read": {
+          "menu": "open",
+          "menu_count": 1,
+          "dialog": "absent",
+          "keyboard_owner": "logic",
+          "appeared_windows": []
+        },
+        "after": {
+          "menu": "closed",
+          "dialog": "absent",
+          "keyboard_owner": "logic",
+          "appeared_windows": []
+        }
+      },
+      "arranged": {
+        "menus": 1,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "after_reply": {
+        "menus": 0,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "after_survival": {
+        "menus": 0,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "clean_up_clean": true,
+      "check_passed": true
+    },
+    {
+      "locale": "zh-TW",
+      "role": "candidate",
+      "kind": "dialog",
+      "result": "select_all_error",
+      "reply": {
+        "state": "B",
+        "fallback_unsafe": true,
+        "safe_to_retry": false
+      },
+      "reply_seconds": 2.566,
+      "settlement": {
+        "action": "dialog_cancel",
+        "escape_targets": [
+          "dialog"
+        ],
+        "escapes_sent": 1,
+        "settled": true,
+        "read": {
+          "menu": "closed",
+          "dialog": "identified_ours",
+          "keyboard_owner": "logic",
+          "appeared_windows": [
+            {
+              "layer": 8
+            }
+          ]
+        },
+        "after": {
+          "menu": "closed",
+          "dialog": "absent",
+          "keyboard_owner": "logic",
+          "appeared_windows": []
+        }
+      },
+      "arranged": {
+        "menus": 0,
+        "dialogs": 1,
+        "keyboard_windows": 0,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "after_reply": {
+        "menus": 0,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "after_survival": {
+        "menus": 0,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "clean_up_clean": true,
+      "check_passed": true
+    },
+    {
+      "locale": "zh-TW",
+      "role": "candidate",
+      "kind": "menu_over_dialog",
+      "result": "position_ledger",
+      "reply": {
+        "state": "B",
+        "fallback_unsafe": true,
+        "safe_to_retry": false
+      },
+      "reply_seconds": 1.63,
+      "settlement": {
+        "action": "menu_escape_loop",
+        "escape_targets": [
+          "menu",
+          "dialog"
+        ],
+        "escapes_sent": 2,
+        "settled": true,
+        "read": {
+          "menu": "open",
+          "menu_count": 1,
+          "dialog": "identified_ours",
+          "keyboard_owner": "logic",
+          "appeared_windows": [
+            {
+              "layer": 8
+            }
+          ]
+        },
+        "after": {
+          "menu": "closed",
+          "dialog": "absent",
+          "keyboard_owner": "logic",
+          "appeared_windows": []
+        }
+      },
+      "arranged": {
+        "menus": 1,
+        "dialogs": 1,
+        "keyboard_windows": 0,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "after_reply": {
+        "menus": 0,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "after_survival": {
+        "menus": 0,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "clean_up_clean": true,
+      "check_passed": true
+    },
+    {
+      "locale": "zh-TW",
+      "role": "candidate",
+      "kind": "unidentified",
+      "result": "position_focus",
+      "reply": {
+        "state": "B",
+        "fallback_unsafe": true,
+        "safe_to_retry": false
+      },
+      "reply_seconds": 1.163,
+      "settlement": {
+        "action": "refuse_to_act",
+        "escape_targets": [],
+        "escapes_sent": 0,
+        "settled": false,
+        "read": {
+          "menu": "open",
+          "menu_count": 1,
+          "dialog": "unidentified",
+          "keyboard_owner": "logic",
+          "appeared_windows": [
+            {
+              "layer": 3
+            }
+          ]
+        },
+        "after": {
+          "menu": "open",
+          "menu_count": 1,
+          "dialog": "unidentified",
+          "keyboard_owner": "logic",
+          "appeared_windows": [
+            {
+              "layer": 3
+            }
+          ]
+        }
+      },
+      "arranged": {
+        "menus": 1,
+        "dialogs": 0,
+        "keyboard_windows": 1,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "after_reply": {
+        "menus": 1,
+        "dialogs": 0,
+        "keyboard_windows": 1,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "after_survival": {
+        "menus": 1,
+        "dialogs": 0,
+        "keyboard_windows": 1,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "clean_up_clean": true,
+      "check_passed": true
+    },
+    {
+      "locale": "zh-TW",
+      "role": "control",
+      "kind": "menu",
+      "result": "position_error",
+      "reply": {
+        "state": "B",
+        "fallback_unsafe": true,
+        "safe_to_retry": false
+      },
+      "reply_seconds": 2.466,
+      "settlement": null,
+      "arranged": {
+        "menus": 1,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "after_reply": {
+        "menus": 1,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "after_survival": {
+        "menus": 1,
+        "dialogs": 0,
+        "keyboard_windows": 0,
+        "new_windows": 0,
+        "keyboard_owner_is_logic": true
+      },
+      "clean_up_clean": true,
+      "check_passed": true
+    },
+    {
+      "locale": "zh-TW",
+      "role": "control",
+      "kind": "dialog",
+      "result": "return_ledger",
+      "reply": {
+        "state": "B",
+        "fallback_unsafe": true,
+        "safe_to_retry": false
+      },
+      "reply_seconds": 0.747,
+      "settlement": null,
+      "arranged": {
+        "menus": 0,
+        "dialogs": 1,
+        "keyboard_windows": 0,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "after_reply": {
+        "menus": 0,
+        "dialogs": 1,
+        "keyboard_windows": 0,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "after_survival": {
+        "menus": 0,
+        "dialogs": 1,
+        "keyboard_windows": 0,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "clean_up_clean": true,
+      "check_passed": true
+    },
+    {
+      "locale": "zh-TW",
+      "role": "control",
+      "kind": "menu_over_dialog",
+      "result": "return_focus",
+      "reply": {
+        "state": "B",
+        "fallback_unsafe": true,
+        "safe_to_retry": false
+      },
+      "reply_seconds": 0.902,
+      "settlement": null,
+      "arranged": {
+        "menus": 1,
+        "dialogs": 1,
+        "keyboard_windows": 0,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "after_reply": {
+        "menus": 1,
+        "dialogs": 1,
+        "keyboard_windows": 0,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "after_survival": {
+        "menus": 1,
+        "dialogs": 1,
+        "keyboard_windows": 0,
+        "new_windows": 1,
+        "keyboard_owner_is_logic": true
+      },
+      "clean_up_clean": true,
+      "check_passed": true
+    }
+  ],
+  "conclusion": "8 of 8 holds passed. Candidate, nothing arranged: none with 0 Escape(s). The Navigate menu: menu_escape_loop with 1 Escape(s), and nothing was left after the reply. The Go To Position dialog: dialog_cancel with 1 Escape(s). The menu over the dialog: menu_escape_loop with 2 Escape(s). The Step Input Keyboard under the menu, a window the server did not open: refuse_to_act with 0 Escape(s), and both stayed up. The control, built without the settlement, sent nothing and left each arranged surface up at both readings.",
+  "limits": [
+    "The script's result is substituted by the debug hold, so this shows what the route does with each result over the arranged screens, not that Logic reaches any of them.",
+    "One menu (Navigate), one window the server did not open (the Step Input Keyboard), one fixture, one Logic installation, one run.",
+    "Window names are kept out of this record; the evidence file beside it holds them."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states the server's behaviour on Logic's screen -- which windows its reading counted, how many Escapes it sent and what was left after the reply -- not a string Logic ships."
+  }
+}

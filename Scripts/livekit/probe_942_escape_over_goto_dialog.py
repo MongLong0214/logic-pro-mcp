@@ -15,17 +15,23 @@ dialog is unresolved, and it is measured here rather than assumed.
 
 HOW IT IS READ
 --------------
-Everything is read from the window server's on-screen list, not from AX: a modal dialog poisons AX
-reads, and an open menu wedges AppleEvents, so neither can be trusted in exactly the state under test.
-A Logic menu is a Logic-owned window at or above the pop-up menu level. The dialog is the Logic-owned
+The menu and the dialog are read from the window server's on-screen list, not from AX: a modal dialog
+poisons AX reads, and an open menu wedges AppleEvents, so neither can be trusted in exactly the state
+under test. The one AX read is the system-wide focused application, for the keyboard owner below.
+A Logic menu is a Logic-owned window at the pop-up menu level, layer 101, and no other. The dialog is the Logic-owned
 window that appeared after its menu item was clicked and whose window-server name is one of the
 dialog's measured titles in docs/locale/ui-labels.json. A list the window server did not hand back is
 unknown, and the sample fails.
 
 The Escape is posted the way the server posts it (`AXLogicProElements.Runtime.livePostPopupMenuEscape`):
 a key-down and key-up for virtual key 53 at the HID event tap, which goes to whichever application owns
-the keyboard. The first layer-0 window's owner is recorded before every Escape, and a sample in which it
-is not Logic fails, because that Escape would have gone somewhere else.
+the keyboard. Before each of the two measured Escapes the keyboard's owner is read
+(`keyboard_owner_is_logic`): the first window at layer 0 or at the modal-panel level, layer 8, whose
+owner must be Logic, and the focused application, which when it reads must be that same process. A
+sample in which it is not Logic fails, because that Escape would have gone somewhere else. This is the
+server's rule with one difference: Logic is recognized here by the window's owner name, where the
+server requires one of Logic's bundle identifiers. The clean-up Escapes after a sample are not
+preceded by an owner read.
 
 Each sample, from a screen with no Logic menu and no dialog:
   1. open the dialog from the menu bar; one Escape; the dialog must be gone. This is the control: it
@@ -118,16 +124,62 @@ def logic_windows():
     return found
 
 
+def focused_application_pid():
+    """The pid the accessibility server names as the focused application, as the server reads it
+    (`ProcessUtils.focusedApplicationPID`), or None when it did not answer. Through ctypes: the
+    system python3 that holds the TCC grants ships Quartz but not the ApplicationServices module.
+    The read fails with -25204 until this process has called the window server, so the caller
+    reads the window list first (measured 2026-10-02)."""
+    import ctypes
+    services = ctypes.cdll.LoadLibrary(
+        "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+    foundation = ctypes.cdll.LoadLibrary(
+        "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+    services.AXUIElementCreateSystemWide.restype = ctypes.c_void_p
+    services.AXUIElementCopyAttributeValue.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
+                                                       ctypes.POINTER(ctypes.c_void_p)]
+    services.AXUIElementCopyAttributeValue.restype = ctypes.c_int32
+    services.AXUIElementGetPid.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)]
+    services.AXUIElementGetPid.restype = ctypes.c_int32
+    foundation.CFStringCreateWithCString.restype = ctypes.c_void_p
+    foundation.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+    foundation.CFRelease.argtypes = [ctypes.c_void_p]
+    attribute = foundation.CFStringCreateWithCString(None, b"AXFocusedApplication", 0x08000100)
+    system_wide = services.AXUIElementCreateSystemWide()
+    value = ctypes.c_void_p()
+    try:
+        if services.AXUIElementCopyAttributeValue(system_wide, attribute, ctypes.byref(value)) != 0 \
+                or not value.value:
+            return None
+        pid = ctypes.c_int()
+        if services.AXUIElementGetPid(value, ctypes.byref(pid)) != 0 or pid.value <= 0:
+            return None
+        return pid.value
+    finally:
+        for ref in (value.value, system_wide, attribute):
+            if ref:
+                foundation.CFRelease(ref)
+
+
 def keyboard_owner_is_logic():
-    """Whether the first layer-0 window on screen is Logic's, as the server judges it; None if unread."""
+    """Whether Logic holds the keyboard, as the server judges it
+    (`LogicOnScreenWindows.keyboardOwnerIsLogic`): the first window at the normal or the
+    modal-panel level must be Logic's, so a permission prompt at layer 8 in front of Logic is the
+    owner; and when the accessibility server names a focused application it must be Logic, so an
+    application with no window on screen (Finder after a click on the desktop) is the owner too.
+    None if the window list or the first window's owner was not read."""
     import Quartz
     windows = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly,
                                                 Quartz.kCGNullWindowID)
     if windows is None:
         return None
+    modal_panel = int(Quartz.CGWindowLevelForKey(Quartz.kCGModalPanelWindowLevelKey))
     for window in windows:
-        if int(window.get(Quartz.kCGWindowLayer) or 0) == 0:
-            return E._is_logic_owned_window(window)
+        if int(window.get(Quartz.kCGWindowLayer) or 0) in (0, modal_panel):
+            if not E._is_logic_owned_window(window):
+                return False
+            focused = focused_application_pid()
+            return focused is None or focused == int(window.get(Quartz.kCGWindowOwnerPID))
     return None
 
 
@@ -136,15 +188,28 @@ def menu_level():
     return int(Quartz.CGWindowLevelForKey(Quartz.kCGPopUpMenuWindowLevelKey))
 
 
-def menus(windows):
-    return None if windows is None else [w for w in windows if w["layer"] >= menu_level()]
-
-
-def dialogs(windows, baseline_ids, titles):
+def menus(windows, level=None):
+    """Logic windows at the pop-up menu level exactly, as `LogicOnScreenWindows.popupMenuCount`
+    counts them. Counting `>=` read a nameless 89 x 19 Logic window at layer 103 as a menu in the
+    ko pilot of live_942 (#942); it was on screen before the hold and it was not a menu."""
     if windows is None:
         return None
-    return [w for w in windows if w["id"] not in baseline_ids and w["name"] in titles
-            and w["layer"] < menu_level()]
+    level = menu_level() if level is None else level
+    return [w for w in windows if w["layer"] == level]
+
+
+def appeared(windows, baseline_ids, level=None):
+    """Logic windows not in the baseline and not at the menu level, as `appearedSince` reads them."""
+    if windows is None:
+        return None
+    level = menu_level() if level is None else level
+    return [w for w in windows if w["id"] not in baseline_ids and w["layer"] != level]
+
+
+def dialogs(windows, baseline_ids, titles, level=None):
+    if windows is None:
+        return None
+    return [w for w in appeared(windows, baseline_ids, level) if w["name"] in titles]
 
 
 def wait_for(predicate, seconds=WAIT_SECONDS):

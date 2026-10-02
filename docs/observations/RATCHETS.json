@@ -85,7 +85,8 @@
       "2026-09-28-zh-TW-track-header-toggles-publish-what-was-read",
       "2026-09-28-zh-TW-track-header-toggles-without-the-mute-led-writer",
       "2026-09-29-1038-transport-goto-gate-toggle-and-pause-ten-languages",
-      "2026-09-29-ko-KR-a-tooltip-in-axwindows-is-not-a-modal-blocker"
+      "2026-09-29-ko-KR-a-tooltip-in-axwindows-is-not-a-modal-blocker",
+      "2026-10-02-ko-KR-a-permission-prompt-holds-the-keyboard-over-logic"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
@@ -492,11 +493,11 @@
   "note": "What the ledger does not know, as SETS of identities. A member may leave; a new member fails CI. Sets rather than counts because a count is defeated by a swap — add one undocumented variant, document a different one, and the total is unchanged while the ledger knows strictly less about a new string. The guard also compares against the MERGE BASE, so raising the file in the same commit as the regression does not help. Raising requires a dated reason under `raised`. ADR-019 D8. Live: observations-status.py --unproven",
   "raised": {
     "manual_reverify": {
-      "date": "2026-09-29",
+      "date": "2026-10-02",
       "members": [
-        "2026-09-29-ko-KR-a-tooltip-in-axwindows-is-not-a-modal-blocker"
+        "2026-10-02-ko-KR-a-permission-prompt-holds-the-keyboard-over-logic"
       ],
-      "reason": "#1063: the record's reverify needs a tooltip resting over Logic when the scan runs. It is the one Logic shows under a pointer left at rest; a script cannot arrange that without moving the pointer, so the steps are written out by hand. The four live calls and their raw replies are in docs/observations/evidence/2026-09-29-ko-KR-help-tag-1063.json."
+      "reason": "#942: the record's reverify needs another process's permission prompt left up in front of Logic when the window list is read and the two binaries are driven. macOS raises those prompts for its own reasons and a script cannot raise one on demand, so the steps are written out by hand. The window list and both binaries' replies are in docs/observations/evidence/2026-10-02-942-keyboard-owner-window-list.json and 2026-10-02-942-keyboard-owner-drive.json."
     },
     "records_without_evidence": {
       "date": "2026-09-19",

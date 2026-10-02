@@ -1,0 +1,826 @@
+{
+ "measured_at": "2026-10-02T08:04:13+0900",
+ "how": "CGWindowListCopyWindowInfo(optionOnScreenOnly|excludeDesktopElements), front to back, by /usr/bin/python3 under the LPM shell",
+ "lsappinfo_front": "\"LSDisplayName\"=\"UserNotificationCenter\"",
+ "rows": [
+  {
+   "number": 8,
+   "layer": 2147483630,
+   "owner_name": "Window Server",
+   "owner_pid": 391,
+   "name": "Cursor",
+   "bounds": {
+    "X": 768,
+    "Height": 40,
+    "Y": 130,
+    "Width": 28
+   }
+  },
+  {
+   "number": 1425,
+   "layer": 2147483630,
+   "owner_name": "Window Server",
+   "owner_pid": 391,
+   "name": "StatusIndicator",
+   "bounds": {
+    "X": -177,
+    "Height": 18,
+    "Y": 355,
+    "Width": 10
+   }
+  },
+  {
+   "number": 1424,
+   "layer": 2147483630,
+   "owner_name": "Window Server",
+   "owner_pid": 391,
+   "name": "StatusIndicator",
+   "bounds": {
+    "X": 2823,
+    "Height": 18,
+    "Y": -239,
+    "Width": 10
+   }
+  },
+  {
+   "number": 1423,
+   "layer": 2147483630,
+   "owner_name": "Window Server",
+   "owner_pid": 391,
+   "name": "StatusIndicator",
+   "bounds": {
+    "X": 1743,
+    "Height": 18,
+    "Y": 6,
+    "Width": 10
+   }
+  },
+  {
+   "number": 1574,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": 2652,
+    "Height": 30,
+    "Y": -245,
+    "Width": 33
+   }
+  },
+  {
+   "number": 1573,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": -348,
+    "Height": 30,
+    "Y": 349,
+    "Width": 33
+   }
+  },
+  {
+   "number": 1572,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "NowPlaying",
+   "bounds": {
+    "X": 1572,
+    "Height": 30,
+    "Y": 0,
+    "Width": 33
+   }
+  },
+  {
+   "number": 1428,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": 2287,
+    "Height": 30,
+    "Y": -245,
+    "Width": 48
+   }
+  },
+  {
+   "number": 1427,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": -713,
+    "Height": 30,
+    "Y": 349,
+    "Width": 48
+   }
+  },
+  {
+   "number": 1426,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "AudioVideoModule",
+   "bounds": {
+    "X": 1207,
+    "Height": 30,
+    "Y": 0,
+    "Width": 48
+   }
+  },
+  {
+   "number": 503,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Amphetamine",
+   "bounds": {
+    "X": 1255,
+    "Height": 30,
+    "Y": 0,
+    "Width": 31
+   }
+  },
+  {
+   "number": 505,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.if.Amphetamine",
+   "bounds": {
+    "X": 2335,
+    "Height": 30,
+    "Y": -245,
+    "Width": 31
+   }
+  },
+  {
+   "number": 504,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.if.Amphetamine",
+   "bounds": {
+    "X": -665,
+    "Height": 30,
+    "Y": 349,
+    "Width": 31
+   }
+  },
+  {
+   "number": 393,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Item-0",
+   "bounds": {
+    "X": 1286,
+    "Height": 30,
+    "Y": 0,
+    "Width": 38
+   }
+  },
+  {
+   "number": 226,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Item-0",
+   "bounds": {
+    "X": 1324,
+    "Height": 30,
+    "Y": 0,
+    "Width": 32
+   }
+  },
+  {
+   "number": 217,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Item-0",
+   "bounds": {
+    "X": 1356,
+    "Height": 30,
+    "Y": 0,
+    "Width": 38
+   }
+  },
+  {
+   "number": 214,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Item-0",
+   "bounds": {
+    "X": 1394,
+    "Height": 30,
+    "Y": 0,
+    "Width": 70
+   }
+  },
+  {
+   "number": 194,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Item-0",
+   "bounds": {
+    "X": 1464,
+    "Height": 30,
+    "Y": 0,
+    "Width": 38
+   }
+  },
+  {
+   "number": 176,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Item-0",
+   "bounds": {
+    "X": 1502,
+    "Height": 30,
+    "Y": 0,
+    "Width": 32
+   }
+  },
+  {
+   "number": 159,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Item-0",
+   "bounds": {
+    "X": 1534,
+    "Height": 30,
+    "Y": 0,
+    "Width": 38
+   }
+  },
+  {
+   "number": 211,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Item-0",
+   "bounds": {
+    "X": 1605,
+    "Height": 30,
+    "Y": 0,
+    "Width": 44
+   }
+  },
+  {
+   "number": 35,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "WiFi",
+   "bounds": {
+    "X": 1649,
+    "Height": 30,
+    "Y": 0,
+    "Width": 38
+   }
+  },
+  {
+   "number": 68,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Item-0",
+   "bounds": {
+    "X": 1687,
+    "Height": 30,
+    "Y": 0,
+    "Width": 32
+   }
+  },
+  {
+   "number": 36,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "BentoBox-0",
+   "bounds": {
+    "X": 1719,
+    "Height": 30,
+    "Y": 0,
+    "Width": 42
+   }
+  },
+  {
+   "number": 34,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "Clock",
+   "bounds": {
+    "X": 1761,
+    "Height": 30,
+    "Y": 0,
+    "Width": 159
+   }
+  },
+  {
+   "number": 395,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.openai.codex",
+   "bounds": {
+    "X": 2366,
+    "Height": 30,
+    "Y": -245,
+    "Width": 38
+   }
+  },
+  {
+   "number": 227,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.roli.hub",
+   "bounds": {
+    "X": 2404,
+    "Height": 30,
+    "Y": -245,
+    "Width": 32
+   }
+  },
+  {
+   "number": 218,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "io.tailscale.ipn.macsys",
+   "bounds": {
+    "X": 2436,
+    "Height": 30,
+    "Y": -245,
+    "Width": 38
+   }
+  },
+  {
+   "number": 215,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.kyome.RunCat",
+   "bounds": {
+    "X": 2474,
+    "Height": 30,
+    "Y": -245,
+    "Width": 70
+   }
+  },
+  {
+   "number": 195,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "dev.kdrag0n.MacVirt",
+   "bounds": {
+    "X": 2544,
+    "Height": 30,
+    "Y": -245,
+    "Width": 38
+   }
+  },
+  {
+   "number": 177,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "notion.id",
+   "bounds": {
+    "X": 2582,
+    "Height": 30,
+    "Y": -245,
+    "Width": 32
+   }
+  },
+  {
+   "number": 160,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.tdesktop.Telegram",
+   "bounds": {
+    "X": 2614,
+    "Height": 30,
+    "Y": -245,
+    "Width": 38
+   }
+  },
+  {
+   "number": 212,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.apple.TextInputMenuAgent",
+   "bounds": {
+    "X": 2685,
+    "Height": 30,
+    "Y": -245,
+    "Width": 44
+   }
+  },
+  {
+   "number": 41,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": 2729,
+    "Height": 30,
+    "Y": -245,
+    "Width": 38
+   }
+  },
+  {
+   "number": 69,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.apple.Spotlight",
+   "bounds": {
+    "X": 2767,
+    "Height": 30,
+    "Y": -245,
+    "Width": 32
+   }
+  },
+  {
+   "number": 39,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": 2799,
+    "Height": 30,
+    "Y": -245,
+    "Width": 42
+   }
+  },
+  {
+   "number": 37,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": 2841,
+    "Height": 30,
+    "Y": -245,
+    "Width": 159
+   }
+  },
+  {
+   "number": 394,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.openai.codex",
+   "bounds": {
+    "X": -634,
+    "Height": 30,
+    "Y": 349,
+    "Width": 38
+   }
+  },
+  {
+   "number": 228,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.roli.hub",
+   "bounds": {
+    "X": -596,
+    "Height": 30,
+    "Y": 349,
+    "Width": 32
+   }
+  },
+  {
+   "number": 219,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "io.tailscale.ipn.macsys",
+   "bounds": {
+    "X": -564,
+    "Height": 30,
+    "Y": 349,
+    "Width": 38
+   }
+  },
+  {
+   "number": 216,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.kyome.RunCat",
+   "bounds": {
+    "X": -526,
+    "Height": 30,
+    "Y": 349,
+    "Width": 70
+   }
+  },
+  {
+   "number": 196,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "dev.kdrag0n.MacVirt",
+   "bounds": {
+    "X": -456,
+    "Height": 30,
+    "Y": 349,
+    "Width": 38
+   }
+  },
+  {
+   "number": 178,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "notion.id",
+   "bounds": {
+    "X": -418,
+    "Height": 30,
+    "Y": 349,
+    "Width": 32
+   }
+  },
+  {
+   "number": 161,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.tdesktop.Telegram",
+   "bounds": {
+    "X": -386,
+    "Height": 30,
+    "Y": 349,
+    "Width": 38
+   }
+  },
+  {
+   "number": 213,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.apple.TextInputMenuAgent",
+   "bounds": {
+    "X": -315,
+    "Height": 30,
+    "Y": 349,
+    "Width": 44
+   }
+  },
+  {
+   "number": 42,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": -271,
+    "Height": 30,
+    "Y": 349,
+    "Width": 38
+   }
+  },
+  {
+   "number": 70,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "com.apple.Spotlight",
+   "bounds": {
+    "X": -233,
+    "Height": 30,
+    "Y": 349,
+    "Width": 32
+   }
+  },
+  {
+   "number": 40,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": -201,
+    "Height": 30,
+    "Y": 349,
+    "Width": 42
+   }
+  },
+  {
+   "number": 38,
+   "layer": 25,
+   "owner_name": "제어 센터",
+   "owner_pid": 661,
+   "name": "",
+   "bounds": {
+    "X": -159,
+    "Height": 30,
+    "Y": 349,
+    "Width": 159
+   }
+  },
+  {
+   "number": 63,
+   "layer": 24,
+   "owner_name": "Window Server",
+   "owner_pid": 391,
+   "name": "Menubar",
+   "bounds": {
+    "X": -1920,
+    "Height": 30,
+    "Y": 349,
+    "Width": 1920
+   }
+  },
+  {
+   "number": 61,
+   "layer": 24,
+   "owner_name": "Window Server",
+   "owner_pid": 391,
+   "name": "Menubar",
+   "bounds": {
+    "X": 1920,
+    "Height": 30,
+    "Y": -245,
+    "Width": 1080
+   }
+  },
+  {
+   "number": 59,
+   "layer": 24,
+   "owner_name": "Window Server",
+   "owner_pid": 391,
+   "name": "Menubar",
+   "bounds": {
+    "X": 0,
+    "Height": 30,
+    "Y": 0,
+    "Width": 1920
+   }
+  },
+  {
+   "number": 27,
+   "layer": 21,
+   "owner_name": "알림 센터",
+   "owner_pid": 733,
+   "name": "Notification Center",
+   "bounds": {
+    "X": 0,
+    "Height": 1080,
+    "Y": 0,
+    "Width": 1920
+   }
+  },
+  {
+   "number": 1693,
+   "layer": 8,
+   "owner_name": "UserNotificationCenter",
+   "owner_pid": 81314,
+   "name": "",
+   "bounds": {
+    "X": 917,
+    "Height": 240,
+    "Y": 298,
+    "Width": 260
+   }
+  },
+  {
+   "number": 1690,
+   "layer": 8,
+   "owner_name": "UserNotificationCenter",
+   "owner_pid": 81314,
+   "name": "",
+   "bounds": {
+    "X": 830,
+    "Height": 267,
+    "Y": 211,
+    "Width": 260
+   }
+  },
+  {
+   "number": 1684,
+   "layer": 3,
+   "owner_name": "Logic Pro",
+   "owner_pid": 6765,
+   "name": "lpm-locale-campaign - 마커 목록",
+   "bounds": {
+    "X": 20,
+    "Height": 746,
+    "Y": 50,
+    "Width": 452
+   }
+  },
+  {
+   "number": 1688,
+   "layer": 0,
+   "owner_name": "Logic Pro",
+   "owner_pid": 6765,
+   "name": "위치로 이동",
+   "bounds": {
+    "X": 758,
+    "Height": 157,
+    "Y": 254,
+    "Width": 403
+   }
+  },
+  {
+   "number": 1683,
+   "layer": 0,
+   "owner_name": "Logic Pro",
+   "owner_pid": 6765,
+   "name": "lpm-locale-campaign - 트랙",
+   "bounds": {
+    "X": 0,
+    "Height": 1050,
+    "Y": 30,
+    "Width": 1920
+   }
+  },
+  {
+   "number": 1609,
+   "layer": 0,
+   "owner_name": "iTerm2",
+   "owner_pid": 645,
+   "name": "✳ Hermes 상태 점검",
+   "bounds": {
+    "X": 201,
+    "Height": 437,
+    "Y": 394,
+    "Width": 587
+   }
+  },
+  {
+   "number": 86,
+   "layer": 0,
+   "owner_name": "iTerm2",
+   "owner_pid": 645,
+   "name": "◑ Agent-control-plane PR 3개, 이슈 7개 완벽 해결",
+   "bounds": {
+    "X": 970,
+    "Height": 437,
+    "Y": 300,
+    "Width": 587
+   }
+  },
+  {
+   "number": 293,
+   "layer": 0,
+   "owner_name": "Google Chrome",
+   "owner_pid": 628,
+   "name": "Jev Gate · 실행 관측",
+   "bounds": {
+    "X": 0,
+    "Height": 1050,
+    "Y": 30,
+    "Width": 1920
+   }
+  },
+  {
+   "number": 264,
+   "layer": 0,
+   "owner_name": "WebStorm",
+   "owner_pid": 3284,
+   "name": "logic-pro-mcp",
+   "bounds": {
+    "X": -1920,
+    "Height": 1050,
+    "Y": 379,
+    "Width": 1920
+   }
+  },
+  {
+   "number": 99,
+   "layer": 0,
+   "owner_name": "Telegram",
+   "owner_pid": 799,
+   "name": "(1) ‎⁨시종⁩ – (1)",
+   "bounds": {
+    "X": 1920,
+    "Height": 1890,
+    "Y": -215,
+    "Width": 1080
+   }
+  }
+ ]
+}

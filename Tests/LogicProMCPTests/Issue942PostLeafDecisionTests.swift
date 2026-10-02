@@ -294,8 +294,79 @@ struct Issue942PostLeafDecisionTests {
         #expect(LogicOnScreenWindows.popupMenuLevel == 101)
     }
 
-    static func keyboardOwner(_ windows: [[String: Any]]) -> String {
-        describe(LogicOnScreenWindows.keyboardOwnerIsLogic(windows, logicPID: logicPID))
+    static func keyboardOwner(_ windows: [[String: Any]], focused: pid_t? = nil) -> String {
+        describe(LogicOnScreenWindows.keyboardOwnerIsLogic(windows, logicPID: logicPID, focusedApplicationPID: focused))
+    }
+
+    /// The screen of 2026-10-02 with Finder activated and no Finder window open
+    /// (lpm-evidence/942/inactive-layer/run2.json, state A1), front to back from layer 8 down:
+    /// Logic's marker list at 3, its Go To Position dialog demoted from 8 to 0, its Tracks window
+    /// at 0. `lsappinfo front` and the system-wide AXFocusedApplication both named Finder.
+    static var windowlessFinderOverLogic: [[String: Any]] {
+        [
+            window(owner: NSNumber(value: logicPID), number: 3343, layer: NSNumber(value: 3)),
+            window(owner: NSNumber(value: logicPID), number: 3386, layer: NSNumber(value: 0)),
+            window(owner: NSNumber(value: logicPID), number: 3342, layer: NSNumber(value: 0)),
+        ]
+    }
+
+    /// Mutations this kills: the focused application ignored (the first expectation reads
+    /// "logic"); an unread focused application taken as "not Logic" (the second reads "other").
+    @Test func anApplicationWithNoWindowHoldsTheKeyboardWhenTheAccessibilityServerSaysSo() {
+        #expect(Self.keyboardOwner(Self.windowlessFinderOverLogic, focused: Self.finderPID) == "other")
+        #expect(Self.keyboardOwner(Self.windowlessFinderOverLogic, focused: nil) == "logic")
+        #expect(Self.keyboardOwner(Self.windowlessFinderOverLogic, focused: Self.logicPID) == "logic")
+    }
+
+    /// The production predicate, from what it read. Review R1 of #1082: the focused application
+    /// was accepted through `isKnownLogicPID`, which answers true for a pid whose bundle does not
+    /// read, so a focused helper process passed. Mutation this kills: accepting the focused pid by
+    /// `isKnownLogicPID` instead of requiring it to be the keyboard window's own process.
+    @Test func theFrontmostGateNeedsTheFocusedApplicationToBeTheKeyboardWindowsOwnProcess() {
+        let windows: [[String: Any]] = [
+            Self.window(owner: NSNumber(value: Self.logicPID), number: 1, layer: NSNumber(value: 0)),
+        ]
+        let everyPidIsLogic: (pid_t) -> String? = { _ in Self.logicBundleID }
+        #expect(!ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.finderPID, bundleIDForPID: everyPidIsLogic))
+        #expect(ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.logicPID, bundleIDForPID: everyPidIsLogic))
+        #expect(ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: nil, bundleIDForPID: everyPidIsLogic))
+        #expect(!ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.logicPID, bundleIDForPID: { _ in "com.apple.finder" }))
+    }
+
+    static let logicBundleID = "com.apple.logic10"
+    static let helperPID: pid_t = 77
+
+    /// Review R2 of #1082: a helper process whose bundle does not read owns the front window, at
+    /// the normal layer and at the modal-panel level, and holds the focus. Both readings name the
+    /// same process, and it is not Logic. Mutation this kills: the owner accepted when its bundle
+    /// does not read (`isKnownLogicPID`), which answered true for both. The control is the same
+    /// screen with the owner reading as Logic's bundle.
+    @Test(arguments: [0, 8])
+    func aFocusedProcessWhoseBundleDoesNotReadDoesNotPassForLogic(layer: Int) {
+        let windows: [[String: Any]] = [
+            Self.window(owner: NSNumber(value: Self.helperPID), number: 9, layer: NSNumber(value: layer)),
+            Self.window(owner: NSNumber(value: Self.logicPID), number: 1, layer: NSNumber(value: 0)),
+        ]
+        let unreadHelper: (pid_t) -> String? = { $0 == Self.logicPID ? Self.logicBundleID : nil }
+        #expect(!ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.helperPID, bundleIDForPID: unreadHelper))
+        let readsAsLogic: (pid_t) -> String? = { _ in Self.logicBundleID }
+        #expect(ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.helperPID, bundleIDForPID: readsAsLogic))
+    }
+
+    /// Both readings must say Logic. Mutation this kills: the focused application overriding the
+    /// window reading, so a prompt in front of Logic reads as Logic's because Logic is focused.
+    @Test func aFocusedLogicDoesNotOverrideAnotherProcesssKeyboardWindow() {
+        #expect(Self.keyboardOwner(Self.alertOverLogic, focused: Self.logicPID) == "other")
+        let unreadableOwner: [[String: Any]] = [
+            Self.window(owner: "Logic Pro", number: 1, layer: NSNumber(value: 0)),
+        ]
+        #expect(Self.keyboardOwner(unreadableOwner, focused: Self.logicPID) == "unread")
     }
 
     @Test func theKeyboardOwnerIsTheFirstNormalLayerWindowsOwner() {
@@ -306,6 +377,52 @@ struct Issue942PostLeafDecisionTests {
             Self.window(owner: NSNumber(value: Self.finderPID), number: 3, layer: NSNumber(value: 0)),
         ]
         #expect(Self.keyboardOwner(logicInFront) == "logic")
+    }
+
+    /// The screen of 2026-10-02 (lpm-evidence/942/keyboard-owner/2026-10-02-unc-alert-over-logic.json),
+    /// front to back, keeping the first row of each run of one owner at one layer: the window
+    /// server, Control Center, the menu bar, Notification Center, two UserNotificationCenter
+    /// permission prompts at layer 8, Logic's marker list at 3, and Logic's Go To Position dialog,
+    /// demoted to 0 behind the prompts. `lsappinfo front` named UserNotificationCenter, and key 53
+    /// at the HID tap closed nothing of Logic's.
+    static let alertPID: pid_t = 81314
+    static var alertOverLogic: [[String: Any]] {
+        [
+            window(owner: NSNumber(value: 391), number: 8, layer: NSNumber(value: 2_147_483_630)),
+            window(owner: NSNumber(value: 661), number: 1574, layer: NSNumber(value: 25)),
+            window(owner: NSNumber(value: 391), number: 63, layer: NSNumber(value: 24)),
+            window(owner: NSNumber(value: 733), number: 27, layer: NSNumber(value: 21)),
+            window(owner: NSNumber(value: alertPID), number: 1693, layer: NSNumber(value: 8)),
+            window(owner: NSNumber(value: alertPID), number: 1692, layer: NSNumber(value: 8)),
+            window(owner: NSNumber(value: logicPID), number: 1684, layer: NSNumber(value: 3)),
+            window(owner: NSNumber(value: logicPID), number: 1688, layer: NSNumber(value: 0)),
+        ]
+    }
+
+    @Test func anAlertAtTheModalPanelLevelInFrontOfLogicHoldsTheKeyboard() {
+        #expect(Self.keyboardOwner(Self.alertOverLogic) == "other")
+        #expect(LogicOnScreenWindows.keyboardWindow(Self.alertOverLogic)
+            .flatMap { ProcessUtils.pidValue(from: $0[kCGWindowOwnerPID as String]) } == Self.alertPID)
+    }
+
+    /// Logic's own dialog at the modal-panel level is Logic's keyboard, as it is while Logic is
+    /// active; and another app's floating panel in front of Logic still is not the keyboard's owner.
+    @Test func logicsOwnModalPanelIsLogicsAndAnotherAppsFloatingPanelIsPassedOver() {
+        let dialogOverLogic: [[String: Any]] = [
+            Self.window(owner: NSNumber(value: Self.logicPID), number: 1, layer: NSNumber(value: LogicOnScreenWindows.modalPanelLevel)),
+            Self.window(owner: NSNumber(value: Self.finderPID), number: 2, layer: NSNumber(value: 0)),
+        ]
+        #expect(Self.keyboardOwner(dialogOverLogic) == "logic")
+        let floatingOverLogic: [[String: Any]] = [
+            Self.window(owner: NSNumber(value: Self.otherPID), number: 1, layer: NSNumber(value: 3)),
+            Self.window(owner: NSNumber(value: Self.logicPID), number: 2, layer: NSNumber(value: 0)),
+        ]
+        #expect(Self.keyboardOwner(floatingOverLogic) == "logic")
+    }
+
+    /// The level the live reading found the prompts and Logic's active dialog at.
+    @Test func theModalPanelLevelIsTheOneTheLiveReadingSaw() {
+        #expect(LogicOnScreenWindows.modalPanelLevel == 8)
     }
 
     @Test func theKeyboardOwnerIsUnreadWithoutANormalLayerWindow() {

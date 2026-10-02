@@ -1091,9 +1091,13 @@ extension AccessibilityChannel {
         // custom runtime only partially injectable and could run a real Logic dialog in a unit
         // test. Production retains this route's measured eight-second budget; a custom runtime
         // without a timeout-specific override delegates to its injected `executeAppleScript`.
+        // A debug build started with the #942 live-hold directory replaces the script and nothing
+        // else, after the lock and the baseline (`AccessibilityChannel+GotoPostLeafLiveHold.swift`).
         let dialogScriptExecutor: @Sendable (String) async -> ChannelResult
         if let executeDialogScript {
             dialogScriptExecutor = executeDialogScript
+        } else if let liveHold = postLeafLiveHoldExecutorFromEnvironment() {
+            dialogScriptExecutor = liveHold
         } else {
             dialogScriptExecutor = { script in
                 await runtime.executeAppleScriptWithTimeout(script, 8.0)

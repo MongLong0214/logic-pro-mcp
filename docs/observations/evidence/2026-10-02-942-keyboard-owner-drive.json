@@ -1,0 +1,174 @@
+[
+ {
+  "binary": "layer0_rule_9899b052",
+  "before": {
+   "front": "\"LSDisplayName\"=\"UserNotificationCenter\"",
+   "mirror_owner_is_logic": false,
+   "logic_windows": [
+    [
+     1684,
+     3,
+     "lpm-locale-campaign - 마커 목록"
+    ],
+    [
+     1688,
+     0,
+     "위치로 이동"
+    ],
+    [
+     1683,
+     0,
+     "lpm-locale-campaign - 트랙"
+    ]
+   ]
+  },
+  "seconds": 0.62,
+  "entered": true,
+  "reply": {
+   "dialog_actuation_attempted": true,
+   "dialog_cleanup": "unobserved",
+   "dialog_route_outcome": "dialog_actuation_issued_cleanup_closed_false",
+   "dialog_submission_attempted": false,
+   "error": "ax_write_failed",
+   "fallback_unsafe": true,
+   "frontmost_preparation": "already_frontmost",
+   "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+   "menu_actuation_attempted": true,
+   "menu_state": "unobserved",
+   "method": "dialog",
+   "operation": "transport.goto_position",
+   "post_leaf_settlement": {
+    "action": "none",
+    "after": {
+     "appeared_windows": [],
+     "dialog": "absent",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    },
+    "escape_targets": [],
+    "escapes_sent": 0,
+    "final_action": "none",
+    "policy": "menu_escape_measured_to_leave_dialog",
+    "read": {
+     "appeared_windows": [],
+     "dialog": "absent",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    },
+    "settled": true
+   },
+   "requested": "9.1.1.1",
+   "safe_to_retry": false,
+   "state": "C",
+   "success": false,
+   "write_attempted": false
+  },
+  "after": {
+   "front": "\"LSDisplayName\"=\"UserNotificationCenter\"",
+   "mirror_owner_is_logic": false,
+   "logic_windows": [
+    [
+     1684,
+     3,
+     "lpm-locale-campaign - 마커 목록"
+    ],
+    [
+     1688,
+     0,
+     "위치로 이동"
+    ],
+    [
+     1683,
+     0,
+     "lpm-locale-campaign - 트랙"
+    ]
+   ]
+  }
+ },
+ {
+  "binary": "modal_panel_rule_a28300da",
+  "before": {
+   "front": "\"LSDisplayName\"=\"UserNotificationCenter\"",
+   "mirror_owner_is_logic": false,
+   "logic_windows": [
+    [
+     1684,
+     3,
+     "lpm-locale-campaign - 마커 목록"
+    ],
+    [
+     1688,
+     0,
+     "위치로 이동"
+    ],
+    [
+     1683,
+     0,
+     "lpm-locale-campaign - 트랙"
+    ]
+   ]
+  },
+  "seconds": 1.14,
+  "entered": true,
+  "reply": {
+   "dialog_actuation_attempted": true,
+   "dialog_cleanup": "unobserved",
+   "dialog_route_outcome": "dialog_actuation_issued_cleanup_closed_false",
+   "dialog_submission_attempted": false,
+   "error": "ax_write_failed",
+   "fallback_unsafe": true,
+   "frontmost_preparation": "activated",
+   "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+   "menu_actuation_attempted": true,
+   "menu_state": "unobserved",
+   "method": "dialog",
+   "operation": "transport.goto_position",
+   "post_leaf_settlement": {
+    "action": "none",
+    "after": {
+     "appeared_windows": [],
+     "dialog": "absent",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    },
+    "escape_targets": [],
+    "escapes_sent": 0,
+    "final_action": "none",
+    "policy": "menu_escape_measured_to_leave_dialog",
+    "read": {
+     "appeared_windows": [],
+     "dialog": "absent",
+     "keyboard_owner": "logic",
+     "menu": "closed"
+    },
+    "settled": true
+   },
+   "requested": "9.1.1.1",
+   "safe_to_retry": false,
+   "state": "C",
+   "success": false,
+   "write_attempted": false
+  },
+  "after": {
+   "front": "\"LSDisplayName\"=\"Logic Pro\"",
+   "mirror_owner_is_logic": true,
+   "logic_windows": [
+    [
+     1688,
+     8,
+     "위치로 이동"
+    ],
+    [
+     1684,
+     3,
+     "lpm-locale-campaign - 마커 목록"
+    ],
+    [
+     1683,
+     0,
+     "lpm-locale-campaign - 트랙"
+    ]
+   ]
+  }
+ }
+]

@@ -20,6 +20,13 @@ enum AXLogicProElements {
         /// #1016 — the Escape key post the popup-menu cleanup falls back to. A seam so a unit test
         /// reaching that fallback records it instead of typing into whatever app is frontmost.
         let postPopupMenuEscape: @Sendable () -> Void
+        /// #942 — the process the accessibility server names as the focused application, read
+        /// beside the window list so an application with no window on screen is not missed as the
+        /// keyboard's owner (`LogicOnScreenWindows.keyboardOwnerIsLogic`). nil is unread and leaves
+        /// the window reading to answer alone. Unlike the two seams above, the default does not
+        /// read the live system: a test runtime that does not set it must not depend on whichever
+        /// application the machine running the test has focused. `.production` sets it.
+        let focusedApplicationPID: @Sendable () -> pid_t?
 
         init(
             logicProPID: @escaping @Sendable () -> pid_t?,
@@ -29,7 +36,8 @@ enum AXLogicProElements {
             },
             executeAppleScriptWithTimeout: (@Sendable (String, TimeInterval) async -> ChannelResult)? = nil,
             onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = Runtime.liveOnScreenWindowList,
-            postPopupMenuEscape: @escaping @Sendable () -> Void = Runtime.livePostPopupMenuEscape
+            postPopupMenuEscape: @escaping @Sendable () -> Void = Runtime.livePostPopupMenuEscape,
+            focusedApplicationPID: @escaping @Sendable () -> pid_t? = { nil }
         ) {
             self.logicProPID = logicProPID
             self.ax = ax
@@ -39,6 +47,7 @@ enum AXLogicProElements {
             }
             self.onScreenWindowList = onScreenWindowList
             self.postPopupMenuEscape = postPopupMenuEscape
+            self.focusedApplicationPID = focusedApplicationPID
         }
 
         static let liveOnScreenWindowList: @Sendable () -> [[String: Any]]? = {
@@ -61,7 +70,8 @@ enum AXLogicProElements {
             executeAppleScript: { await AppleScriptChannel.executeAppleScript($0) },
             executeAppleScriptWithTimeout: { script, timeout in
                 await AppleScriptChannel.executeAppleScript(script, timeout: timeout)
-            }
+            },
+            focusedApplicationPID: { ProcessUtils.focusedApplicationPID() }
         )
     }
 

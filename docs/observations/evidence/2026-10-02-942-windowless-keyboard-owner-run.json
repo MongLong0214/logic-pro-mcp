@@ -1,0 +1,3316 @@
+{
+ "name": "live_942_windowless_keyboard_owner",
+ "head": "e0af4f1248ffbeea1c53d5afdbb6cfddbee2913f",
+ "artifact": {
+  "path": "/Users/isaac/lpm-evidence/942/bin-e0af4f12/candidate/LogicProMCP",
+  "sha256": "81efb0e1b5369f27207b80025dfa9b6bc8d65adc461530fcf3c073ebe105905d",
+  "built_from": "e0af4f1248ffbeea1c53d5afdbb6cfddbee2913f",
+  "worktree_clean": true,
+  "built_from_is_measured": false,
+  "artifact_older_than_sources": false
+ },
+ "records": [
+  {
+   "kind": "declaration",
+   "surface": "non_ui"
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/binaries",
+   "payload": {
+    "candidate": "/Users/isaac/lpm-evidence/942/bin-e0af4f12/candidate/LogicProMCP",
+    "candidate_sha256": "81efb0e1b5369f27207b80025dfa9b6bc8d65adc461530fcf3c073ebe105905d",
+    "control": "/Users/isaac/lpm-evidence/942/bin-a7913248/candidate/LogicProMCP",
+    "control_sha256": "fc6e1a9f8193c88a8a6030859e6c00f580c375b164644df5a44e67242ea13f9a",
+    "lprojs": [
+     "ko",
+     "en",
+     "ja",
+     "de",
+     "es",
+     "fr",
+     "it",
+     "pt",
+     "zh_CN",
+     "zh_TW"
+    ],
+    "samples": 2
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/ko/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/ko/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/en/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/en/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/ja/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/ja/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/de/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/de/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/es/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/es/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/fr/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/fr/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/it/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/it/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/pt/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/pt/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/zh_CN/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/zh_CN/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/zh_TW/sample-1",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "ax_write_failed",
+    "hint": "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
+    "verified": null,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/zh_TW/sample-2",
+   "payload": {
+    "candidate": {
+     "frontmost_preparation": "activated",
+     "keyboard_owner": "other",
+     "escapes_sent": 0,
+     "front_at_entry": "logic",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "control": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": "other",
+     "at_hold": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     },
+     "before": {
+      "list_read": true,
+      "front": "finder",
+      "keyboard_window": "logic",
+      "focused_application": "finder",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": true
+     }
+    },
+    "candidate_logic_front": {
+     "frontmost_preparation": "already_frontmost",
+     "keyboard_owner": "logic",
+     "escapes_sent": 0,
+     "front_at_entry": null,
+     "at_hold": {
+      "list_read": true,
+      "front": "logic",
+      "keyboard_window": "logic",
+      "focused_application": "logic",
+      "finder_normal_windows": 0,
+      "windowless_finder_holds_the_keyboard": false
+     }
+    }
+   }
+  },
+  {
+   "kind": "restoration",
+   "tag": "942-windowless/Logic-language-restored-to-Korean",
+   "restored": true,
+   "detail": "{'switched': True, 'arrange_window': 'lpm-locale-campaign - \ud2b8\ub799', 'language_setting': ['ko'], 'window_names': ['lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d', 'lpm-locale-campaign - \ud2b8\ub799'], 'language_setting_after_restore': ['ko'], 'window_names_after_restore': ['lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d', 'lpm-locale-campaign - \ud2b8\ub799'], 'ok': True}"
+  },
+  {
+   "kind": "observation",
+   "tag": "942-windowless/failures",
+   "payload": {}
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ko/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ko/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ko/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ko/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ko/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ko/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/en/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/en/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/en/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/en/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/en/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/en/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ja/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ja/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ja/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ja/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ja/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/ja/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/de/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/de/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/de/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/de/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/de/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/de/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/es/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/es/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/es/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/es/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/es/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/es/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/fr/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/fr/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/fr/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/fr/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/fr/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/fr/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/it/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/it/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/it/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/it/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/it/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/it/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/pt/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/pt/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/pt/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/pt/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/pt/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/pt/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_CN/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_CN/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_CN/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_CN/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_CN/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_CN/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_TW/1/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_TW/1/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_TW/1/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_TW/2/candidate",
+   "passed": true,
+   "expected": "with Finder active and windowless, the candidate activates Logic and its settlement reads the keyboard as another process's, sending nothing",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the focused application from keyboardOwnerIsLogic and logicOwnsTheKeyboard (the control binary): already_frontmost, logic",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_TW/2/control",
+   "passed": true,
+   "expected": "the same screen read by the window rule alone answers already_frontmost and logic: the defect reproduces",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': 'other', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_applicat",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a screen on which the window rule did not misread would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "942-windowless/zh_TW/2/candidate-logic-front",
+   "passed": true,
+   "expected": "with Logic active the candidate answers already_frontmost and reads logic",
+   "observed": {
+    "observation": "{'frontmost_preparation': 'already_frontmost', 'keyboard_owner': 'logic', 'escapes_sent': 0, 'front_at_entry': None, 'at_hold': {'list_read': True, 'front': 'logic', 'keyboard_window': 'logic', 'focused_application': 'logic', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': False}}",
+    "accepted_the_observation": true,
+    "counterexample": "{'frontmost_preparation': 'activated', 'keyboard_owner': 'other', 'escapes_sent': 0, 'front_at_entry': 'logic', 'at_hold': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'finder', 'finder_normal_windows': 0, 'windowless_finder_holds_the_keyboard': True}, 'before': {'list_read': True, 'front': 'finder', 'keyboard_window': 'logic', 'focused_application': 'f",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "keyboardOwnerIsLogic answering false whenever a focused application is read",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "environment",
+   "screen_locked": false
+  }
+ ]
+}
