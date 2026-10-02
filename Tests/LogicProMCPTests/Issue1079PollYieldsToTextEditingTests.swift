@@ -122,7 +122,7 @@ struct Issue1079PollYieldsToTextEditingTests {
         mutationInFlight: Bool = false,
         cache: StateCache = StateCache(),
         projectInfo: (@Sendable (Int) -> ChannelResult)? = nil,
-        postPoll: @escaping @Sendable ([ResourceCacheKey]) async -> Void = { _ in },
+        postPoll: @escaping StatePoller.PostPoll = { _, _ in true },
         sleep: @escaping @Sendable (UInt64) async throws -> Void = { _ in throw CancellationError() }
     ) -> StatePoller {
         var runtime = StatePoller.Runtime(
@@ -155,7 +155,7 @@ struct Issue1079PollYieldsToTextEditingTests {
         headers: Int? = nil,
         cache: StateCache = StateCache(),
         projectInfo: (@Sendable (Int) -> ChannelResult)? = nil,
-        postPoll: @escaping @Sendable ([ResourceCacheKey]) async -> Void = { _ in },
+        postPoll: @escaping StatePoller.PostPoll = { _, _ in true },
         focus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus
     ) async -> ReadLog {
         let log = ReadLog()
@@ -229,6 +229,7 @@ struct Issue1079PollYieldsToTextEditingTests {
         private let lock = NSLock()
         private var value = 0
         func next() -> Int { lock.lock(); defer { lock.unlock() }; value += 1; return value }
+        func peek() -> Int { lock.lock(); defer { lock.unlock() }; return value }
     }
 
     /// The focus reads as text editing from its `firstEditingReading`th reading on. Within one
@@ -455,7 +456,7 @@ struct Issue1079PollYieldsToTextEditingTests {
         let log = await Self.runBackgroundLoop(
             ticks: 2,
             projectInfo: { call in call == 1 ? .success(Self.projectJSON) : .error("unreadable") },
-            postPoll: { published.add($0) }
+            postPoll: { keys, _ in published.add(keys); return true }
         ) {
             readings.next() == 4 ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) : .notTextEditing
         }
@@ -468,6 +469,109 @@ struct Issue1079PollYieldsToTextEditingTests {
         let publishedKeys = batches.first ?? []
         #expect(publishedKeys.contains(.project), "tick 1's project write was not published")
         #expect(publishedKeys.contains(.tracks))
+    }
+
+    // MARK: - Review R3
+
+    /// F1079-R3-01: the path query read the focus as editing (reading 3) and skipped its write, but
+    /// the cycle asked the focus again before the track read, and from reading 4 on the focus does
+    /// not read, which polls. So the walk ran and read the help. Mutation this kills: the path
+    /// query's yield not ending the cycle. The control is the same readings with no edit at 3.
+    @Test("a yield at the path query ends the cycle even when the next focus reading fails")
+    func aYieldAtThePathQueryEndsTheCycle() async {
+        for editingAtThree in [true, false] {
+            let readings = Counter()
+            let log = await Self.runBackgroundLoop(ticks: 1, headers: 3) {
+                switch readings.next() {
+                case 1, 2: .notTextEditing
+                case 3: editingAtThree ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) : .notTextEditing
+                default: .unreadable(.focusedElement)
+                }
+            }
+            if editingAtThree {
+                #expect(log.count(.trackHeader) == 0, "\(log.count(.trackHeader)) headers read after the yield")
+                for read in [Read.tracks, .transport, .mixer, .markers, .documentPath] {
+                    #expect(log.count(read) == 0, "\(read) ran after the path query yielded")
+                }
+            } else {
+                #expect(log.count(.trackHeader) == 3, "the control read \(log.count(.trackHeader)) headers")
+                #expect(log.count(.documentPath) == 1)
+            }
+        }
+    }
+
+    /// F1079-R3-02: editing that begins during the cycle's last read (markers, due on the first
+    /// cycle) is read at the publication check, focus reading 8, and nothing is published; tick 2
+    /// publishes what tick 1 wrote. Markers are written only on tick 1, so a markers key in tick
+    /// 2's batch is the held one. Mutation this kills: publishing without asking the focus first.
+    @Test("editing during the last read holds the publication for the next whole cycle")
+    func editingDuringTheLastReadHoldsThePublication() async {
+        // One tick alone: nothing may be published. Without the check, tick 1 publishes and the
+        // reading at 8 falls on a later gate instead, which the two-tick run below cannot tell apart.
+        let alone = Published()
+        let aloneReadings = Counter()
+        _ = await Self.runBackgroundLoop(
+            ticks: 1,
+            postPoll: { keys, _ in alone.add(keys); return true }
+        ) {
+            aloneReadings.next() == 8 ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) : .notTextEditing
+        }
+        #expect(alone.all.isEmpty, "tick 1 published \(alone.all) after editing began")
+
+        let published = Published()
+        let readings = Counter()
+        _ = await Self.runBackgroundLoop(
+            ticks: 2,
+            postPoll: { keys, _ in published.add(keys); return true }
+        ) {
+            readings.next() == 8 ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) : .notTextEditing
+        }
+        let batches = published.all
+        #expect(batches.count == 1, "published \(batches.count) times, not once")
+        let keys = batches.first ?? []
+        #expect(keys.contains(.markers), "tick 1's markers were not held and published")
+    }
+
+    /// F1079-R3-02: a publication the stop cut short reports false, and the poller holds its keys
+    /// for the next whole cycle. Tick 1 writes the project and its publication stops; tick 2's own
+    /// project read fails, so a project key in its batch is the held one. Mutation this kills: a
+    /// stopped publication's keys dropped.
+    @Test("a publication cut short is published again by the next whole cycle")
+    func aPublicationCutShortIsPublishedAgain() async {
+        let published = Published()
+        let log = await Self.runBackgroundLoop(
+            ticks: 2,
+            projectInfo: { call in call == 1 ? .success(Self.projectJSON) : .error("unreadable") },
+            postPoll: { keys, _ in
+                published.add(keys)
+                return published.all.count > 1
+            }
+        ) { .notTextEditing }
+        #expect(log.count(.project) == 2)
+        let batches = published.all
+        #expect(batches.count == 2, "published \(batches.count) times, not twice")
+        let second = batches.count == 2 ? batches[1] : []
+        #expect(second.contains(.project), "the cut-short publication's project key was dropped")
+    }
+
+    /// The stop a background cycle hands its publication reads the focus; a refresh's never stops.
+    /// Mutation this kills: the background publication given a stop that never answers true.
+    @Test("a background publication's stop reads the focus")
+    func aBackgroundPublicationsStopReadsTheFocus() async {
+        let answers = Published()
+        let editing = Counter()
+        _ = await Self.runBackgroundLoop(
+            ticks: 1,
+            postPoll: { _, stop in
+                _ = editing.next()
+                answers.add(stop() ? [.document] : [])
+                return true
+            }
+        ) {
+            // Not editing for the cycle and its publication check; editing once publication began.
+            editing.peek() >= 1 ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) : .notTextEditing
+        }
+        #expect(answers.all.first == [.document], "the stop did not read the focus as editing")
     }
 
     @Test("an explicit refreshNow runs while a text field holds the focus, and does not ask")

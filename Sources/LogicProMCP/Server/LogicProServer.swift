@@ -453,7 +453,7 @@ actor LogicProServer {
             axChannel: axChannel,
             cache: cache,
             runtime: runtimeWithGate,
-            postPoll: { cacheKeys in
+            postPoll: { cacheKeys, stopBeforeNextRead in
                 await resourceNotifier.publishChangedResources(
                     cacheKeys: cacheKeys,
                     cache: cache,
@@ -465,7 +465,8 @@ actor LogicProServer {
                             router: router,
                             targetRegistry: targetRegistry
                         )
-                    }
+                    },
+                    stopBeforeEachRead: stopBeforeNextRead
                 ) { uri in
                     try await server.notify(ResourceUpdatedNotification.message(.init(uri: uri)))
                 }

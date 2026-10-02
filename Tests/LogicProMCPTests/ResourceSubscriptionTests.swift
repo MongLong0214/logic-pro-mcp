@@ -23,6 +23,13 @@ private func resourceResult(_ text: String, uri: String) -> ReadResource.Result 
     ReadResource.Result(contents: [.text(text, uri: uri, mimeType: "application/json")])
 }
 
+private final class ReadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func bump() async { lock.withLock { value += 1 } }
+    func countNow() -> Int { lock.withLock { value } }
+}
+
 @Suite("ResourceSubscription")
 struct ResourceSubscriptionTests {
     @Test("subscription_registry_add_remove_cleanup")
@@ -115,6 +122,39 @@ struct ResourceSubscriptionTests {
 
         #expect(try ResourceContentHasher.stableDataHash(fromResourceText: first) == ResourceContentHasher.stableDataHash(fromResourceText: second))
         #expect(try ResourceContentHasher.stableDataHash(fromResourceText: first) != ResourceContentHasher.stableDataHash(fromResourceText: changed))
+    }
+
+    /// #1079 review R3: publishing reads each subscribed resource back from Logic, and a background
+    /// cycle must not start such a read once the user is editing. The stop is asked before each
+    /// read; after the first read it answers true, so the second resource is not read and the
+    /// publication reports that it stopped. Mutation this kills: the stop not asked. The control is
+    /// the same publication with a stop that never answers true.
+    @Test("a publication stops before the next resource read once told to, and says so")
+    func aPublicationStopsBeforeTheNextRead() async throws {
+        for stopAfterFirst in [true, false] {
+            let registry = ResourceSubscriptionRegistry()
+            let notifier = ResourceUpdateNotifier(registry: registry)
+            try await registry.subscribe(uri: "logic://tracks")
+            try await registry.subscribe(uri: "logic://project/info")
+            let reads = ReadCounter()
+            let completed = await notifier.publishChangedResources(
+                cacheKeys: [.tracks, .project],
+                cache: StateCache(),
+                router: ChannelRouter(),
+                readResource: { uri, _, _ in
+                    await reads.bump()
+                    return resourceResult(#"{"data":{}}"#, uri: uri)
+                },
+                stopBeforeEachRead: { stopAfterFirst && reads.countNow() >= 1 }
+            ) { _ in }
+            if stopAfterFirst {
+                #expect(reads.countNow() == 1, "read \(reads.countNow()) resources after the stop")
+                #expect(!completed)
+            } else {
+                #expect(reads.countNow() == 2)
+                #expect(completed)
+            }
+        }
     }
 
     @Test("unsubscribe_during_read_suppresses_notify_and_hash_update")

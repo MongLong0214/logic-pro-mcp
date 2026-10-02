@@ -113,7 +113,13 @@ actor StatePoller {
     private let axChannel: AccessibilityChannel
     private let cache: StateCache
     private let runtime: Runtime
-    private let postPoll: @Sendable ([ResourceCacheKey]) async -> Void
+    /// Publishes the sections a cycle wrote. The closure it is given answers whether to stop before
+    /// the next resource read; it answers false outside a background cycle. Returns false when it
+    /// stopped before publishing everything (#1079 review R3).
+    typealias PostPoll = @Sendable (
+        _ cacheKeys: [ResourceCacheKey], _ stopBeforeNextRead: @escaping @Sendable () -> Bool
+    ) async -> Bool
+    private let postPoll: PostPoll
     private var pollingTask: Task<Void, Never>?
     /// #668 coalescing state. `cycleInProgress` is the mutual exclusion the `actor` keyword does
     /// not give across `await`; `waitingForNextCycle` holds callers that arrived mid-cycle and are
@@ -134,12 +140,26 @@ actor StatePoller {
         axChannel: AccessibilityChannel,
         cache: StateCache,
         runtime: Runtime = .production,
-        postPoll: @escaping @Sendable ([ResourceCacheKey]) async -> Void = { _ in }
+        postPoll: @escaping PostPoll = { _, _ in true }
     ) {
         self.axChannel = axChannel
         self.cache = cache
         self.runtime = runtime
         self.postPoll = postPoll
+    }
+
+    /// A publisher that cannot stop partway: it is given no stop check and always reports that it
+    /// published everything. Kept for callers that only observe the call.
+    init(
+        axChannel: AccessibilityChannel,
+        cache: StateCache,
+        runtime: Runtime = .production,
+        postPoll: @escaping @Sendable ([ResourceCacheKey]) async -> Void
+    ) {
+        self.init(axChannel: axChannel, cache: cache, runtime: runtime, postPoll: { keys, _ in
+            await postPoll(keys)
+            return true
+        })
     }
 
     /// Start the background polling loop.
@@ -395,12 +415,31 @@ actor StatePoller {
     /// "the function returned" (#544 review).
     ///
     /// It also publishes the sections a yielded cycle wrote (`yieldCycle`), which were held back.
+    /// #1079 review R3: publishing reads resources back, so a background cycle asks the focus once
+    /// more before it publishes and before each resource read. Editing at either point holds every
+    /// key for the next whole cycle; a resource already published is not notified twice, since the
+    /// notifier compares content. A refresh's cycle publishes whatever the focus reads.
     @discardableResult
-    private func finishPoll(_ cacheKeys: [ResourceCacheKey]) async -> Bool {
+    private func finishPoll(_ cacheKeys: [ResourceCacheKey], yieldingToTextEditing: Bool = false) async -> Bool {
         var publishing = keysHeldByAYield
         keysHeldByAYield = []
         for key in cacheKeys where !publishing.contains(key) { publishing.append(key) }
-        if !publishing.isEmpty { await postPoll(publishing) }
+        guard !publishing.isEmpty else { return !cacheKeys.isEmpty }
+        if backgroundCycleYields(yieldingToTextEditing) {
+            keysHeldByAYield = publishing
+            return !cacheKeys.isEmpty
+        }
+        let focus = runtime.keyboardFocus
+        let stop: @Sendable () -> Bool
+        if yieldingToTextEditing {
+            stop = { Self.backgroundTickYields(to: focus()) }
+        } else {
+            stop = { false }
+        }
+        let completed = await postPoll(publishing, stop)
+        if !completed {
+            for key in publishing where !keysHeldByAYield.contains(key) { keysHeldByAYield.append(key) }
+        }
         return !cacheKeys.isEmpty
     }
 
@@ -446,7 +485,7 @@ actor StatePoller {
                 await cache.updateBlockingDialogButtons(nil)
                 cacheKeys.append(.document)
             }
-            return await finishPoll(cacheKeys)
+            return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
         }
         consecutiveWindowMisses = 0
         // #432: sample the authoritative blocking-dialog signal once per
@@ -458,6 +497,10 @@ actor StatePoller {
         await cache.updateBlockingDialogButtons(runtime.blockingDialogInfo()?.buttonTitles)
 
         if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
+        // #1079 review R3: set when the path query yields. The update returning false says only
+        // that nothing was written, so the cycle reads this to end where the yield was decided
+        // rather than asking the focus again, which may not read.
+        var yieldedAtPathQuery = false
         let projectReady = await poll(
             operation: "project.get_info", label: "ProjectInfo",
             section: .project,
@@ -469,6 +512,7 @@ actor StatePoller {
                 // path that went missing as a different project and clears every section, so the
                 // write is skipped and the cycle ends at the next check.
                 if yieldingToTextEditing && Self.backgroundTickYields(to: runtime.keyboardFocus()) {
+                    yieldedAtPathQuery = true
                     return false
                 }
                 if let metadata = await LogicProjectFileReader.read(runtime: runtime.projectFileReader) {
@@ -479,6 +523,7 @@ actor StatePoller {
         }
         // #668: readability drives `hasDocument`; only an APPLIED write is reported as refreshed.
         if projectReady.applied { cacheKeys.append(.project) }
+        if yieldedAtPathQuery { return yieldCycle(cacheKeys) }
         if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let tracksReady: PollOutcome
         let tracksVersion = await cache.currentVersion(for: .tracks)
@@ -543,7 +588,7 @@ actor StatePoller {
                 // do NOT clear hasDocument. fetchedAt timestamps continue
                 // ageing so `cache_age_sec` keeps growing — clients that
                 // treat freshness as a contract still see staleness.
-                return await finishPoll(cacheKeys)
+                return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
             }
             consecutivePollMisses += 1
             if consecutivePollMisses >= Self.failureThreshold {
@@ -556,7 +601,7 @@ actor StatePoller {
         }
 
         guard hasDocument else {
-            return await finishPoll(cacheKeys)
+            return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
         }
 
         if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
@@ -593,7 +638,7 @@ actor StatePoller {
                 await cache.markMarkersUnreadable()
             }
         }
-        return await finishPoll(cacheKeys)
+        return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
     }
 
     /// 3 consecutive misses (~9s at the 3s poll interval) before declaring

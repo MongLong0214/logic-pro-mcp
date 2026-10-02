@@ -3,7 +3,7 @@
 
 Usage: LPM_LIVE_LOCK=<held lock> LPM_LOCALE_FIXTURE=<fixture> /usr/bin/python3 \\
        Scripts/livekit/probe_1079_rename_keeps_focus.py <control-binary> <candidate-binary> <out.json> \\
-       [--samples N] [--lprojs lproj ...]
+       [--samples N] [--lprojs lproj ...] [--subscribe]
        (default: two samples, all ten languages; Korean is restored at the end)
 
 Per language, on a fresh launch of the locale-campaign fixture, three conditions, `samples` each:
@@ -22,6 +22,9 @@ long the field's value grew while it held. The key is the letter K; under the 2-
 machine runs, a letter that reaches Logic outside a text field runs nothing (#1039), so a control
 sample that loses the field types into nothing. A rename still open at the end is cancelled with
 one Escape, sent only while Logic holds the keyboard, which leaves the name as it was.
+With --subscribe, each server is first subscribed to every resource a poll cycle publishes, so a
+cycle's publication reads them back (#1079 review R3). The notifications that arrive during the
+idle wait are counted: a server sample with none fails, since its publication was not shown to run.
 
 PASS: every sample in every language opened its rename; every none and candidate sample kept the
 field for HOLD seconds and its value grew; and the control lost the field in at least one sample
@@ -131,12 +134,46 @@ def open_rename(helper):
     return None
 
 
+SUBSCRIBE = ("logic://project/info", "logic://tracks", "logic://transport/state", "logic://mixer",
+             "logic://markers", "logic://project/audit")
+SUBSCRIBING = False
+
+
+def drain_notifications(driver, seconds):
+    """Read the server's output for `seconds` and count resources/updated notifications."""
+    import select
+    count, deadline = 0, time.monotonic() + seconds
+    while True:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return count
+        ready, _, _ = select.select([driver.proc.stdout], [], [], left)
+        if not ready:
+            return count
+        line = driver.proc.stdout.readline()
+        if not line:
+            return count
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if message.get("method") == "notifications/resources/updated":
+            count += 1
+
+
 def sample(helper, condition, binary, n):
     row, driver = {"condition": condition, "sample": n}, None
     try:
         if binary:
             driver = E.Driver(binary=binary)
-            time.sleep(4.0)  # the idle poll runs
+            if SUBSCRIBING:
+                replies = [driver._send("resources/subscribe", {"uri": uri}) for uri in SUBSCRIBE]
+                row["subscribed"] = [isinstance(r, dict) and "error" not in r for r in replies]
+                # The first publication after a subscription notifies every resource, since the
+                # notifier has no earlier content to compare with: these show it ran.
+                row["notifications_before_rename"] = drain_notifications(driver, 6.0)
+            else:
+                time.sleep(4.0)  # the idle poll runs
         if P.keyboard_owner_is_logic() is not True:
             row["outcome"] = "not_run"
             row["why"] = "the keyboard is not Logic's"
@@ -188,6 +225,11 @@ def verdict(rows):
     it; the control lost it at least once."""
     failures = []
     for row in rows:
+        if SUBSCRIBING and row["condition"] in ("control", "candidate") and row.get("outcome") in ("kept", "lost"):
+            if not row.get("subscribed") or not all(row["subscribed"]):
+                failures.append(f"{row['lproj']}/{row['condition']}/{row['sample']}: a subscription was refused")
+            if not row.get("notifications_before_rename"):
+                failures.append(f"{row['lproj']}/{row['condition']}/{row['sample']}: no notification arrived, so no publication was shown to run")
         if row.get("outcome") not in ("kept", "lost"):
             failures.append(f"{row['lproj']}/{row['condition']}/{row['sample']}: {row.get('outcome')}")
         elif row["condition"] in ("none", "candidate"):
@@ -210,6 +252,8 @@ def arguments():
     parser.add_argument("out")
     parser.add_argument("--samples", type=int, default=2)
     parser.add_argument("--lprojs", nargs="+", default=list(L993.DEFAULT_LPROJS))
+    parser.add_argument("--subscribe", action="store_true",
+                        help="subscribe each server to the resources a poll cycle publishes")
     args = parser.parse_args()
     unknown = [name for name in args.lprojs if name not in L993.CODES]
     if unknown:
@@ -219,6 +263,8 @@ def arguments():
 
 def main():
     args = arguments()
+    global SUBSCRIBING
+    SUBSCRIBING = args.subscribe
     if not os.environ.get("LPM_LIVE_LOCK") or not os.path.exists(os.environ["LPM_LIVE_LOCK"]):
         sys.exit("cannot run: LPM_LIVE_LOCK must name a held lock")
     E.REPO = os.path.dirname(os.path.dirname(HERE))
@@ -257,6 +303,7 @@ def main():
     with open(args.out, "w", encoding="utf-8") as handle:
         json.dump({"binaries": binaries, "hold_seconds": HOLD, "type_every_seconds": TYPE_EVERY,
                    "open_wait_seconds": OPEN_WAIT, "lprojs": args.lprojs, "samples": args.samples,
+                   "subscribed_to": list(SUBSCRIBE) if SUBSCRIBING else [],
                    "launches": launches, "korean_restored": restored, "rows": rows,
                    "failures": failures}, handle, ensure_ascii=False, indent=1, default=str)
     print(json.dumps({"failures": failures, "rows": len(rows)}, ensure_ascii=False))
