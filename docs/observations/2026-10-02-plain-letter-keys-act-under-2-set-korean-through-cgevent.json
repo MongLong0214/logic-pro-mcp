@@ -1643,7 +1643,7 @@
     "The piano roll, automation and zoom readings are structural and unnamed; the canon has no label for the editors' checkbox or the automation view.",
     "The waits around the key (100 ms each side) were not varied.",
     "The run was made at ae33818c with both binaries built from that tree.",
-    "TIS offered ABC, the layout this host's 2-Set Korean types Latin through; the Dvorak pass is its own record."
+    "TIS's ASCII-capable layout read ABC before the run and was not read per call; the passes with Dvorak offered before every call are their own records."
   ],
   "supersedes": null,
   "canon_not_applicable": {

@@ -1,10 +1,10 @@
 {
  "name": "live_1039_plain_letters_under_2set_korean",
- "head": "0c9f1fa5beb703d5992eb1df76147be6a14b5ee4",
+ "head": "e01892a38952e29f91dde038ff152e2d73d67688",
  "artifact": {
-  "path": "/Users/isaac/lpm-evidence/1039/bin-0c9f1fa5/candidate/LogicProMCP",
-  "sha256": "9a17d6242359340a09665226b003e2200805ddaf8d188fcb843eb89badf15ef9",
-  "built_from": "0c9f1fa5beb703d5992eb1df76147be6a14b5ee4",
+  "path": "/Users/isaac/lpm-evidence/1039/bin-e01892a3/candidate/LogicProMCP",
+  "sha256": "5195fef465944ed63d82d343a124133de4f33fe00e85c828d5fe004fe7fe853e",
+  "built_from": "e01892a38952e29f91dde038ff152e2d73d67688",
   "worktree_clean": true,
   "built_from_is_measured": false,
   "artifact_older_than_sources": false
@@ -18,8 +18,8 @@
    "kind": "observation",
    "tag": "1039/binaries",
    "payload": {
-    "candidate": "/Users/isaac/lpm-evidence/1039/bin-0c9f1fa5/candidate/LogicProMCP",
-    "candidate_sha256": "9a17d6242359340a09665226b003e2200805ddaf8d188fcb843eb89badf15ef9",
+    "candidate": "/Users/isaac/lpm-evidence/1039/bin-e01892a3/candidate/LogicProMCP",
+    "candidate_sha256": "5195fef465944ed63d82d343a124133de4f33fe00e85c828d5fe004fe7fe853e",
     "control": "/Users/isaac/lpm-evidence/1039/bin-0c9f1fa5/control/LogicProMCP",
     "control_sha256": "9bb9459006eb5ebff0664d8b9b66880a3d415c732ebe54fc29835edbdd5586b9",
     "lprojs": [
@@ -266,7 +266,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.07
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -352,7 +352,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -476,7 +476,7 @@
       "operation": "view.toggle_library"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "view.toggle_mixer": {
      "kind": "box",
@@ -538,7 +538,7 @@
       "operation": "view.toggle_mixer"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.06
+     "seconds": 0.05
     },
     "view.toggle_piano_roll": {
      "kind": "unnamed_box",
@@ -586,7 +586,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.record": {
      "kind": "box",
@@ -648,7 +648,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.33
+     "seconds": 1.31
     }
    }
   },
@@ -803,9 +803,9 @@
   {
    "kind": "capture",
    "tag": "1039/ko/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-before.png",
    "window": {
-    "id": 9880,
+    "id": 12568,
     "title": "lpm-locale-campaign - \ud2b8\ub799",
     "x": 0,
     "y": 30,
@@ -822,7 +822,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "06247c30792c933880bb3ff162d28ce9f98ed378c6e8685314a196cbf07bfa2f",
+   "hash": "1887ad8d86eefac85c90c3dcdbb5e222623fd077cdbfffda63bd03e539715342",
    "region_hash": "33d24a4e83b61dd89d3bfee85dfd7210d00ba7b1c28ff9ec7c7375142346d48a",
    "frames": 2,
    "settled": true
@@ -846,9 +846,9 @@
   {
    "kind": "capture",
    "tag": "1039/ko/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-after.png",
    "window": {
-    "id": 9880,
+    "id": 12568,
     "title": "lpm-locale-campaign - \ud2b8\ub799",
     "x": 0,
     "y": 30,
@@ -865,7 +865,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "5eb7440bc745cc12185b36b0951fa5f2929808f323bb2118b502b1a3d21abcd4",
+   "hash": "f4ebe7fbf4566d8712c20ad2b33b79b7a8fbdc045a98eaae26846e97dc88ff8a",
    "region_hash": "c7ac57325cd86239638d17606cffca0461831005d7660b4d7d9c6a943be407b2",
    "frames": 2,
    "settled": true
@@ -880,8 +880,8 @@
     30
    ],
    "subject": "the control-bar checkbox described '\ubbf9\uc11c', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -2035,7 +2035,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.09
+     "seconds": 0.07
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -2121,7 +2121,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -2355,7 +2355,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.record": {
      "kind": "box",
@@ -2417,7 +2417,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.31
     }
    }
   },
@@ -2572,9 +2572,9 @@
   {
    "kind": "capture",
    "tag": "1039/en/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-before.png",
    "window": {
-    "id": 9908,
+    "id": 12596,
     "title": "lpm-locale-campaign - Tracks",
     "x": 0,
     "y": 30,
@@ -2591,7 +2591,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "9733d3789498135b44ec316589cffb3c00a6393b6720ae578e84fa0a264c9a6e",
+   "hash": "e0b6fe979efae25a17643b999099cb5985c17084dc3b7076c596541b20625a44",
    "region_hash": "33d24a4e83b61dd89d3bfee85dfd7210d00ba7b1c28ff9ec7c7375142346d48a",
    "frames": 2,
    "settled": true
@@ -2615,9 +2615,9 @@
   {
    "kind": "capture",
    "tag": "1039/en/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-after.png",
    "window": {
-    "id": 9908,
+    "id": 12596,
     "title": "lpm-locale-campaign - Tracks",
     "x": 0,
     "y": 30,
@@ -2634,7 +2634,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "1d23cff3b5cb621ecdbe965bc5bb697e3d3aeac0cceb5cc4d361b9e63f8d5276",
+   "hash": "109f33e34cf343fe93098baef5c46ce75e5e29832a371883c790fd9c0ec06c16",
    "region_hash": "c7ac57325cd86239638d17606cffca0461831005d7660b4d7d9c6a943be407b2",
    "frames": 2,
    "settled": true
@@ -2649,8 +2649,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mixer', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -3806,7 +3806,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.1
+     "seconds": 0.07
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -3892,7 +3892,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -4016,7 +4016,7 @@
       "operation": "view.toggle_library"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "view.toggle_mixer": {
      "kind": "box",
@@ -4126,7 +4126,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.05
     },
     "transport.record": {
      "kind": "box",
@@ -4188,7 +4188,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.3
     }
    }
   },
@@ -4343,9 +4343,9 @@
   {
    "kind": "capture",
    "tag": "1039/ja/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-before.png",
    "window": {
-    "id": 9936,
+    "id": 12627,
     "title": "lpm-locale-campaign - \u30c8\u30e9\u30c3\u30af",
     "x": 0,
     "y": 30,
@@ -4386,9 +4386,9 @@
   {
    "kind": "capture",
    "tag": "1039/ja/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-after.png",
    "window": {
-    "id": 9936,
+    "id": 12627,
     "title": "lpm-locale-campaign - \u30c8\u30e9\u30c3\u30af",
     "x": 0,
     "y": 30,
@@ -4420,8 +4420,8 @@
     30
    ],
    "subject": "the control-bar checkbox described '\u30df\u30ad\u30b5\u30fc', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -5580,7 +5580,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.09
+     "seconds": 0.07
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -5666,7 +5666,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -5790,7 +5790,7 @@
       "operation": "view.toggle_library"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "view.toggle_mixer": {
      "kind": "box",
@@ -5900,7 +5900,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.record": {
      "kind": "box",
@@ -5962,7 +5962,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.31
+     "seconds": 1.32
     }
    }
   },
@@ -6117,9 +6117,9 @@
   {
    "kind": "capture",
    "tag": "1039/de/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-before.png",
    "window": {
-    "id": 9964,
+    "id": 12658,
     "title": "lpm-locale-campaign - Spuren",
     "x": 0,
     "y": 30,
@@ -6160,9 +6160,9 @@
   {
    "kind": "capture",
    "tag": "1039/de/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-after.png",
    "window": {
-    "id": 9964,
+    "id": 12658,
     "title": "lpm-locale-campaign - Spuren",
     "x": 0,
     "y": 30,
@@ -6194,8 +6194,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mixer', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -7354,7 +7354,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.09
+     "seconds": 0.07
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -7440,7 +7440,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -7564,7 +7564,7 @@
       "operation": "view.toggle_library"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "view.toggle_mixer": {
      "kind": "box",
@@ -7736,7 +7736,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.31
     }
    }
   },
@@ -7891,9 +7891,9 @@
   {
    "kind": "capture",
    "tag": "1039/es/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-before.png",
    "window": {
-    "id": 9992,
+    "id": 12689,
     "title": "lpm-locale-campaign - Pistas",
     "x": 0,
     "y": 30,
@@ -7910,7 +7910,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "f594162171f9e8018017fe0da2ebe891790abf6198ffd329dbcd4b6aaf93e2f1",
+   "hash": "2855e7ba40f3257250e331710d01aa0178cb982258dd4eccb33b32dfc67a0466",
    "region_hash": "33d24a4e83b61dd89d3bfee85dfd7210d00ba7b1c28ff9ec7c7375142346d48a",
    "frames": 2,
    "settled": true
@@ -7934,9 +7934,9 @@
   {
    "kind": "capture",
    "tag": "1039/es/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-after.png",
    "window": {
-    "id": 9992,
+    "id": 12689,
     "title": "lpm-locale-campaign - Pistas",
     "x": 0,
     "y": 30,
@@ -7953,7 +7953,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "5768a41d3ef5959a92020c10a66b5dc76b2ae9c6d52f9c61072f00000189ac02",
+   "hash": "ee3f795f14d1b841ef9b4e1c12241dc8f710d3b76194a91d6c18d66b880d50c9",
    "region_hash": "c7ac57325cd86239638d17606cffca0461831005d7660b4d7d9c6a943be407b2",
    "frames": 2,
    "settled": true
@@ -7968,8 +7968,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mezclador', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -9128,7 +9128,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.09
+     "seconds": 0.06
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -9510,7 +9510,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.3
     }
    }
   },
@@ -9665,9 +9665,9 @@
   {
    "kind": "capture",
    "tag": "1039/fr/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-before.png",
    "window": {
-    "id": 10020,
+    "id": 12720,
     "title": "lpm-locale-campaign - Pistes",
     "x": 0,
     "y": 30,
@@ -9708,9 +9708,9 @@
   {
    "kind": "capture",
    "tag": "1039/fr/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-after.png",
    "window": {
-    "id": 10020,
+    "id": 12720,
     "title": "lpm-locale-campaign - Pistes",
     "x": 0,
     "y": 30,
@@ -9742,8 +9742,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Table de mixage', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -10902,7 +10902,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.1
+     "seconds": 0.09
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -10926,7 +10926,7 @@
       "operation": "nav.zoom_to_fit"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.06
+     "seconds": 0.05
     },
     "transport.toggle_cycle": {
      "kind": "box",
@@ -10988,7 +10988,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -11222,7 +11222,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.record": {
      "kind": "box",
@@ -11284,7 +11284,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.31
     }
    }
   },
@@ -11439,9 +11439,9 @@
   {
    "kind": "capture",
    "tag": "1039/it/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-before.png",
    "window": {
-    "id": 10048,
+    "id": 12751,
     "title": "lpm-locale-campaign - Tracce",
     "x": 0,
     "y": 30,
@@ -11482,9 +11482,9 @@
   {
    "kind": "capture",
    "tag": "1039/it/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-after.png",
    "window": {
-    "id": 10048,
+    "id": 12751,
     "title": "lpm-locale-campaign - Tracce",
     "x": 0,
     "y": 30,
@@ -11516,8 +11516,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mixer', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -12676,7 +12676,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.1
+     "seconds": 0.08
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -12762,7 +12762,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -12886,7 +12886,7 @@
       "operation": "view.toggle_library"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.06
+     "seconds": 0.07
     },
     "view.toggle_mixer": {
      "kind": "box",
@@ -12996,7 +12996,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.record": {
      "kind": "box",
@@ -13058,7 +13058,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.31
     }
    }
   },
@@ -13213,9 +13213,9 @@
   {
    "kind": "capture",
    "tag": "1039/pt/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-before.png",
    "window": {
-    "id": 10076,
+    "id": 12782,
     "title": "lpm-locale-campaign - Pistas",
     "x": 0,
     "y": 30,
@@ -13256,9 +13256,9 @@
   {
    "kind": "capture",
    "tag": "1039/pt/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-after.png",
    "window": {
-    "id": 10076,
+    "id": 12782,
     "title": "lpm-locale-campaign - Pistas",
     "x": 0,
     "y": 30,
@@ -13290,8 +13290,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mixer', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -14448,7 +14448,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.1
+     "seconds": 0.08
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -14534,7 +14534,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.06
+     "seconds": 0.07
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -14768,7 +14768,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.record": {
      "kind": "box",
@@ -14985,9 +14985,9 @@
   {
    "kind": "capture",
    "tag": "1039/zh_CN/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-before.png",
    "window": {
-    "id": 10104,
+    "id": 12813,
     "title": "lpm-locale-campaign - \u8f68\u9053",
     "x": 0,
     "y": 30,
@@ -15028,9 +15028,9 @@
   {
    "kind": "capture",
    "tag": "1039/zh_CN/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-after.png",
    "window": {
-    "id": 10104,
+    "id": 12813,
     "title": "lpm-locale-campaign - \u8f68\u9053",
     "x": 0,
     "y": 30,
@@ -15062,8 +15062,8 @@
     30
    ],
    "subject": "the control-bar checkbox described '\u6df7\u97f3\u5668', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -16537,7 +16537,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.record": {
      "kind": "box",
@@ -16599,7 +16599,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.31
     }
    }
   },
@@ -16754,9 +16754,9 @@
   {
    "kind": "capture",
    "tag": "1039/zh_TW/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-before.png",
    "window": {
-    "id": 10132,
+    "id": 12844,
     "title": "lpm-locale-campaign - \u97f3\u8ecc",
     "x": 0,
     "y": 30,
@@ -16797,9 +16797,9 @@
   {
    "kind": "capture",
    "tag": "1039/zh_TW/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-after.png",
    "window": {
-    "id": 10132,
+    "id": 12844,
     "title": "lpm-locale-campaign - \u97f3\u8ecc",
     "x": 0,
     "y": 30,
@@ -16831,8 +16831,8 @@
     30
    ],
    "subject": "the control-bar checkbox described '\u6df7\u97f3\u5668', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -17777,9 +17777,9 @@
   },
   {
    "kind": "recording",
-   "file": "/Users/isaac/lpm-evidence/1039/live-0c9f1fa5-abc/0c9f1fa5beb703d5992eb1df76147be6a14b5ee4/live_1039_plain_letters_under_2set_korean__run.mov",
+   "file": "/Users/isaac/lpm-evidence/1039/live-e01892a3-abc/e01892a38952e29f91dde038ff152e2d73d67688/live_1039_plain_letters_under_2set_korean__run.mov",
    "exists": true,
-   "bytes": 1071537377
+   "bytes": 96081472
   },
   {
    "kind": "observation",
