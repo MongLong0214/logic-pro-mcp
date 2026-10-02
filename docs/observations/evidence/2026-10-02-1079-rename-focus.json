@@ -1,0 +1,133 @@
+{
+ "binaries": {
+  "control": "/Users/isaac/lpm-evidence/1077/bin-control-main-9dc6/LogicProMCP",
+  "control_sha256": "c8502e006ed8283baf313c05f3ad245c0472fd6ce03a17ba5f3880f7b35f3b32",
+  "candidate": "/Users/isaac/lpm-evidence/1079/bin-4502bfd8/LogicProMCP",
+  "candidate_sha256": "c4d52ff6e33eadca6b9ec6cbc484f0d3f818992130a45f7146a1c17e566d2260"
+ },
+ "hold_seconds": 20.0,
+ "rows": [
+  {
+   "condition": "none",
+   "sample": 0,
+   "pressed": {
+    "bar": "트랙",
+    "item": "트랙 이름 변경"
+   },
+   "role_at_start": "AXTextField",
+   "focus_lost_after_s": null,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "role_after_cancel": "AXWindow"
+  },
+  {
+   "condition": "none",
+   "sample": 1,
+   "pressed": {
+    "bar": "트랙",
+    "item": "트랙 이름 변경"
+   },
+   "role_at_start": "AXTextField",
+   "focus_lost_after_s": null,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "role_after_cancel": "AXWindow"
+  },
+  {
+   "condition": "none",
+   "sample": 2,
+   "pressed": {
+    "bar": "트랙",
+    "item": "트랙 이름 변경"
+   },
+   "role_at_start": "AXTextField",
+   "focus_lost_after_s": null,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "role_after_cancel": "AXWindow"
+  },
+  {
+   "condition": "control",
+   "sample": 0,
+   "pressed": {
+    "bar": "트랙",
+    "item": "트랙 이름 변경"
+   },
+   "role_at_start": "AXTextField",
+   "first_attempt_role": "AXSlider",
+   "focus_lost_after_s": 2.18,
+   "reads": 5,
+   "role_after": "AXSlider",
+   "role_after_cancel": "AXSlider"
+  },
+  {
+   "condition": "control",
+   "sample": 1,
+   "pressed": {
+    "bar": "트랙",
+    "item": "트랙 이름 변경"
+   },
+   "role_at_start": "AXTextField",
+   "first_attempt_role": "AXSlider",
+   "focus_lost_after_s": 1.66,
+   "reads": 4,
+   "role_after": "AXCheckBox",
+   "role_after_cancel": "AXSlider"
+  },
+  {
+   "condition": "control",
+   "sample": 2,
+   "pressed": {
+    "bar": "트랙",
+    "item": "트랙 이름 변경"
+   },
+   "role_at_start": "AXTextField",
+   "focus_lost_after_s": 0.55,
+   "reads": 2,
+   "role_after": "AXCheckBox",
+   "role_after_cancel": "AXCheckBox"
+  },
+  {
+   "condition": "candidate",
+   "sample": 0,
+   "pressed": {
+    "bar": "트랙",
+    "item": "트랙 이름 변경"
+   },
+   "role_at_start": "AXTextField",
+   "first_attempt_role": "AXCheckBox",
+   "focus_lost_after_s": null,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "role_after_cancel": "AXWindow"
+  },
+  {
+   "condition": "candidate",
+   "sample": 1,
+   "pressed": {
+    "bar": "트랙",
+    "item": "트랙 이름 변경"
+   },
+   "role_at_start": "AXTextField",
+   "first_attempt_role": "AXSlider",
+   "focus_lost_after_s": null,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "role_after_cancel": "AXWindow"
+  },
+  {
+   "condition": "candidate",
+   "sample": 2,
+   "pressed": {
+    "bar": "트랙",
+    "item": "트랙 이름 변경"
+   },
+   "role_at_start": "AXTextField",
+   "first_attempt_role": "AXSlider",
+   "focus_lost_after_s": null,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "role_after_cancel": "AXWindow"
+  }
+ ]
+}
