@@ -195,6 +195,23 @@ def settle_focus(helper):
     return attempts
 
 
+def server_trace(driver, start_ms, end_ms):
+    """The `poll-trace` lines a debug build writes to stderr under LOGIC_MCP_DEBUG_POLL_TRACE=1,
+    between two wall-clock times, as [ms, stage]. Empty for a build without the trace."""
+    out = []
+    try:
+        with open(driver._stderr_path, encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if not line.startswith("poll-trace "):
+                    continue
+                _, ms, stage = line.rstrip("\n").split(" ", 2)
+                if start_ms <= int(ms) <= end_ms:
+                    out.append([int(ms), stage[:160]])
+    except (OSError, ValueError):
+        pass
+    return out[-300:]
+
+
 def sample(helper, condition, binary, n):
     row, driver = {"condition": condition, "sample": n}, None
     try:
@@ -229,6 +246,7 @@ def sample(helper, condition, binary, n):
         if opened is None:
             row["outcome"] = "not_opened"
             return row
+        row["opened_epoch_ms"] = int(time.time() * 1000)
         started, lost, reads, typed = time.monotonic(), None, [], 0
         next_key = started + TYPE_EVERY
         while time.monotonic() - started < HOLD:
@@ -239,6 +257,7 @@ def sample(helper, condition, binary, n):
             # Kept means the same field: a text field elsewhere taking the focus is a loss too.
             if not (is_rename_field(reading) and reading.get("frame") == frame):
                 lost = reads[-1]["t"]
+                row["lost_epoch_ms"] = int(time.time() * 1000)
                 break
             if time.monotonic() >= next_key:
                 post_key(TYPE_KEY)
@@ -257,6 +276,9 @@ def sample(helper, condition, binary, n):
         return row
     finally:
         if driver is not None:
+            if os.environ.get("LOGIC_MCP_DEBUG_POLL_TRACE") == "1" and row.get("opened_epoch_ms"):
+                row["trace"] = server_trace(driver, row["opened_epoch_ms"] - 6000,
+                                            row.get("lost_epoch_ms", row["opened_epoch_ms"] + 3000) + 500)
             driver.close()
 
 
