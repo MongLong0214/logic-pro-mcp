@@ -1,0 +1,4 @@
+Limit: the product itself still leaves the Write-mode alert open after set_automation write; this runner change only keeps the campaign alive, and the product defect is #1077
+Warn: acknowledge_alert presses only a one-button Logic AXDialog through its AXDefaultButton; widening it to more buttons would let it answer a save prompt and discard work
+Unverified: park_pointer was added after X6 and no live run has driven it; the real-Quartz path (quartz=None) has no test, and X6 covered three of the ten languages
+Provenance: inherited 72c56effeae77656f762b7baa8813cfa1782a3d9
