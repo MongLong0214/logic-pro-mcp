@@ -72,7 +72,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # the 27th on its own branch. Its ten counterexamples are each derived from the live observation
 # with one earlier defect put in -- a null output, absent send_slots, occupancy read from level,
 # `edges: []` beside a bus output.
-FLOOR = 29
+FLOOR = 30
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )
