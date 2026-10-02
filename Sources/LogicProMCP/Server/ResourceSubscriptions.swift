@@ -182,6 +182,9 @@ actor ResourceUpdateNotifier {
             if stopBeforeEachRead() { return false }
             do {
                 let result = try await readResource(uri, cache, router)
+                // Editing that began during the read may have cut it short (the help-read guard
+                // refuses help reads once it has), so its content is not published.
+                if stopBeforeEachRead() { return false }
                 let hash = try ResourceContentHasher.stableDataHash(
                     fromResourceText: sharedResourceTextForProduction(result)
                 )

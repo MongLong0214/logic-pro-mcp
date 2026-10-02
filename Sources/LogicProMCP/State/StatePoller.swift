@@ -468,6 +468,26 @@ actor StatePoller {
     private func pollOnce(
         axChannel: AccessibilityChannel, cache: StateCache, yieldingToTextEditing: Bool
     ) async -> Bool {
+        // #1079 after review R3: the checks between reads do not reach inside one. A background
+        // cycle runs under a help-read guard, so an AXHelp read anywhere in it asks the focus
+        // first, and a section whose read the guard cut short is discarded, not written.
+        guard yieldingToTextEditing else {
+            return await pollOnceReading(axChannel: axChannel, cache: cache, yieldingToTextEditing: false)
+        }
+        let focus = runtime.keyboardFocus
+        let guardian = AXHelpers.HelpReadGuard(stop: { Self.backgroundTickYields(to: focus()) })
+        return await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
+            await pollOnceReading(axChannel: axChannel, cache: cache, yieldingToTextEditing: true)
+        }
+    }
+
+    /// A help read in this cycle was refused because text editing began: the section being read
+    /// is missing some of its help, and the cycle ends without writing it.
+    private static var helpReadsStopped: Bool { AXHelpers.HelpReadGuard.current?.stopped == true }
+
+    private func pollOnceReading(
+        axChannel: AccessibilityChannel, cache: StateCache, yieldingToTextEditing: Bool
+    ) async -> Bool {
         var cacheKeys: [ResourceCacheKey] = []
         guard runtime.hasVisibleWindow() else {
             // Be conservative: a single missed window check is often a transient
@@ -494,7 +514,9 @@ actor StatePoller {
         // what makes the project/track polls below fail (they occlude the arrange
         // subtree), so we capture it here — before those polls — regardless of
         // their outcome. `nil` when no blocking dialog owns the Logic window.
-        await cache.updateBlockingDialogButtons(runtime.blockingDialogInfo()?.buttonTitles)
+        let blockingDialog = runtime.blockingDialogInfo()
+        if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
+        await cache.updateBlockingDialogButtons(blockingDialog?.buttonTitles)
 
         if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         // #1079 review R3: set when the path query yields. The update returning false says only
@@ -523,7 +545,7 @@ actor StatePoller {
         }
         // #668: readability drives `hasDocument`; only an APPLIED write is reported as refreshed.
         if projectReady.applied { cacheKeys.append(.project) }
-        if yieldedAtPathQuery { return yieldCycle(cacheKeys) }
+        if yieldedAtPathQuery || Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let tracksReady: PollOutcome
         let tracksVersion = await cache.currentVersion(for: .tracks)
@@ -538,7 +560,7 @@ actor StatePoller {
         } else {
             trackRead = (await axChannel.readTrackStates(), false)
         }
-        if trackRead.yielded { return yieldCycle(cacheKeys) }
+        if trackRead.yielded || Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if let tracks = trackRead.states {
             // The read succeeded, so tracks are readable regardless of what the write does. The
             // write outcome is a separate answer and has to come from the CAS, not be assumed:
@@ -558,6 +580,7 @@ actor StatePoller {
             ) { cache, tracks, observed in
                 await cache.applyTracks(tracks, ifCurrent: observed)
             }
+            if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         }
         if tracksReady.applied { cacheKeys.append(.tracks) }
         // Deliberately `readable`, not `applied`: a refused write means the cache already holds
@@ -612,6 +635,7 @@ actor StatePoller {
         ) { cache, state, observed in
             await cache.updateTransport(state, ifCurrent: observed)
         }
+        if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if transportReady.applied { cacheKeys.append(.transport) }
         if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let mixerReady = await poll(
@@ -621,6 +645,7 @@ actor StatePoller {
         ) { cache, strips, observed in
             await cache.updateChannelStrips(strips, ifCurrent: observed)
         }
+        if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if mixerReady.applied { cacheKeys.append(.mixer) }
         markerPollTick += 1
         if markerPollTick >= Self.markerPollInterval {
@@ -632,6 +657,7 @@ actor StatePoller {
             ) { cache, markers in
                 await cache.updateMarkers(markers)
             }
+            if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
             if markersReady {
                 cacheKeys.append(.markers)
             } else {
@@ -684,6 +710,8 @@ actor StatePoller {
         let observed = await cache.currentVersion(for: section)
         let result = await axChannel.execute(operation: operation, params: [:])
         guard case .success(let json) = result else { return .unreadable }
+        // A read the help-read guard cut short is not written (`pollOnce`).
+        if Self.helpReadsStopped { return .unreadable }
         guard let data = json.data(using: .utf8) else { return .unreadable }
         do {
             let value = try Self.iso8601Decoder.decode(T.self, from: data)
@@ -731,6 +759,7 @@ actor StatePoller {
     ) async -> Bool {
         let result = await axChannel.execute(operation: operation, params: [:])
         guard case .success(let json) = result else { return false }
+        if Self.helpReadsStopped { return false }
         guard let data = json.data(using: .utf8) else { return false }
         do {
             let value = try Self.iso8601Decoder.decode(T.self, from: data)

@@ -74,7 +74,8 @@ struct Issue1079PollYieldsToTextEditingTests {
     /// that asks its `stop` before each one, as the production walk does; each header read is
     /// counted as `.trackHeader`.
     private static func countingChannel(
-        _ log: ReadLog, headers: Int? = nil, projectInfo: (@Sendable (Int) -> ChannelResult)? = nil
+        _ log: ReadLog, headers: Int? = nil, projectInfo: (@Sendable (Int) -> ChannelResult)? = nil,
+        mixerState: (@Sendable () -> ChannelResult)? = nil
     ) -> AccessibilityChannel {
         let projectReads = Counter()
         var stoppable: (@Sendable (@escaping @Sendable () -> Bool) -> (states: [TrackState]?, yielded: Bool))?
@@ -104,7 +105,7 @@ struct Issue1079PollYieldsToTextEditingTests {
             selectTrack: { _ in .error("not under test") },
             setTrackToggle: { _, _ in .error("not under test") },
             renameTrack: { _ in .error("not under test") },
-            mixerState: { log.bump(.mixer); return .success("[]") },
+            mixerState: { log.bump(.mixer); return mixerState?() ?? .success("[]") },
             channelStrip: { _ in .error("not under test") },
             setMixerValue: { _, _ in .error("not under test") },
             projectInfo: {
@@ -122,6 +123,7 @@ struct Issue1079PollYieldsToTextEditingTests {
         mutationInFlight: Bool = false,
         cache: StateCache = StateCache(),
         projectInfo: (@Sendable (Int) -> ChannelResult)? = nil,
+        mixerState: (@Sendable () -> ChannelResult)? = nil,
         postPoll: @escaping StatePoller.PostPoll = { _, _ in true },
         sleep: @escaping @Sendable (UInt64) async throws -> Void = { _ in throw CancellationError() }
     ) -> StatePoller {
@@ -141,7 +143,7 @@ struct Issue1079PollYieldsToTextEditingTests {
         )
         runtime.mutationInFlight = { mutationInFlight }
         return StatePoller(
-            axChannel: countingChannel(log, headers: headers, projectInfo: projectInfo),
+            axChannel: countingChannel(log, headers: headers, projectInfo: projectInfo, mixerState: mixerState),
             cache: cache, runtime: runtime, postPoll: postPoll
         )
     }
@@ -155,6 +157,7 @@ struct Issue1079PollYieldsToTextEditingTests {
         headers: Int? = nil,
         cache: StateCache = StateCache(),
         projectInfo: (@Sendable (Int) -> ChannelResult)? = nil,
+        mixerState: (@Sendable () -> ChannelResult)? = nil,
         postPoll: @escaping StatePoller.PostPoll = { _, _ in true },
         focus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus
     ) async -> ReadLog {
@@ -162,7 +165,7 @@ struct Issue1079PollYieldsToTextEditingTests {
         let (loopEnded, endLoop) = AsyncStream<Void>.makeStream()
         let poller = makePoller(
             log: log, headers: headers, focus: focus, mutationInFlight: mutationInFlight,
-            cache: cache, projectInfo: projectInfo, postPoll: postPoll
+            cache: cache, projectInfo: projectInfo, mixerState: mixerState, postPoll: postPoll
         ) { _ in
             if log.nextSleep() >= ticks {
                 endLoop.finish()
@@ -588,6 +591,101 @@ struct Issue1079PollYieldsToTextEditingTests {
             editing.peek() >= 1 ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) : .notTextEditing
         }
         #expect(answers.all.first == [.document], "the stop did not read the focus as editing")
+    }
+
+    // MARK: - The help-read guard (after review R3)
+
+    /// A fake AX runtime whose every read is counted by attribute.
+    final class AttributeReads: @unchecked Sendable {
+        private let lock = NSLock()
+        private var counts: [String: Int] = [:]
+        func bump(_ attribute: String) { lock.withLock { counts[attribute, default: 0] += 1 } }
+        func count(_ attribute: String) -> Int { lock.withLock { counts[attribute, default: 0] } }
+    }
+
+    private static func countingAXRuntime(_ reads: AttributeReads) -> (AXHelpers.Runtime, AXUIElement) {
+        let builder = FakeAXRuntimeBuilder()
+        let element = builder.element(7)
+        builder.setAttribute(element, kAXHelpAttribute as String, "help")
+        builder.setAttribute(element, kAXTitleAttribute as String, "title")
+        let runtime = builder.makeAXRuntime(
+            attributeValueHandler: { _, attribute in reads.bump(attribute); return nil },
+            setAttributeHandler: nil, performActionHandler: nil
+        )
+        return (runtime, element)
+    }
+
+    /// The guard refuses an AXHelp read once its stop answers true, and every one after it without
+    /// asking again; other attributes are read as before; with no guard set nothing changes.
+    /// Mutation this kills: the guard not consulted by `getAttribute` (the refused read is made).
+    @Test("the help-read guard refuses help reads once stopped, and only help reads")
+    func theHelpReadGuardRefusesHelpReadsOnceStopped() {
+        let reads = AttributeReads()
+        let (runtime, element) = Self.countingAXRuntime(reads)
+        let asked = Counter()
+        let guardian = AXHelpers.HelpReadGuard(stop: { asked.next() >= 2 })
+        AXHelpers.HelpReadGuard.$current.withValue(guardian) {
+            #expect(AXHelpers.getHelp(element, runtime: runtime) == "help")
+            #expect(!guardian.stopped)
+            #expect(AXHelpers.getHelp(element, runtime: runtime) == nil)
+            #expect(guardian.stopped)
+            #expect(AXHelpers.getHelp(element, runtime: runtime) == nil)
+            #expect(AXHelpers.getTitle(element, runtime: runtime) == "title")
+            let result: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                element, kAXHelpAttribute as String, runtime: runtime)
+            guard case .failure = result else {
+                Issue.record("a refused help read answered \(result), not a failure")
+                return
+            }
+        }
+        #expect(reads.count(kAXHelpAttribute as String) == 1, "help read \(reads.count(kAXHelpAttribute as String)) times")
+        #expect(asked.peek() == 2, "the stop was asked \(asked.peek()) times; once stopped it is not asked again")
+        // No guard set: the read is made.
+        #expect(AXHelpers.getHelp(element, runtime: runtime) == "help")
+        #expect(reads.count(kAXHelpAttribute as String) == 2)
+    }
+
+    /// The mixer read reads AXHelp, and a French run lost the rename to one under way. Editing
+    /// begins at focus reading 7, inside the mixer read (the check before it is reading 6): its
+    /// help read is refused, the mixer section is not written, markers are not read and nothing
+    /// is published. The control is the same cycle with no edit. Mutations this kills: no guard
+    /// set for the background cycle (the help is read), and the poller writing and going on after
+    /// a cut-short read (markers are read, the mixer is written).
+    @Test("a mixer read cut short by editing is discarded and the cycle ends")
+    func aMixerReadCutShortIsDiscarded() async {
+        for editing in [true, false] {
+            let reads = AttributeReads()
+            let (axRuntime, element) = Self.countingAXRuntime(reads)
+            let strip = String(decoding: (try? JSONEncoder().encode(
+                [ChannelStripState(trackIndex: 0, volume: -6, pan: 0)])) ?? Data(), as: UTF8.self)
+            let cache = StateCache()
+            let before = await cache.currentVersion(for: .mixer)
+            let published = Published()
+            let readings = Counter()
+            let log = await Self.runBackgroundLoop(
+                ticks: 1, cache: cache,
+                mixerState: {
+                    _ = AXHelpers.getHelp(element, runtime: axRuntime)
+                    return .success(strip)
+                },
+                postPoll: { keys, _ in published.add(keys); return true }
+            ) {
+                editing && readings.next() >= 7
+                    ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) : .notTextEditing
+            }
+            let after = await cache.currentVersion(for: .mixer)
+            #expect(log.count(.mixer) == 1)
+            if editing {
+                #expect(reads.count(kAXHelpAttribute as String) == 0, "the mixer's help was read after editing began")
+                #expect(after == before, "the cut-short mixer read was written")
+                #expect(log.count(.markers) == 0, "markers were read after the mixer read was cut short")
+                #expect(published.all.isEmpty)
+            } else {
+                #expect(reads.count(kAXHelpAttribute as String) == 1)
+                #expect(after != before, "the control's mixer read was not written")
+                #expect(log.count(.markers) == 1)
+            }
+        }
     }
 
     @Test("an explicit refreshNow runs while a text field holds the focus, and does not ask")

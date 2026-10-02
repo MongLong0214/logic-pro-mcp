@@ -150,10 +150,43 @@ enum AXHelpers {
         runtime.axApp(pid)
     }
 
+    /// #1079: reading AXHelp of an element in Logic's tracks area ends an inline rename (measured
+    /// 2026-10-02), and the background poll's reads include such reads in more places than the
+    /// track walk: a French run lost the rename to the mixer read under way when it opened
+    /// (2026-10-03). While a guard is set for the task, every AXHelp read through `getAttribute` or
+    /// `getAttributeResult` asks it first. Once its stop answers true the guard refuses that read
+    /// and every later one, and records that it stopped, so the caller can discard a reading that
+    /// went without some of its help instead of publishing it.
+    final class HelpReadGuard: @unchecked Sendable {
+        @TaskLocal static var current: HelpReadGuard?
+
+        private let stop: @Sendable () -> Bool
+        private let lock = NSLock()
+        private var refused = false
+
+        init(stop: @escaping @Sendable () -> Bool) {
+            self.stop = stop
+        }
+
+        /// The guard refused a read: whatever was being read is missing some of its help.
+        var stopped: Bool { lock.withLock { refused } }
+
+        /// Whether the next AXHelp read may go ahead. Asks `stop` until it once answers true.
+        func permits() -> Bool {
+            if stopped { return false }
+            guard stop() else { return true }
+            lock.withLock { refused = true }
+            return false
+        }
+    }
+
     /// Get a typed attribute value from an AX element.
     /// Returns nil on any error (element gone, attribute missing, type mismatch).
     static func getAttribute<T>(_ element: AXUIElement, _ attribute: String, runtime: Runtime = .production) -> T? {
-        runtime.attributeValue(element, attribute) as? T
+        if attribute == kAXHelpAttribute as String, let guardian = HelpReadGuard.current, !guardian.permits() {
+            return nil
+        }
+        return runtime.attributeValue(element, attribute) as? T
     }
 
     /// Get a typed attribute value without collapsing an AX read failure into `nil`.
@@ -166,6 +199,10 @@ enum AXHelpers {
         _ attribute: String,
         runtime: Runtime = .production
     ) -> Result<T?, AXStatusError> {
+        if attribute == kAXHelpAttribute as String, let guardian = HelpReadGuard.current, !guardian.permits() {
+            // Not read, which is not the same as read and absent.
+            return .failure(AXStatusError(raw: Int32(AXError.cannotComplete.rawValue)))
+        }
         if let read = runtime.attributeValueResult {
             // Cast only a value that is actually there. Casting `Optional.none` to `AnyObject`
             // bridges it to NSNull, so an absent attribute would come back as a present-but-
