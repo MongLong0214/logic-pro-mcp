@@ -80,6 +80,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case projectAudit = "project.audit"
     case projectCleanupPlan = "project.cleanup_plan"
     case projectInspectSession = "project.inspect_session"
+    case projectPlanSessionRepair = "project.plan_session_repair"
     case projectCleanupApply = "project.cleanup_apply"
     case midiSendNote = "midi.send_note"
     case midiSendChord = "midi.send_chord"
@@ -331,7 +332,7 @@ enum OperationRegistry {
             "project.bounce", "project.is_running", "project.launch", "project.quit",
             "project.get_regions", "project.export_plan", "project.export_run",
             "project.export_resume", "project.audit", "project.cleanup_plan",
-            "project.inspect_session", "project.cleanup_apply",
+            "project.inspect_session", "project.plan_session_repair", "project.cleanup_apply",
         ],
         ToolID.logicMidi.rawValue: [
             "midi.send_note", "midi.send_chord", "midi.send_cc", "midi.send_program_change",
@@ -387,7 +388,7 @@ enum OperationRegistry {
         ToolID.logicProject.rawValue: [
             "new", "open", "save", "save_as", "close", "bounce", "is_running", "launch",
             "quit", "get_regions", "export_plan", "export_run", "export_resume", "audit",
-            "cleanup_plan", "inspect_session", "cleanup_apply",
+            "cleanup_plan", "inspect_session", "plan_session_repair", "cleanup_apply",
         ],
         ToolID.logicMidi.rawValue: [
             "send_note", "send_chord", "send_cc", "send_program_change", "send_pitch_bend",
@@ -863,6 +864,7 @@ enum OperationRegistry {
             DeadlineClass.short,
             ["allow_ui_navigation", "domains", "project_ref", "scope", "snapshot_id"]
         ),
+        (.projectPlanSessionRepair, "plan_session_repair", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short, ["snapshot_id", "policy", "names", "plan_id", "digest"]),
         (
             .projectCleanupApply,
             "cleanup_apply",
