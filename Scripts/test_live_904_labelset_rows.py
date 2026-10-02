@@ -22,6 +22,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import datetime
 import os
 import re
 import subprocess
@@ -605,6 +606,16 @@ check("the alert script answers an AXDefaultButton read error as unreadable with
       len(default_read) == 1
       and re.search(r'on error number (\w+)\n\s*return "unreadable" & linefeed & \1\n', default_read[0])
       and SCRIPT.index('return "unreadable"') < SCRIPT.index("click b"), default_read)
+_lines = SCRIPT.split("\n")
+_guard = [i for i, line in enumerate(_lines) if line.strip() == "if isDefault then"]
+_end = next((j for j in range(_guard[0] + 1, len(_lines))
+             if _lines[j].startswith(_lines[_guard[0]][:len(_lines[_guard[0]]) - len(_lines[_guard[0]].lstrip())] + "end if")),
+            None) if len(_guard) == 1 else None
+_clicks = [i for i, line in enumerate(_lines) if "click " in line]
+check("the alert script's one click sits inside the `if isDefault then` block, so no other condition "
+      "can press a dialog (review R3: `if true then` passed every earlier check)",
+      len(_guard) == 1 and _end is not None and len(_clicks) == 1 and _guard[0] < _clicks[0] < _end,
+      (_guard, _end, _clicks))
 check("the alert script clicks only in a dialog with one button, through a default button named as "
       "that one button",
       "(count of buttons of d) is 1" in SCRIPT
@@ -700,6 +711,50 @@ def osa_reading(readings):
         L993.subprocess, L993.time = saved
         del L993.SYSTEM_EVENTS_RESTARTS[:]
 
+
+def osa_bookkeeping(osascript_ends, bookkeeping):
+    """L993.osa with a 2.0 s deadline on one clock: the refused osascript ends at `osascript_ends`,
+    building the restart record advances the clock by `bookkeeping`, and each subprocess.run records
+    the clock at the moment it is invoked: (calls as (program, timeout, clock), restarts)."""
+    clock, calls = Clock(), []
+    saved = (L993.subprocess, L993.time, L993.datetime)
+
+    def fake_run(argv, timeout=None, **_):
+        calls.append((os.path.basename(argv[0]), None if timeout is None else round(timeout, 6),
+                      round(clock.now, 6)))
+        if argv[0].endswith("killall"):
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        clock.now = osascript_ends
+        return subprocess.CompletedProcess(argv, 1, "", "execution error: (-25211)")
+
+    class FakeDatetime:
+        @staticmethod
+        def now():
+            clock.now += bookkeeping
+            return datetime.datetime(2026, 10, 2, tzinfo=datetime.timezone.utc)
+
+    L993.subprocess = types.SimpleNamespace(run=fake_run, TimeoutExpired=subprocess.TimeoutExpired)
+    L993.time = clock
+    L993.datetime = types.SimpleNamespace(datetime=FakeDatetime)
+    del L993.SYSTEM_EVENTS_RESTARTS[:]
+    try:
+        L993.osa("x", deadline=clock.now + 2.0)
+        return calls, list(L993.SYSTEM_EVENTS_RESTARTS)
+    finally:
+        L993.subprocess, L993.time, L993.datetime = saved
+        del L993.SYSTEM_EVENTS_RESTARTS[:]
+
+
+# Review R3 of #1081: the budget was read before the restart record was built; building it took the
+# clock from 1.9 to 2.1 and the kill started after the deadline with the 0.1 s read before. The
+# kill's own invocation time is what is checked: it must be inside the deadline, or not happen.
+calls, restarts = osa_bookkeeping(1.9, 0.2)
+check("a restart whose record takes the clock past the deadline launches no kill and records nothing",
+      [c[0] for c in calls] == ["osascript"] and restarts == [], (calls, restarts))
+calls, restarts = osa_bookkeeping(1.5, 0.2)
+check("a restart inside the deadline launches the kill before it, given the time left at its launch",
+      [c[0] for c in calls] == ["osascript", "killall"] and calls[1][2] < 2.0
+      and abs(calls[1][1] + calls[1][2] - 2.0) < 1e-6 and len(restarts) == 1, (calls, restarts))
 
 # Review R2 of #1081: the clock read 1.9 when the restart was allowed and 2.1 when the kill launched,
 # and the kill was given -0.1. The budget is read once and that reading is the one the kill gets.

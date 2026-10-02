@@ -121,14 +121,16 @@ def osa(script, timeout=20, deadline=None):
         stderr = result.stderr or ""
         if attempt or "-25211" not in stderr:
             return None
-        # The restart's budget is read once, here, and that reading is the one the kill is given:
-        # read again at the launch it could already be past the deadline (review R2 of #1081).
+        # The restart's budget is read after its record is built and just before the kill, and that
+        # reading is the one the kill is given: one taken earlier, or read again later, can be past
+        # the deadline by the time the kill starts (reviews R2 and R3 of #1081). An expired budget
+        # records and launches nothing.
+        restart = {"at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+                   "stderr_tail": stderr.strip()[-300:]}
         budget = within(timeout)
         if budget <= 0:
             return None
-        SYSTEM_EVENTS_RESTARTS.append({
-            "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
-            "stderr_tail": stderr.strip()[-300:]})
+        SYSTEM_EVENTS_RESTARTS.append(restart)
         try:
             subprocess.run(["/usr/bin/killall", "System Events"], capture_output=True, text=True,
                            timeout=None if deadline is None else budget)
