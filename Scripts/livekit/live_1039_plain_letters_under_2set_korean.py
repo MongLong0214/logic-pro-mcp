@@ -278,6 +278,33 @@ def plain_bindings():
                    and isinstance(entry.get("CharCode"), int) and 32 < entry["CharCode"] < 127})
 
 
+def fit_arrange_window():
+    """Put the arrange window inside the main display, below the menu bar, and read it back from the
+    window server. A window across two displays makes captures that match nothing on screen
+    (`evidence._display_containing`); the ten-language run at 16d39a17 had 12 of 20 captures
+    straddle two displays, while the Korean pilots, whose window sat at the main display's top left,
+    had none. Returns whether the window now lies wholly within the main display."""
+    import Quartz
+    bounds = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
+    x, y = int(bounds.origin.x), int(bounds.origin.y) + 30
+    w, h = int(bounds.size.width), int(bounds.size.height) - 30
+    title = ARRANGE["title"].replace("\\", "\\\\").replace('"', '\\"')
+    script = (f'tell application "System Events" to tell process "Logic Pro" to tell '
+              f'(first window whose name is "{title}")\nset position to {{{x}, {y}}}\n'
+              f'set size to {{{w}, {h}}}\nend tell')
+    subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True, timeout=10)
+    time.sleep(0.8)
+    pid = logic_pid()
+    for window in Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly,
+                                                    Quartz.kCGNullWindowID) or []:
+        if int(window.get(Quartz.kCGWindowOwnerPID) or 0) == pid and window.get(Quartz.kCGWindowName) == ARRANGE["title"]:
+            b = window.get(Quartz.kCGWindowBounds)
+            return (b["X"] >= bounds.origin.x and b["Y"] >= bounds.origin.y
+                    and b["X"] + b["Width"] <= bounds.origin.x + bounds.size.width
+                    and b["Y"] + b["Height"] <= bounds.origin.y + bounds.size.height)
+    return False
+
+
 def logic_pid():
     out = subprocess.run(["/usr/bin/lsappinfo", "info", "-only", "pid", "-app", LOGIC_BUNDLE],
                          capture_output=True, text=True).stdout
@@ -632,6 +659,10 @@ def main():
             activate_logic()
             if not wait_ready(ax):
                 failures[lproj] = "the control bar did not read within the wait after the launch"
+                break
+            runs[lproj]["window_fits_the_main_display"] = fit_arrange_window()
+            if not runs[lproj]["window_fits_the_main_display"]:
+                failures[lproj] = "the arrange window could not be put inside the main display"
                 break
             for role, binary in (("control", args.control), ("candidate", args.candidate)):
                 driver = E.Driver(binary=binary)
