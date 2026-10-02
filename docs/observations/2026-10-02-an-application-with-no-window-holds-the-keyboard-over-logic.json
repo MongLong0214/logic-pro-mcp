@@ -1,0 +1,1005 @@
+{
+  "schema": 3,
+  "id": "2026-10-02-an-application-with-no-window-holds-the-keyboard-over-logic",
+  "date": "2026-10-02",
+  "subject": "which process holds the keyboard when Finder is active with no window of its own, and what the frontmost gate and the post-leaf settlement read",
+  "question": "With Finder active and windowless, is the first window at layer 0 or 8 still Logic's, and do a server on the window rule and a server that also asks for the focused application read the keyboard's owner as Logic or as another process?",
+  "verdict": "works",
+  "surface": "system.accessibility",
+  "issues": [
+    942
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_942_windowless_keyboard_owner.py <worktree> <head> <candidate debug build> <control debug build without the focused application> (run as /usr/bin/python3 for its Accessibility grant, with LPM_LIVE_LOCK naming a held lock and LPM_EVIDENCE_ROOT an absolute directory exported)",
+    "expected": "exit 0; per language and sample the candidate answers activated and reads other, the control answers already_frontmost and reads logic, and the candidate with Logic active answers already_frontmost and reads logic",
+    "cost": "about two minutes per language on the locale-campaign fixture; needs LIVE.lock, the Accessibility grant for /usr/bin/python3, and no Finder window open"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/LogicOnScreenWindows.swift:keyboardOwnerIsLogic",
+    "Sources/LogicProMCP/Utilities/ProcessUtils.swift:logicOwnsTheKeyboard",
+    "Sources/LogicProMCP/Utilities/ProcessUtils.swift:focusedApplicationPID"
+  ],
+  "evidence": [
+    "evidence/2026-10-02-942-windowless-dialog-layers.json",
+    "evidence/2026-10-02-942-windowless-keyboard-owner-run.json"
+  ],
+  "method": "First, in Korean, /usr/bin/python3 opened Go To Position from the menu bar and read the window list, lsappinfo front and the system-wide AXFocusedApplication with Logic active, with Finder activated and no Finder window, with a Finder window opened, with it closed, and with Logic active again. Then live_942_windowless_keyboard_owner.py ran at e0af4f12 in ten languages, two samples each. Per sample it activated Finder with no window, held one goto_position call per binary at the #942 seam, activated Finder again at the hold and read the screen by pids, then released. The candidate was the debug build of e0af4f12; the control was the debug build of a7913248, on the window rule alone. A third hold per sample ran the candidate with Logic left active.",
+  "observations": [
+    {
+      "locale": "ko-KR",
+      "reading": "window list and focused application as Logic and Finder take turns",
+      "state": "before",
+      "lsappinfo_front": "logic",
+      "ax_focused_application": "logic",
+      "first_window_at_layer_0_or_8": {
+        "owner": "logic",
+        "layer": 0
+      },
+      "go_to_position_dialog_layer": null,
+      "finder_windows_at_layer_0": 0
+    },
+    {
+      "locale": "ko-KR",
+      "reading": "window list and focused application as Logic and Finder take turns",
+      "state": "A0_logic_active_dialog",
+      "lsappinfo_front": "logic",
+      "ax_focused_application": "logic",
+      "first_window_at_layer_0_or_8": {
+        "owner": "logic",
+        "layer": 8
+      },
+      "go_to_position_dialog_layer": 8,
+      "finder_windows_at_layer_0": 0
+    },
+    {
+      "locale": "ko-KR",
+      "reading": "window list and focused application as Logic and Finder take turns",
+      "state": "A1_finder_active_no_new_window",
+      "lsappinfo_front": "finder",
+      "ax_focused_application": "finder",
+      "first_window_at_layer_0_or_8": {
+        "owner": "logic",
+        "layer": 0
+      },
+      "go_to_position_dialog_layer": 0,
+      "finder_windows_at_layer_0": 0
+    },
+    {
+      "locale": "ko-KR",
+      "reading": "window list and focused application as Logic and Finder take turns",
+      "state": "B1_finder_active_with_window",
+      "lsappinfo_front": "finder",
+      "ax_focused_application": "finder",
+      "first_window_at_layer_0_or_8": {
+        "owner": "finder",
+        "layer": 0
+      },
+      "go_to_position_dialog_layer": 0,
+      "finder_windows_at_layer_0": 1
+    },
+    {
+      "locale": "ko-KR",
+      "reading": "window list and focused application as Logic and Finder take turns",
+      "state": "B2_finder_window_closed",
+      "lsappinfo_front": "finder",
+      "ax_focused_application": "finder",
+      "first_window_at_layer_0_or_8": {
+        "owner": "logic",
+        "layer": 0
+      },
+      "go_to_position_dialog_layer": 0,
+      "finder_windows_at_layer_0": 0
+    },
+    {
+      "locale": "ko-KR",
+      "reading": "window list and focused application as Logic and Finder take turns",
+      "state": "C_logic_reactivated",
+      "lsappinfo_front": "logic",
+      "ax_focused_application": "logic",
+      "first_window_at_layer_0_or_8": {
+        "owner": "logic",
+        "layer": 8
+      },
+      "go_to_position_dialog_layer": 8,
+      "finder_windows_at_layer_0": 0
+    },
+    {
+      "locale": "ko-KR",
+      "reading": "window list and focused application as Logic and Finder take turns",
+      "state": "end",
+      "lsappinfo_front": "logic",
+      "ax_focused_application": "logic",
+      "first_window_at_layer_0_or_8": {
+        "owner": "logic",
+        "layer": 0
+      },
+      "go_to_position_dialog_layer": null,
+      "finder_windows_at_layer_0": 0
+    },
+    {
+      "locale": "ko-KR",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "ko-KR",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "en-US",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "en-US",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "ja-JP",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "ja-JP",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "de-DE",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "de-DE",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "es-ES",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "es-ES",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "fr-FR",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "fr-FR",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "it-IT",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "it-IT",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "pt-BR",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "pt-BR",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "zh-CN",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "zh-CN",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "zh-TW",
+      "sample": 1,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "locale": "zh-TW",
+      "sample": 2,
+      "candidate": {
+        "frontmost_preparation": "activated",
+        "settlement_keyboard_owner": "other",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "logic",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "control": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": "other",
+        "at_hold": {
+          "front": "finder",
+          "keyboard_window": "logic",
+          "focused_application": "finder",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": true
+        }
+      },
+      "candidate_logic_front": {
+        "frontmost_preparation": "already_frontmost",
+        "settlement_keyboard_owner": "logic",
+        "escapes_sent": 0,
+        "front_when_the_hold_was_entered": null,
+        "at_hold": {
+          "front": "logic",
+          "keyboard_window": "logic",
+          "focused_application": "logic",
+          "finder_normal_windows": 0,
+          "windowless_finder_holds_the_keyboard": false
+        }
+      }
+    },
+    {
+      "reading": "harness checks",
+      "checks": 60,
+      "passed": 60,
+      "samples": 20
+    }
+  ],
+  "conclusion": "With Logic active the dialog was at layer 8 and every reading named Logic. With Finder activated and no Finder window it dropped to layer 0 and stayed the first window at layer 0 or 8, while lsappinfo front and the focused application named Finder. With a Finder window open, that window came first. In the harness run 60 of 60 checks passed over 20 samples: at every hold the condition held, the control answered already_frontmost and read logic, the candidate answered activated and read other, and with Logic active the candidate answered already_frontmost and read logic. No binary sent an Escape.",
+  "limits": [
+    "One windowless application, Finder, on one Logic installation and one fixture.",
+    "The script is replaced by the #942 hold; no keystroke was posted into Finder by either binary, so what such a keystroke would have done is not shown.",
+    "The focused application was not read under the permission prompts the modal-panel rule was built for; with the read failing the window rule answers alone, as before.",
+    "The run was made at e0af4f12 with the candidate built at e0af4f12."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states which process the window server lists in front, which application the accessibility server names as focused, and what the server answered; it quotes no string Logic ships."
+  }
+}

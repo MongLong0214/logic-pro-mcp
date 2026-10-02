@@ -58,6 +58,12 @@ actor CGEventChannel: Channel {
         /// so the default is nil: a runtime that says nothing about the screen gets a refusal, not
         /// a dialog nobody saw. `.production` reads CoreGraphics.
         let onScreenWindowList: @Sendable () -> [[String: Any]]?
+        /// #942: the process the accessibility server names as the focused application, read with
+        /// the window list so an application with no window on screen is not missed as the
+        /// keyboard's owner (`LogicOnScreenWindows.keyboardOwnerIsLogic`). nil is unread, which
+        /// leaves the window reading to answer alone, so the default changes nothing for a runtime
+        /// that does not set it. `.production` asks the system-wide AX element.
+        let focusedApplicationPID: @Sendable () -> pid_t?
 
         /// The two #440 fields default to an already-frontmost Logic so existing
         /// callers that construct a Runtime for an unrelated reason keep
@@ -81,7 +87,8 @@ actor CGEventChannel: Channel {
             layoutLetter: @escaping @Sendable (String, CGKeyCode) -> String? = { _, _ in nil },
             layoutIsEnabled: @escaping @Sendable (String) -> Bool = { _ in false },
             inputSourceSettleMicros: useconds_t = CGEventChannel.inputSourceSwitchSettleMicros,
-            onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = { nil }
+            onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = { nil },
+            focusedApplicationPID: @escaping @Sendable () -> pid_t? = { nil }
         ) {
             self.isLogicProRunning = isLogicProRunning
             self.logicProPID = logicProPID
@@ -96,6 +103,7 @@ actor CGEventChannel: Channel {
             self.layoutIsEnabled = layoutIsEnabled
             self.inputSourceSettleMicros = inputSourceSettleMicros
             self.onScreenWindowList = onScreenWindowList
+            self.focusedApplicationPID = focusedApplicationPID
         }
 
         static let production = Runtime(
@@ -112,7 +120,8 @@ actor CGEventChannel: Channel {
             selectInputSource: { CGEventChannel.selectEnabledInputSource(id: $0) },
             layoutLetter: { CGEventChannel.readLayoutLetter(layoutID: $0, keyCode: $1) },
             layoutIsEnabled: { CGEventChannel.isEnabledInputSource(id: $0) },
-            onScreenWindowList: AXLogicProElements.Runtime.liveOnScreenWindowList
+            onScreenWindowList: AXLogicProElements.Runtime.liveOnScreenWindowList,
+            focusedApplicationPID: { ProcessUtils.focusedApplicationPID() }
         )
     }
 
@@ -814,7 +823,8 @@ actor CGEventChannel: Channel {
         var polls = 0
         while true {
             let (reading, appeared) = AccessibilityChannel.readPostLeafScreen(
-                baseline: baseline, logicPID: pid, windows: runtime.onScreenWindowList()
+                baseline: baseline, logicPID: pid, windows: runtime.onScreenWindowList(),
+                focusedApplicationPID: runtime.focusedApplicationPID()
             )
             let fields = AccessibilityChannel.PostLeafSettlement.readingFields(reading, appeared: appeared)
             if reading.dialog == .identifiedOurs, reading.menu == .closed, reading.logicOwnsKeyboard == true {

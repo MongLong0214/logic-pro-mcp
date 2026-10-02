@@ -72,7 +72,15 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # the 27th on its own branch. Its ten counterexamples are each derived from the live observation
 # with one earlier defect put in -- a null output, absent send_slots, occupancy read from level,
 # `edges: []` beside a bus output.
-FLOOR = 30
+# 28 -> 29 on 2026-10-01: live_942_post_leaf_settlement_in_every_locale, whose counterexample for
+# each settled hold is the binary without the settlement on the same arranged screen, and for each
+# control hold the candidate's, so neither predicate can accept both binaries.
+# 29 -> 31 on 2026-10-02, the union with main: live_1077_write_warning_is_cleared_in_every_locale
+# came in on main, and live_942_windowless_keyboard_owner, whose counterexample for each binary is
+# the other binary's row on the same windowless screen, on this branch.
+# 31 -> 32 on 2026-10-03, the union with main: live_1039_plain_letters_under_2set_korean on this
+# branch, whose counterexample for each candidate row is the control binary's row.
+FLOOR = 32
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )
