@@ -165,16 +165,18 @@ def label(key):
 
 
 def matches(text, key):
-    """Whether `text` matches the canon key under its mode: `contains` is case-insensitive
-    containment, `exact` case-insensitive equality, `exact_strict` equality."""
+    """Whether `text` matches the canon key under its mode, as `AXLocalePolicy` compares:
+    `contains` is case-insensitive containment, `exact` case-insensitive equality after trimming,
+    and `exact_strict` case-insensitive equality of the verbatim string, untrimmed. The English
+    pilot stopped on a case-sensitive `exact_strict`: the control bar is described with capitals."""
     if not text:
         return False
     mode, names = label(key)
     if mode == "contains":
         return any(name.casefold() in text.casefold() for name in names)
     if mode == "exact_strict":
-        return text in names
-    return any(text.casefold() == name.casefold() for name in names)
+        return any(text.casefold() == name.casefold() for name in names)
+    return any(text.strip().casefold() == name.strip().casefold() for name in names)
 
 
 # --- Accessibility, from this process -------------------------------------------------------------
