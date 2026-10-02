@@ -1,0 +1,529 @@
+[
+ {
+  "condition": "none",
+  "sample": 0,
+  "opened_after_s": 0.05,
+  "reads": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "none",
+  "sample": 1,
+  "opened_after_s": 0.04,
+  "reads": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "none",
+  "sample": 2,
+  "opened_after_s": 0.04,
+  "reads": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "osascript",
+  "sample": 0,
+  "opened_after_s": 0.04,
+  "reads": [
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ]
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "osascript",
+  "sample": 1,
+  "opened_after_s": 0.04,
+  "reads": [
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ]
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "osascript",
+  "sample": 2,
+  "opened_after_s": 0.04,
+  "reads": [
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    0
+   ]
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "header_values",
+  "sample": 0,
+  "opened_after_s": 0.04,
+  "reads": [
+   133,
+   133,
+   133,
+   133,
+   133,
+   133,
+   133,
+   133
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "header_values",
+  "sample": 1,
+  "opened_after_s": 0.04,
+  "reads": [
+   133,
+   133,
+   133,
+   133,
+   133,
+   133,
+   133,
+   133
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "header_values",
+  "sample": 2,
+  "opened_after_s": 0.03,
+  "reads": [
+   133,
+   133,
+   133,
+   133,
+   133,
+   133,
+   133,
+   133
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "window_meta",
+  "sample": 0,
+  "opened_after_s": 0.04,
+  "reads": [
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "window_meta",
+  "sample": 1,
+  "opened_after_s": 0.04,
+  "reads": [
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "window_meta",
+  "sample": 2,
+  "opened_after_s": 0.04,
+  "reads": [
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "walk_roles",
+  "sample": 0,
+  "opened_after_s": 0.04,
+  "reads": [
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "walk_roles",
+  "sample": 1,
+  "opened_after_s": 0.04,
+  "reads": [
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "walk_roles",
+  "sample": 2,
+  "opened_after_s": 0.03,
+  "reads": [
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "walk_values",
+  "sample": 0,
+  "opened_after_s": 0.04,
+  "reads": [
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "walk_values",
+  "sample": 1,
+  "opened_after_s": 0.04,
+  "reads": [
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "walk_values",
+  "sample": 2,
+  "opened_after_s": 0.04,
+  "reads": [
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548,
+   1548
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "walk_help",
+  "sample": 0,
+  "opened_after_s": 0.04,
+  "reads": [
+   1548
+  ],
+  "outcome": "lost",
+  "lost": {
+   "after_action": 1,
+   "role": "AXCheckBox"
+  }
+ },
+ {
+  "condition": "walk_help",
+  "sample": 1,
+  "opened_after_s": 0.03,
+  "reads": [
+   1548
+  ],
+  "outcome": "lost",
+  "lost": {
+   "after_action": 1,
+   "role": "AXCheckBox"
+  }
+ },
+ {
+  "condition": "walk_help",
+  "sample": 2,
+  "opened_after_s": 0.03,
+  "reads": [
+   1548
+  ],
+  "outcome": "lost",
+  "lost": {
+   "after_action": 1,
+   "role": "AXCheckBox"
+  }
+ },
+ {
+  "condition": "mixer_help",
+  "sample": 0,
+  "opened_after_s": 0.05,
+  "reads": [
+   69,
+   69,
+   69,
+   69,
+   69,
+   69,
+   69,
+   69
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "mixer_help",
+  "sample": 1,
+  "opened_after_s": 0.04,
+  "reads": [
+   69,
+   69,
+   69,
+   69,
+   69,
+   69,
+   69,
+   69
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "mixer_help",
+  "sample": 2,
+  "opened_after_s": 0.05,
+  "reads": [
+   69,
+   69,
+   69,
+   69,
+   69,
+   69,
+   69,
+   69
+  ],
+  "outcome": "kept",
+  "lost": null
+ },
+ {
+  "condition": "header_help",
+  "sample": 0,
+  "opened_after_s": 0.04,
+  "reads": [
+   229
+  ],
+  "outcome": "lost",
+  "lost": {
+   "after_action": 1,
+   "role": "AXTextField"
+  }
+ },
+ {
+  "condition": "header_help",
+  "sample": 1,
+  "opened_after_s": 0.04,
+  "reads": [
+   229
+  ],
+  "outcome": "lost",
+  "lost": {
+   "after_action": 1,
+   "role": "AXTextField"
+  }
+ },
+ {
+  "condition": "header_help",
+  "sample": 2,
+  "opened_after_s": 0.04,
+  "reads": [
+   229
+  ],
+  "outcome": "lost",
+  "lost": {
+   "after_action": 1,
+   "role": "AXTextField"
+  }
+ },
+ {
+  "condition": "help_one_by_one",
+  "sample": 0,
+  "outcome": "lost",
+  "elements_read": 533,
+  "element_role": "AXButton",
+  "element_depth": 6,
+  "parent_role": "AXGroup",
+  "focus_role_after": "AXButton"
+ },
+ {
+  "condition": "help_one_by_one",
+  "sample": 1,
+  "outcome": "lost",
+  "elements_read": 534,
+  "element_role": "AXButton",
+  "element_depth": 6,
+  "parent_role": "AXGroup",
+  "focus_role_after": "AXButton"
+ }
+]
