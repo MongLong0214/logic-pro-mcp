@@ -133,9 +133,26 @@ def language_setting():
     return re.findall(r"[\w-]+", result.stdout) if result.returncode == 0 else []
 
 
+LOGIC_PROCESS_COUNT = ('tell application "System Events" to return (count of (every process whose '
+                       'name is "Logic Pro"))')
+
+
+def logic_census():
+    """Logic's process count through System Events, with an answer that did not read kept apart.
+
+    `logic_running` folds a failed or malformed answer into False, which reads as "not running".
+    A quit witness must not do that: a count that did not read is not a Logic that quit (#1077
+    R1077-2). `status` is "running" (a count of one or more), "gone" (a count of 0) or "unreadable"
+    (osascript failed, or answered something that is not a count); `raw` is what it answered.
+    """
+    raw = osa(LOGIC_PROCESS_COUNT)
+    if raw is None or not re.fullmatch(r"[0-9]+", raw):
+        return {"status": "unreadable", "raw": raw}
+    return {"status": "running" if int(raw) > 0 else "gone", "raw": raw}
+
+
 def logic_running():
-    return osa('tell application "System Events" to return (count of (every process whose '
-               'name is "Logic Pro"))') == "1"
+    return logic_census()["raw"] == "1"
 
 
 def window_names():

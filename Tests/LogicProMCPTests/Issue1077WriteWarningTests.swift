@@ -10,7 +10,8 @@ import Testing
 // tree. What each test checks is the fixture's own state after the reply: whether the warning is
 // still up and how many times its button was pressed. A reply field alone cannot show that; a
 // handler that never reads the modal set would still answer State A here. Nothing reads a clock:
-// the poll waits go through CountingSleeper.
+// the poll waits go through CountingSleeper. The last two tests drive the track-delete loop, which
+// shares the one-action-per-kind latch, over the same warning; that loop sleeps for real.
 
 // MARK: - Fixtures
 
@@ -30,20 +31,43 @@ private final class WriteWarning: @unchecked Sendable {
     private var presses = 0
     private var modeReadsSincePress = 0
     private var due = false
+    private var menuOpen = false
+    private var mainWindowReads = 0
+    private var escapes = 0
     let shape: Shape
     let arrival: Arrival
     let closesWhenPressed: Bool
+    /// Every modal read starts with the app's AXMainWindow, except the track-delete observation,
+    /// which reads the arrange window it resolved once. These script the reads counted from the
+    /// press (R1077-1): reads past `mainWindowReadsThatSucceed` fail with -25204, a press on the
+    /// warning's button opens a stray menu when `menuOpensWhenPressed`, and the read numbered
+    /// `reraisesOnMainWindowRead` finds the warning up again and the menu shut.
+    let mainWindowReadsThatSucceed: Int?
+    let menuOpensWhenPressed: Bool
+    let reraisesOnMainWindowRead: Int?
 
-    init(shape: Shape = .oneButton, arrival: Arrival = .onPress, closesWhenPressed: Bool = true) {
+    init(
+        shape: Shape = .oneButton,
+        arrival: Arrival = .onPress,
+        closesWhenPressed: Bool = true,
+        mainWindowReadsThatSucceed: Int? = nil,
+        menuOpensWhenPressed: Bool = false,
+        reraisesOnMainWindowRead: Int? = nil
+    ) {
         self.shape = shape
         self.arrival = arrival
         self.closesWhenPressed = closesWhenPressed
+        self.mainWindowReadsThatSucceed = mainWindowReadsThatSucceed
+        self.menuOpensWhenPressed = menuOpensWhenPressed
+        self.reraisesOnMainWindowRead = reraisesOnMainWindowRead
     }
 
+    /// Called for the Write press, and for the Delete Track press in the track-delete fixture.
     func writePressed() {
         lock.lock()
         defer { lock.unlock() }
         modeReadsSincePress = 0
+        mainWindowReads = 0
         switch arrival {
         case .none: break
         case .onPress: raiseLocked()
@@ -64,6 +88,27 @@ private final class WriteWarning: @unchecked Sendable {
         defer { lock.unlock() }
         presses += 1
         if closesWhenPressed { up = false }
+        if menuOpensWhenPressed { menuOpen = true }
+    }
+
+    /// One AXMainWindow read: applies the script and says whether the read succeeds.
+    func mainWindowRead() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        mainWindowReads += 1
+        if mainWindowReads == reraisesOnMainWindowRead {
+            menuOpen = false
+            raiseLocked()
+        }
+        guard let limit = mainWindowReadsThatSucceed else { return true }
+        return mainWindowReads <= limit
+    }
+
+    /// The fixture never runs AppleScript; an Escape the reconciler sends is only counted.
+    func escapeSent() {
+        lock.lock()
+        defer { lock.unlock() }
+        escapes += 1
     }
 
     func settle() {
@@ -81,6 +126,17 @@ private final class WriteWarning: @unchecked Sendable {
     var isUp: Bool { lock.lock(); defer { lock.unlock() }; return up }
     var raisedCount: Int { lock.lock(); defer { lock.unlock() }; return raised }
     var pressCount: Int { lock.lock(); defer { lock.unlock() }; return presses }
+    var isMenuOpen: Bool { lock.lock(); defer { lock.unlock() }; return menuOpen }
+    var escapeCount: Int { lock.lock(); defer { lock.unlock() }; return escapes }
+}
+
+private let axCannotComplete = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+
+private final class RowDeleted: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func set() { lock.lock(); value = true; lock.unlock() }
+    var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
 }
 
 /// Logic's app root: an arrange window plus, while the warning is up, a top-level modal AXDialog
@@ -122,15 +178,26 @@ private func makeLogicAX(
         guard CFEqual(element, arrange) else { return nil }
         return isSheet && warning.isUp ? [sheet] : []
     }
+    // One menu-bar item, selected while the fixture's stray menu is open.
+    let menuBar = builder.element(5)
+    let menuBarItem = builder.element(6)
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setChildren(menuBar, [menuBarItem])
 
     return builder.makeLogicRuntime(
         appElement: app,
         attributeValueHandler: { element, attribute in
+            if CFEqual(element, menuBarItem), attribute == (kAXSelectedAttribute as String) {
+                return AnyObject??.some(NSNumber(value: warning.isMenuOpen))
+            }
             guard attribute == (kAXWindowsAttribute as String), CFEqual(element, app) else { return nil }
             let windows: [AXUIElement] = warning.isUp && !isSheet ? [arrange, dialog] : [arrange]
             return AnyObject??.some(windows as NSArray)
         },
         attributeValueResultHandler: { element, attribute in
+            if CFEqual(element, app), attribute == (kAXMainWindowAttribute as String) {
+                return warning.mainWindowRead() ? nil : .failure(axCannotComplete)
+            }
             guard CFEqual(element, arrange) else { return nil }
             if attribute == "AXSheets" {
                 return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
@@ -146,8 +213,93 @@ private func makeLogicAX(
                 warning.buttonPressed()
             }
             return true
+        },
+        executeAppleScript: { _ in
+            warning.escapeSent()
+            return .error("fixture: AppleScript is not run")
         }
     )
+}
+
+/// The track-delete side (R1077-1 asks for the same transitions on its loop). An arrange window
+/// whose header rail loses its row when Delete Track is pressed; the press raises the fixture's
+/// one-button warning as a top-level modal dialog. AXWindows lists the arrange window, and the
+/// dialog while it is up. The Track menu-bar item doubles as the stray menu.
+private func makeDeleteAX(_ warning: WriteWarning) -> AXLogicProElements.Runtime {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(200)
+    let arrange = builder.element(201)
+    let menuBar = builder.element(202)
+    let trackMenu = builder.element(203)
+    let deleteItem = builder.element(204)
+    let headers = builder.element(205)
+    let header = builder.element(206)
+    let dialog = builder.element(207)
+    let ok = builder.element(208)
+    let rowDeleted = RowDeleted()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(arrange, kAXModalAttribute as String, false)
+    builder.setChildren(arrange, [headers])
+    builder.setAttribute(headers, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(headers, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    builder.setChildren(menuBar, [trackMenu])
+    builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+    builder.setChildren(trackMenu, [deleteItem])
+    builder.setAttribute(deleteItem, kAXTitleAttribute as String, AXLocalePolicy.deleteTrackMenuItem.canonical)
+    builder.setAttribute(dialog, kAXModalAttribute as String, true)
+    builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(ok, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(ok, kAXTitleAttribute as String, "OK")
+    builder.setChildren(dialog, [ok])
+    let headerRows: @Sendable (AXUIElement) -> [AXUIElement]? = { element in
+        guard CFEqual(element, headers) else { return nil }
+        return rowDeleted.isSet ? [] : [header]
+    }
+
+    return builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { element, attribute in
+            if CFEqual(element, trackMenu), attribute == (kAXSelectedAttribute as String) {
+                return AnyObject??.some(NSNumber(value: warning.isMenuOpen))
+            }
+            guard attribute == (kAXWindowsAttribute as String), CFEqual(element, app) else { return nil }
+            let windows: [AXUIElement] = warning.isUp ? [arrange, dialog] : [arrange]
+            return AnyObject??.some(windows as NSArray)
+        },
+        attributeValueResultHandler: { element, attribute in
+            if CFEqual(element, app), attribute == (kAXMainWindowAttribute as String) {
+                return warning.mainWindowRead() ? nil : .failure(axCannotComplete)
+            }
+            guard CFEqual(element, arrange), attribute == "AXSheets" else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+        },
+        childrenHandler: headerRows,
+        childrenResultHandler: { element in headerRows(element).map { .success($0) } },
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard action == (kAXPressAction as String) else { return false }
+            if CFEqual(element, deleteItem) {
+                rowDeleted.set()
+                warning.writePressed()
+            } else if CFEqual(element, ok) {
+                warning.buttonPressed()
+            }
+            return true
+        },
+        executeAppleScript: { _ in
+            warning.escapeSent()
+            return .error("fixture: AppleScript is not run")
+        }
+    )
+}
+
+private func deleteTrack(_ warning: WriteWarning) async -> [String: Any] {
+    let result = await AccessibilityChannel.defaultDeleteTrack(runtime: makeDeleteAX(warning))
+    return (try? JSONSerialization.jsonObject(with: Data(result.message.utf8))) as? [String: Any] ?? [:]
 }
 
 /// One track whose automation mode is set by the mode buttons, with Select moving the selection.
@@ -404,5 +556,80 @@ struct Issue1077WriteWarningTests {
     @Test func theServerWiresTheModalWatch() async throws {
         let server = LogicProServer()
         #expect(await server.mcuObservesModalAfterAutomationPressForTesting)
+    }
+
+    // MARK: R1077-1 — a sighting outlives the reads after it, and the limit binds the kind pressed
+
+    /// The observation sees the warning; the executor's fresh read then fails at AXMainWindow, and
+    /// so does every read after it. Nothing was pressed, and the reply must still name the warning
+    /// it saw. The modal set never read complete again, so the reply is not State A.
+    @Test func aWarningSeenBeforeAnUnreadableReconcileReadIsStillNamed() async throws {
+        let warning = WriteWarning(mainWindowReadsThatSucceed: 1)
+        let run = await setAutomation("write", warning: warning)
+
+        // The seam fired: the warning went up and the first read could see it.
+        #expect(warning.raisedCount == 1)
+        #expect(warning.pressCount == 0)
+        #expect(warning.isUp)
+        #expect(run.body["observed_mode"] as? String == "write")
+        #expect(run.body["state"] as? String == "B")
+        #expect(run.body["reason"] as? String == "readback_unavailable")
+        #expect(run.body["modal_after_press"] as? String == "unreadable")
+        #expect(run.body["reconciled_modal_kind"] as? String == "informational_alert")
+        #expect(run.body["reconciled_action"] as? String == "none")
+        #expect(run.body["modal_reconciliation_witness"] == nil)
+    }
+
+    /// The warning is acknowledged, and the press opens a menu. The next observation sees that
+    /// menu, which nothing acted on, so the executor runs; by its fresh read the warning is up
+    /// again. The warning's kind was already acted on, so it is not pressed a second time, and the
+    /// reply keeps the first acknowledgement beside the warning that is still up.
+    @Test func aKindAlreadyActedOnIsNotPressedAgainWhenTheFreshReadFindsIt() async throws {
+        let warning = WriteWarning(menuOpensWhenPressed: true, reraisesOnMainWindowRead: 4)
+        let run = await setAutomation("write", warning: warning)
+
+        // The seam fired: raised on the press and again on the fourth read.
+        #expect(warning.raisedCount == 2)
+        #expect(warning.pressCount == 1)
+        #expect(warning.isUp)
+        #expect(!warning.isMenuOpen)
+        #expect(warning.escapeCount == 0)
+        #expect(run.body["state"] as? String == "B")
+        #expect(run.body["reason"] as? String == "modal_left_open")
+        #expect(run.body["modal_after_press"] as? String == "open")
+        #expect(run.body["reconciled_modal_kind"] as? String == "informational_alert")
+        #expect(run.body["reconciled_action"] as? String == "acknowledge_alert")
+        #expect(run.body["modal_reconciliation_witness"] != nil)
+    }
+
+    /// The track-delete loop, first transition: its observation (on the arrange window it resolved
+    /// once) sees the warning, and its executor's fresh read fails at AXMainWindow on every poll.
+    @Test func deleteNamesAWarningItsFreshReadCouldNotSee() async throws {
+        let warning = WriteWarning(mainWindowReadsThatSucceed: 0)
+        let body = await deleteTrack(warning)
+
+        #expect(warning.raisedCount == 1)
+        #expect(warning.pressCount == 0)
+        #expect(warning.isUp)
+        #expect(body["state"] as? String == "B")
+        #expect(body["reason"] as? String == "retry_exhausted")
+        #expect(body["reconciled_modal_kind"] as? String == "informational_alert")
+        #expect(body["reconciled_action"] as? String == "none")
+    }
+
+    /// The track-delete loop, second transition: the warning is acknowledged on the first poll and
+    /// a menu opens; the second poll observes the menu, and its executor's fresh read (the second
+    /// AXMainWindow read) finds the warning again. It is not pressed again.
+    @Test func deleteDoesNotPressAWarningTwiceWhenAMenuWasObservedInBetween() async throws {
+        let warning = WriteWarning(menuOpensWhenPressed: true, reraisesOnMainWindowRead: 2)
+        let body = await deleteTrack(warning)
+
+        #expect(warning.raisedCount == 2)
+        #expect(warning.pressCount == 1)
+        #expect(warning.isUp)
+        #expect(warning.escapeCount == 0)
+        #expect(body["state"] as? String == "B")
+        #expect(body["reconciled_modal_kind"] as? String == "informational_alert")
+        #expect(body["reconciled_action"] as? String == "acknowledge_alert")
     }
 }

@@ -32,8 +32,11 @@ again 1.5 s later.
      no window that was not there before the call may be listed after the reply; and System Events
      must count no one-button dialog at either reading. Logic is then quit at once.
 
-Every quit is read the same way: whether the Logic process is gone, and which `Logic Pro-*.ips`
-crash reports appeared in ~/Library/Logs/DiagnosticReports within 8 s of it.
+Every quit is read the same way: whether live_993's `quit_logic` returned True, Logic's process
+count before the quit and 8 s after it (live_993's `logic_census`, which keeps a count that did not
+read apart from a count of 0), and which `Logic Pro-*.ips` crash reports appeared in
+~/Library/Logs/DiagnosticReports within those 8 s. A quit counts only when it returned True and the
+count read as running before it and as 0 after it; an unreadable or malformed count is not a quit.
 
 PASS
 ----
@@ -339,17 +342,35 @@ def crash_reports():
 
 
 def quit_and_read():
-    """Quit Logic through live_993, then list the crash reports that appeared within CRASH_WAIT."""
+    """Quit Logic through live_993, then list the crash reports that appeared within CRASH_WAIT.
+
+    The process is counted before the quit and after the wait with live_993's `logic_census`, which
+    keeps a count that did not read apart from a count of 0. `quit_logic` alone cannot witness the
+    quit: it returns True without quitting when its own first count does not read.
+    """
     before = crash_reports()
+    census_before = L993.logic_census()
     started = time.monotonic()
     quit_returned = L993.quit_logic()
     seconds = round(time.monotonic() - started, 3)
     time.sleep(CRASH_WAIT)
     after = crash_reports()
     return {"quit_returned": quit_returned, "quit_seconds": seconds,
-            "logic_gone": not L993.logic_running(),
+            "census_before": census_before, "census_after": L993.logic_census(),
             "new_crash_reports": None if before is None or after is None
             else sorted(os.path.basename(p) for p in after - before)}
+
+
+def quit_witnessed(quit):
+    """Logic read as running before the quit, the quit returned True, and Logic read as gone after.
+
+    A census that did not read, or answered something other than a count, is not "gone", and a quit
+    that returned anything but True is not a quit, whatever the count says afterwards.
+    """
+    quit = quit if isinstance(quit, dict) else {}
+    return (quit.get("quit_returned") is True
+            and (quit.get("census_before") or {}).get("status") == "running"
+            and (quit.get("census_after") or {}).get("status") == "gone")
 
 
 def control_left_it_up(phase):
@@ -384,7 +405,7 @@ def candidate_cleared_it(phase):
 
 
 def quit_left_no_crash(quit):
-    return bool(quit) and quit.get("logic_gone") is True and quit.get("new_crash_reports") == []
+    return quit_witnessed(quit) and quit.get("new_crash_reports") == []
 
 
 def main():
@@ -444,8 +465,10 @@ def main():
                                   "modal_after_press": reply.get("modal_after_press"),
                                   "after_reply": phase.get("after_reply"),
                                   "quit": row[f"{role}_quit"]}, ensure_ascii=False), flush=True)
-                if not row[f"{role}_quit"].get("logic_gone"):
-                    failures[lproj] = f"Logic was still running after the {role}'s quit"
+                if not quit_witnessed(row[f"{role}_quit"]):
+                    failures[lproj] = (f"the {role}'s quit was not witnessed: it did not return "
+                                       f"True, or Logic was not counted running before it and "
+                                       f"gone after it")
                     break
             if lproj in failures:
                 break
@@ -480,8 +503,9 @@ def main():
                                 "executeAutomation): the warning stays up as it does for the control")
         ev.check(f"1077/{lproj}/candidate-quit-leaves-no-crash-report",
                  quit_left_no_crash(row.get("candidate_quit")),
-                 "Logic is gone after the quit that follows the candidate's Write press, and no "
-                 "Logic Pro crash report appeared within 8 s",
+                 "the quit that follows the candidate's Write press returned True, Logic's process "
+                 "count read as running before it and as 0 after it, and no Logic Pro crash report "
+                 "appeared within 8 s",
                  row.get("candidate_quit"),
                  "drop the modal poll after the mode press: the quit then meets the warning, as the "
                  "control's does")

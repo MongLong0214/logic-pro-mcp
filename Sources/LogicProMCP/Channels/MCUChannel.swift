@@ -188,11 +188,11 @@ actor MCUChannel: Channel {
         let readArmed: @Sendable (Int) async -> Bool?
         /// Reads Logic's modal set after an automation-mode press (#1077). Logic answers the Write
         /// press with a one-button warning and leaves it up; quitting Logic under it crashed Logic
-        /// 4 of 4 times. With `act` false this only observes. With `act` true it reads again and
-        /// clears only what is safe to clear, a one-button informational alert or a stray open
-        /// menu, and reports anything else untouched. `nil` means nothing observes the modal set,
+        /// 4 of 4 times. `.observe` only reads. `.reconcile` reads again and clears only what is
+        /// safe to clear, a one-button informational alert or a stray open menu, never a withheld
+        /// kind, and reports anything else untouched. `nil` means nothing observes the modal set,
         /// and the reply then says nothing about it.
-        let reconcileModal: (@Sendable (_ act: Bool) async -> AccessibilityChannel.ModalReconcileOutcome)?
+        let reconcileModal: (@Sendable (_ request: AccessibilityChannel.ModalWatchRequest) async -> AccessibilityChannel.ModalReconcileOutcome)?
 
         init(
             readVolume: @escaping @Sendable (Int) async -> Double?,
@@ -202,7 +202,7 @@ actor MCUChannel: Channel {
             readMuted: @escaping @Sendable (Int) async -> Bool? = { _ in nil },
             readSoloed: @escaping @Sendable (Int) async -> Bool? = { _ in nil },
             readArmed: @escaping @Sendable (Int) async -> Bool? = { _ in nil },
-            reconcileModal: (@Sendable (_ act: Bool) async -> AccessibilityChannel.ModalReconcileOutcome)? = nil
+            reconcileModal: (@Sendable (_ request: AccessibilityChannel.ModalWatchRequest) async -> AccessibilityChannel.ModalReconcileOutcome)? = nil
         ) {
             self.readVolume = readVolume
             self.readPan = readPan
@@ -1840,37 +1840,35 @@ actor MCUChannel: Channel {
 /// What the polls after an automation press saw of Logic's modal set (#1077).
 ///
 /// `cleanStreak` counts consecutive complete reads that found no blocker; a blocker or an
-/// incomplete read drops it to 0. A blocker is acted on at most once per kind, the way the
-/// track-delete poll does it, so a press that did not close a dialog is not repeated into the
-/// operation deadline. The provenance of the last blocker seen outlives the clean reads that
-/// follow, so a reply after an acknowledged warning still names it.
+/// incomplete read drops it to 0. A blocker is acted on at most once per kind through the same
+/// `ModalActionLatch` the track-delete poll uses, so a press that did not close a dialog is not
+/// repeated into the operation deadline, and a fresh read that finds a kind already acted on does
+/// not act on it again. Every read is absorbed, the observation and then the executor's own read,
+/// so a blocker the observation saw is named even when the executor's read then fails. The last
+/// blocker seen outlives the reads that follow, clean or unreadable, so a reply after an
+/// acknowledged warning still names it.
 struct AutomationModalWatch {
     private(set) var cleanStreak = 0
     private var polled = false
     private var lastReadComplete = true
     private var lastKind: ModalReconciliation.BlockingModalKind = .none
-    private var actedKinds: Set<String> = []
+    private var latch = AccessibilityChannel.ModalActionLatch()
+    /// The last blocker any read saw.
     private var kind: ModalReconciliation.BlockingModalKind = .none
-    private var action = "none"
-    private var actionKind: ModalReconciliation.BlockingModalKind = .none
-    private var witnessSummary: AccessibilityChannel.ModalReconcileWitnessSummary?
     private var refusal: AccessibilityChannel.AlertAcknowledgeRefusal?
-    private var actionFailure: AXHelpers.AXActionError?
     private var unreadableReason: AccessibilityChannel.ModalReadFailure?
     private var sheetScanFailureDetail: AccessibilityChannel.ModalSheetScanFailureDetail?
 
     mutating func poll(
-        _ reconcile: @Sendable (_ act: Bool) async -> AccessibilityChannel.ModalReconcileOutcome
+        _ reader: @Sendable (_ request: AccessibilityChannel.ModalWatchRequest) async
+            -> AccessibilityChannel.ModalReconcileOutcome
     ) async {
-        var outcome = await reconcile(false)
-        let label = AccessibilityChannel.reconcileKindLabel(outcome.kind)
-        if outcome.kind != .none, !actedKinds.contains(label) {
-            outcome = await reconcile(true)
-            if outcome.actionAttempted {
-                actedKinds.insert(AccessibilityChannel.reconcileKindLabel(outcome.kind))
-            }
-        }
-        absorb(outcome)
+        let step = await latch.poll(
+            observe: { await reader(.observe) },
+            reconcile: { withholding in await reader(.reconcile(withholding: withholding)) }
+        )
+        absorb(step.observed)
+        if let reconciled = step.reconciled { absorb(reconciled) }
     }
 
     private mutating func absorb(_ outcome: AccessibilityChannel.ModalReconcileOutcome) {
@@ -1884,18 +1882,6 @@ struct AutomationModalWatch {
         guard outcome.kind != .none else { return }
         kind = outcome.kind
         if let refusal = outcome.refusal { self.refusal = refusal }
-        if outcome.actionAttempted {
-            action = AccessibilityChannel.attemptedReconcileActionLabel(outcome)
-            actionKind = outcome.kind
-            witnessSummary = outcome.witnessSummary
-            actionFailure = outcome.actionFailure
-        } else if actionKind != outcome.kind {
-            // A new blocker nothing acted on must not inherit the earlier kind's action or witness.
-            action = "none"
-            actionKind = .none
-            witnessSummary = nil
-            actionFailure = nil
-        }
     }
 
     /// The state of the last read: `open` (it found a blocker), `clear` (complete, no blocker) or
@@ -1910,18 +1896,20 @@ struct AutomationModalWatch {
     }
 
     /// `modal_after_press` carries `lastRead`; the reconcile fields name the last blocker seen
-    /// and what was done about it.
+    /// and what was done about that kind: the action, its witness and any AX failure come from
+    /// the last action issued on it, and `none` when nothing acted on it.
     func apply(to extras: inout [String: Any]) {
         guard polled else { return }
         extras["modal_after_press"] = lastRead.rawValue
+        let acted = latch.action(on: kind)
         AccessibilityChannel.mergeReconcileExtras(
             &extras,
             kind: kind,
-            action: action,
+            action: acted.map(AccessibilityChannel.attemptedReconcileActionLabel) ?? "none",
             newTrackAutoConfirmed: false,
-            witnessSummary: witnessSummary,
+            witnessSummary: acted?.witnessSummary,
             refusal: refusal,
-            actionFailure: actionFailure,
+            actionFailure: acted?.actionFailure,
             unreadableReason: unreadableReason,
             sheetScanFailureDetail: sheetScanFailureDetail
         )
