@@ -44,7 +44,7 @@ menu, dialog and menu_over_dialog and must leave each surface up and carry no se
 
 Every reading of the screen the harness makes is its own: Logic-owned windows from
 CGWindowListCopyWindowInfo, taken after the reply and again 1.5 s later. A menu is a Logic window at
-or above the pop-up menu level; the dialog is a Logic window that was not listed before the hold and
+the pop-up menu level, layer 101, and no other; the dialog is a Logic window that was not listed before the hold and
 whose name is a measured Go To Position title in docs/locale/ui-labels.json. Clean-up (Escapes, and
 the Window menu item that closes the Step Input Keyboard) is outside the measured bracket and is
 verified by a re-read before the next hold.

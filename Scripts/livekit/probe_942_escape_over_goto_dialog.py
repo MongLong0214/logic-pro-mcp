@@ -17,15 +17,17 @@ HOW IT IS READ
 --------------
 Everything is read from the window server's on-screen list, not from AX: a modal dialog poisons AX
 reads, and an open menu wedges AppleEvents, so neither can be trusted in exactly the state under test.
-A Logic menu is a Logic-owned window at or above the pop-up menu level. The dialog is the Logic-owned
+A Logic menu is a Logic-owned window at the pop-up menu level, layer 101, and no other. The dialog is the Logic-owned
 window that appeared after its menu item was clicked and whose window-server name is one of the
 dialog's measured titles in docs/locale/ui-labels.json. A list the window server did not hand back is
 unknown, and the sample fails.
 
 The Escape is posted the way the server posts it (`AXLogicProElements.Runtime.livePostPopupMenuEscape`):
 a key-down and key-up for virtual key 53 at the HID event tap, which goes to whichever application owns
-the keyboard. The first layer-0 window's owner is recorded before every Escape, and a sample in which it
-is not Logic fails, because that Escape would have gone somewhere else.
+the keyboard. Before every Escape the keyboard's owner is read the way the server reads it: the first
+window at layer 0 or at the modal-panel level, layer 8, whose owner must be Logic, and the focused
+application, which when it reads must be that same process (`keyboard_owner_is_logic`). A sample in
+which it is not Logic fails, because that Escape would have gone somewhere else.
 
 Each sample, from a screen with no Logic menu and no dialog:
   1. open the dialog from the menu bar; one Escape; the dialog must be gone. This is the control: it
