@@ -193,6 +193,36 @@ def subscribe_and_count(driver, uris, seconds):
     return [replies.get(i, False) for i in ids], notifications
 
 
+TEXT_ROLES = ("AXTextField", "AXTextArea")
+
+
+def settle_focus(helper):
+    """Leave the focus on the Tracks rail before a sample starts, and return its role. A sample
+    that lost the field can leave a text field focused, and a server started then yields from its
+    first tick, so its publication never runs (seen 2026-10-03: the candidate's first subscribed
+    sample in every language had no notification). Up to three rounds: an Escape, sent only while
+    Logic holds the keyboard and a text field has the focus, then the rail. Every round is returned,
+    so a sample that could not leave a text field says why (seen in German: two in a row)."""
+    attempts = []
+    for _ in range(3):
+        P.osa('tell application "Logic Pro" to activate')
+        role = focused_role(helper)
+        owner = P.keyboard_owner_is_logic()
+        escaped = role in TEXT_ROLES and owner is True
+        if escaped:
+            P.post_escape()
+            time.sleep(0.7)
+        subprocess.run([helper, "keymain", *P.names("arrangeWindowTitleSuffix")], capture_output=True,
+                       text=True, timeout=10)
+        subprocess.run([helper, "focusrail", *P.names("trackHeadersDescription")], capture_output=True,
+                       text=True, timeout=15)
+        after = focused_role(helper)
+        attempts.append({"role": role, "keyboard_owner_is_logic": owner, "escaped": escaped, "role_after": after})
+        if after not in TEXT_ROLES:
+            break
+    return attempts
+
+
 def server_trace(driver, start_ms, end_ms):
     """The `poll-trace` lines a debug build writes to stderr under LOGIC_MCP_DEBUG_POLL_TRACE=1,
     between two wall-clock times, as [ms, stage]. Empty for a build without the trace."""
