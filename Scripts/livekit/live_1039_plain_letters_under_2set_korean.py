@@ -618,6 +618,8 @@ def main():
             runs[lproj] = {"launch": language}
             ARRANGE["title"] = language.get("arrange_window")
             runs[lproj]["plain_bindings"] = plain_bindings()
+            ev.note(f"1039/{lproj}/plain-bindings", {"characters": runs[lproj]["plain_bindings"],
+                                                     "source": LOGIC_PREFERENCES})
             if language.get("arrange_window") is None \
                     or language.get("language_setting", [])[:1] != [L993.CODES[lproj]]:
                 failures[lproj] = "the fixture did not open in this language"
