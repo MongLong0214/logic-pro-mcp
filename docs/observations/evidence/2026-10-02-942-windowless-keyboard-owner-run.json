@@ -1,10 +1,10 @@
 {
  "name": "live_942_windowless_keyboard_owner",
- "head": "5977af91314f405bb2f7383d2cc13d7557fcd77d",
+ "head": "e0af4f1248ffbeea1c53d5afdbb6cfddbee2913f",
  "artifact": {
-  "path": "/Users/isaac/lpm-evidence/942/bin-5977af91/candidate/LogicProMCP",
-  "sha256": "9ff430939674742c269ba8872571a40247af4cefcc7a23ab63dd1d25acfe4bf5",
-  "built_from": "5977af91314f405bb2f7383d2cc13d7557fcd77d",
+  "path": "/Users/isaac/lpm-evidence/942/bin-e0af4f12/candidate/LogicProMCP",
+  "sha256": "81efb0e1b5369f27207b80025dfa9b6bc8d65adc461530fcf3c073ebe105905d",
+  "built_from": "e0af4f1248ffbeea1c53d5afdbb6cfddbee2913f",
   "worktree_clean": true,
   "built_from_is_measured": false,
   "artifact_older_than_sources": false
@@ -18,8 +18,8 @@
    "kind": "observation",
    "tag": "942-windowless/binaries",
    "payload": {
-    "candidate": "/Users/isaac/lpm-evidence/942/bin-5977af91/candidate/LogicProMCP",
-    "candidate_sha256": "9ff430939674742c269ba8872571a40247af4cefcc7a23ab63dd1d25acfe4bf5",
+    "candidate": "/Users/isaac/lpm-evidence/942/bin-e0af4f12/candidate/LogicProMCP",
+    "candidate_sha256": "81efb0e1b5369f27207b80025dfa9b6bc8d65adc461530fcf3c073ebe105905d",
     "control": "/Users/isaac/lpm-evidence/942/bin-a7913248/candidate/LogicProMCP",
     "control_sha256": "fc6e1a9f8193c88a8a6030859e6c00f580c375b164644df5a44e67242ea13f9a",
     "lprojs": [
