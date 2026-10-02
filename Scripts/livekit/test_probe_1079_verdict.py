@@ -55,6 +55,16 @@ def main():
          ["none", "candidate", "control"], False),
     ]
     unexpected = 0
+    # The context is required: a call without it cannot be made, so it cannot pass candidate-free
+    # rows the way the first repair's default call did.
+    for name, call in (("a call with rows alone", lambda: probe.verdict([r for r in everything if r["condition"] == "control"])),
+                       ("a call without the sample count", lambda: probe.verdict(everything, lprojs, ["none", "candidate", "control"]))):
+        try:
+            call()
+            print(f"FAIL {name} -> returned instead of refusing")
+            unexpected += 1
+        except TypeError:
+            print(f"ok   {name} -> refused")
     for name, rows, conditions, passes in cases:
         failures = probe.verdict(rows, lprojs, conditions, samples)
         ok = (not failures) is passes

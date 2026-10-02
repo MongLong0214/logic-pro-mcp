@@ -312,21 +312,22 @@ def sample(helper, condition, binary, n):
 CONDITIONS = ("none", "candidate", "control")
 
 
-def verdict(rows, lprojs=None, conditions=CONDITIONS, samples=None):
+def verdict(rows, lprojs, conditions, samples):
     """Per language: every sample ran and opened; none and candidate kept the field and typed into
     it; the control lost it at least once. A run without all three conditions is a search and
     cannot pass, and every (language, condition, sample) asked for must have a row: a broken
-    candidate must not be able to pass a run that never ran it (supplementary review S-02)."""
+    candidate must not be able to pass a run that never ran it (supplementary review S-02). The
+    languages, conditions and sample count are required: without them no call can know what is
+    missing, and the first repair kept a default call that passed candidate-free rows."""
     failures = []
     if tuple(sorted(conditions)) != tuple(sorted(CONDITIONS)):
         failures.append(f"conditions {', '.join(conditions)}: a search, not a verdict")
-    if lprojs is not None and samples is not None:
-        have = {(r.get("lproj"), r.get("condition"), r.get("sample")) for r in rows}
-        for lproj in lprojs:
-            for condition in conditions:
-                for n in range(samples):
-                    if (lproj, condition, n) not in have:
-                        failures.append(f"{lproj}/{condition}/{n}: no row")
+    have = {(r.get("lproj"), r.get("condition"), r.get("sample")) for r in rows}
+    for lproj in lprojs:
+        for condition in conditions:
+            for n in range(samples):
+                if (lproj, condition, n) not in have:
+                    failures.append(f"{lproj}/{condition}/{n}: no row")
     for row in rows:
         if SUBSCRIBING and row["condition"] in ("control", "candidate") and row.get("outcome") in ("kept", "lost"):
             if not row.get("subscribed") or not all(row["subscribed"]):
