@@ -42,7 +42,12 @@ def stored_row(harness):
 def main():
     harness = load("live_1039_plain_letters_under_2set_korean")
     row = stored_row(harness)
-    dvorak = {"ok": True, "ascii_layout": harness.DVORAK, "current": harness.KOREAN_2SET}
+    # What the tool reads on this host: Dvorak types t on the U.S. K key and a on the A key.
+    keys = {"k": {"abc": "k", "dvorak": "t"}, "a": {"abc": "a", "dvorak": "a"}}
+    dvorak = {"ok": True, "ascii_layout": harness.DVORAK, "current": harness.KOREAN_2SET, "us_letter_keys": keys}
+    automation = "automation.toggle_view"
+    a_row = dict(row, op=automation, accessibility_first=False)
+    on_dvorak = [dict(r, input_source_switched_to=harness.DVORAK) for r in row["replies"]]
     cases = [
         # The positive control: the row as the run recorded it.
         ("the stored row, its key bound", row, True),
@@ -63,6 +68,12 @@ def main():
          False),
         ("a Dvorak history required and the tool failing",
          dict(row, history_required=True, ascii_histories=[dvorak, dict(dvorak, ok=False)]), False),
+        ("K under a Dvorak history, gone out under Dvorak, which types t",
+         dict(row, history_required=True, ascii_histories=[dvorak, dvorak], replies=on_dvorak), False),
+        ("A under a Dvorak history, gone out under Dvorak, which types a",
+         dict(a_row, history_required=True, ascii_histories=[dvorak, dvorak], replies=on_dvorak), True),
+        ("A under a Dvorak history, gone out under ABC although Dvorak types a",
+         dict(a_row, history_required=True, ascii_histories=[dvorak, dvorak]), False),
     ]
     unexpected = 0
     for name, case, want in cases:

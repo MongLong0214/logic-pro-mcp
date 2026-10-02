@@ -464,6 +464,7 @@ def activate_logic():
 
 ASCII_HISTORY_TOOL = None
 DVORAK = "com.apple.keylayout.Dvorak"
+ABC = "com.apple.keylayout.ABC"
 
 
 def set_ascii_history():
@@ -633,15 +634,23 @@ def candidate_switched(row):
         for r in toggled)
     routed = all(r.get("method") == "cgevent" for r in toggled) if row.get("accessibility_first") else True
     # Review R1 of #1085: the layout the key went out under is the one that types its letter.
-    expected = row.get("expect_switched_to")
-    named = expected is None or all(r.get("input_source_switched_to") == expected for r in toggled)
-    # Under a Dvorak history, each call must have been made with Dvorak as TIS's offer.
     histories = (row.get("ascii_histories") or [])[:len(toggled)]
-    offered = (not row.get("history_required")) or (
-        len(histories) == len(toggled) and all(
+    if row.get("history_required"):
+        # Each call was made with Dvorak as TIS's offer, read by the tool just before it. Dvorak
+        # is kept for a key it types as the U.S. letter (A), and ABC is selected for any other.
+        letter = CHARACTERS.get(row.get("op"))
+        offered = len(histories) == len(toggled) and all(
             isinstance(h, dict) and h.get("ok") is True and h.get("ascii_layout") == DVORAK
-            for h in histories))
-    return switched and routed and named and offered and bool(sources) and all(s == KOREAN_2SET for s in sources)
+            for h in histories)
+        named = offered and letter is not None and all(
+            r.get("input_source_switched_to")
+            == (DVORAK if ((h.get("us_letter_keys") or {}).get(letter) or {}).get("dvorak") == letter else ABC)
+            and ((h.get("us_letter_keys") or {}).get(letter) or {}).get("abc") == letter
+            for r, h in zip(toggled, histories))
+    else:
+        expected = row.get("expect_switched_to")
+        named = expected is None or all(r.get("input_source_switched_to") == expected for r in toggled)
+    return switched and routed and named and bool(sources) and all(s == KOREAN_2SET for s in sources)
 
 
 def candidate_acted(row):
