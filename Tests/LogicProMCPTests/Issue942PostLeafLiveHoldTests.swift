@@ -101,7 +101,12 @@ import Testing
         if AccessibilityChannel.postLeafLiveHoldAppearanceResults[name] != nil {
             #expect(outcome == name, "\(name)")
         } else {
-            #expect(outcome.hasSuffix("_cleanup_closed_false"), "\(name)")
+            // The exact classification of this site's prefix, not the suffix every site shares
+            // (supplementary review S-06 of #1083).
+            let prefix = expected.components(separatedBy: AccessibilityChannel.PostLeafCleanupSite.dialogRefusal)[0]
+            let parts = prefix.components(separatedBy: ": ")
+            let label = parts[0].lowercased() + (parts.count > 1 ? "_" + parts[1] : "") + "_cleanup_closed_false"
+            #expect(outcome == label, "\(name): \(outcome), not \(label)")
         }
         let entered = try String(contentsOf: folder.appendingPathComponent("entered"), encoding: .utf8)
         #expect(entered == expected, "\(name)")
