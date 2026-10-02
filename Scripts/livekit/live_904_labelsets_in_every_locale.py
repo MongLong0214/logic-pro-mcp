@@ -326,21 +326,26 @@ def track_named(rows, name):
 
 
 #: Every alert `acknowledge_alert` answered, as {"locale", "call", "button", "text"}, so the summary
-#: shows it; an entry whose button is None is a poll osascript could not read.
+#: shows it; an entry whose button is None pressed nothing. An entry for a call in which any poll
+#: went unread also carries "unreadable_polls" (how many) and "unreadable_why" (one reason each, in
+#: order), whether or not a later poll pressed.
 ACKNOWLEDGED_ALERTS = []
 #: Seconds `acknowledge_alert` watches for the alert, and between its polls.
 ALERT_WAIT, ALERT_POLL = 2.0, 0.25
 #: Only a dialog with exactly one button is pressed, and only through its AXDefaultButton when that
-#: is the one button: a save prompt (more than one button, or none AX can reach) is left alone.
+#: is the one button: a save prompt (more than one button, or none AX can reach) is left alone. A
+#: one-button dialog whose default button cannot be read is not pressed and answers "unreadable"
+#: with the error number, so the poll is counted rather than read as no dialog.
 ACKNOWLEDGE_SCRIPT = '''tell application "System Events" to tell process "Logic Pro"
   repeat with d in (windows whose subrole is "AXDialog")
     if (count of buttons of d) is 1 then
-      set b to missing value
       try
-        set candidate to value of attribute "AXDefaultButton" of d
-        if (name of candidate as string) is (name of button 1 of d as string) then set b to candidate
+        set b to value of attribute "AXDefaultButton" of d
+        set isDefault to (name of b as string) is (name of button 1 of d as string)
+      on error number e
+        return "unreadable" & linefeed & e
       end try
-      if b is not missing value then
+      if isDefault then
         set t to ""
         try
           set t to (value of static text 1 of d) as string
@@ -358,25 +363,36 @@ end tell'''
 def acknowledge_alert():
     """Press the default button of a Logic dialog with exactly one button, if one appears.
 
-    Polls for up to ALERT_WAIT seconds. Returns {"button", "text"} for the dialog it pressed, and
-    None when every poll read no such dialog. A poll osascript could not read is not a poll that saw
-    nothing: when no dialog was pressed and any poll was unreadable, the return is
-    {"button": None, "text": None, "unreadable_polls": n}.
+    Polls for up to ALERT_WAIT seconds, and no probe runs past that: osascript, and any System
+    Events restart `L993.osa` makes, get only the time left. Returns {"button", "text"} for the
+    dialog it pressed, and None when every poll read no such dialog. A poll that went unread is not
+    a poll that saw nothing, and a reply that came back after the deadline is not taken: either is
+    kept, with its reason, as "unreadable_polls" and "unreadable_why" on the return, which is
+    {"button": None, "text": None, ...} when nothing was pressed.
     """
     deadline = time.monotonic() + ALERT_WAIT
-    unreadable = 0
+    why, pressed = [], None
     while True:
-        out = L993.osa(ACKNOWLEDGE_SCRIPT)
-        parts = (out or "").split("\n", 2)
-        if parts[0] == "pressed":
-            parts += ["", ""]
-            return {"button": parts[1], "text": parts[2]}
-        if out != "none":
-            unreadable += 1
+        out = L993.osa(ACKNOWLEDGE_SCRIPT, deadline=deadline)
+        parts = (out or "").split("\n", 2) + ["", ""]
+        if out is None:
+            why.append("no_reply")
+        elif time.monotonic() > deadline:
+            why.append(f"after_deadline:{parts[0]}")
+        elif parts[0] == "pressed":
+            pressed = {"button": parts[1], "text": parts[2]}
+            break
+        elif parts[0] == "unreadable":
+            why.append(f"AXDefaultButton:{parts[1]}")
+        elif out != "none":
+            why.append("unexpected_reply")
         if time.monotonic() + ALERT_POLL > deadline:
             break
         time.sleep(ALERT_POLL)
-    return {"button": None, "text": None, "unreadable_polls": unreadable} if unreadable else None
+    unread = {"unreadable_polls": len(why), "unreadable_why": why} if why else {}
+    if pressed is None:
+        return {"button": None, "text": None, **unread} if why else None
+    return {**pressed, **unread}
 
 
 #: Seconds `park_pointer` waits after its move before it reads the pointer back.

@@ -24,6 +24,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import types
@@ -498,8 +499,10 @@ class UnobservedReadCanned(RecordingCanned):
         return RecordingCanned.tool(self, name, command, params)
 
 
-def alert_run(base):
-    """main() with an alert poll that finds a dialog only right after a Write request."""
+def alert_run(base, answer=None):
+    """main() with an alert poll that finds a dialog only right after a Write request, and answers
+    `answer` (by default a press of "b" with text "t") for it."""
+    answer = answer or {"button": "b", "text": "t"}
     seen = {"last": None, "set_automation": 0, "polls": 0}
 
     class Driver(base):
@@ -510,7 +513,7 @@ def alert_run(base):
 
     def poll():
         seen["polls"] += 1
-        return {"button": "b", "text": "t"} if seen["last"] == ("set_automation", "write") else None
+        return dict(answer) if seen["last"] == ("set_automation", "write") else None
 
     code, _, _, runner = run_main({}, driver=Driver, acknowledge=poll)
     return code, runner, seen
@@ -526,6 +529,12 @@ check("the alert poll runs once for every set_automation call the driver answere
 code, runner, seen = alert_run(UnobservedReadCanned)
 check("the second read after the extra toggle_view is polled too: once per set_automation call",
       seen["polls"] == seen["set_automation"] == len(R.AUTOMATION_MODES) + 1, seen)
+code, runner, seen = alert_run(RecordingCanned, {"button": "b", "text": "t", "unreadable_polls": 1,
+                                                 "unreadable_why": ["no_reply"]})
+expect("a press that came after an unread poll reaches the summary with both",
+       (runner or {}).get("acknowledged_alerts"),
+       [{"locale": "de", "call": "set_automation:write", "button": "b", "text": "t",
+         "unreadable_polls": 1, "unreadable_why": ["no_reply"]}])
 
 # acknowledge_alert itself, with osascript answered from a list: a press, no dialog, and a poll
 # osascript could not read, which is not a poll that saw nothing.
@@ -549,7 +558,7 @@ def poll_with(replies, wait=0.0):
     saved = (L993.osa, R.ALERT_WAIT, R.time)
     answers, sent = iter(replies), []
 
-    def osa(script, timeout=20):
+    def osa(script, timeout=20, deadline=None):
         sent.append(script)
         return next(answers, "none")
 
@@ -568,7 +577,14 @@ expect("a pressed dialog with an empty name and text is still a press",
        poll_with(["pressed"])[0], {"button": "", "text": ""})
 expect("no dialog is None", poll_with(["none"])[0], None)
 expect("an unreadable poll is recorded, not read as no dialog",
-       poll_with([None])[0], {"button": None, "text": None, "unreadable_polls": 1})
+       poll_with([None])[0],
+       {"button": None, "text": None, "unreadable_polls": 1, "unreadable_why": ["no_reply"]})
+expect("an unreadable poll before a press is kept beside the press, not dropped by it",
+       poll_with([None, "pressed\nb\nt"], wait=R.ALERT_POLL * 4)[0],
+       {"button": "b", "text": "t", "unreadable_polls": 1, "unreadable_why": ["no_reply"]})
+expect("a dialog whose default button could not be read is not a press, and its error is kept",
+       poll_with(["unreadable\n-25204"])[0], {"button": None, "text": None, "unreadable_polls": 1,
+                                              "unreadable_why": ["AXDefaultButton:-25204"]})
 got, sent = poll_with(["none", "pressed\nb\nt"], wait=R.ALERT_POLL * 4)
 check("a dialog that appears on a later poll is pressed", got == {"button": "b", "text": "t"}
       and len(sent) == 2, (got, len(sent)))
@@ -577,8 +593,120 @@ check("polls that never see a dialog stop at the deadline: one at the start and 
       got is None and len(sent) == 5, (got, len(sent)))
 literals = set(re.findall(r'"([^"]*)"', R.ACKNOWLEDGE_SCRIPT))
 check("the alert script names no UI label, only processes, AX names and its own reply tokens",
-      literals <= {"System Events", "Logic Pro", "AXDialog", "AXDefaultButton", "pressed", "none", ""},
+      literals <= {"System Events", "Logic Pro", "AXDialog", "AXDefaultButton", "pressed", "none",
+                   "unreadable", ""},
       sorted(literals))
+# The script's own branches, read as text: osascript is not run here.
+SCRIPT = R.ACKNOWLEDGE_SCRIPT
+default_read = [block for block in re.findall(r"try\n(.*?)end try", SCRIPT, re.S)
+                if 'attribute "AXDefaultButton"' in block]
+check("the alert script answers an AXDefaultButton read error as unreadable with its number, and "
+      "that answer comes before the click",
+      len(default_read) == 1
+      and re.search(r'on error number (\w+)\n\s*return "unreadable" & linefeed & \1\n', default_read[0])
+      and SCRIPT.index('return "unreadable"') < SCRIPT.index("click b"), default_read)
+check("the alert script clicks only in a dialog with one button, through a default button named as "
+      "that one button",
+      "(count of buttons of d) is 1" in SCRIPT
+      and "(name of b as string) is (name of button 1 of d as string)" in SCRIPT
+      and SCRIPT.index("(count of buttons of d) is 1") < SCRIPT.index("click b"))
+
+# The watch's budget, with the real L993.osa between acknowledge_alert and a faked subprocess.run.
+# One Clock serves both modules, and the time a probe takes is what the fake adds to it.
+
+
+def watch_with(run):
+    """REAL_ACKNOWLEDGE_ALERT's answer, each (program, timeout) subprocess.run was given, the clock
+    when it returned and the System Events restarts recorded, with subprocess.run answered by
+    `run(argv, timeout, clock)`."""
+    clock, calls = Clock(), []
+    saved = (L993.subprocess, L993.time, R.time)
+
+    def fake_run(argv, timeout=None, **_):
+        calls.append((os.path.basename(argv[0]), timeout))
+        return run(argv, timeout, clock)
+
+    L993.subprocess = types.SimpleNamespace(run=fake_run, TimeoutExpired=subprocess.TimeoutExpired)
+    L993.time = R.time = clock
+    del L993.SYSTEM_EVENTS_RESTARTS[:]
+    try:
+        try:
+            got = REAL_ACKNOWLEDGE_ALERT()
+        except Exception as error:  # a FAIL line, not a crash that hides the cases after it
+            got = repr(error)
+        return got, calls, clock.now, list(L993.SYSTEM_EVENTS_RESTARTS)
+    finally:
+        L993.subprocess, L993.time, R.time = saved
+        del L993.SYSTEM_EVENTS_RESTARTS[:]
+
+
+def blocked(argv, timeout, clock):
+    """An osascript that never answers: subprocess.run kills it once its timeout has run out."""
+    clock.now += timeout
+    raise subprocess.TimeoutExpired(argv, timeout)
+
+
+def late_press(argv, timeout, clock):
+    """A probe that does not keep to its timeout and reports a press three seconds later."""
+    clock.now += 3.0
+    return subprocess.CompletedProcess(argv, 0, "pressed\nb\nt\n", "")
+
+
+def refusing(argv, timeout, clock):
+    """A System Events that refuses GUI scripting (-25211) after 1.5 s; the kill answers at once."""
+    if argv[0].endswith("killall"):
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    clock.now += 1.5
+    return subprocess.CompletedProcess(argv, 1, "", "execution error: (-25211)")
+
+
+UNREAD = {"button": None, "text": None, "unreadable_polls": 1}
+got, calls, now, _ = watch_with(blocked)
+check("a probe that blocks is cut at the deadline: its osascript is given the watch's budget, not "
+      "20 s, and the watch ends at ALERT_WAIT with the poll counted",
+      calls == [("osascript", R.ALERT_WAIT)] and now == R.ALERT_WAIT
+      and got == dict(UNREAD, unreadable_why=["no_reply"]), (got, calls, now))
+got, calls, now, _ = watch_with(late_press)
+expect("a press reported after the deadline is not taken as a press, and is kept as late",
+       got, dict(UNREAD, unreadable_why=["after_deadline:pressed"]))
+got, calls, now, restarts = watch_with(refusing)
+check("a System Events restart inside the watch ends at the deadline: the kill gets the 0.5 s left, "
+      "the relaunch wait is cut to it, and no retry starts",
+      calls == [("osascript", R.ALERT_WAIT), ("killall", R.ALERT_WAIT - 1.5)]
+      and now == R.ALERT_WAIT and len(restarts) == 1
+      and got == dict(UNREAD, unreadable_why=["no_reply"]), (got, calls, now, restarts))
+
+
+def default_osa(answers):
+    """L993.osa called as its other callers call it: no deadline, subprocess.run faked, and a `time`
+    with no clock, so reading one raises."""
+    calls, sleeps, queue = [], [], list(answers)
+    saved = (L993.subprocess, L993.time)
+
+    def fake_run(argv, timeout=None, **_):
+        calls.append((os.path.basename(argv[0]), timeout))
+        if argv[0].endswith("killall"):
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        return subprocess.CompletedProcess(argv, *queue.pop(0))
+
+    L993.subprocess = types.SimpleNamespace(run=fake_run, TimeoutExpired=subprocess.TimeoutExpired)
+    L993.time = types.SimpleNamespace(sleep=sleeps.append)
+    try:
+        try:
+            got = L993.osa("x")
+        except Exception as error:
+            got = repr(error)
+        return got, calls, sleeps
+    finally:
+        L993.subprocess, L993.time = saved
+        del L993.SYSTEM_EVENTS_RESTARTS[:]
+
+
+got, calls, sleeps = default_osa([(1, "", "execution error: (-25211)"), (0, "ok\n", "")])
+check("L993.osa without a deadline is unchanged for its other callers: 20 s per osascript, a kill "
+      "with no timeout, the whole relaunch wait, and no clock read",
+      got == "ok" and calls == [("osascript", 20), ("killall", None), ("osascript", 20)]
+      and sleeps == [L993.SYSTEM_EVENTS_RELAUNCH_WAIT], (got, calls, sleeps))
 
 # pick_park_point: every rect is [x, y, w, h] in global display points, as CGDisplayBounds and
 # kCGWindowBounds give them.

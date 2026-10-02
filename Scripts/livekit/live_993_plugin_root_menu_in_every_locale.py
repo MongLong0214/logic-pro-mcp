@@ -97,26 +97,39 @@ SYSTEM_EVENTS_RESTARTS = []
 SYSTEM_EVENTS_RELAUNCH_WAIT = 2.0
 
 
-def osa(script, timeout=20):
+def osa(script, timeout=20, deadline=None):
     # Measured 2026-09-29 (#904 r5): a System Events respawned mid-run answered every GUI read with
     # -25211 while python AX kept working, and killing it made the next on-demand instance answer.
     # So -25211 alone earns one kill and one retry; every other failure is returned as before.
+    # A caller that passes `deadline`, a time.monotonic() reading, gets nothing that runs past it:
+    # each osascript and the kill get only the time left, the relaunch wait is cut to it, and no
+    # attempt starts once it has passed. Without one, nothing here reads the clock.
+    def within(seconds):
+        return seconds if deadline is None else min(seconds, deadline - time.monotonic())
+
     for attempt in range(2):
+        limit = within(timeout)
+        if limit <= 0:
+            return None
         try:
             result = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True,
-                                    text=True, timeout=timeout)
+                                    text=True, timeout=limit)
         except subprocess.TimeoutExpired:
             return None
         if result.returncode == 0:
             return (result.stdout or "").strip()
         stderr = result.stderr or ""
-        if attempt or "-25211" not in stderr:
+        if attempt or "-25211" not in stderr or within(timeout) <= 0:
             return None
         SYSTEM_EVENTS_RESTARTS.append({
             "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
             "stderr_tail": stderr.strip()[-300:]})
-        subprocess.run(["/usr/bin/killall", "System Events"], capture_output=True, text=True)
-        time.sleep(SYSTEM_EVENTS_RELAUNCH_WAIT)
+        try:
+            subprocess.run(["/usr/bin/killall", "System Events"], capture_output=True, text=True,
+                           timeout=None if deadline is None else within(timeout))
+        except subprocess.TimeoutExpired:
+            return None
+        time.sleep(max(0.0, within(SYSTEM_EVENTS_RELAUNCH_WAIT)))
     return None
 
 
