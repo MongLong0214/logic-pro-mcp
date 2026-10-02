@@ -33,6 +33,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **Under a keyboard input source that is not ASCII-capable, a CGEvent plain-letter key is sent
+  through a switch to an ASCII-capable layout and the user's source is selected back (#1039).**
+  Under 2-Set Korean a letter with no Command, Control or Option reaches Logic as a Hangul
+  character and runs nothing, so since #1045 the ten operations sent that way (`transport.record`,
+  `toggle_cycle`, `toggle_metronome`, `edit.quantize`, `view.toggle_mixer`, `toggle_piano_roll`,
+  `toggle_library`, `toggle_score_editor`, `nav.zoom_to_fit`, `automation.toggle_view`) were
+  refused. The channel now selects the ASCII-capable layout macOS names for the current source,
+  reads it back as current, waits 0.1 s, posts, waits 0.1 s, selects the user's source again and
+  reads that back. The State B reply names each step: `input_source_switched`,
+  `input_source_before`, `input_source_switched_to`, `input_source_restored` and
+  `input_source_after`, with a `hint` when the user's source did not read back. A switch that
+  cannot be made or does not read back posts nothing and refuses `input_source_blocks_plain_letters`
+  with `input_source_switch_failure`; a source that does not read is refused
+  `input_source_unreadable` as before. Shown with a fake input-source API only: whether a
+  selection made by the server reaches the key Logic reads, and how long the two waits need to
+  be, were not measured against a running Logic.
 - **`transport.goto_position`'s CGEvent fallback types nothing until the Go To Position dialog is
   on screen (#1038).** It used to post the position and Return right after the key that opens the
   dialog, so when the dialog did not open they went to whatever held the keyboard. The opening key
