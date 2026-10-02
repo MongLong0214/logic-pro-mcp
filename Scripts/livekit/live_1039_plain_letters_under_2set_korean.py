@@ -278,6 +278,20 @@ def plain_bindings():
                    and isinstance(entry.get("CharCode"), int) and 32 < entry["CharCode"] < 127})
 
 
+def arrange_cg_window():
+    """The arrange window as the window server lists it, in the shape `evidence.Evidence.shot`
+    takes, or None."""
+    import Quartz
+    pid = logic_pid()
+    for window in Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly,
+                                                    Quartz.kCGNullWindowID) or []:
+        if int(window.get(Quartz.kCGWindowOwnerPID) or 0) == pid and window.get(Quartz.kCGWindowName) == ARRANGE["title"]:
+            b = window.get(Quartz.kCGWindowBounds)
+            return {"id": int(window.get(Quartz.kCGWindowNumber)), "title": ARRANGE["title"],
+                    "x": int(b["X"]), "y": int(b["Y"]), "w": int(b["Width"]), "h": int(b["Height"])}
+    return None
+
+
 def fit_arrange_window():
     """Put the arrange window inside the main display, below the menu bar, and read it back from the
     window server. A window across two displays makes captures that match nothing on screen
@@ -571,7 +585,10 @@ def mixer_shot(ev, ax, tag, region=None):
         if box is None:
             return None
         region = (int(box[0] - window_frame[0]), int(box[1] - window_frame[1]), int(box[2]), int(box[3]))
-    shot = ev.shot(tag, settle_region=region)
+    # The arrange window from the window server, by the title the language switch gave: the
+    # evidence module's own lookup knows the arrange title in only some languages, and in the run at
+    # 3a5cb407 it found no window in Spanish, French, Italian, Portuguese and both Chinese.
+    shot = ev.shot(tag, settle_region=region, window=arrange_cg_window())
     return {"file": shot["file"], "region": region,
             "description": target[0][0] if target else None,
             "window_points": (int(window_frame[2]), int(window_frame[3])) if window_frame else None}
