@@ -846,10 +846,10 @@ enum AXValueExtractors {
             ]
         }
         if stop() { return nil }
-        var signals = headerSignals + [AXHelpers.getHelp(header, runtime: runtime)]
-        for (element, readFirst) in zip(descendants, descendantSignals) {
-            signals.append(contentsOf: readFirst + [AXHelpers.getHelp(element, runtime: runtime)])
-        }
+        let signals = headerSignals + [AXHelpers.getHelp(header, runtime: runtime)]
+            + zip(descendants, descendantSignals).flatMap { element, readFirst in
+                readFirst + [AXHelpers.getHelp(element, runtime: runtime)]
+            }
         let trackName = extractTrackName(from: header, runtime: runtime).name
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
