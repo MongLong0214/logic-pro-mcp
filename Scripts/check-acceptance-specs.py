@@ -11,8 +11,10 @@ with one while nothing notices until a live run is attempted on it:
      `LPM_VERIFY_ISSUE_BODIES`; it never calls `gh` or the network.
   2. A source no row decides. `sources[i]` quotes an acceptance sentence, and a row's `criterion`
      names the source it judges. A source no row names is a sentence the spec claims and nothing
-     checks. Sources undecided when this rule was written are listed in `UNDECIDED`, which may only
-     shrink: an entry whose source is decided, or gone, is reported until it is deleted.
+     checks. Sources undecided when this rule was written are listed in `UNDECIDED` with the `doc`
+     and `quote` each was written for, and the list may only shrink: an entry whose source is
+     decided, or gone, is reported until it is deleted, and an entry whose index now holds another
+     source exempts nothing.
   3. A UI label written as a literal where the verifier sends or compares it. A spec runs in every
      locale it names, and a label only one language spells that way passes in that language alone.
      The scope is the string values under `steps[].call.params`, `restore[].call.params`,
@@ -44,10 +46,17 @@ from verify.predicates import parse_path  # noqa: E402
 
 VERIFY = os.path.join(REPO, "Scripts", "verify", "verify.py")
 
-#: Sources no row decides, keyed by (spec basename, source index), with the reason. May only shrink.
+#: Sources no row decides, keyed by (spec basename, source index), with the source the entry was
+#: written for and the reason. May only shrink. The index says where to look and `doc` and `quote`
+#: say what must be there: a review replaced sources[2] with another sentence verbatim in the same
+#: issue, check-spec admitted it, and an entry keyed by index alone went on exempting it.
 UNDECIDED = {
-    ("1020.json", 2): "the pilot's rows judge the read-first set and the refusal; no row yet "
-                      "observes that a toggle is not reported as a set",
+    ("1020.json", 2): {
+        "doc": "issue:1020",
+        "quote": "A toggle must not be presented as a set.",
+        "reason": "the pilot's rows judge the read-first set and the refusal; no row yet observes "
+                  "that a toggle is not reported as a set",
+    },
 }
 
 #: Where a string is sent to the product or compared with a reading. (row key, what to read.)
@@ -166,13 +175,21 @@ def main() -> int:
         judged.add(base)
         for index in undecided_sources(spec):
             undecided_seen.add((base, index))
-            if (base, index) not in UNDECIDED:
+            entry = UNDECIDED.get((base, index))
+            source = spec["sources"][index]
+            if entry is None:
                 problems.append(f"{path}: sources[{index}] is decided by no row -- no row names "
                                 f"criterion {index}, so the sentence it quotes is claimed and "
                                 f"never checked")
+            elif (source.get("doc"), source.get("quote")) != (entry["doc"], entry["quote"]):
+                problems.append(f"{path}: sources[{index}] is decided by no row, and "
+                                f"UNDECIDED[({base!r}, {index})] was written for "
+                                f"{entry['quote']!r} in {entry['doc']}, not "
+                                f"{source.get('quote')!r} in {source.get('doc')} -- an index "
+                                f"does not exempt whatever sentence comes to sit there")
         problems += [f"{path}: {p}" for p in label_problems(spec, canonicals)]
 
-    for (base, index), _reason in sorted(UNDECIDED.items()):
+    for (base, index), _entry in sorted(UNDECIDED.items()):
         if base in judged and (base, index) not in undecided_seen:
             problems.append(f"UNDECIDED[({base!r}, {index})]: that source is now decided by a row "
                             f"or no longer exists -- delete the entry so the list only shrinks")
