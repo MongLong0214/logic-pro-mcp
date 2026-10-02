@@ -198,6 +198,18 @@ actor ChannelRouter {
         }
     }
 
+    /// An operation whose chain is empty needs no channel and succeeds. A restriction that names
+    /// no channel refuses it all the same, since that restriction refuses everything (#1039 review
+    /// R1, R-1039-03: `project.is_running`, `system.health` and `system.permissions` answered).
+    /// One that keeps a channel leaves it alone: there is no chain for it to narrow.
+    static func emptyChainResult(operation: String, restriction: DebugOnlyChannel) -> ChannelResult {
+        if case .invalid = restriction,
+           case let .failure(refusal) = effectiveChain([], operation: operation, restriction: restriction) {
+            return .error(refusal.message)
+        }
+        return .success("No channel required for \(operation)")
+    }
+
     struct RoutingRefusal: Error, Equatable {
         let message: String
     }
@@ -209,7 +221,7 @@ actor ChannelRouter {
 
         // Operations with empty chain don't need a channel
         if tableChain.isEmpty {
-            return .success("No channel required for \(operation)")
+            return Self.emptyChainResult(operation: operation, restriction: Self.debugOnlyChannel)
         }
 
         let chain: [ChannelID]

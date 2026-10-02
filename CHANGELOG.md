@@ -46,7 +46,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `input_source_after`, with a `hint` when the user's source did not read back. A switch that
   cannot be made or does not read back posts nothing and refuses `input_source_blocks_plain_letters`
   with `input_source_switch_failure`; a source that does not read is refused
-  `input_source_unreadable` as before. Driven against Logic 12.3 under 2-Set Korean in ten
+  `input_source_unreadable` as before. The layout must also type the key's U.S. letter, read from
+  its own key map: when TIS offers Dvorak or AZERTY, ABC or U.S. is selected instead, and when
+  none types the letter the failure is `layout_types_another_letter`. Driven against Logic 12.3 under 2-Set Korean in ten
   languages, eight of the ten went out through CGEvent under ABC, changed Logic's state and back,
   and left 2-Set Korean current; `edit.quantize` and `view.toggle_score_editor` were not driven,
   and the two waits were not varied.

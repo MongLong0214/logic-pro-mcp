@@ -15,6 +15,13 @@ private let koreanID = "com.apple.inputmethod.Korean.2SetKorean"
 private let abcID = "com.apple.keylayout.ABC"
 private let korean = CGEventChannel.InputSourceReading(id: koreanID, isASCIICapable: false)
 private let abc = CGEventChannel.InputSourceReading(id: abcID, isASCIICapable: true)
+private let dvorakID = "com.apple.keylayout.Dvorak"
+private let dvorak = CGEventChannel.InputSourceReading(id: dvorakID, isASCIICapable: true)
+private let usLetters = CGEventChannel.Shortcut.usLetters
+/// What Dvorak types on the U.S. letter keys `keyMap` posts: R types p, and so on. A types a.
+private let dvorakLetters: [CGKeyCode: String] = usLetters.merging(
+    [15: "p", 8: "j", 40: "t", 12: "'", 7: "q", 35: "l", 16: "f", 6: ";", 1: "o", 31: "r"]
+) { _, dvorak in dvorak }
 /// Distinct from the frontmost gate's 50 ms polls, so a settle can be told apart in the log.
 private let settle: useconds_t = 7_777
 
@@ -45,14 +52,17 @@ private final class FakeTIS: @unchecked Sendable {
     private let layoutID: String?
     private let outcomes: [String: Selection]
     private let postSucceeds: Bool
-    private let known: [String: CGEventChannel.InputSourceReading] = [koreanID: korean, abcID: abc]
+    private let known: [String: CGEventChannel.InputSourceReading] = [koreanID: korean, abcID: abc, dvorakID: dvorak]
+    private let letters: [String: [CGKeyCode: String]]
 
     init(
         current: CGEventChannel.InputSourceReading?,
         layoutID: String? = abcID,
         outcomes: [String: Selection] = [:],
-        postSucceeds: Bool = true
+        postSucceeds: Bool = true,
+        letters: [String: [CGKeyCode: String]] = [abcID: usLetters]
     ) {
+        self.letters = letters
         self.current = current
         self.layoutID = layoutID
         self.outcomes = outcomes
@@ -116,6 +126,7 @@ private final class FakeTIS: @unchecked Sendable {
                 }
             },
             selectInputSource: { self.select($0) },
+            layoutLetter: { id, keyCode in self.letters[id]?[keyCode] },
             inputSourceSettleMicros: settle
         )
     }
@@ -263,6 +274,49 @@ enum FailedRestore: String, CaseIterable, Sendable {
     /// Kills: posting on TIS's return alone (`selected` without the re-read), posting when the
     /// re-read names another source or none, switching away from a source with no id, and a
     /// refusal that leaves the source on whatever the failed selection did.
+    /// Review R1 of #1085 (R-1039-01): TIS offers Dvorak, where most of these keys type another
+    /// letter, so the key for R would reach Logic as P. ABC types the U.S. letter and is selected
+    /// in its place; for A, which Dvorak also types as a, Dvorak is kept. Kills: the layout taken
+    /// on its ASCII capability alone (Dvorak is selected for every key).
+    @Test("a layout that types another letter on the key is passed over for ABC", arguments: plainLetterOps)
+    func aLayoutTypingAnotherLetterIsPassedOver(_ operation: String) async throws {
+        let tis = FakeTIS(current: korean, layoutID: dvorakID, letters: [dvorakID: dvorakLetters, abcID: usLetters])
+        let channel = CGEventChannel(runtime: tis.runtime())
+        let shortcut = try #require(CGEventChannel.keyMap[operation])
+        let letter = try #require(usLetters[shortcut.keyCode])
+        let expected = dvorakLetters[shortcut.keyCode] == letter ? dvorakID : abcID
+
+        let result = await channel.execute(operation: operation, params: [:])
+
+        #expect(result.isSuccess, "\(operation): \(result.message)")
+        #expect(tis.log.filter { $0.hasPrefix("select:") } == ["select:\(expected)", "select:\(koreanID)"],
+                "\(operation): \(tis.log)")
+        #expect(tis.posts.map(\.keyCode) == [shortcut.keyCode])
+        let object = try #require(envelope(result.message))
+        #expect(object["input_source_switched_to"] as? String == expected)
+    }
+
+    /// When neither TIS's layout nor ABC or U.S. reads as typing the key's letter, nothing is
+    /// selected or posted. Kills: falling back to TIS's layout when no candidate types the letter.
+    @Test("no layout typing the key's letter refuses the key", arguments: plainLetterOps)
+    func noLayoutTypingTheLetterRefuses(_ operation: String) async throws {
+        let tis = FakeTIS(current: korean, layoutID: dvorakID, letters: [dvorakID: dvorakLetters])
+        let channel = CGEventChannel(runtime: tis.runtime())
+        let shortcut = try #require(CGEventChannel.keyMap[operation])
+        let letter = try #require(usLetters[shortcut.keyCode])
+        // A types a under Dvorak too, so Dvorak is a layout that types it; the case is the others.
+        guard dvorakLetters[shortcut.keyCode] != letter else { return }
+
+        let result = await channel.execute(operation: operation, params: [:])
+
+        #expect(!result.isSuccess, "\(operation): \(result.message)")
+        #expect(tis.posts.isEmpty)
+        #expect(!tis.log.contains { $0.hasPrefix("select:") }, "\(operation): \(tis.log)")
+        #expect(tis.source == korean)
+        let object = try #require(envelope(result.message))
+        #expect(object["input_source_switch_failure"] as? String == "layout_types_another_letter")
+    }
+
     @Test("a switch that does not read back posts nothing", arguments: UnverifiedSwitch.allCases)
     func unverifiedSwitchPostsNothing(_ scenario: UnverifiedSwitch) async throws {
         let tis = scenario.tis

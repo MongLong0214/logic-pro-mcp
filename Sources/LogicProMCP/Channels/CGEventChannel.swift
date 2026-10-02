@@ -40,6 +40,11 @@ actor CGEventChannel: Channel {
         /// TIS returned noErr. That return is not taken as the switch: the channel reads
         /// `currentInputSource` again. The default selects nothing.
         let selectInputSource: @Sendable (String) -> Bool
+        /// #1039 review R1: the character the keyboard layout with this id types for this key with
+        /// no modifier (`UCKeyTranslate` over its `kTISPropertyUnicodeKeyLayoutData`), or nil when
+        /// it does not read. The default reads nothing: a runtime that says nothing about what a
+        /// layout types cannot switch, and the plain letter is refused.
+        let layoutLetter: @Sendable (String, CGKeyCode) -> String?
         /// #1039: the wait after a switched layout reads back as current, before the key, and
         /// again after the key, before the user's source is selected back
         /// (`inputSourceSwitchSettleMicros`).
@@ -70,6 +75,7 @@ actor CGEventChannel: Channel {
             },
             asciiCapableLayoutID: @escaping @Sendable () -> String? = { nil },
             selectInputSource: @escaping @Sendable (String) -> Bool = { _ in false },
+            layoutLetter: @escaping @Sendable (String, CGKeyCode) -> String? = { _, _ in nil },
             inputSourceSettleMicros: useconds_t = CGEventChannel.inputSourceSwitchSettleMicros,
             onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = { nil }
         ) {
@@ -82,6 +88,7 @@ actor CGEventChannel: Channel {
             self.currentInputSource = currentInputSource
             self.asciiCapableLayoutID = asciiCapableLayoutID
             self.selectInputSource = selectInputSource
+            self.layoutLetter = layoutLetter
             self.inputSourceSettleMicros = inputSourceSettleMicros
             self.onScreenWindowList = onScreenWindowList
         }
@@ -98,6 +105,7 @@ actor CGEventChannel: Channel {
             currentInputSource: { CGEventChannel.readCurrentInputSource() },
             asciiCapableLayoutID: { CGEventChannel.readASCIICapableLayoutID() },
             selectInputSource: { CGEventChannel.selectEnabledInputSource(id: $0) },
+            layoutLetter: { CGEventChannel.readLayoutLetter(layoutID: $0, keyCode: $1) },
             onScreenWindowList: AXLogicProElements.Runtime.liveOnScreenWindowList
         )
     }
@@ -142,6 +150,38 @@ actor CGEventChannel: Channel {
         let source = Unmanaged<TISInputSource>.fromOpaque(raw).takeUnretainedValue()
         return TISSelectInputSource(source) == noErr
     }
+
+    /// #1039 review R1: the character the installed keyboard layout `layoutID` types for `keyCode`
+    /// with no modifier, read from the layout's own key map. nil when no installed source has that
+    /// id, it carries no Unicode key layout, or the translation produces nothing.
+    static func readLayoutLetter(layoutID: String, keyCode: CGKeyCode) -> String? {
+        let filter = [kTISPropertyInputSourceID as String: layoutID] as CFDictionary
+        guard let list = TISCreateInputSourceList(filter, true)?.takeRetainedValue(),
+              CFArrayGetCount(list) > 0,
+              let raw = CFArrayGetValueAtIndex(list, 0) else {
+            return nil
+        }
+        let source = Unmanaged<TISInputSource>.fromOpaque(raw).takeUnretainedValue()
+        guard let rawData = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+            return nil
+        }
+        let data = Unmanaged<CFData>.fromOpaque(rawData).takeUnretainedValue()
+        guard let bytes = CFDataGetBytePtr(data) else { return nil }
+        let layout = UnsafeRawPointer(bytes).assumingMemoryBound(to: UCKeyboardLayout.self)
+        var deadKeyState: UInt32 = 0
+        var characters = [UniChar](repeating: 0, count: 4)
+        var length = 0
+        let status = UCKeyTranslate(
+            layout, UInt16(keyCode), UInt16(kUCKeyActionDown), 0, UInt32(LMGetKbdType()),
+            OptionBits(kUCKeyTranslateNoDeadKeysBit), &deadKeyState, characters.count, &length, &characters
+        )
+        guard status == noErr, length > 0 else { return nil }
+        return String(utf16CodeUnits: characters, count: length)
+    }
+
+    /// #1039 review R1: layouts that type the U.S. letter on every letter key, tried when TIS's
+    /// ASCII-capable layout types another (Dvorak, AZERTY). Each is still checked key by key.
+    static let usLetterLayoutIDs = ["com.apple.keylayout.ABC", "com.apple.keylayout.US"]
 
     /// #1039: how long a switched layout is given to reach Logic before the key, and the key to be
     /// read by Logic before the user's source goes back. The read-back is this process's view; it
@@ -213,13 +253,17 @@ actor CGEventChannel: Channel {
             Shortcut(keyCode: code, flags: .maskNumericPad)
         }
 
-        /// The 26 letter keys (HIToolbox `kVK_ANSI_A` ... `kVK_ANSI_Z`).
-        static let letterKeyCodes: Set<CGKeyCode> = Set([
-            kVK_ANSI_A, kVK_ANSI_B, kVK_ANSI_C, kVK_ANSI_D, kVK_ANSI_E, kVK_ANSI_F, kVK_ANSI_G,
-            kVK_ANSI_H, kVK_ANSI_I, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L, kVK_ANSI_M, kVK_ANSI_N,
-            kVK_ANSI_O, kVK_ANSI_P, kVK_ANSI_Q, kVK_ANSI_R, kVK_ANSI_S, kVK_ANSI_T, kVK_ANSI_U,
-            kVK_ANSI_V, kVK_ANSI_W, kVK_ANSI_X, kVK_ANSI_Y, kVK_ANSI_Z,
-        ].map { CGKeyCode($0) })
+        /// The 26 letter keys (HIToolbox `kVK_ANSI_A` ... `kVK_ANSI_Z`) and the letter each types
+        /// on a U.S. layout, which is the letter the key map means (#1039 review R1).
+        static let usLetters: [CGKeyCode: String] = ([
+            kVK_ANSI_A: "a", kVK_ANSI_B: "b", kVK_ANSI_C: "c", kVK_ANSI_D: "d", kVK_ANSI_E: "e",
+            kVK_ANSI_F: "f", kVK_ANSI_G: "g", kVK_ANSI_H: "h", kVK_ANSI_I: "i", kVK_ANSI_J: "j",
+            kVK_ANSI_K: "k", kVK_ANSI_L: "l", kVK_ANSI_M: "m", kVK_ANSI_N: "n", kVK_ANSI_O: "o",
+            kVK_ANSI_P: "p", kVK_ANSI_Q: "q", kVK_ANSI_R: "r", kVK_ANSI_S: "s", kVK_ANSI_T: "t",
+            kVK_ANSI_U: "u", kVK_ANSI_V: "v", kVK_ANSI_W: "w", kVK_ANSI_X: "x", kVK_ANSI_Y: "y",
+            kVK_ANSI_Z: "z",
+        ] as [Int: String]).reduce(into: [CGKeyCode: String]()) { $0[CGKeyCode($1.key)] = $1.value }
+        static let letterKeyCodes = Set(usLetters.keys)
 
         /// A letter key with no Command, Control or Option: the key an input method turns into its
         /// own character. Shift does not stop it (Shift-Q is ㅃ under 2-Set Korean).
@@ -401,7 +445,7 @@ actor CGEventChannel: Channel {
                 return Self.inputSourceRefusal(operation: operation, source: nil)
             }
             if !source.isASCIICapable {
-                switch switchToASCIICapableLayout(from: source) {
+                switch switchToASCIICapableLayout(from: source, keyCode: shortcut.keyCode) {
                 case let .refused(failure, restore):
                     return Self.inputSourceRefusal(
                         operation: operation, source: source, switchFailure: failure, restore: restore
@@ -482,12 +526,23 @@ actor CGEventChannel: Channel {
     /// A source whose id did not read is not switched away from: nothing could select it back.
     /// When the selection does not read back, the user's source is put back (unless the reading
     /// already names it) and the switch is refused.
-    func switchToASCIICapableLayout(from source: InputSourceReading) -> InputSourceSwitch {
+    ///
+    /// Review R1: ASCII-capable does not mean the key types the letter the key map means. TIS can
+    /// name Dvorak or AZERTY, where the key for R types P or another letter, and with key-label
+    /// assignments that is another command. So the layout must type the U.S. letter on this key,
+    /// read from its key map before anything is selected; when TIS's does not, ABC or U.S. is
+    /// tried, and when none does, nothing is selected or posted.
+    func switchToASCIICapableLayout(from source: InputSourceReading, keyCode: CGKeyCode) -> InputSourceSwitch {
         guard let originalID = source.id else {
             return .refused(failure: "source_id_unreadable", restore: nil)
         }
-        guard let layoutID = runtime.asciiCapableLayoutID() else {
+        guard let offered = runtime.asciiCapableLayoutID() else {
             return .refused(failure: "no_ascii_capable_layout", restore: nil)
+        }
+        let candidates = [offered] + Self.usLetterLayoutIDs.filter { $0 != offered }
+        guard let letter = Shortcut.usLetters[keyCode],
+              let layoutID = candidates.first(where: { runtime.layoutLetter($0, keyCode) == letter }) else {
+            return .refused(failure: "layout_types_another_letter", restore: nil)
         }
         let selected = runtime.selectInputSource(layoutID)
         let reading = runtime.currentInputSource()
@@ -657,6 +712,9 @@ actor CGEventChannel: Channel {
                     + "no ASCII-capable layout was selected."
             case "no_ascii_capable_layout":
                 why = " TIS named no ASCII-capable keyboard layout to select for the key."
+            case "layout_types_another_letter":
+                why = " Neither TIS's ASCII-capable layout nor ABC or U.S. reads as typing this key's "
+                    + "letter, so the key could run another command; no layout was selected."
             case let failure?:
                 why = " Selecting TIS's ASCII-capable layout for the key did not read back as the current "
                     + "source (\(failure))."

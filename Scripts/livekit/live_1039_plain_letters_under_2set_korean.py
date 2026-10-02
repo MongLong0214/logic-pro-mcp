@@ -131,6 +131,12 @@ def arguments():
     parser.add_argument("candidate")
     parser.add_argument("control")
     parser.add_argument("--lprojs", nargs="+", default=list(L993.DEFAULT_LPROJS), metavar="lproj")
+    parser.add_argument("--ascii-history-tool", metavar="path",
+                        help="before every call, run `<path> dvorak`, which must leave 2-Set Korean current "
+                             "with Dvorak as TIS's ASCII-capable layout, and record its reading (review R1 of "
+                             "#1085); `<path> reset` runs once at the end")
+    parser.add_argument("--expect-switched-to", default="com.apple.keylayout.ABC", metavar="id",
+                        help="the layout every candidate reply must name as switched to")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.head):
         parser.error("head must be a full lowercase 40-character SHA")
@@ -456,14 +462,32 @@ def activate_logic():
     time.sleep(0.8)
 
 
+ASCII_HISTORY_TOOL = None
+DVORAK = "com.apple.keylayout.Dvorak"
+
+
+def set_ascii_history():
+    """Run the history tool: Dvorak becomes TIS's ASCII-capable layout and 2-Set Korean stays current.
+    Its reading is returned with whether the tool said it held."""
+    done = subprocess.run([ASCII_HISTORY_TOOL, "dvorak"], capture_output=True, text=True, timeout=20)
+    try:
+        reading = json.loads(done.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        reading = {"unparsed": done.stdout[-200:]}
+    reading["ok"] = done.returncode == 0
+    return reading
+
+
 def call(driver, source, tool, command, params, ax=None):
     activate_logic()
     focus = focus_tracks(ax) if ax is not None else None
+    history = set_ascii_history() if ASCII_HISTORY_TOOL else None
     started = time.monotonic()
     reply = driver.tool(tool, command, params)
     seconds = round(time.monotonic() - started, 2)
     time.sleep(SETTLE)
-    return {"reply": reply, "seconds": seconds, "source_after": source.current(), "focus": focus}
+    return {"reply": reply, "seconds": seconds, "source_after": source.current(), "focus": focus,
+            "ascii_history": history}
 
 
 def reply_summary(reply):
@@ -548,7 +572,8 @@ def run_candidate(ev, driver, ax, source, lproj):
                       "changed": changed(kind, before, middle), "came_back": came_back,
                       "others_kept": others_kept(kind, before, middle),
                       "replies": [reply_summary(first["reply"]), reply_summary(second["reply"])],
-                      "sources_after": [first["source_after"], second["source_after"]]}
+                      "sources_after": [first["source_after"], second["source_after"]],
+                      "ascii_histories": [first["ascii_history"], second["ascii_history"]]}
         print(json.dumps({"lproj": lproj, "role": "candidate", "op": name, "changed": rows[name]["changed"],
                           "came_back": rows[name]["came_back"], "replies": rows[name]["replies"]},
                          ensure_ascii=False), flush=True)
@@ -564,7 +589,8 @@ def run_candidate(ev, driver, ax, source, lproj):
                   "others_kept": True,
                   "replies": [reply_summary(started["reply"]), reply_summary(stopped["reply"]),
                               reply_summary(undone["reply"])],
-                  "sources_after": [started["source_after"], stopped["source_after"]]}
+                  "sources_after": [started["source_after"], stopped["source_after"]],
+                  "ascii_histories": [started["ascii_history"]]}
     print(json.dumps({"lproj": lproj, "role": "candidate", "op": name, "changed": rows[name]["changed"],
                       "came_back": rows[name]["came_back"], "replies": rows[name]["replies"]},
                      ensure_ascii=False), flush=True)
@@ -606,15 +632,24 @@ def candidate_switched(row):
         and r.get("input_source_before") == KOREAN_2SET and r.get("input_source_restored") is True
         for r in toggled)
     routed = all(r.get("method") == "cgevent" for r in toggled) if row.get("accessibility_first") else True
-    return switched and routed and bool(sources) and all(s == KOREAN_2SET for s in sources)
+    # Review R1 of #1085: the layout the key went out under is the one that types its letter.
+    expected = row.get("expect_switched_to")
+    named = expected is None or all(r.get("input_source_switched_to") == expected for r in toggled)
+    # Under a Dvorak history, each call must have been made with Dvorak as TIS's offer.
+    histories = (row.get("ascii_histories") or [])[:len(toggled)]
+    offered = (not row.get("history_required")) or (
+        len(histories) == len(toggled) and all(
+            isinstance(h, dict) and h.get("ok") is True and h.get("ascii_layout") == DVORAK
+            for h in histories))
+    return switched and routed and named and offered and bool(sources) and all(s == KOREAN_2SET for s in sources)
 
 
 def candidate_acted(row):
-    """The key went out under ABC and Logic's state changed and came back. For a key Logic's key
-    command set leaves unbound with no modifier, the state cannot change by that key, and only the
-    switch is judged; the row says so, and the record must."""
-    if row.get("key_bound") is False:
-        return candidate_switched(row) and row.get("changed") is not True
+    """The key went out under ABC and Logic's state changed and came back. A key Logic's key
+    command set leaves unbound with no modifier, or whose binding did not read, cannot show that,
+    and fails: a switch alone is not the operation acting (review R1 of #1085, R-1039-02)."""
+    if row.get("key_bound") is not True:
+        return False
     return (row.get("changed") is True and row.get("came_back") is True and row.get("others_kept") is True
             and candidate_switched(row))
 
@@ -627,6 +662,8 @@ def control_refused(row):
 
 def main():
     args = arguments()
+    global ASCII_HISTORY_TOOL
+    ASCII_HISTORY_TOOL = args.ascii_history_tool
     sys.path.insert(0, os.path.join(args.worktree, "Scripts"))
     import logic_canon  # noqa: E402
     setattr(L993, "logic_canon", logic_canon)
@@ -714,6 +751,10 @@ def main():
                           and restored["language_setting_after_restore"][:1] == [L993.CODES[L993.RESTORE]]
                           and restored["arrange_window"] in (restored["window_names_after_restore"] or []))
         ev.restored("1039/Logic-language-restored-to-Korean", restored["ok"], repr(restored))
+        if ASCII_HISTORY_TOOL:
+            reset = subprocess.run([ASCII_HISTORY_TOOL, "reset"], capture_output=True, text=True, timeout=20)
+            ev.restored("1039/ascii-history-reset-to-ABC-and-Dvorak-disabled", reset.returncode == 0,
+                        reset.stdout.strip()[-400:])
         ev.restored("1039/input-source-is-2-Set-Korean-at-the-end", source.current() == KOREAN_2SET,
                     repr(source.current()))
         ev.stop_recording(recording)
@@ -725,12 +766,16 @@ def main():
         bound = row.get("plain_bindings")
         for name, *_ in TOGGLES + (RECORD,):
             c = dict(candidate.get(name) or {}, op=name, accessibility_first=name in ACCESSIBILITY_FIRST,
-                     key_bound=None if bound is None else CHARACTERS[name] in bound)
+                     key_bound=None if bound is None else CHARACTERS[name] in bound,
+                     expect_switched_to=args.expect_switched_to,
+                     history_required=bool(args.ascii_history_tool))
             k = dict(control.get(name) or {}, op=name)
             ev.falsifiable(f"1039/{lproj}/candidate/{name}", candidate_acted, c, k,
-                           "under 2-Set Korean through CGEvent alone the key is posted under ABC, the "
-                           "reading changes and comes back, and the source reads 2-Set Korean after; "
-                           "for a key Logic leaves unbound, only the switch and the restore",
+                           "under 2-Set Korean through CGEvent alone the key is posted under "
+                           f"{args.expect_switched_to}, the reading changes and comes back, and the source "
+                           "reads 2-Set Korean after"
+                           + (", with Dvorak as TIS's ASCII-capable layout before each call"
+                              if args.ascii_history_tool else ""),
                            mutation="remove the switch from CGEventChannel.execute (the control binary): "
                                     "the key is refused and nothing changes")
             ev.falsifiable(f"1039/{lproj}/control/{name}", control_refused, k, c,

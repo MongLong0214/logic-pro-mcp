@@ -54,4 +54,28 @@ import Testing
         }
         #expect(refusal.message.contains("CGEvnt"))
     }
+
+    /// Review R1, R-1039-03: the operations whose chain is empty answered before the restriction
+    /// was consulted. Every one of them in the table is checked, so a new one is covered too.
+    /// Mutation this kills: the empty-chain answer given without asking the restriction. The
+    /// control is the same operations unrestricted and under a restriction that names a channel.
+    @Test func anInvalidValueRefusesTheOperationsThatNeedNoChannel() {
+        let empty = Router.routingTable.filter { $0.value.isEmpty }.map(\.key).sorted()
+        #expect(empty.contains("system.health"), "the table has no empty chain where one was read")
+        for operation in empty {
+            let refused = Router.emptyChainResult(operation: operation, restriction: .invalid("CGEvnt"))
+            guard case let .error(message) = refused else {
+                Issue.record("\(operation) answered \(refused) under an invalid restriction")
+                continue
+            }
+            #expect(message.contains("CGEvnt"))
+            for restriction in [Router.DebugOnlyChannel.unrestricted, .only(.cgEvent)] {
+                let answered = Router.emptyChainResult(operation: operation, restriction: restriction)
+                guard case .success = answered else {
+                    Issue.record("\(operation) answered \(answered) under \(restriction)")
+                    continue
+                }
+            }
+        }
+    }
 }
