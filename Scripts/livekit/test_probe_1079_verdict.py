@@ -65,6 +65,16 @@ def main():
             unexpected += 1
         except TypeError:
             print(f"ok   {name} -> refused")
+    # Supplementary review S-08: an empty context cannot pass either.
+    control_only = [r for r in everything if r["condition"] == "control"]
+    for name, args in (("no samples asked for", (control_only, lprojs, ["none", "candidate", "control"], 0)),
+                       ("a negative sample count", (control_only, lprojs, ["none", "candidate", "control"], -1)),
+                       ("no languages asked for", (control_only, [], ["none", "candidate", "control"], 2)),
+                       ("an empty run with nothing asked for", ([], [], ["none", "candidate", "control"], 0))):
+        failures = probe.verdict(*args)
+        ok = bool(failures)
+        unexpected += not ok
+        print(f"{'ok  ' if ok else 'FAIL'} {name} -> {len(failures)} failure(s), expected some")
     for name, rows, conditions, passes in cases:
         failures = probe.verdict(rows, lprojs, conditions, samples)
         ok = (not failures) is passes

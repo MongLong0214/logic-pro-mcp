@@ -320,6 +320,8 @@ def verdict(rows, lprojs, conditions, samples):
     languages, conditions and sample count are required: without them no call can know what is
     missing, and the first repair kept a default call that passed candidate-free rows."""
     failures = []
+    if not lprojs or samples < 1:
+        failures.append(f"languages {list(lprojs)} and {samples} sample(s) per condition: nothing to judge")
     if tuple(sorted(conditions)) != tuple(sorted(CONDITIONS)):
         failures.append(f"conditions {', '.join(conditions)}: a search, not a verdict")
     have = {(r.get("lproj"), r.get("condition"), r.get("sample")) for r in rows}
