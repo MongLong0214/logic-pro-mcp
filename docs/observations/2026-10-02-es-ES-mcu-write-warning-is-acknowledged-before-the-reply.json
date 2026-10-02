@@ -18,7 +18,7 @@
   },
   "reverify": {
     "kind": "script",
-    "command": "/usr/bin/python3 Scripts/livekit/live_1077_write_warning_is_cleared_in_every_locale.py <worktree> <full-40-char-head> <candidate-binary> <control-binary> --lprojs es",
+    "command": "/usr/bin/python3 Scripts/livekit/live_1077_write_warning_is_cleared_in_every_locale.py <worktree> <full-40-char-head> <candidate-binary> <control-binary> --lprojs es --crash-control es",
     "expected": "the control leaves one one-button dialog up after the reply and 1.5 s later, where none was up before the press; the candidate's reply names informational_alert, acknowledge_alert and modal_after_press clear, a Logic window is listed during the call, none is left after it, and the quit leaves Logic gone with no new Logic Pro crash report; a control quit under the warning in a crash-control language writes one",
     "cost": "needs LPM_LIVE_LOCK naming a held lock and LPM_EVIDENCE_ROOT an absolute path outside the repository; quits and relaunches Logic twice per language and restores Korean at the end, about three minutes per language"
   },
