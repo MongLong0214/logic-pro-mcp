@@ -119,14 +119,19 @@ def osa(script, timeout=20, deadline=None):
         if result.returncode == 0:
             return (result.stdout or "").strip()
         stderr = result.stderr or ""
-        if attempt or "-25211" not in stderr or within(timeout) <= 0:
+        if attempt or "-25211" not in stderr:
+            return None
+        # The restart's budget is read once, here, and that reading is the one the kill is given:
+        # read again at the launch it could already be past the deadline (review R2 of #1081).
+        budget = within(timeout)
+        if budget <= 0:
             return None
         SYSTEM_EVENTS_RESTARTS.append({
             "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
             "stderr_tail": stderr.strip()[-300:]})
         try:
             subprocess.run(["/usr/bin/killall", "System Events"], capture_output=True, text=True,
-                           timeout=None if deadline is None else within(timeout))
+                           timeout=None if deadline is None else budget)
         except subprocess.TimeoutExpired:
             return None
         time.sleep(max(0.0, within(SYSTEM_EVENTS_RELAUNCH_WAIT)))

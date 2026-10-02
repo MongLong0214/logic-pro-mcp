@@ -677,6 +677,40 @@ check("a System Events restart inside the watch ends at the deadline: the kill g
       and got == dict(UNREAD, unreadable_why=["no_reply"]), (got, calls, now, restarts))
 
 
+def osa_reading(readings):
+    """L993.osa with a 2.0 s deadline, a clock that answers `readings` in order (the last repeats),
+    an osascript refused with -25211 and a kill that answers at once: (calls, restarts)."""
+    calls, reads = [], list(readings)
+    saved = (L993.subprocess, L993.time)
+
+    def fake_run(argv, timeout=None, **_):
+        calls.append((os.path.basename(argv[0]), None if timeout is None else round(timeout, 6)))
+        if argv[0].endswith("killall"):
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        return subprocess.CompletedProcess(argv, 1, "", "execution error: (-25211)")
+
+    L993.subprocess = types.SimpleNamespace(run=fake_run, TimeoutExpired=subprocess.TimeoutExpired)
+    L993.time = types.SimpleNamespace(monotonic=lambda: reads.pop(0) if len(reads) > 1 else reads[0],
+                                      sleep=lambda seconds: None)
+    del L993.SYSTEM_EVENTS_RESTARTS[:]
+    try:
+        L993.osa("x", deadline=2.0)
+        return calls, list(L993.SYSTEM_EVENTS_RESTARTS)
+    finally:
+        L993.subprocess, L993.time = saved
+        del L993.SYSTEM_EVENTS_RESTARTS[:]
+
+
+# Review R2 of #1081: the clock read 1.9 when the restart was allowed and 2.1 when the kill launched,
+# and the kill was given -0.1. The budget is read once and that reading is the one the kill gets.
+calls, restarts = osa_reading([0.0, 1.9, 2.1])
+expect("a restart allowed at 1.9 gives the kill the 0.1 s it was allowed, never a budget read later",
+       calls, [("osascript", 2.0), ("killall", 0.1)])
+calls, restarts = osa_reading([0.0, 2.1])
+check("a restart whose budget has run out when it is read is neither recorded nor launched",
+      calls == [("osascript", 2.0)] and restarts == [], (calls, restarts))
+
+
 def default_osa(answers):
     """L993.osa called as its other callers call it: no deadline, subprocess.run faked, and a `time`
     with no clock, so reading one raises."""
