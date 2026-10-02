@@ -143,56 +143,54 @@ SUBSCRIBE = SUBSCRIBE_ALL
 SUBSCRIBING = False
 
 
-def drain_notifications(driver, seconds):
-    """Read the server's output for `seconds` and count resources/updated notifications."""
-    import select
-    count, deadline = 0, time.monotonic() + seconds
+def subscribe_and_count(driver, uris, seconds):
+    """Subscribe to `uris` and, for `seconds`, count the resources/updated notifications the server
+    sends. Returns ([accepted per uri], notifications).
+
+    The server's output is read by one thread, line by line, into a queue. The first version
+    called select() on the pipe after the client's own reads, and those reads had already
+    buffered lines past the replies, so select() saw nothing and notifications that had arrived
+    were counted as none (2026-10-03: four of six French samples read 0 with identical
+    starting screens)."""
+    import queue
+    import threading
+    lines = queue.Queue()
+
+    def pump():
+        while True:
+            line = driver.proc.stdout.readline()
+            lines.put(line)
+            if not line:
+                return
+
+    ids = []
+    for uri in uris:
+        driver._id += 1
+        ids.append(driver._id)
+        driver._write({"jsonrpc": "2.0", "id": driver._id, "method": "resources/subscribe",
+                       "params": {"uri": uri}})
+    threading.Thread(target=pump, daemon=True).start()
+    replies, notifications = {}, 0
+    deadline = time.monotonic() + seconds
     while True:
         left = deadline - time.monotonic()
         if left <= 0:
-            return count
-        ready, _, _ = select.select([driver.proc.stdout], [], [], left)
-        if not ready:
-            return count
-        line = driver.proc.stdout.readline()
+            break
+        try:
+            line = lines.get(timeout=left)
+        except queue.Empty:
+            break
         if not line:
-            return count
+            break
         try:
             message = json.loads(line)
         except ValueError:
             continue
-        if message.get("method") == "notifications/resources/updated":
-            count += 1
-
-
-TEXT_ROLES = ("AXTextField", "AXTextArea")
-
-
-def settle_focus(helper):
-    """Leave the focus on the Tracks rail before a sample starts, and return its role. A sample
-    that lost the field can leave a text field focused, and a server started then yields from its
-    first tick, so its publication never runs (seen 2026-10-03: the candidate's first subscribed
-    sample in every language had no notification). Up to three rounds: an Escape, sent only while
-    Logic holds the keyboard and a text field has the focus, then the rail. Every round is returned,
-    so a sample that could not leave a text field says why (seen in German: two in a row)."""
-    attempts = []
-    for _ in range(3):
-        P.osa('tell application "Logic Pro" to activate')
-        role = focused_role(helper)
-        owner = P.keyboard_owner_is_logic()
-        escaped = role in TEXT_ROLES and owner is True
-        if escaped:
-            P.post_escape()
-            time.sleep(0.7)
-        subprocess.run([helper, "keymain", *P.names("arrangeWindowTitleSuffix")], capture_output=True,
-                       text=True, timeout=10)
-        subprocess.run([helper, "focusrail", *P.names("trackHeadersDescription")], capture_output=True,
-                       text=True, timeout=15)
-        after = focused_role(helper)
-        attempts.append({"role": role, "keyboard_owner_is_logic": owner, "escaped": escaped, "role_after": after})
-        if after not in TEXT_ROLES:
-            break
-    return attempts
+        if message.get("id") in ids:
+            replies[message["id"]] = "error" not in message
+        elif message.get("method") == "notifications/resources/updated":
+            notifications += 1
+    return [replies.get(i, False) for i in ids], notifications
 
 
 def server_trace(driver, start_ms, end_ms):
@@ -224,11 +222,10 @@ def sample(helper, condition, binary, n):
         if binary:
             driver = E.Driver(binary=binary)
             if SUBSCRIBING:
-                replies = [driver._send("resources/subscribe", {"uri": uri}) for uri in SUBSCRIBE]
-                row["subscribed"] = [isinstance(r, dict) and "error" not in r for r in replies]
                 # The first publication after a subscription notifies every resource, since the
                 # notifier has no earlier content to compare with: these show it ran.
-                row["notifications_before_rename"] = drain_notifications(driver, 6.0)
+                row["subscribed"], row["notifications_before_rename"] = subscribe_and_count(
+                    driver, SUBSCRIBE, 6.0)
             else:
                 time.sleep(4.0)  # the idle poll runs
         if P.keyboard_owner_is_logic() is not True:
