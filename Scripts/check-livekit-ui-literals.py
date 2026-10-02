@@ -68,6 +68,7 @@ import glob
 import importlib.util
 import os
 import re
+import symtable
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -99,7 +100,7 @@ KNOWN = {
     ("live_448_track_stack_readback.py", "Tracks"): 1,
     ("live_519_region_op_on_a_localized_logic.py", "Tracks"): 3,
     ("live_523_marker_delete.py", "Marker"): 2,
-    ("live_523_marker_delete.py", "Number of Items"): 3,
+    ("live_523_marker_delete.py", "Number of Items"): 2,
     ("live_538_modal_reconcile.py", "Tracks"): 1,
     ("live_549_cell_does_not_veto.py", "Cancel"): 2,
     ("live_549_cell_does_not_veto.py", "Delete"): 1,
@@ -154,15 +155,18 @@ PYTHON_PREDICATES = [
     re.compile(r'(?P<q>["\'])(?P<lit>[^"\']+)(?P=q)\s+in\s+\w'),
 ]
 
-# Comparisons against a PROTOCOL field, not against Logic's UI. `target_identity.control == "pan"`
-# reads a key this repository defines and ships; that the policy also happens to carry `pan` as a
-# slider hint does not make the envelope localised. A review found this one already baked into
-# KNOWN as a false positive. Keyed by the literal AND the expression it sits in, so the exemption
-# cannot quietly cover a real UI comparison against the same word.
+# Comparisons against a PROTOCOL name, not against Logic's UI, written where no parser reads them:
+# inside an AppleScript string, or in a Swift file. Keyed by the literal AND the text it sits in, so
+# the exemption cannot quietly cover a real UI comparison against the same word, and by the files it
+# may apply in: `EVERY_HARNESS`, or a tuple of repository-relative paths.
+#
+# These are TEXT markers, found in the line. A marker that begins with a name does not match after a
+# character that would continue that name. A Python comparison is read from the tree and exempted by
+# PROTOCOL_EXPRESSIONS below; the three `control` forms and `["kind"]` that sat here were Python
+# comparisons, matched as text and exempting whatever they were read from, and each is an entry
+# there now (#1078, review R2), tied to the binding it was measured with.
+EVERY_HARNESS = None
 PROTOCOL_COMPARISONS = (
-    ('"control") == "pan"', "pan"),
-    ('get("control") == "pan"', "pan"),
-    ('["control"] == "pan"', "pan"),
     # System Events' PROCESS name is not Logic's UI, and it is not the string the policy carries.
     # MEASURED 2026-09-15 on a Korean Logic 12.3 (6674), all three in the same minute:
     #
@@ -174,39 +178,431 @@ PROTOCOL_COMPARISONS = (
     # strings that read alike; `applicationMenuBarItem` is about the second one. Without this the
     # guard would push five harnesses to "fix" a line that is already right, and the fix would
     # break them.
-    ('every process whose ', "logic pro"),
-    ('name is "Logic Pro"', "logic pro"),
-    ('tell process "Logic Pro"', "logic pro"),
-    ('tell application "Logic Pro"', "logic pro"),
+    ('every process whose ', "logic pro", EVERY_HARNESS),
+    ('name is "Logic Pro"', "logic pro", EVERY_HARNESS),
+    ('tell process "Logic Pro"', "logic pro", EVERY_HARNESS),
+    ('tell application "Logic Pro"', "logic pro", EVERY_HARNESS),
+)
+
+# Whole Python comparisons, keyed and scoped as above but matched by what they ARE. A text marker
+# bounds where it starts, and that is not the same expression: review R1 of #1078 found
+# `"read" in step` exempting `"read" in step_title` and `"read" in step["automation_title"]` -- a
+# localised title -- and `name == "mute"` exempting a name spelled `button`, U+0301, `name`, which
+# Python reads as one identifier and `\w` does not. So each entry is parsed as one comparison, and
+# a comparison in the source is exempt only when both its operands are the entry's: the same names
+# and subscripts, nothing read from them, nothing longer, nothing joined by an operator. Quote style
+# and redundant parentheses are not part of an expression, so `'read' in step` is the same one.
+# Escapes, adjacent strings and line breaks inside a literal are not part of it either: the parser
+# has joined them, so `"re\x61d" in (step)` is the entry `"read" in step`.
+#
+# The same expression is another comparison when its name holds something else. Review R2 of #1078
+# found `step = step["automation_title"]` followed by `"read" in step` exempt: a localised title,
+# compared under the entry's own spelling. So each entry also names the binding it was measured with
+# -- the assignment, `def` header, `lambda` parameters or `for` clause that gives its one name a
+# value -- and a comparison is exempt only where the scope that resolves that name binds it exactly
+# once, by one of those. A second binding of any kind, a different one, a `global` or `nonlocal`
+# declaration, or none at all (the name comes from elsewhere) is reported. What a binding reads in
+# turn -- `witness` in `for r in witness` -- is not followed.
+# They apply to Python source only; in an AppleScript string or a Swift file they exempt nothing.
+PROTOCOL_EXPRESSIONS = (
     # Two comparisons against a name that was ALREADY normalised or already read as a process name.
     # `evidence.py` strips the non-breaking space on the line above its compare and says so in a
     # comment older than this guard; `live_614` compares `name of first process whose frontmost is
-    # true`. Keyed by the variable so the exemption cannot spread to a window or menu title.
-    ('owner == "Logic Pro"', "logic pro"),
-    ('front == "Logic Pro"', "logic pro"),
+    # true`. Keyed by the variable and its binding so the exemption cannot spread to a window or
+    # menu title.
+    ('owner == "Logic Pro"', "logic pro", EVERY_HARNESS,
+     'owner = (window.get("kCGWindowOwnerName") or "").replace("\\xa0", " ")'),
+    ('front == "Logic Pro"', "logic pro", EVERY_HARNESS,
+     'front = osa(\'tell application "System Events" to return name of first process whose '
+     'frontmost is true\')'),
+    # `target_identity.control == "pan"` reads a key this repository defines and ships in the
+    # set_pan envelope; that the policy also carries `pan` as a slider hint does not make the
+    # envelope localised. A review found this one already baked into KNOWN as a false positive.
+    ('(envelope.get("target_identity") or {}).get("control") == "pan"', "pan",
+     ("Scripts/livekit/live_290_selectors_resolve_by_identity.py",),
+     'envelope = d.tool("logic_mixer", "set_pan", {"track": 0, "value": target})'),
     # `r["kind"] == "output"` in the #291 slot harnesses reads the harness's OWN witness key -- the
     # `SLOT` table's key for the row, written by the harness a few lines above the compare -- and
     # not a string Logic displays. The word became localisable on 2026-09-27 when
     # `physicalOutputLabelPrefix` (canonical `output`, Apple's `Output %d-%d` prefix in ten
-    # locales) joined the policy; the compare did not change. Keyed by the subscript so a
-    # `whose name contains "output"` on the same line would still be reported.
-    ('["kind"] == "output"', "output"),
+    # locales) joined the policy; the compare did not change.
+    ('r["kind"] == "output"', "output",
+     ("Scripts/livekit/live_291_input_slot_is_read.py", "Scripts/livekit/live_291_output_slot_is_read.py"),
+     "for r in witness"),
+    # `observed_position_components` is the reply's list of position-component raw values
+    # (TransportDispatcher), `bar` among them, not the localised bar slider. No line pattern saw this
+    # one: the parenthesised operand kept `in` from being followed by a word character. Reading the
+    # tree found it (#1078, review R2).
+    ('"bar" in (o.get("observed_position_components") or [])', "bar",
+     ("Scripts/livekit/live_778_japanese_ax_reads_resolve.py",), "lambda o"),
     # Scripts/verify protocol vocabulary (ADR-027 P2 PR-1, #1028): dict keys, a lifecycle event
     # name, a runner branch on the step shape, and the walk's own flag name -- not a string typed
     # at Logic. Measured 2026-09-30 at b2fb4ff4 by pointing the scan at Scripts/verify: 13 hits
-    # across 8 files, all these ten words, none a UI matcher.
-    ('flag == "solo"', "solo"),  # live/probes.py: the solo-implies-mute comparison
-    ('name == "mute"', "mute"),  # live/probes.py: same line as the entry above
-    ('"arm" in row["value_errors"]', "arm"),  # live/spec_probes.py: which flag's read error
-    ('"tracks" in observation', "tracks"),  # live/tests/test_controls_known.py: probe shape switch
-    ('e["dir"] == "send"', "send"),  # live/tests/test_mcp.py: transcript message direction
-    ('"read" in step', "read"),  # engine.py and runner.py: a step's own kind
-    ('"delete" in op', "delete"),  # selftest.py: a fixture-mutation op's own kind
-    ('"move" in op', "move"),  # selftest.py: a fixture-mutation op's own kind
-    ('case["cmd"][0] == "record"', "record"),  # selftest.py: a self-test case's own command
-    ('e[0] == "start"', "start"),  # selftest.py: a lifecycle event's own kind
+    # across 8 files, all these ten words, none a UI matcher. Each is scoped to the files it was
+    # measured in. `name == "mute"` is a flag name in live/probes.py and would be an AX title
+    # compare in the next harness to write it; a review asked that the exemption not travel. The
+    # bindings are the ones each compare had on 2026-10-02, one per name per site.
+    ('flag == "solo"', "solo", ("Scripts/verify/live/probes.py",),
+     "def flags_show(spec, run, flag=None)"),  # solo implies mute
+    ('name == "mute"', "mute", ("Scripts/verify/live/probes.py",),
+     "for name in FLAGS"),  # same line as the above
+    ('"arm" in row["value_errors"]', "arm", ("Scripts/verify/live/spec_probes.py",),
+     "def _armed(row: dict)"),  # which flag's read error
+    ('"tracks" in observation', "tracks", ("Scripts/verify/live/tests/test_controls_known.py",),
+     ("def zeroed(observation)", "def emptied(observation)")),  # probe shape switch
+    ('e["dir"] == "send"', "send", ("Scripts/verify/live/tests/test_mcp.py",),
+     "for e in self.server.transcript"),  # transcript message direction
+    ('"read" in step', "read", ("Scripts/verify/engine.py", "Scripts/verify/runner.py"),
+     ("def reading_of(step: dict) -> tuple", "def _take(ctx: dict, step: dict) -> str")),  # a step's kind
+    ('"delete" in op', "delete", ("Scripts/verify/selftest.py",),
+     "for op in ops"),  # a fixture-mutation op's kind
+    ('"move" in op', "move", ("Scripts/verify/selftest.py",),
+     "for op in ops"),  # a fixture-mutation op's kind
+    ('case["cmd"][0] == "record"', "record", ("Scripts/verify/selftest.py",),
+     "def _run_attested(case: dict, where: dict)"),  # a self-test case's own command
+    ('e[0] == "start"', "start", ("Scripts/verify/selftest.py",),
+     "for e in life.events"),  # a lifecycle event's kind
 )
+
+
+def _string_value(node):
+    """The one string `node` spells, however it is spelled; None when it is computed.
+
+    A constant's escapes, adjacent parts and line breaks are already joined by the parser. An
+    f-string with nothing interpolated, and `+` between strings, spell one string as well.
+    """
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if isinstance(node, ast.JoinedStr):
+        parts = [_string_value(value) for value in node.values]
+        return None if None in parts else "".join(parts)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = _string_value(node.left), _string_value(node.right)
+        return None if left is None or right is None else left + right
+    return None
+
+
+def _shape(compare):
+    """`ast.dump` of a comparison with each operand that spells a string written as that string."""
+    def folded(operand):
+        value = _string_value(operand)
+        return operand if value is None else ast.Constant(value=value, kind=None)
+    return ast.dump(ast.Compare(left=folded(compare.left), ops=compare.ops,
+                                comparators=[folded(c) for c in compare.comparators]))
+
+
+def _comparison(expression, literal):
+    """`(shape, side, name)`: the one comparison `expression` is, which operand is `literal`, and the
+    one name the other operand reads.
+
+    Read when the module loads, so an entry that is not one comparison of `literal` with one other
+    operand reading one name stops the guard instead of becoming an exemption that never matches.
+    """
+    node = ast.parse(expression, mode="eval").body
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+        raise ValueError(f"PROTOCOL_EXPRESSIONS: {expression!r} is not one comparison")
+    operands = (node.left, node.comparators[0])
+    sides = [side for side, operand in enumerate(operands)
+             if isinstance(operand, ast.Constant) and isinstance(operand.value, str)
+             and operand.value.lower() == literal]
+    if len(sides) != 1:
+        raise ValueError(f"PROTOCOL_EXPRESSIONS: {expression!r} does not compare {literal!r} "
+                         "with one other operand")
+    names = {n.id for n in ast.walk(operands[1 - sides[0]]) if isinstance(n, ast.Name)}
+    if len(names) != 1:
+        raise ValueError(f"PROTOCOL_EXPRESSIONS: {expression!r} reads {sorted(names)!r}, "
+                         "not one name")
+    return _shape(node), sides[0], names.pop()
+
+
+def _stored(target):
+    return {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
+
+
+def _def_key(function):
+    return ("def", function.name, ast.dump(function.args),
+            ast.dump(function.returns) if function.returns else None)
+
+
+def _binding_key(source, name):
+    """The key of the binding `source` writes for `name`: an assignment, a `def` header, `lambda`
+    parameters, or a `for` clause, which is the same key in a statement and in a comprehension."""
+    if source.startswith("for "):
+        generator = ast.parse(f"[_ {source}]", mode="eval").body.generators[0]
+        key, bound = ("for", ast.dump(generator.target), ast.dump(generator.iter)), \
+            _stored(generator.target)
+    elif source.startswith("def "):
+        function = ast.parse(source + ": ...").body[0]
+        args = function.args
+        key, bound = _def_key(function), {a.arg for a in args.posonlyargs + args.args + args.kwonlyargs}
+    elif source.startswith("lambda"):
+        function = ast.parse(source + ": ...", mode="eval").body
+        args = function.args
+        key, bound = ("lambda", ast.dump(args)), {a.arg for a in args.posonlyargs + args.args + args.kwonlyargs}
+    else:
+        statement = ast.parse(source).body[0]
+        if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
+            raise ValueError(f"PROTOCOL_EXPRESSIONS: {source!r} is not one assignment")
+        key = ("=", ast.dump(statement.targets[0]), ast.dump(statement.value))
+        bound = {statement.targets[0].id} if isinstance(statement.targets[0], ast.Name) else set()
+    if name not in bound:
+        raise ValueError(f"PROTOCOL_EXPRESSIONS: {source!r} does not bind {name!r}")
+    return key
+
+
+def _expression(expression, literal, where, bindings):
+    shape, side, name = _comparison(expression, literal)
+    bindings = (bindings,) if isinstance(bindings, str) else bindings
+    return shape, where, name, frozenset(_binding_key(b, name) for b in bindings)
+
+
+_EXPRESSIONS = tuple(_expression(*entry) for entry in PROTOCOL_EXPRESSIONS)
 ANY_LITERAL = re.compile(r'"([^"\\\n]{1,80})"')
+
+_FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+_COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+_MATCH_NAMES = tuple(getattr(ast, n) for n in ("MatchAs", "MatchStar") if hasattr(ast, n))
+_MATCH_REST = getattr(ast, "MatchMapping", ())
+
+
+def _evaluated_around(node):
+    """The parts of a nested `def`, `lambda` or `class` that run in the scope around it, when the
+    statement or expression does: defaults, annotations, decorators, class bases and keywords.
+    Review R3 of #1078 found `def inner(x=(step := step["automation_title"])): pass` rebinding
+    `step` in the function the entry was measured in, unseen, because the whole nested statement
+    was skipped. Its body stays its own scope."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        args = node.args
+        parts = list(args.defaults) + [d for d in args.kw_defaults if d is not None]
+        if not isinstance(node, ast.Lambda):
+            every = args.posonlyargs + args.args + args.kwonlyargs + [a for a in (args.vararg, args.kwarg) if a]
+            parts += [a.annotation for a in every if a.annotation is not None]
+            parts += list(node.decorator_list) + ([node.returns] if node.returns is not None else [])
+        return parts
+    if isinstance(node, ast.ClassDef):
+        return list(node.decorator_list) + list(node.bases) + [k.value for k in node.keywords]
+    return []
+
+
+def _comprehension_walrus_lines(node, name):
+    """Lines of each walrus to `name` that a comprehension makes in the scope around it. A walrus in
+    any comprehension binds outside it, so nested comprehensions are entered; a `def`, `lambda` or
+    `class` inside it is its own scope, so only what `_evaluated_around` says runs here is entered.
+    The review of a1b27a6f found an unrestricted walk counting `lambda: (step := "title")` -- the
+    lambda's own local -- as a second binding of the measured name."""
+    lines, stack = [], [node]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            stack.extend(_evaluated_around(current))
+            continue
+        if isinstance(current, ast.NamedExpr) and current.target.id == name:
+            lines.append(current.lineno)
+        stack.extend(ast.iter_child_nodes(current))
+    return lines
+
+
+def _runs_around(scope, child, grandchild):
+    """Whether `child` of `scope` (reached through `grandchild`) is evaluated in the scope around
+    `scope` rather than in it: a header part of a `def`, `lambda` or `class`, or a comprehension's
+    first iterable, which runs before the comprehension's own scope exists."""
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return not any(child is statement for statement in scope.body)
+    if isinstance(scope, ast.Lambda):
+        return child is not scope.body
+    if isinstance(scope, _COMPREHENSIONS):
+        return child is scope.generators[0] and grandchild is scope.generators[0].iter
+    return False
+
+
+#: The compiler's symbol table of the file being scanned, set by `_scan_root` before it reads the
+#: file's comparisons, so `_declared_writes` reads `nonlocal` and `global` the way Python does.
+_SYMBOLS = None
+
+
+def _table_for(root, scope):
+    """The symbol table of the module, `def` or `class` statement `scope`, or None."""
+    if isinstance(scope, ast.Module):
+        return root
+    stack = list(root.get_children())
+    while stack:
+        table = stack.pop()
+        if table.get_name() == getattr(scope, "name", None) and table.get_lineno() == scope.lineno \
+                and table.get_type() in ("function", "class"):
+            return table
+        stack.extend(table.get_children())
+    return None
+
+
+def _declared_writes(scope, name):
+    """Lines of each nested `def` or `class` body that assigns `name` in `scope` through a
+    declaration: `nonlocal` resolving to `scope`, or `global` when `scope` is the module. Review of
+    1adc7aa1 (#1078): a class body declaring `nonlocal step` and assigning it rebinds the measured
+    parameter, and the binding walk, which does not enter nested bodies, never saw it. A `nonlocal`
+    resolves to the nearest enclosing function that binds the name itself, so a write meant for an
+    intermediate function is not counted here."""
+    if _SYMBOLS is None or not isinstance(scope, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef)):
+        return []
+    target = _table_for(_SYMBOLS, scope)
+    if target is None:
+        return []
+    module = isinstance(scope, ast.Module)
+    lines = []
+
+    def visit(table, between):
+        for child in table.get_children():
+            if child.get_type() not in ("function", "class"):
+                continue
+            symbol = child.lookup(name) if name in child.get_identifiers() else None
+            if symbol is not None and symbol.is_assigned():
+                if module and symbol.is_declared_global():
+                    lines.append(("other", child.get_lineno()))
+                elif not module and symbol.is_nonlocal():
+                    owner = next((t for t in reversed(between) if name in t.get_identifiers()
+                                  and t.lookup(name).is_local()), target)
+                    if owner is target:
+                        lines.append(("other", child.get_lineno()))
+            visit(child, between + ([child] if child.get_type() == "function" else []))
+
+    visit(target, [])
+    return lines
+
+
+def _bindings(scope, name):
+    """Every binding of `name` that `scope` itself makes, as keys. One no entry can be written as --
+    `+=`, `del`, `with`, `except`, an import, a walrus, a `match` capture, a nested `def` or `class`,
+    a `global` or `nonlocal` declaration, a second target -- is `("other", line)`. A nested `def`,
+    `lambda` or `class` is entered only for what `_evaluated_around` says runs here."""
+    keys = []
+    if isinstance(scope, _FUNCTIONS):
+        args = scope.args
+        params = args.posonlyargs + args.args + args.kwonlyargs + [a for a in (args.vararg, args.kwarg) if a]
+        if any(p.arg == name for p in params):
+            keys.append(("lambda", ast.dump(args)) if isinstance(scope, ast.Lambda) else _def_key(scope))
+        stack = list(scope.body) if isinstance(scope.body, list) else [scope.body]
+    elif isinstance(scope, _COMPREHENSIONS):
+        stack = []
+        for index, generator in enumerate(scope.generators):
+            if name in _stored(generator.target):
+                keys.append(("for", ast.dump(generator.target), ast.dump(generator.iter)))
+            stack += list(generator.ifs) + ([generator.iter] if index else [])
+        stack += [scope.key, scope.value] if isinstance(scope, ast.DictComp) else [scope.elt]
+    else:
+        stack = list(scope.body)
+    handled = set()
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == name:
+                keys.append(("other", node.lineno))
+            stack.extend(_evaluated_around(node))
+            continue
+        if isinstance(node, ast.Lambda):
+            stack.extend(_evaluated_around(node))
+            continue
+        if isinstance(node, _COMPREHENSIONS):
+            # Its own targets bind inside it; a walrus in it binds here.
+            keys += [("other", line) for line in _comprehension_walrus_lines(node, name)]
+            continue
+        if isinstance(node, (ast.For, ast.AsyncFor)) and name in _stored(node.target):
+            keys.append(("for", ast.dump(node.target), ast.dump(node.iter)))
+            handled.update(id(n) for n in ast.walk(node.target))
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name) and node.targets[0].id == name:
+            keys.append(("=", ast.dump(node.targets[0]), ast.dump(node.value)))
+            handled.add(id(node.targets[0]))
+        elif isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, (ast.Store, ast.Del)) \
+                and id(node) not in handled:
+            keys.append(("other", node.lineno))
+        elif isinstance(node, (ast.Global, ast.Nonlocal)) and name in node.names:
+            keys.append(("other", node.lineno))
+        elif isinstance(node, ast.ExceptHandler) and node.name == name:
+            keys.append(("other", node.lineno))
+        elif isinstance(node, (ast.Import, ast.ImportFrom)) \
+                and any((a.asname or a.name.split(".")[0]) == name for a in node.names):
+            keys.append(("other", node.lineno))
+        elif (isinstance(node, _MATCH_NAMES) and node.name == name) or \
+                (_MATCH_REST and isinstance(node, _MATCH_REST) and node.rest == name):
+            keys.append(("other", node.lineno))
+        stack.extend(ast.iter_child_nodes(node))
+    return keys + _declared_writes(scope, name)
+
+
+def _resolved(node, name, parents):
+    """The bindings of `name` in the scope that resolves it at `node`, or None when none binds it.
+    A class body is a scope only for what sits in it directly, as Python reads it, and a scope's
+    header is read in the scope around it: a comparison in a decorator is not resolved against the
+    parameters of the function it decorates (review R3 of #1078)."""
+    inside_function = False
+    grandchild, child = None, node
+    while child in parents:
+        scope = parents[child]
+        around = _runs_around(scope, child, grandchild)
+        grandchild, child = child, scope
+        if around or (isinstance(scope, ast.ClassDef) and inside_function):
+            continue
+        if isinstance(scope, (*_FUNCTIONS, *_COMPREHENSIONS, ast.ClassDef, ast.Module)):
+            keys = _bindings(scope, name)
+            if keys:
+                return keys
+            inside_function = inside_function or not isinstance(scope, ast.ClassDef)
+    return None
+
+
+def _exempt(compare, scope, parents):
+    """Whether `compare` IS a PROTOCOL_EXPRESSIONS entry that applies in `scope`, its name bound
+    once, by a binding the entry was measured with."""
+    if len(compare.ops) != 1:
+        return False
+    shape = _shape(compare)
+    for entry_shape, where, name, bindings in _EXPRESSIONS:
+        if shape != entry_shape or (where is not EVERY_HARNESS and scope not in where):
+            continue
+        keys = _resolved(compare, name, parents)
+        if keys is not None and len(keys) == 1 and keys[0] in bindings:
+            return True
+    return False
+
+
+def _python_comparisons(tree):
+    """`(comparison, operand, string)` for each string a Python comparison reads: either operand of
+    `==` / `!=`, the left operand of `in` / `not in` and each element of a tuple, list or set on its
+    right, and the first argument of `.startswith` / `.endswith` or each element of a tuple there."""
+    for node in ast.walk(tree):
+        candidates = []
+        if isinstance(node, ast.Compare):
+            operands = [node.left, *node.comparators]
+            for index, op in enumerate(node.ops):
+                left, right = operands[index], operands[index + 1]
+                if isinstance(op, (ast.Eq, ast.NotEq)):
+                    candidates += [left, right]
+                elif isinstance(op, (ast.In, ast.NotIn)):
+                    candidates.append(left)
+                    if isinstance(right, (ast.Tuple, ast.List, ast.Set)):
+                        candidates += right.elts
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                and node.func.attr in ("startswith", "endswith") and node.args:
+            first = node.args[0]
+            candidates = list(first.elts) if isinstance(first, ast.Tuple) else [first]
+        for operand in candidates:
+            value = _string_value(operand)
+            if value is not None:
+                yield node, operand, value
+
+
+_SWIFT_UNICODE_ESCAPE = re.compile(r'(?<!\\)\\u\{([0-9A-Fa-f]{1,8})\}')
+
+
+def _swift_unescaped(line):
+    """A Swift line with each `\\u{...}` escape written as its character, so `"re\\u{61}d"` reads as
+    the word it spells. A quote, a backslash or a line break stays escaped: written out, it would
+    move where the string ends."""
+    def one(match):
+        code = int(match.group(1), 16)
+        if code > 0x10FFFF or chr(code) in '"\\\n\r':
+            return match.group(0)
+        return chr(code)
+    return _SWIFT_UNICODE_ESCAPE.sub(one, line)
 
 
 def _labels_module():
@@ -240,8 +636,16 @@ def _docstring_nodes(tree):
     return out
 
 
-def _hits(text, known_canonicals, patterns):
+def _continues_name(character):
+    """Whether `character` can continue a Python identifier. A combining mark can and is not `\\w`."""
+    return bool(character) and ("a" + character).isidentifier()
+
+
+def _hits(text, known_canonicals, patterns, site=None):
     """(literal, policy name) once per OCCURRENCE, not once per pattern that matched it.
+
+    `site` is the repository-relative path the text came from. A scoped PROTOCOL_COMPARISONS entry
+    applies only there, so a text with no file behind it gets the unscoped entries alone.
 
     Two patterns both match `whose name ends with "Tracks"`, so one matcher scored two hits. A
     review turned that into an attack: replace it with a single `window "Tracks"` (one hit) and add
@@ -262,10 +666,15 @@ def _hits(text, known_canonicals, patterns):
         # Pro"`: three real `'Save'` findings vanished with it. A line-wide skip is an exemption
         # that grows on its own.
         exempt_spans = set()
-        for marker, lit in PROTOCOL_COMPARISONS:
+        for marker, lit, where in PROTOCOL_COMPARISONS:
+            if where is not EVERY_HARNESS and site not in where:
+                continue
             quoted = f'"{lit}"'
             literal_offset = marker.lower().rfind(quoted) + 1
             for marker_match in re.finditer(re.escape(marker), line):
+                if _continues_name(marker[:1]) and \
+                        _continues_name(line[marker_match.start() - 1:marker_match.start()]):
+                    continue
                 if literal_offset:
                     start = marker_match.start() + literal_offset
                     exempt_spans.add((start, start + len(lit)))
@@ -295,45 +704,67 @@ def _hits(text, known_canonicals, patterns):
     return found
 
 
-def _scan_root(root, key, known_canonicals, swift_recursive=False):
+def _scan_root(root, label, key, known_canonicals, swift_recursive=False):
     """found entries `(key(path), literal, lineno, policy_name)` for every `*.py` and `*.swift`
     file under `root`. `key` turns a path into the identity `KNOWN` is keyed on -- a basename for
     Scripts/livekit, a root-relative path for Scripts/verify, where two files can share a
     basename. `swift_recursive` defaults False so Scripts/livekit's swift scan is exactly the
     top-level-only glob it always was; Scripts/verify has no swift today, and the outcome this
-    root was added for is `Scripts/verify/**`, so it opts into `**`."""
+    root was added for is `Scripts/verify/**`, so it opts into `**`. `label` is the root's
+    repository-relative name, so a file's scope for PROTOCOL_COMPARISONS is the same whether the
+    root is the real tree or a test's copy of it."""
     found = []
     for path in sorted(glob.glob(os.path.join(root, "**", "*.py"), recursive=True)):
         site = key(path)
+        scope = f"{label}/{os.path.relpath(path, root)}"
         source = open(path, encoding="utf-8", errors="replace").read()
         try:
             tree = ast.parse(source)
         except SyntaxError:
             print(f"  {site}: does not parse — not scanned")
             continue
+        global _SYMBOLS
+        # The compiler can refuse what the parser accepts -- Python 3.14 refuses a walrus in an
+        # annotation -- and such a file cannot run either. It is still scanned; only the
+        # declaration check, which needs the symbol table, is left out.
+        try:
+            _SYMBOLS = symtable.symtable(source, path, "exec")
+        except SyntaxError:
+            _SYMBOLS = None
         skip = _docstring_nodes(tree)
         # Pass 1: AppleScript, which lives inside string constants.
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skip:
-                for literal, name in _hits(node.value, known_canonicals, APPLESCRIPT_PREDICATES):
+                for literal, name in _hits(node.value, known_canonicals, APPLESCRIPT_PREDICATES,
+                                           scope):
                     found.append((site, literal, getattr(node, "lineno", 0), name))
-        # Pass 2: Python comparisons, which live in the source. Docstrings are removed so a
-        # paragraph quoting `help.startswith("Tracks")` is prose, not a matcher.
-        prose = [n.value for n in ast.walk(tree)
-                 if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) in skip]
-        code = source
-        for doc in prose:
-            code = code.replace(doc, "")
-        for lineno, line in enumerate(code.splitlines(), 1):
-            for literal, name in _hits(line, known_canonicals, PYTHON_PREDICATES):
-                found.append((site, literal, lineno, name))
+        # Pass 2: Python comparisons, read from the same tree (#1078, review R2). A line pattern read
+        # a literal as its line spelled it, so an escape, adjacent strings, a string continued on the
+        # next line or a parenthesised operand hid a UI comparison from it. The tree has the value.
+        # A value computed any other way is not read: a name bound to a string, `.lower()`, `%`,
+        # `.format`, `.join`, `re`, `str.startswith(title, ...)`. Measured 2026-10-02: eleven
+        # operands in ten comparisons, in five files under the two roots, compare against a name
+        # bound to a localised word (`EDGE_SEND`, `KIND_BUS` and the like), and none is reported.
+        parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+        read = set()
+        for comparison, operand, value in _python_comparisons(tree):
+            if id(operand) in read:
+                continue
+            read.add(id(operand))
+            name = known_canonicals.get(value.strip().lower())
+            if not name:
+                continue
+            if isinstance(comparison, ast.Compare) and _exempt(comparison, scope, parents):
+                continue
+            found.append((site, value, operand.lineno, name))
     # Swift drivers have no docstrings; a leading `//` is the only prose marker they use.
     swift_glob = os.path.join(root, "**", "*.swift") if swift_recursive else os.path.join(root, "*.swift")
     for path in sorted(glob.glob(swift_glob, recursive=swift_recursive)):
         site = key(path)
+        scope = f"{label}/{os.path.relpath(path, root)}"
         for lineno, line in enumerate(open(path, encoding="utf-8", errors="replace"), 1):
-            for literal, name in _hits(line, known_canonicals,
-                                       APPLESCRIPT_PREDICATES + PYTHON_PREDICATES):
+            for literal, name in _hits(_swift_unescaped(line), known_canonicals,
+                                       APPLESCRIPT_PREDICATES + PYTHON_PREDICATES, scope):
                 found.append((site, literal, lineno, name))
     return found
 
@@ -342,9 +773,9 @@ def offenders(known_canonicals):
     # Every occurrence is returned. `main` aggregates by (site, literal) and compares the COUNT
     # against `KNOWN`, which is what stops an already-listed site from absorbing further copies.
     # Deduplicating here — the earlier shape — threw away exactly the number the ratchet needs.
-    found = _scan_root(LIVEKIT, os.path.basename, known_canonicals)
-    found += _scan_root(VERIFY, lambda path: os.path.relpath(path, VERIFY), known_canonicals,
-                        swift_recursive=True)
+    found = _scan_root(LIVEKIT, "Scripts/livekit", os.path.basename, known_canonicals)
+    found += _scan_root(VERIFY, "Scripts/verify", lambda path: os.path.relpath(path, VERIFY),
+                        known_canonicals, swift_recursive=True)
     return found
 
 
