@@ -90,6 +90,8 @@ EDGE_POINTS = 16
 BAR = 9
 CANDIDATE_HOLDS = ("nothing", "menu", "dialog", "menu_over_dialog", "unidentified")
 CONTROL_HOLDS = ("menu", "dialog", "menu_over_dialog")
+#: The holds that arrange the Navigate menu: the harness's own hold names, not anything Logic displays.
+MENU_HOLDS = ("menu", "menu_over_dialog", "unidentified")
 RECORDING_SECONDS_PER_LANGUAGE = 200
 
 
@@ -228,7 +230,7 @@ def arrange(kind, path, kb, baseline_ids):
     if kind == "unidentified":
         toggle_keyboard(kb)
         wait_surfaces(baseline_ids, lambda r: len(r["keyboard_windows"]) == 1)
-    if kind in ("menu", "menu_over_dialog", "unidentified"):
+    if kind in MENU_HOLDS:
         menu_clicks.append(P.open_menu(path))
         wait_surfaces(baseline_ids, lambda r: r["menus"] > 0)
     return surfaces(baseline_ids), menu_clicks
