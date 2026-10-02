@@ -364,10 +364,43 @@ _MATCH_NAMES = tuple(getattr(ast, n) for n in ("MatchAs", "MatchStar") if hasatt
 _MATCH_REST = getattr(ast, "MatchMapping", ())
 
 
+def _evaluated_around(node):
+    """The parts of a nested `def`, `lambda` or `class` that run in the scope around it, when the
+    statement or expression does: defaults, annotations, decorators, class bases and keywords.
+    Review R3 of #1078 found `def inner(x=(step := step["automation_title"])): pass` rebinding
+    `step` in the function the entry was measured in, unseen, because the whole nested statement
+    was skipped. Its body stays its own scope."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        args = node.args
+        parts = list(args.defaults) + [d for d in args.kw_defaults if d is not None]
+        if not isinstance(node, ast.Lambda):
+            every = args.posonlyargs + args.args + args.kwonlyargs + [a for a in (args.vararg, args.kwarg) if a]
+            parts += [a.annotation for a in every if a.annotation is not None]
+            parts += list(node.decorator_list) + ([node.returns] if node.returns is not None else [])
+        return parts
+    if isinstance(node, ast.ClassDef):
+        return list(node.decorator_list) + list(node.bases) + [k.value for k in node.keywords]
+    return []
+
+
+def _runs_around(scope, child, grandchild):
+    """Whether `child` of `scope` (reached through `grandchild`) is evaluated in the scope around
+    `scope` rather than in it: a header part of a `def`, `lambda` or `class`, or a comprehension's
+    first iterable, which runs before the comprehension's own scope exists."""
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return not any(child is statement for statement in scope.body)
+    if isinstance(scope, ast.Lambda):
+        return child is not scope.body
+    if isinstance(scope, _COMPREHENSIONS):
+        return child is scope.generators[0] and grandchild is scope.generators[0].iter
+    return False
+
+
 def _bindings(scope, name):
     """Every binding of `name` that `scope` itself makes, as keys. One no entry can be written as --
     `+=`, `del`, `with`, `except`, an import, a walrus, a `match` capture, a nested `def` or `class`,
-    a `global` or `nonlocal` declaration, a second target -- is `("other", line)`."""
+    a `global` or `nonlocal` declaration, a second target -- is `("other", line)`. A nested `def`,
+    `lambda` or `class` is entered only for what `_evaluated_around` says runs here."""
     keys = []
     if isinstance(scope, _FUNCTIONS):
         args = scope.args
@@ -390,8 +423,10 @@ def _bindings(scope, name):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if node.name == name:
                 keys.append(("other", node.lineno))
+            stack.extend(_evaluated_around(node))
             continue
         if isinstance(node, ast.Lambda):
+            stack.extend(_evaluated_around(node))
             continue
         if isinstance(node, _COMPREHENSIONS):
             # Its own targets bind inside it; a walrus in it binds here.
@@ -424,17 +459,22 @@ def _bindings(scope, name):
 
 def _resolved(node, name, parents):
     """The bindings of `name` in the scope that resolves it at `node`, or None when none binds it.
-    A class body is a scope only for what sits in it directly, as Python reads it."""
+    A class body is a scope only for what sits in it directly, as Python reads it, and a scope's
+    header is read in the scope around it: a comparison in a decorator is not resolved against the
+    parameters of the function it decorates (review R3 of #1078)."""
     inside_function = False
-    while node in parents:
-        node = parents[node]
-        if isinstance(node, ast.ClassDef) and inside_function:
+    grandchild, child = None, node
+    while child in parents:
+        scope = parents[child]
+        around = _runs_around(scope, child, grandchild)
+        grandchild, child = child, scope
+        if around or (isinstance(scope, ast.ClassDef) and inside_function):
             continue
-        if isinstance(node, (*_FUNCTIONS, *_COMPREHENSIONS, ast.ClassDef, ast.Module)):
-            keys = _bindings(node, name)
+        if isinstance(scope, (*_FUNCTIONS, *_COMPREHENSIONS, ast.ClassDef, ast.Module)):
+            keys = _bindings(scope, name)
             if keys:
                 return keys
-            inside_function = inside_function or not isinstance(node, ast.ClassDef)
+            inside_function = inside_function or not isinstance(scope, ast.ClassDef)
     return None
 
 

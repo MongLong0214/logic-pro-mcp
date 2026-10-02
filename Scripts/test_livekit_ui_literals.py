@@ -446,6 +446,44 @@ _found = scan_verify("selftest.py", 'def f():\n    global op\n    for op in ops:
 case("a global declaration beside the measured binding is reported",
      [f[1] for f in _found] == ["delete"], f"found={_found!r}")
 
+# Review R3: the header of a nested def, lambda or class runs in the function around it, so a walrus
+# there rebinds the measured name. Each is reported once; a binding in a nested body is the nested
+# function's own and leaves the comparison exempt.
+_ALIAS = '(step := step["automation_title"])'
+for _label, _lines in (
+        ("a nested function's default", [f"def inner(x={_ALIAS}):", "    pass"]),
+        ("a nested function's keyword-only default", [f"def inner(*, x={_ALIAS}):", "    pass"]),
+        ("a nested function's annotation", [f"def inner(x: {_ALIAS}):", "    pass"]),
+        ("a nested function's return annotation", [f"def inner() -> {_ALIAS}:", "    pass"]),
+        ("a nested function's decorator", [f"@decorate{_ALIAS}", "def inner():", "    pass"]),
+        ("an async function's default", [f"async def inner(x={_ALIAS}):", "    pass"]),
+        ("a lambda's default", [f"f = lambda x={_ALIAS}: x"]),
+        ("a class decorator", [f"@decorate{_ALIAS}", "class Inner:", "    pass"]),
+        ("a class base", [f"class Inner(base{_ALIAS}):", "    pass"]),
+        ("a class keyword", [f"class Inner(metaclass=meta{_ALIAS}):", "    pass"])):
+    _body = _TAKE + "".join(f"    {line}\n" for line in _lines) + '    return "read" in step\n'
+    ast.parse(_body)
+    _found = scan_verify("runner.py", _body, _READ)
+    case(f"`\"read\" in step` after a walrus in {_label} is reported once", [f[1] for f in _found] == ["read"],
+         f"found={_found!r}")
+_found = scan_verify("runner.py", _TAKE + "    def inner():\n        step = title\n"
+                     '    return "read" in step\n', _READ)
+case("a binding in a nested function's body is that function's own, and the comparison stays exempt",
+     _found == [], f"found={_found!r}")
+# A comparison in a header is read where the header runs. A decorator at module level, where `step` is
+# bound by nothing, is reported even though the function it decorates is the measured one; one inside
+# the measured function reads its parameter, even when the decorated function has a `step` of its own.
+_found = scan_verify("runner.py", '@decorate("read" in step)\n' + _TAKE + '    return ""\n', _READ)
+case("a comparison in the measured function's own decorator is read at module level, and reported",
+     [f[1] for f in _found] == ["read"], f"found={_found!r}")
+_found = scan_verify("runner.py", _TAKE + '    @decorate("read" in step)\n    def inner(step):\n'
+                     '        pass\n    return ""\n', _READ)
+case("a comparison in a nested decorator reads the measured parameter, and is exempt",
+     _found == [], f"found={_found!r}")
+_found = scan_verify("runner.py", _TAKE + '    return [1 for step in ("read" in step,)]\n', _READ)
+case("a comparison in a comprehension's first iterable reads the measured parameter, and is exempt",
+     _found == [], f"found={_found!r}")
+
 # A chained comparison compares the literal with a second operand, so it is no entry, under the
 # binding or not; and an entry spelled with an escape, or continued onto the next line, is the same
 # comparison and stays exempt beside a UI read on the same line.
@@ -519,7 +557,10 @@ with tempfile.TemporaryDirectory() as _vcopy:
     for _label, _function in (
             ("titled", 'def _titled(step):\n    return "read" in step["automation_title"]\n'),
             ("aliased", 'def _aliased(step):\n    step = step["automation_title"]\n    return "read" in step\n'),
-            ("escaped", 'def _escaped(step):\n    return "re\\x61d" in (step["automation_title"])\n')):
+            ("escaped", 'def _escaped(step):\n    return "re\\x61d" in (step["automation_title"])\n'),
+            ("nested-default", 'def _take(ctx: dict, step: dict) -> str:\n'
+                               '    def inner(x=(step := step["automation_title"])):\n        pass\n'
+                               '    return "read" in step\n')):
         with open(os.path.join(_copy, "runner.py"), "w", encoding="utf-8") as _h:
             _h.write(_runner + "\n\n" + _function)
         _witness_runs[_label] = subprocess.run(_entry, capture_output=True, text=True,
@@ -530,9 +571,9 @@ case("a copy of the real Scripts/verify passes the entry point",
 case("and the same copy with a title read beside `step` fails it, naming runner.py",
      _dirty.returncode == 1 and "runner.py" in _dirty.stdout and "'read'" in _dirty.stdout,
      (_dirty.stdout + _dirty.stderr).strip()[:200])
-for _label in ("aliased", "escaped"):
+for _label in ("aliased", "escaped", "nested-default"):
     _run = _witness_runs[_label]
-    case(f"and with review R2's {_label} witness appended it fails, naming runner.py",
+    case(f"and with the review's {_label} witness appended it fails, naming runner.py",
          _run.returncode == 1 and "runner.py" in _run.stdout and "'read'" in _run.stdout,
          (_run.stdout + _run.stderr).strip()[:200])
 
