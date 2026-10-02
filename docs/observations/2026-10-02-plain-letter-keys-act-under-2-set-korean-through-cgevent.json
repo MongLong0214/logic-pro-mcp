@@ -29,7 +29,7 @@
   "evidence": [
     "evidence/2026-10-02-1039-plain-letters-run.json"
   ],
-  "method": "live_1039_plain_letters_under_2set_korean.py ran at d4fac893 under the 2-Set Korean source in ten languages. Both servers were debug builds started with LOGIC_MCP_DEBUG_ONLY_CHANNEL=CGEvent, and the MIDI key-command approval was withdrawn for the run and put back byte for byte. The candidate was built at 16d39a17; the control was built from the same tree with CGEventChannel.swift as at 07d76426, which has no input-source switch. Per language, on a fresh launch of the fixture, the control was called once per operation and the candidate twice per toggle; record was followed by stop and undo. The state was read through Accessibility from the harness process: the control-bar checkbox the canon names for record, cycle, metronome, mixer and library, the one unnamed control-bar checkbox for the piano roll, per-depth role counts for automation, and slider values for zoom to fit. The arrange window was raised and the Tracks header rail focused before every call. Which letters Logic's key command set binds with no modifier was read from its preferences (KeyCommands) in each language. Before the run, this host's key command 474, Toggle Metronome Click, was moved from Control-Shift-R to plain K, the binding Apple's U.S. preset gives it; the preferences were backed up first.",
+  "method": "live_1039_plain_letters_under_2set_korean.py ran at ae33818c under the 2-Set Korean source in ten languages. Both servers were debug builds started with LOGIC_MCP_DEBUG_ONLY_CHANNEL=CGEvent, and the MIDI key-command approval was withdrawn for the run and put back byte for byte. The candidate was built at ae33818c; the control from the same tree with CGEventChannel.swift as at 07d76426, which has no input-source switch. Per language, on a fresh launch of the fixture, the control was called once per operation and the candidate twice per toggle; record was followed by stop and undo. The state was read through Accessibility from the harness process: the control-bar checkbox the canon names for record, cycle, metronome, mixer and library, the one unnamed control-bar checkbox for the piano roll, per-depth role counts for automation, and slider values for zoom to fit. The arrange window was raised and the Tracks header rail focused before every call. Which letters Logic's key command set binds with no modifier was read from its preferences (KeyCommands) in each language. Before the run, this host's key command 474, Toggle Metronome Click, was moved from Control-Shift-R to plain K, the binding Apple's U.S. preset gives it; the preferences were backed up first.",
   "observations": [
     {
       "locale": "en-US",
@@ -57,6 +57,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -72,6 +75,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -87,6 +93,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -102,6 +111,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -117,6 +129,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -132,6 +147,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -147,6 +165,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -162,6 +183,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -192,6 +216,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -207,6 +234,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -222,6 +252,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -237,6 +270,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -252,6 +288,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -267,6 +306,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -282,6 +324,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -297,6 +342,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -327,6 +375,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -342,6 +393,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -357,6 +411,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -372,6 +429,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -387,6 +447,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -402,6 +465,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -417,6 +483,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -432,6 +501,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -462,6 +534,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -477,6 +552,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -492,6 +570,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -507,6 +588,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -522,6 +606,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -537,6 +624,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -552,6 +642,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -567,6 +660,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -597,6 +693,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -612,6 +711,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -627,6 +729,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -642,6 +747,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -657,6 +765,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -672,6 +783,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -687,6 +801,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -702,6 +819,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -732,6 +852,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -747,6 +870,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -762,6 +888,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -777,6 +906,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -792,6 +924,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -807,6 +942,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -822,6 +960,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -837,6 +978,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -867,6 +1011,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -882,6 +1029,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -897,6 +1047,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -912,6 +1065,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -927,6 +1083,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -942,6 +1101,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -957,6 +1119,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -972,6 +1137,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -1002,6 +1170,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -1017,6 +1188,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -1032,6 +1206,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -1047,6 +1224,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -1062,6 +1242,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -1077,6 +1260,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -1092,6 +1278,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -1107,6 +1296,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -1137,6 +1329,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -1152,6 +1347,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -1167,6 +1365,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -1182,6 +1383,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -1197,6 +1401,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -1212,6 +1419,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -1227,6 +1437,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -1242,6 +1455,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -1272,6 +1488,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "nav.zoom_to_fit": {
@@ -1287,6 +1506,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_cycle": {
@@ -1302,6 +1524,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.toggle_metronome": {
@@ -1317,6 +1542,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_library": {
@@ -1332,6 +1560,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_mixer": {
@@ -1347,6 +1578,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "view.toggle_piano_roll": {
@@ -1362,6 +1596,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         },
         "transport.record": {
@@ -1377,6 +1614,9 @@
           "candidate_restored": true,
           "source_after_every_call": [
             "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
           ]
         }
       }
@@ -1396,13 +1636,14 @@
       }
     }
   ],
-  "conclusion": "160 of 160 checks passed in 10 languages. The control refused every call and no reading moved. Under the candidate every call went out through CGEvent under ABC and 2-Set Korean read back after it; 8 of the 8 operations changed Logic's state and changed it back in every language. ",
+  "conclusion": "160 of 160 checks passed in 10 languages. The control refused every call and no reading moved. Under the candidate every call went out through CGEvent, every reply named com.apple.keylayout.ABC as the layout switched to, and 2-Set Korean read back after it; 8 of the 8 operations changed Logic's state and changed it back in every language. ",
   "limits": [
     "One Logic installation, one fixture, one keyboard input source (2-Set Korean).",
     "This host's key command set was changed for the run: command 474 moved from Control-Shift-R to plain K. With the host's own set, K reaches Logic and runs nothing, and the metronome cannot change by its key.",
     "The piano roll, automation and zoom readings are structural and unnamed; the canon has no label for the editors' checkbox or the automation view.",
     "The waits around the key (100 ms each side) were not varied.",
-    "The binaries were built from the tree at 16d39a17; the commits after it on the branch change only the harness and the roadmap, with no Swift change."
+    "The run was made at ae33818c with both binaries built from that tree.",
+    "TIS offered ABC, the layout this host's 2-Set Korean types Latin through; the Dvorak pass is its own record."
   ],
   "supersedes": null,
   "canon_not_applicable": {

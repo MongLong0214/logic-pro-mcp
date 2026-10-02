@@ -1,10 +1,10 @@
 {
  "name": "live_1039_plain_letters_under_2set_korean",
- "head": "d4fac893839d770b69b179093e6820a020d5e53e",
+ "head": "ae33818c80d1dde75e0de73112dc3d0a75aa0d05",
  "artifact": {
-  "path": "/Users/isaac/lpm-evidence/1039/bin-16d39a17/candidate/LogicProMCP",
-  "sha256": "5418a98c815e2f553eba47c41feed62d38c5eb3acff9bcc0735f7f89fa508de7",
-  "built_from": "d4fac893839d770b69b179093e6820a020d5e53e",
+  "path": "/Users/isaac/lpm-evidence/1039/bin-ae33818c/candidate/LogicProMCP",
+  "sha256": "1b36a3b09651a47fe262af1fa79d2e83fe0483462567526705071f8411ebf7f0",
+  "built_from": "ae33818c80d1dde75e0de73112dc3d0a75aa0d05",
   "worktree_clean": true,
   "built_from_is_measured": false,
   "artifact_older_than_sources": false
@@ -18,10 +18,10 @@
    "kind": "observation",
    "tag": "1039/binaries",
    "payload": {
-    "candidate": "/Users/isaac/lpm-evidence/1039/bin-16d39a17/candidate/LogicProMCP",
-    "candidate_sha256": "5418a98c815e2f553eba47c41feed62d38c5eb3acff9bcc0735f7f89fa508de7",
-    "control": "/Users/isaac/lpm-evidence/1039/bin-16d39a17/control/LogicProMCP",
-    "control_sha256": "ba6d302faaab4ddddf9481bb2a30ef3eb3d06d306a87b1d49bf4fd58cc32bc26",
+    "candidate": "/Users/isaac/lpm-evidence/1039/bin-ae33818c/candidate/LogicProMCP",
+    "candidate_sha256": "1b36a3b09651a47fe262af1fa79d2e83fe0483462567526705071f8411ebf7f0",
+    "control": "/Users/isaac/lpm-evidence/1039/bin-ae33818c/control/LogicProMCP",
+    "control_sha256": "16aa703180f64c60bd8ede4008f6f002d9afa8e8aa8e1e35ca39bf595134a79c",
     "lprojs": [
      "ko",
      "en",
@@ -266,7 +266,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.1
+     "seconds": 0.07
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -352,7 +352,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -476,7 +476,7 @@
       "operation": "view.toggle_library"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "view.toggle_mixer": {
      "kind": "box",
@@ -586,7 +586,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.record": {
      "kind": "box",
@@ -648,7 +648,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.35
+     "seconds": 1.3
     }
    }
   },
@@ -803,9 +803,9 @@
   {
    "kind": "capture",
    "tag": "1039/ko/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-before.png",
    "window": {
-    "id": 6592,
+    "id": 8151,
     "title": "lpm-locale-campaign - \ud2b8\ub799",
     "x": 0,
     "y": 30,
@@ -846,9 +846,9 @@
   {
    "kind": "capture",
    "tag": "1039/ko/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-after.png",
    "window": {
-    "id": 6592,
+    "id": 8151,
     "title": "lpm-locale-campaign - \ud2b8\ub799",
     "x": 0,
     "y": 30,
@@ -880,8 +880,8 @@
     30
    ],
    "subject": "the control-bar checkbox described '\ubbf9\uc11c', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_ko_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -1072,6 +1072,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -1123,6 +1127,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -1231,6 +1239,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -1339,6 +1351,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -1447,6 +1463,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -1555,6 +1575,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -1642,6 +1666,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -1771,6 +1799,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -2004,7 +2035,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.1
+     "seconds": 0.07
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -2090,7 +2121,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -2386,7 +2417,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.31
+     "seconds": 1.32
     }
    }
   },
@@ -2541,9 +2572,9 @@
   {
    "kind": "capture",
    "tag": "1039/en/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-before.png",
    "window": {
-    "id": 6620,
+    "id": 8179,
     "title": "lpm-locale-campaign - Tracks",
     "x": 0,
     "y": 30,
@@ -2584,9 +2615,9 @@
   {
    "kind": "capture",
    "tag": "1039/en/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-after.png",
    "window": {
-    "id": 6620,
+    "id": 8179,
     "title": "lpm-locale-campaign - Tracks",
     "x": 0,
     "y": 30,
@@ -2618,8 +2649,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mixer', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_en_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -2810,6 +2841,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -2861,6 +2896,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -2969,6 +3008,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -3077,6 +3120,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -3185,6 +3232,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -3293,6 +3344,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -3380,6 +3435,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -3509,6 +3568,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -3744,7 +3806,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.1
+     "seconds": 0.06
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -3830,7 +3892,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -3954,7 +4016,7 @@
       "operation": "view.toggle_library"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "view.toggle_mixer": {
      "kind": "box",
@@ -4281,9 +4343,9 @@
   {
    "kind": "capture",
    "tag": "1039/ja/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-before.png",
    "window": {
-    "id": 6648,
+    "id": 8207,
     "title": "lpm-locale-campaign - \u30c8\u30e9\u30c3\u30af",
     "x": 0,
     "y": 30,
@@ -4300,7 +4362,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "aaae1e7907ff2f1ad2b77682b74ed5c2663e01bc23ca6a56257cff6f27381375",
+   "hash": "68ddbe0c7fc886a28d0f56641b3e3e852e1a231aca99d8c8203635d11f59a900",
    "region_hash": "33d24a4e83b61dd89d3bfee85dfd7210d00ba7b1c28ff9ec7c7375142346d48a",
    "frames": 2,
    "settled": true
@@ -4324,9 +4386,9 @@
   {
    "kind": "capture",
    "tag": "1039/ja/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-after.png",
    "window": {
-    "id": 6648,
+    "id": 8207,
     "title": "lpm-locale-campaign - \u30c8\u30e9\u30c3\u30af",
     "x": 0,
     "y": 30,
@@ -4343,7 +4405,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "e852d2684bfdb5f37ae66bc5d4cbfae266de558fbb6612eb872af44225adf486",
+   "hash": "fa02d79f7faf83470cd19551192a973b632b4904b9c9299765a13111fb08846f",
    "region_hash": "c7ac57325cd86239638d17606cffca0461831005d7660b4d7d9c6a943be407b2",
    "frames": 2,
    "settled": true
@@ -4358,8 +4420,8 @@
     30
    ],
    "subject": "the control-bar checkbox described '\u30df\u30ad\u30b5\u30fc', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_ja_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -4553,6 +4615,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -4604,6 +4670,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -4712,6 +4782,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -4820,6 +4894,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -4928,6 +5006,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -5036,6 +5118,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -5123,6 +5209,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -5252,6 +5342,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -5487,7 +5580,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.1
+     "seconds": 0.06
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -5573,7 +5666,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -5869,7 +5962,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.31
+     "seconds": 1.32
     }
    }
   },
@@ -6024,9 +6117,9 @@
   {
    "kind": "capture",
    "tag": "1039/de/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-before.png",
    "window": {
-    "id": 6676,
+    "id": 8235,
     "title": "lpm-locale-campaign - Spuren",
     "x": 0,
     "y": 30,
@@ -6043,7 +6136,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "605cb1b183a2a44020867d0ef3273353ba4a0c667162f8c9259efd41ff36941a",
+   "hash": "8688f5166037ecfedd3673768e9ad0ea305957a1a5aa481f056cff5c49ca0b18",
    "region_hash": "33d24a4e83b61dd89d3bfee85dfd7210d00ba7b1c28ff9ec7c7375142346d48a",
    "frames": 2,
    "settled": true
@@ -6067,9 +6160,9 @@
   {
    "kind": "capture",
    "tag": "1039/de/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-after.png",
    "window": {
-    "id": 6676,
+    "id": 8235,
     "title": "lpm-locale-campaign - Spuren",
     "x": 0,
     "y": 30,
@@ -6086,7 +6179,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "81b7d1528e1509abcf507c22955b40fbc1e7973fcc7b212e5f2eac1583e3a27c",
+   "hash": "3bb02d34490939708497637cb511de782c2e1cc44f88fc472cfe94220796ded7",
    "region_hash": "c7ac57325cd86239638d17606cffca0461831005d7660b4d7d9c6a943be407b2",
    "frames": 2,
    "settled": true
@@ -6101,8 +6194,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mixer', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_de_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -6296,6 +6389,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -6347,6 +6444,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -6455,6 +6556,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -6563,6 +6668,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -6671,6 +6780,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -6779,6 +6892,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -6866,6 +6983,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -6995,6 +7116,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -7230,7 +7354,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.09
+     "seconds": 0.06
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -7316,7 +7440,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -7440,7 +7564,7 @@
       "operation": "view.toggle_library"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "view.toggle_mixer": {
      "kind": "box",
@@ -7550,7 +7674,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.record": {
      "kind": "box",
@@ -7767,9 +7891,9 @@
   {
    "kind": "capture",
    "tag": "1039/es/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-before.png",
    "window": {
-    "id": 6704,
+    "id": 8263,
     "title": "lpm-locale-campaign - Pistas",
     "x": 0,
     "y": 30,
@@ -7810,9 +7934,9 @@
   {
    "kind": "capture",
    "tag": "1039/es/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-after.png",
    "window": {
-    "id": 6704,
+    "id": 8263,
     "title": "lpm-locale-campaign - Pistas",
     "x": 0,
     "y": 30,
@@ -7844,8 +7968,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mezclador', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_es_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -8039,6 +8163,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -8090,6 +8218,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -8198,6 +8330,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -8306,6 +8442,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -8414,6 +8554,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -8522,6 +8666,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -8609,6 +8757,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -8738,6 +8890,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -8973,7 +9128,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.1
+     "seconds": 0.07
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -9059,7 +9214,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -9183,7 +9338,7 @@
       "operation": "view.toggle_library"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.06
+     "seconds": 0.05
     },
     "view.toggle_mixer": {
      "kind": "box",
@@ -9355,7 +9510,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.31
+     "seconds": 1.32
     }
    }
   },
@@ -9510,9 +9665,9 @@
   {
    "kind": "capture",
    "tag": "1039/fr/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-before.png",
    "window": {
-    "id": 6732,
+    "id": 8291,
     "title": "lpm-locale-campaign - Pistes",
     "x": 0,
     "y": 30,
@@ -9529,7 +9684,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "fa08f8ae1e9731c1b953d951b4eb3ca9cc470f70538ade4f1148173b9b7ca081",
+   "hash": "fa964a844f5087887318001857f957b0b6667145916ff480b04b378cefc2821f",
    "region_hash": "33d24a4e83b61dd89d3bfee85dfd7210d00ba7b1c28ff9ec7c7375142346d48a",
    "frames": 2,
    "settled": true
@@ -9553,9 +9708,9 @@
   {
    "kind": "capture",
    "tag": "1039/fr/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-after.png",
    "window": {
-    "id": 6732,
+    "id": 8291,
     "title": "lpm-locale-campaign - Pistes",
     "x": 0,
     "y": 30,
@@ -9572,7 +9727,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "c73afc2297f0c667cb52bb339ab46eae2d2ec66757ad9d386d7c7e9bc79bb91a",
+   "hash": "cbf7cf4ea8d819e6cc8ba32e1d171a35b89c638c352de00c6dde56a0926ef42e",
    "region_hash": "c7ac57325cd86239638d17606cffca0461831005d7660b4d7d9c6a943be407b2",
    "frames": 2,
    "settled": true
@@ -9587,8 +9742,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Table de mixage', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_fr_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -9782,6 +9937,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -9833,6 +9992,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -9941,6 +10104,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -10049,6 +10216,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -10157,6 +10328,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -10265,6 +10440,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -10352,6 +10531,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -10481,6 +10664,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -10716,7 +10902,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.07
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -10802,7 +10988,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.08
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -11098,7 +11284,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.31
     }
    }
   },
@@ -11253,9 +11439,9 @@
   {
    "kind": "capture",
    "tag": "1039/it/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-before.png",
    "window": {
-    "id": 6760,
+    "id": 8319,
     "title": "lpm-locale-campaign - Tracce",
     "x": 0,
     "y": 30,
@@ -11296,9 +11482,9 @@
   {
    "kind": "capture",
    "tag": "1039/it/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-after.png",
    "window": {
-    "id": 6760,
+    "id": 8319,
     "title": "lpm-locale-campaign - Tracce",
     "x": 0,
     "y": 30,
@@ -11330,8 +11516,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mixer', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_it_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -11525,6 +11711,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -11576,6 +11766,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -11684,6 +11878,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -11792,6 +11990,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -11900,6 +12102,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -12008,6 +12214,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -12095,6 +12305,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -12224,6 +12438,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -12459,7 +12676,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.09
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -12545,7 +12762,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.06
+     "seconds": 0.07
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -12607,7 +12824,7 @@
       "operation": "transport.toggle_metronome"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.07
+     "seconds": 0.06
     },
     "view.toggle_library": {
      "kind": "box",
@@ -12779,7 +12996,7 @@
       "operation": "view.toggle_piano_roll"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.06
+     "seconds": 0.07
     },
     "transport.record": {
      "kind": "box",
@@ -12841,7 +13058,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.31
     }
    }
   },
@@ -12996,9 +13213,9 @@
   {
    "kind": "capture",
    "tag": "1039/pt/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-before.png",
    "window": {
-    "id": 6788,
+    "id": 8347,
     "title": "lpm-locale-campaign - Pistas",
     "x": 0,
     "y": 30,
@@ -13015,7 +13232,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "443a197465058af849ab4e0e91b208079a07ae9aeeaf2b6c9cadd4466d854c68",
+   "hash": "fa4e14acdde5269c710425f283cedf0439bbaf7d3db7a5d346b4f751795b04d0",
    "region_hash": "33d24a4e83b61dd89d3bfee85dfd7210d00ba7b1c28ff9ec7c7375142346d48a",
    "frames": 2,
    "settled": true
@@ -13039,9 +13256,9 @@
   {
    "kind": "capture",
    "tag": "1039/pt/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-after.png",
    "window": {
-    "id": 6788,
+    "id": 8347,
     "title": "lpm-locale-campaign - Pistas",
     "x": 0,
     "y": 30,
@@ -13058,7 +13275,7 @@
     ],
     "wholly_within": true
    },
-   "hash": "e64ce8c54fa68dca4b0478d0bef1db5b4d24d664f0ce12f84aa8c3c29a4e8650",
+   "hash": "7de1a27aacca194f4d9a019eded891a6f075ba6500213ff5b661196456309bec",
    "region_hash": "c7ac57325cd86239638d17606cffca0461831005d7660b4d7d9c6a943be407b2",
    "frames": 2,
    "settled": true
@@ -13073,8 +13290,8 @@
     30
    ],
    "subject": "the control-bar checkbox described 'Mixer', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_pt_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -13268,6 +13485,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -13319,6 +13540,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -13427,6 +13652,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -13535,6 +13764,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -13643,6 +13876,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -13751,6 +13988,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -13838,6 +14079,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -13967,6 +14212,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -14200,7 +14448,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.09
+     "seconds": 0.1
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -14224,7 +14472,7 @@
       "operation": "nav.zoom_to_fit"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.06
+     "seconds": 0.05
     },
     "transport.toggle_cycle": {
      "kind": "box",
@@ -14582,7 +14830,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.32
+     "seconds": 1.3
     }
    }
   },
@@ -14737,9 +14985,9 @@
   {
    "kind": "capture",
    "tag": "1039/zh_CN/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-before.png",
    "window": {
-    "id": 6816,
+    "id": 8375,
     "title": "lpm-locale-campaign - \u8f68\u9053",
     "x": 0,
     "y": 30,
@@ -14780,9 +15028,9 @@
   {
    "kind": "capture",
    "tag": "1039/zh_CN/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-after.png",
    "window": {
-    "id": 6816,
+    "id": 8375,
     "title": "lpm-locale-campaign - \u8f68\u9053",
     "x": 0,
     "y": 30,
@@ -14814,8 +15062,8 @@
     30
    ],
    "subject": "the control-bar checkbox described '\u6df7\u97f3\u5668', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_zh_CN_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -15006,6 +15254,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -15057,6 +15309,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -15165,6 +15421,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -15273,6 +15533,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -15381,6 +15645,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -15489,6 +15757,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -15576,6 +15848,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -15705,6 +15981,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -15938,7 +16217,7 @@
       "operation": "automation.toggle_view"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.09
+     "seconds": 0.1
     },
     "nav.zoom_to_fit": {
      "kind": "sliders",
@@ -16024,7 +16303,7 @@
       "operation": "transport.toggle_cycle"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 0.08
+     "seconds": 0.07
     },
     "transport.toggle_metronome": {
      "kind": "box",
@@ -16320,7 +16599,7 @@
       "operation": "transport.record"
      },
      "source_after": "com.apple.inputmethod.Korean.2SetKorean",
-     "seconds": 1.3
+     "seconds": 1.33
     }
    }
   },
@@ -16475,9 +16754,9 @@
   {
    "kind": "capture",
    "tag": "1039/zh_TW/candidate/mixer-before",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-before.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-before.png",
    "window": {
-    "id": 6844,
+    "id": 8403,
     "title": "lpm-locale-campaign - \u97f3\u8ecc",
     "x": 0,
     "y": 30,
@@ -16518,9 +16797,9 @@
   {
    "kind": "capture",
    "tag": "1039/zh_TW/candidate/mixer-after",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-after.png",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-after.png",
    "window": {
-    "id": 6844,
+    "id": 8403,
     "title": "lpm-locale-campaign - \u97f3\u8ecc",
     "x": 0,
     "y": 30,
@@ -16552,8 +16831,8 @@
     30
    ],
    "subject": "the control-bar checkbox described '\u6df7\u97f3\u5668', matched to the canon's mixer label",
-   "before": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-before.png",
-   "after": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-after.png",
+   "before": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-before.png",
+   "after": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__1039_zh_TW_candidate_mixer-after.png",
    "expected": "region changes \u2014 X posted under ABC toggles the mixer, and the control bar's mixer checkbox shows the new state",
    "observed": "before 33d24a4e83b61dd8 after c7ac57325cd86239 changed=True",
    "passed": true
@@ -16744,6 +17023,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "nav.zoom_to_fit": {
@@ -16795,6 +17078,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_cycle": {
@@ -16903,6 +17190,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.toggle_metronome": {
@@ -17011,6 +17302,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_library": {
@@ -17119,6 +17414,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_mixer": {
@@ -17227,6 +17526,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "view.toggle_piano_roll": {
@@ -17314,6 +17617,10 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null,
+      null
      ]
     },
     "transport.record": {
@@ -17443,6 +17750,9 @@
      "sources_after": [
       "com.apple.inputmethod.Korean.2SetKorean",
       "com.apple.inputmethod.Korean.2SetKorean"
+     ],
+     "ascii_histories": [
+      null
      ]
     }
    }
@@ -17467,9 +17777,9 @@
   },
   {
    "kind": "recording",
-   "file": "/Users/isaac/lpm-evidence/1039/live-d4fac893/d4fac893839d770b69b179093e6820a020d5e53e/live_1039_plain_letters_under_2set_korean__run.mov",
+   "file": "/Users/isaac/lpm-evidence/1039/live-ae33818c-abc/ae33818c80d1dde75e0de73112dc3d0a75aa0d05/live_1039_plain_letters_under_2set_korean__run.mov",
    "exists": true,
-   "bytes": 1292833787
+   "bytes": 1173318721
   },
   {
    "kind": "observation",
@@ -17480,7 +17790,7 @@
    "kind": "check",
    "tag": "1039/ko/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 13, '1:AXGroup': 5, '3:AXPopUpButton': 7, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2:AXGroup': 6, '3:AXGr",
     "accepted_the_observation": true,
@@ -17514,7 +17824,7 @@
    "kind": "check",
    "tag": "1039/ko/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -17548,7 +17858,7 @@
    "kind": "check",
    "tag": "1039/ko/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uba54\ud2b8\ub85c\ub188 \ud074\ub9ad': 0, '\ub77c\uc774\ube0c\ub7ec\ub9ac': 1, '\uc778\uc2a4\ud399\ud130': 1, '\ube60\ub978 \ub3c4\uc6c0\ub9d0': 0, '\ub3c4\uad6c \ub9c9\ub300': 0, 'Smart\\xa0Controls': 0, '\ubbf9\uc11c': 1, '\ud3b8\uc9d1\uae30': 0, '\ubaa9\ub85d \ud3b8\uc9d1\uae30': 0, '\uba54\ubaa8\uc7a5': 0, '\ub8e8\ud504 \ube0c\ub77c\uc6b0\uc800': 0, '\ube0c\ub77c\uc6b0\uc800': 0}}, 'middle': {'target': 1, 'others': {'\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uba54\ud2b8\ub85c\ub188 \ud074\ub9ad': 0, '",
     "accepted_the_observation": true,
@@ -17582,7 +17892,7 @@
    "kind": "check",
    "tag": "1039/ko/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\uc0ac\uc774\ud074': 0, '\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\ub77c\uc774\ube0c\ub7ec\ub9ac': 1, '\uc778\uc2a4\ud399\ud130': 1, '\ube60\ub978 \ub3c4\uc6c0\ub9d0': 0, '\ub3c4\uad6c \ub9c9\ub300': 0, 'Smart\\xa0Controls': 0, '\ubbf9\uc11c': 1, '\ud3b8\uc9d1\uae30': 0, '\ubaa9\ub85d \ud3b8\uc9d1\uae30': 0, '\uba54\ubaa8\uc7a5': 0, '\ub8e8\ud504 \ube0c\ub77c\uc6b0\uc800': 0, '\ube0c\ub77c\uc6b0\uc800': 0}}, 'middle': {'target': 1, 'others': {'\uc0ac\uc774\ud074': 0, '\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\ub77c\uc774\ube0c\ub7ec\ub9ac': ",
     "accepted_the_observation": true,
@@ -17616,7 +17926,7 @@
    "kind": "check",
    "tag": "1039/ko/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'\uc0ac\uc774\ud074': 0, '\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uba54\ud2b8\ub85c\ub188 \ud074\ub9ad': 0, '\uc778\uc2a4\ud399\ud130': 1, '\ube60\ub978 \ub3c4\uc6c0\ub9d0': 0, '\ub3c4\uad6c \ub9c9\ub300': 0, 'Smart\\xa0Controls': 0, '\ubbf9\uc11c': 1, '\ud3b8\uc9d1\uae30': 0, '\ubaa9\ub85d \ud3b8\uc9d1\uae30': 0, '\uba54\ubaa8\uc7a5': 0, '\ub8e8\ud504 \ube0c\ub77c\uc6b0\uc800': 0, '\ube0c\ub77c\uc6b0\uc800': 0}}, 'middle': {'target': 0, 'others': {'\uc0ac\uc774\ud074': 0, '\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uba54\ud2b8\ub85c\ub188 \ud074",
     "accepted_the_observation": true,
@@ -17650,7 +17960,7 @@
    "kind": "check",
    "tag": "1039/ko/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'\uc0ac\uc774\ud074': 0, '\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uba54\ud2b8\ub85c\ub188 \ud074\ub9ad': 0, '\ub77c\uc774\ube0c\ub7ec\ub9ac': 1, '\uc778\uc2a4\ud399\ud130': 1, '\ube60\ub978 \ub3c4\uc6c0\ub9d0': 0, '\ub3c4\uad6c \ub9c9\ub300': 0, 'Smart\\xa0Controls': 0, '\ud3b8\uc9d1\uae30': 0, '\ubaa9\ub85d \ud3b8\uc9d1\uae30': 0, '\uba54\ubaa8\uc7a5': 0, '\ub8e8\ud504 \ube0c\ub77c\uc6b0\uc800': 0, '\ube0c\ub77c\uc6b0\uc800': 0}}, 'middle': {'target': 0, 'others': {'\uc0ac\uc774\ud074': 0, '\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uba54\ud2b8\ub85c",
     "accepted_the_observation": true,
@@ -17684,7 +17994,7 @@
    "kind": "check",
    "tag": "1039/ko/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uc778\uc2a4\ud399\ud130': 1, '\ube60\ub978 \ub3c4\uc6c0\ub9d0': 0, '\ub3c4\uad6c \ub9c9\ub300': 0, 'Smart\\xa0Controls': 0, '\ud3b8\uc9d1\uae30': 0, '\ubaa9\ub85d \ud3b8\uc9d1\uae30': 0, '\uba54\ubaa8\uc7a5': 0, '\ub8e8\ud504 \ube0c\ub77c\uc6b0\uc800': 0, '\ube0c\ub77c\uc6b0\uc800': 0}, 'middle': {'\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uc778\uc2a4\ud399\ud130': 1, '\ube60\ub978 \ub3c4\uc6c0\ub9d0': 0, '\ub3c4\uad6c \ub9c9\ub300': 0, 'Smart\\xa0Controls': 0, '\ud3b8\uc9d1\uae30': 1, '\ubaa9\ub85d \ud3b8\uc9d1\uae30': 0, '\uba54\ubaa8\uc7a5': 0, '\ub8e8\ud504 \ube0c\ub77c\uc6b0\uc800': 0, '\ube0c",
     "accepted_the_observation": true,
@@ -17718,7 +18028,7 @@
    "kind": "check",
    "tag": "1039/ko/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\uc0ac\uc774\ud074': 0, '\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\uc7ac\uc0dd': 0, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uba54\ud2b8\ub85c\ub188 \ud074\ub9ad': 0, '\ub77c\uc774\ube0c\ub7ec\ub9ac': 1, '\uc778\uc2a4\ud399\ud130': 1, '\ube60\ub978 \ub3c4\uc6c0\ub9d0': 0, '\ub3c4\uad6c \ub9c9\ub300': 0, 'Smart\\xa0Controls': 0, '\ubbf9\uc11c': 0, '\ud3b8\uc9d1\uae30': 0, '\ubaa9\ub85d \ud3b8\uc9d1\uae30': 0, '\uba54\ubaa8\uc7a5': 0, '\ub8e8\ud504 \ube0c\ub77c\uc6b0\uc800': 0, '\ube0c\ub77c\uc6b0\uc800': 0}}, 'middle': {'target': 1, 'others': {'\uc0ac\uc774\ud074': 0, '\ud504\ub9ac \ud15c\ud3ec \ub179\uc74c': 0, '\uc7ac\uc0dd': 1, '\ub300\uce58': 0, '\ud29c\ub108': 0, '\uc194\ub85c': 0, '\uce74\uc6b4\ud2b8 \uc778': 1, '\uba54\ud2b8\ub85c\ub188 \ud074\ub9ad': 1,",
     "accepted_the_observation": true,
@@ -17752,7 +18062,7 @@
    "kind": "check",
    "tag": "1039/en/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 13, '1:AXGroup': 5, '3:AXPopUpButton': 7, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2:AXGroup': 6, '3:AXGr",
     "accepted_the_observation": true,
@@ -17786,7 +18096,7 @@
    "kind": "check",
    "tag": "1039/en/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -17820,7 +18130,7 @@
    "kind": "check",
    "tag": "1039/en/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Free Tempo Recording': 0, 'Record': 0, 'Play': 0, 'Replace': 0, 'Tuner': 0, 'Solo': 0, 'Count In': 1, 'Metronome Click': 0, 'Library': 1, 'Inspector': 1, 'Quick Help': 0, 'Toolbar': 0, 'Smart Controls': 0, 'Mixer': 1, 'Editors': 0, 'List Editors': 0, 'Note Pads': 0, 'Loop Browser': 0, 'Browsers': 0}}, 'middle': {'target': 1, 'others': {'Free Temp",
     "accepted_the_observation": true,
@@ -17854,7 +18164,7 @@
    "kind": "check",
    "tag": "1039/en/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Cycle': 0, 'Free Tempo Recording': 0, 'Record': 0, 'Play': 0, 'Replace': 0, 'Tuner': 0, 'Solo': 0, 'Count In': 1, 'Library': 1, 'Inspector': 1, 'Quick Help': 0, 'Toolbar': 0, 'Smart Controls': 0, 'Mixer': 1, 'Editors': 0, 'List Editors': 0, 'Note Pads': 0, 'Loop Browser': 0, 'Browsers': 0}}, 'middle': {'target': 1, 'others': {'Cycle': 0, 'Free Te",
     "accepted_the_observation": true,
@@ -17888,7 +18198,7 @@
    "kind": "check",
    "tag": "1039/en/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Cycle': 0, 'Free Tempo Recording': 0, 'Record': 0, 'Play': 0, 'Replace': 0, 'Tuner': 0, 'Solo': 0, 'Count In': 1, 'Metronome Click': 0, 'Inspector': 1, 'Quick Help': 0, 'Toolbar': 0, 'Smart Controls': 0, 'Mixer': 1, 'Editors': 0, 'List Editors': 0, 'Note Pads': 0, 'Loop Browser': 0, 'Browsers': 0}}, 'middle': {'target': 0, 'others': {'Cycle': 0, ",
     "accepted_the_observation": true,
@@ -17922,7 +18232,7 @@
    "kind": "check",
    "tag": "1039/en/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Cycle': 0, 'Free Tempo Recording': 0, 'Record': 0, 'Play': 0, 'Replace': 0, 'Tuner': 0, 'Solo': 0, 'Count In': 1, 'Metronome Click': 0, 'Library': 1, 'Inspector': 1, 'Quick Help': 0, 'Toolbar': 0, 'Smart Controls': 0, 'Editors': 0, 'List Editors': 0, 'Note Pads': 0, 'Loop Browser': 0, 'Browsers': 0}}, 'middle': {'target': 0, 'others': {'Cycle': 0",
     "accepted_the_observation": true,
@@ -17956,7 +18266,7 @@
    "kind": "check",
    "tag": "1039/en/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'Free Tempo Recording': 0, 'Play': 0, 'Replace': 0, 'Tuner': 0, 'Solo': 0, 'Count In': 1, 'Inspector': 1, 'Quick Help': 0, 'Toolbar': 0, 'Smart Controls': 0, 'Editors': 0, 'List Editors': 0, 'Note Pads': 0, 'Loop Browser': 0, 'Browsers': 0}, 'middle': {'Free Tempo Recording': 0, 'Play': 0, 'Replace': 0, 'Tuner': 0, 'Solo': 0, 'Count In': 1, 'Inspector': 1, 'Quick",
     "accepted_the_observation": true,
@@ -17990,7 +18300,7 @@
    "kind": "check",
    "tag": "1039/en/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Cycle': 0, 'Free Tempo Recording': 0, 'Play': 0, 'Replace': 0, 'Tuner': 0, 'Solo': 0, 'Count In': 1, 'Metronome Click': 0, 'Library': 1, 'Inspector': 1, 'Quick Help': 0, 'Toolbar': 0, 'Smart Controls': 0, 'Mixer': 0, 'Editors': 0, 'List Editors': 0, 'Note Pads': 0, 'Loop Browser': 0, 'Browsers': 0}}, 'middle': {'target': 1, 'others': {'Cycle': 0,",
     "accepted_the_observation": true,
@@ -18024,7 +18334,7 @@
    "kind": "check",
    "tag": "1039/ja/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 12, '1:AXGroup': 5, '3:AXPopUpButton': 7, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '3:AXMenuButton': 1, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2",
     "accepted_the_observation": true,
@@ -18058,7 +18368,7 @@
    "kind": "check",
    "tag": "1039/ja/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -18092,7 +18402,7 @@
    "kind": "check",
    "tag": "1039/ja/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, '\u30ab\u30a6\u30f3\u30c8\u30a4\u30f3': 1, '\u30e1\u30c8\u30ed\u30ce\u30fc\u30e0\u30af\u30ea\u30c3\u30af': 0, '\u30e9\u30a4\u30d6\u30e9\u30ea': 1, '\u30a4\u30f3\u30b9\u30da\u30af\u30bf': 1, '\u30af\u30a4\u30c3\u30af\u30d8\u30eb\u30d7': 0, '\u30c4\u30fc\u30eb\u30d0\u30fc': 0, 'Smart Control': 0, '\u30df\u30ad\u30b5\u30fc': 1, '\u30a8\u30c7\u30a3\u30bf': 0, '\u30ea\u30b9\u30c8\u30a8\u30c7\u30a3\u30bf': 0, '\u30ce\u30fc\u30c8\u30d1\u30c3\u30c9': 0, '\u30eb\u30fc\u30d7\u30d6\u30e9\u30a6\u30b6': 0, '\u30d6\u30e9\u30a6\u30b6': 0}}, 'middle': {'target': 1, 'others': {'\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, '\u30ab\u30a6\u30f3\u30c8",
     "accepted_the_observation": true,
@@ -18126,7 +18436,7 @@
    "kind": "check",
    "tag": "1039/ja/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\u30b5\u30a4\u30af\u30eb': 0, '\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, '\u30ab\u30a6\u30f3\u30c8\u30a4\u30f3': 1, '\u30e9\u30a4\u30d6\u30e9\u30ea': 1, '\u30a4\u30f3\u30b9\u30da\u30af\u30bf': 1, '\u30af\u30a4\u30c3\u30af\u30d8\u30eb\u30d7': 0, '\u30c4\u30fc\u30eb\u30d0\u30fc': 0, 'Smart Control': 0, '\u30df\u30ad\u30b5\u30fc': 1, '\u30a8\u30c7\u30a3\u30bf': 0, '\u30ea\u30b9\u30c8\u30a8\u30c7\u30a3\u30bf': 0, '\u30ce\u30fc\u30c8\u30d1\u30c3\u30c9': 0, '\u30eb\u30fc\u30d7\u30d6\u30e9\u30a6\u30b6': 0, '\u30d6\u30e9\u30a6\u30b6': 0}}, 'middle': {'target': 1, 'others': {'\u30b5\u30a4\u30af\u30eb': 0, '\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, ",
     "accepted_the_observation": true,
@@ -18160,7 +18470,7 @@
    "kind": "check",
    "tag": "1039/ja/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'\u30b5\u30a4\u30af\u30eb': 0, '\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, '\u30ab\u30a6\u30f3\u30c8\u30a4\u30f3': 1, '\u30e1\u30c8\u30ed\u30ce\u30fc\u30e0\u30af\u30ea\u30c3\u30af': 0, '\u30a4\u30f3\u30b9\u30da\u30af\u30bf': 1, '\u30af\u30a4\u30c3\u30af\u30d8\u30eb\u30d7': 0, '\u30c4\u30fc\u30eb\u30d0\u30fc': 0, 'Smart Control': 0, '\u30df\u30ad\u30b5\u30fc': 1, '\u30a8\u30c7\u30a3\u30bf': 0, '\u30ea\u30b9\u30c8\u30a8\u30c7\u30a3\u30bf': 0, '\u30ce\u30fc\u30c8\u30d1\u30c3\u30c9': 0, '\u30eb\u30fc\u30d7\u30d6\u30e9\u30a6\u30b6': 0, '\u30d6\u30e9\u30a6\u30b6': 0}}, 'middle': {'target': 0, 'others': {'\u30b5\u30a4\u30af\u30eb': 0, '\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed'",
     "accepted_the_observation": true,
@@ -18194,7 +18504,7 @@
    "kind": "check",
    "tag": "1039/ja/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'\u30b5\u30a4\u30af\u30eb': 0, '\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, '\u30ab\u30a6\u30f3\u30c8\u30a4\u30f3': 1, '\u30e1\u30c8\u30ed\u30ce\u30fc\u30e0\u30af\u30ea\u30c3\u30af': 0, '\u30e9\u30a4\u30d6\u30e9\u30ea': 1, '\u30a4\u30f3\u30b9\u30da\u30af\u30bf': 1, '\u30af\u30a4\u30c3\u30af\u30d8\u30eb\u30d7': 0, '\u30c4\u30fc\u30eb\u30d0\u30fc': 0, 'Smart Control': 0, '\u30a8\u30c7\u30a3\u30bf': 0, '\u30ea\u30b9\u30c8\u30a8\u30c7\u30a3\u30bf': 0, '\u30ce\u30fc\u30c8\u30d1\u30c3\u30c9': 0, '\u30eb\u30fc\u30d7\u30d6\u30e9\u30a6\u30b6': 0, '\u30d6\u30e9\u30a6\u30b6': 0}}, 'middle': {'target': 0, 'others': {'\u30b5\u30a4\u30af\u30eb': 0, '\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed",
     "accepted_the_observation": true,
@@ -18228,7 +18538,7 @@
    "kind": "check",
    "tag": "1039/ja/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, '\u30ab\u30a6\u30f3\u30c8\u30a4\u30f3': 1, '\u30a4\u30f3\u30b9\u30da\u30af\u30bf': 1, '\u30af\u30a4\u30c3\u30af\u30d8\u30eb\u30d7': 0, '\u30c4\u30fc\u30eb\u30d0\u30fc': 0, 'Smart Control': 0, '\u30a8\u30c7\u30a3\u30bf': 0, '\u30ea\u30b9\u30c8\u30a8\u30c7\u30a3\u30bf': 0, '\u30ce\u30fc\u30c8\u30d1\u30c3\u30c9': 0, '\u30eb\u30fc\u30d7\u30d6\u30e9\u30a6\u30b6': 0, '\u30d6\u30e9\u30a6\u30b6': 0}, 'middle': {'\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, '\u30ab\u30a6\u30f3\u30c8\u30a4\u30f3': 1, '\u30a4\u30f3\u30b9\u30da\u30af\u30bf': 1, '\u30af\u30a4\u30c3\u30af\u30d8\u30eb\u30d7': 0, '\u30c4\u30fc\u30eb\u30d0\u30fc': 0, 'Smart Control': 0, '\u30a8\u30c7\u30a3\u30bf': 1, '\u30ea\u30b9\u30c8\u30a8\u30c7\u30a3\u30bf': 0, '\u30ce\u30fc\u30c8\u30d1\u30c3\u30c9",
     "accepted_the_observation": true,
@@ -18262,7 +18572,7 @@
    "kind": "check",
    "tag": "1039/ja/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\u30b5\u30a4\u30af\u30eb': 0, '\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u518d\u751f': 0, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, '\u30ab\u30a6\u30f3\u30c8\u30a4\u30f3': 1, '\u30e1\u30c8\u30ed\u30ce\u30fc\u30e0\u30af\u30ea\u30c3\u30af': 0, '\u30e9\u30a4\u30d6\u30e9\u30ea': 1, '\u30a4\u30f3\u30b9\u30da\u30af\u30bf': 1, '\u30af\u30a4\u30c3\u30af\u30d8\u30eb\u30d7': 0, '\u30c4\u30fc\u30eb\u30d0\u30fc': 0, 'Smart Control': 0, '\u30df\u30ad\u30b5\u30fc': 0, '\u30a8\u30c7\u30a3\u30bf': 0, '\u30ea\u30b9\u30c8\u30a8\u30c7\u30a3\u30bf': 0, '\u30ce\u30fc\u30c8\u30d1\u30c3\u30c9': 0, '\u30eb\u30fc\u30d7\u30d6\u30e9\u30a6\u30b6': 0, '\u30d6\u30e9\u30a6\u30b6': 0}}, 'middle': {'target': 1, 'others': {'\u30b5\u30a4\u30af\u30eb': 0, '\u30d5\u30ea\u30fc\u30c6\u30f3\u30dd\u9332\u97f3': 0, '\u518d\u751f': 1, '\u7f6e\u304d\u63db\u3048\u308b': 0, '\u30c1\u30e5\u30fc\u30ca\u30fc': 0, '\u30bd\u30ed': 0, '",
     "accepted_the_observation": true,
@@ -18296,7 +18606,7 @@
    "kind": "check",
    "tag": "1039/de/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 12, '1:AXGroup': 5, '3:AXPopUpButton': 5, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '3:AXMenuButton': 2, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2",
     "accepted_the_observation": true,
@@ -18330,7 +18640,7 @@
    "kind": "check",
    "tag": "1039/de/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -18364,7 +18674,7 @@
    "kind": "check",
    "tag": "1039/de/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Aufnahme mit freiem Tempo': 0, 'Aufnahme': 0, 'Wiedergabe': 0, 'Ersetzen': 0, 'Stimmger\u00e4t': 0, 'Solo': 0, 'Einz\u00e4hlen': 1, 'Metronom-Klick': 0, 'Bibliothek': 1, 'Informationen': 1, 'Dynamische Hilfe': 0, 'Symbolleiste': 0, 'Smart Controls': 0, 'Mixer': 1, 'Editoren': 0, 'Listeneditoren': 0, 'Notizblock': 0, 'Loop-\u00dcbersicht': 0, '\u00dcbersichten': 0}},",
     "accepted_the_observation": true,
@@ -18398,7 +18708,7 @@
    "kind": "check",
    "tag": "1039/de/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Cycle': 0, 'Aufnahme mit freiem Tempo': 0, 'Aufnahme': 0, 'Wiedergabe': 0, 'Ersetzen': 0, 'Stimmger\u00e4t': 0, 'Solo': 0, 'Einz\u00e4hlen': 1, 'Bibliothek': 1, 'Informationen': 1, 'Dynamische Hilfe': 0, 'Symbolleiste': 0, 'Smart Controls': 0, 'Mixer': 1, 'Editoren': 0, 'Listeneditoren': 0, 'Notizblock': 0, 'Loop-\u00dcbersicht': 0, '\u00dcbersichten': 0}}, 'middle'",
     "accepted_the_observation": true,
@@ -18432,7 +18742,7 @@
    "kind": "check",
    "tag": "1039/de/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Cycle': 0, 'Aufnahme mit freiem Tempo': 0, 'Aufnahme': 0, 'Wiedergabe': 0, 'Ersetzen': 0, 'Stimmger\u00e4t': 0, 'Solo': 0, 'Einz\u00e4hlen': 1, 'Metronom-Klick': 0, 'Informationen': 1, 'Dynamische Hilfe': 0, 'Symbolleiste': 0, 'Smart Controls': 0, 'Mixer': 1, 'Editoren': 0, 'Listeneditoren': 0, 'Notizblock': 0, 'Loop-\u00dcbersicht': 0, '\u00dcbersichten': 0}}, 'mid",
     "accepted_the_observation": true,
@@ -18466,7 +18776,7 @@
    "kind": "check",
    "tag": "1039/de/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Cycle': 0, 'Aufnahme mit freiem Tempo': 0, 'Aufnahme': 0, 'Wiedergabe': 0, 'Ersetzen': 0, 'Stimmger\u00e4t': 0, 'Solo': 0, 'Einz\u00e4hlen': 1, 'Metronom-Klick': 0, 'Bibliothek': 1, 'Informationen': 1, 'Dynamische Hilfe': 0, 'Symbolleiste': 0, 'Smart Controls': 0, 'Editoren': 0, 'Listeneditoren': 0, 'Notizblock': 0, 'Loop-\u00dcbersicht': 0, '\u00dcbersichten': 0}},",
     "accepted_the_observation": true,
@@ -18500,7 +18810,7 @@
    "kind": "check",
    "tag": "1039/de/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'Aufnahme mit freiem Tempo': 0, 'Wiedergabe': 0, 'Ersetzen': 0, 'Stimmger\u00e4t': 0, 'Solo': 0, 'Einz\u00e4hlen': 1, 'Informationen': 1, 'Dynamische Hilfe': 0, 'Symbolleiste': 0, 'Smart Controls': 0, 'Editoren': 0, 'Listeneditoren': 0, 'Notizblock': 0, 'Loop-\u00dcbersicht': 0, '\u00dcbersichten': 0}, 'middle': {'Aufnahme mit freiem Tempo': 0, 'Wiedergabe': 0, 'Ersetzen': 0, 'Stimm",
     "accepted_the_observation": true,
@@ -18534,7 +18844,7 @@
    "kind": "check",
    "tag": "1039/de/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Cycle': 0, 'Aufnahme mit freiem Tempo': 0, 'Wiedergabe': 0, 'Ersetzen': 0, 'Stimmger\u00e4t': 0, 'Solo': 0, 'Einz\u00e4hlen': 1, 'Metronom-Klick': 0, 'Bibliothek': 1, 'Informationen': 1, 'Dynamische Hilfe': 0, 'Symbolleiste': 0, 'Smart Controls': 0, 'Mixer': 0, 'Editoren': 0, 'Listeneditoren': 0, 'Notizblock': 0, 'Loop-\u00dcbersicht': 0, '\u00dcbersichten': 0}}, 'm",
     "accepted_the_observation": true,
@@ -18568,7 +18878,7 @@
    "kind": "check",
    "tag": "1039/es/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 12, '1:AXGroup': 5, '3:AXPopUpButton': 5, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '3:AXMenuButton': 2, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2",
     "accepted_the_observation": true,
@@ -18602,7 +18912,7 @@
    "kind": "check",
    "tag": "1039/es/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -18636,7 +18946,7 @@
    "kind": "check",
    "tag": "1039/es/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Grabaci\u00f3n de tempo libre': 0, 'Grabar': 0, 'Reproducir': 0, 'Reemplazar': 0, 'Afinador': 0, 'Solo': 0, 'Comp\u00e1s de entrada': 1, 'Sonido del metr\u00f3nomo': 0, 'Biblioteca': 1, 'Inspector': 1, 'Ayuda r\u00e1pida': 0, 'Barra de herramientas': 0, 'Smart Controls': 0, 'Mezclador': 1, 'Editores': 0, 'Editores de lista': 0, 'Blocs de notas': 0, 'Explorador de lo",
     "accepted_the_observation": true,
@@ -18670,7 +18980,7 @@
    "kind": "check",
    "tag": "1039/es/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Ciclo': 0, 'Grabaci\u00f3n de tempo libre': 0, 'Grabar': 0, 'Reproducir': 0, 'Reemplazar': 0, 'Afinador': 0, 'Solo': 0, 'Comp\u00e1s de entrada': 1, 'Biblioteca': 1, 'Inspector': 1, 'Ayuda r\u00e1pida': 0, 'Barra de herramientas': 0, 'Smart Controls': 0, 'Mezclador': 1, 'Editores': 0, 'Editores de lista': 0, 'Blocs de notas': 0, 'Explorador de loops': 0, 'Explo",
     "accepted_the_observation": true,
@@ -18704,7 +19014,7 @@
    "kind": "check",
    "tag": "1039/es/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Ciclo': 0, 'Grabaci\u00f3n de tempo libre': 0, 'Grabar': 0, 'Reproducir': 0, 'Reemplazar': 0, 'Afinador': 0, 'Solo': 0, 'Comp\u00e1s de entrada': 1, 'Sonido del metr\u00f3nomo': 0, 'Inspector': 1, 'Ayuda r\u00e1pida': 0, 'Barra de herramientas': 0, 'Smart Controls': 0, 'Mezclador': 1, 'Editores': 0, 'Editores de lista': 0, 'Blocs de notas': 0, 'Explorador de loops':",
     "accepted_the_observation": true,
@@ -18738,7 +19048,7 @@
    "kind": "check",
    "tag": "1039/es/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Ciclo': 0, 'Grabaci\u00f3n de tempo libre': 0, 'Grabar': 0, 'Reproducir': 0, 'Reemplazar': 0, 'Afinador': 0, 'Solo': 0, 'Comp\u00e1s de entrada': 1, 'Sonido del metr\u00f3nomo': 0, 'Biblioteca': 1, 'Inspector': 1, 'Ayuda r\u00e1pida': 0, 'Barra de herramientas': 0, 'Smart Controls': 0, 'Editores': 0, 'Editores de lista': 0, 'Blocs de notas': 0, 'Explorador de loops'",
     "accepted_the_observation": true,
@@ -18772,7 +19082,7 @@
    "kind": "check",
    "tag": "1039/es/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'Grabaci\u00f3n de tempo libre': 0, 'Reproducir': 0, 'Reemplazar': 0, 'Afinador': 0, 'Solo': 0, 'Comp\u00e1s de entrada': 1, 'Inspector': 1, 'Ayuda r\u00e1pida': 0, 'Barra de herramientas': 0, 'Smart Controls': 0, 'Editores': 0, 'Editores de lista': 0, 'Blocs de notas': 0, 'Explorador de loops': 0, 'Exploradores': 0}, 'middle': {'Grabaci\u00f3n de tempo libre': 0, 'Reproducir': 0, '",
     "accepted_the_observation": true,
@@ -18806,7 +19116,7 @@
    "kind": "check",
    "tag": "1039/es/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Ciclo': 0, 'Grabaci\u00f3n de tempo libre': 0, 'Reproducir': 0, 'Reemplazar': 0, 'Afinador': 0, 'Solo': 0, 'Comp\u00e1s de entrada': 1, 'Sonido del metr\u00f3nomo': 0, 'Biblioteca': 1, 'Inspector': 1, 'Ayuda r\u00e1pida': 0, 'Barra de herramientas': 0, 'Smart Controls': 0, 'Mezclador': 0, 'Editores': 0, 'Editores de lista': 0, 'Blocs de notas': 0, 'Explorador de loo",
     "accepted_the_observation": true,
@@ -18840,7 +19150,7 @@
    "kind": "check",
    "tag": "1039/fr/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 12, '1:AXGroup': 5, '3:AXPopUpButton': 5, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '3:AXMenuButton': 2, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2",
     "accepted_the_observation": true,
@@ -18874,7 +19184,7 @@
    "kind": "check",
    "tag": "1039/fr/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -18908,7 +19218,7 @@
    "kind": "check",
    "tag": "1039/fr/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Enregistrement de tempo libre': 0, 'Enregistrement': 0, 'Lecture': 0, 'Remplacer': 0, 'Accordeur': 0, 'Solo': 0, 'D\u00e9compte': 1, 'Clic du m\u00e9tronome': 0, 'Biblioth\u00e8que': 1, 'Inspecteur': 1, 'Aide rapide': 0, 'Barre d\u2019outils': 0, 'Smart Controls': 0, 'Table de mixage': 1, '\u00c9diteurs': 0, '\u00c9diteurs de listes': 0, 'Blocs-notes': 0, 'Navigateur de boucl",
     "accepted_the_observation": true,
@@ -18942,7 +19252,7 @@
    "kind": "check",
    "tag": "1039/fr/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Cycle': 0, 'Enregistrement de tempo libre': 0, 'Enregistrement': 0, 'Lecture': 0, 'Remplacer': 0, 'Accordeur': 0, 'Solo': 0, 'D\u00e9compte': 1, 'Biblioth\u00e8que': 1, 'Inspecteur': 1, 'Aide rapide': 0, 'Barre d\u2019outils': 0, 'Smart Controls': 0, 'Table de mixage': 1, '\u00c9diteurs': 0, '\u00c9diteurs de listes': 0, 'Blocs-notes': 0, 'Navigateur de boucles': 0, 'Nav",
     "accepted_the_observation": true,
@@ -18976,7 +19286,7 @@
    "kind": "check",
    "tag": "1039/fr/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Cycle': 0, 'Enregistrement de tempo libre': 0, 'Enregistrement': 0, 'Lecture': 0, 'Remplacer': 0, 'Accordeur': 0, 'Solo': 0, 'D\u00e9compte': 1, 'Clic du m\u00e9tronome': 0, 'Inspecteur': 1, 'Aide rapide': 0, 'Barre d\u2019outils': 0, 'Smart Controls': 0, 'Table de mixage': 1, '\u00c9diteurs': 0, '\u00c9diteurs de listes': 0, 'Blocs-notes': 0, 'Navigateur de boucles': 0,",
     "accepted_the_observation": true,
@@ -19010,7 +19320,7 @@
    "kind": "check",
    "tag": "1039/fr/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Cycle': 0, 'Enregistrement de tempo libre': 0, 'Enregistrement': 0, 'Lecture': 0, 'Remplacer': 0, 'Accordeur': 0, 'Solo': 0, 'D\u00e9compte': 1, 'Clic du m\u00e9tronome': 0, 'Biblioth\u00e8que': 1, 'Inspecteur': 1, 'Aide rapide': 0, 'Barre d\u2019outils': 0, 'Smart Controls': 0, '\u00c9diteurs': 0, '\u00c9diteurs de listes': 0, 'Blocs-notes': 0, 'Navigateur de boucles': 0, 'N",
     "accepted_the_observation": true,
@@ -19044,7 +19354,7 @@
    "kind": "check",
    "tag": "1039/fr/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'Enregistrement de tempo libre': 0, 'Lecture': 0, 'Remplacer': 0, 'Accordeur': 0, 'Solo': 0, 'D\u00e9compte': 1, 'Inspecteur': 1, 'Aide rapide': 0, 'Barre d\u2019outils': 0, 'Smart Controls': 0, '\u00c9diteurs': 0, '\u00c9diteurs de listes': 0, 'Blocs-notes': 0, 'Navigateur de boucles': 0, 'Navigateurs': 0}, 'middle': {'Enregistrement de tempo libre': 0, 'Lecture': 0, 'Remplacer': 0",
     "accepted_the_observation": true,
@@ -19078,7 +19388,7 @@
    "kind": "check",
    "tag": "1039/fr/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Cycle': 0, 'Enregistrement de tempo libre': 0, 'Lecture': 0, 'Remplacer': 0, 'Accordeur': 0, 'Solo': 0, 'D\u00e9compte': 1, 'Clic du m\u00e9tronome': 0, 'Biblioth\u00e8que': 1, 'Inspecteur': 1, 'Aide rapide': 0, 'Barre d\u2019outils': 0, 'Smart Controls': 0, 'Table de mixage': 0, '\u00c9diteurs': 0, '\u00c9diteurs de listes': 0, 'Blocs-notes': 0, 'Navigateur de boucles': 0, '",
     "accepted_the_observation": true,
@@ -19112,7 +19422,7 @@
    "kind": "check",
    "tag": "1039/it/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 12, '1:AXGroup': 5, '3:AXPopUpButton': 5, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '3:AXMenuButton': 2, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2",
     "accepted_the_observation": true,
@@ -19146,7 +19456,7 @@
    "kind": "check",
    "tag": "1039/it/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -19180,7 +19490,7 @@
    "kind": "check",
    "tag": "1039/it/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Registrazione ritmo libera': 0, 'Registra': 0, 'Riproduci': 0, 'Sostituisci': 0, 'Accordatore': 0, 'Assolo': 0, 'Precount': 1, 'Clic metronomo': 0, 'Libreria': 1, 'Inspector': 1, 'Aiuto rapido': 0, 'Barra strumenti': 0, 'Smart Control': 0, 'Mixer': 1, 'Editor': 0, 'Editor elenchi': 0, 'Blocchi note': 0, 'Browser Loop': 0, 'Browser': 0}}, 'middle'",
     "accepted_the_observation": true,
@@ -19214,7 +19524,7 @@
    "kind": "check",
    "tag": "1039/it/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Ciclo': 0, 'Registrazione ritmo libera': 0, 'Registra': 0, 'Riproduci': 0, 'Sostituisci': 0, 'Accordatore': 0, 'Assolo': 0, 'Precount': 1, 'Libreria': 1, 'Inspector': 1, 'Aiuto rapido': 0, 'Barra strumenti': 0, 'Smart Control': 0, 'Mixer': 1, 'Editor': 0, 'Editor elenchi': 0, 'Blocchi note': 0, 'Browser Loop': 0, 'Browser': 0}}, 'middle': {'targe",
     "accepted_the_observation": true,
@@ -19248,7 +19558,7 @@
    "kind": "check",
    "tag": "1039/it/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Ciclo': 0, 'Registrazione ritmo libera': 0, 'Registra': 0, 'Riproduci': 0, 'Sostituisci': 0, 'Accordatore': 0, 'Assolo': 0, 'Precount': 1, 'Clic metronomo': 0, 'Inspector': 1, 'Aiuto rapido': 0, 'Barra strumenti': 0, 'Smart Control': 0, 'Mixer': 1, 'Editor': 0, 'Editor elenchi': 0, 'Blocchi note': 0, 'Browser Loop': 0, 'Browser': 0}}, 'middle': {",
     "accepted_the_observation": true,
@@ -19282,7 +19592,7 @@
    "kind": "check",
    "tag": "1039/it/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Ciclo': 0, 'Registrazione ritmo libera': 0, 'Registra': 0, 'Riproduci': 0, 'Sostituisci': 0, 'Accordatore': 0, 'Assolo': 0, 'Precount': 1, 'Clic metronomo': 0, 'Libreria': 1, 'Inspector': 1, 'Aiuto rapido': 0, 'Barra strumenti': 0, 'Smart Control': 0, 'Editor': 0, 'Editor elenchi': 0, 'Blocchi note': 0, 'Browser Loop': 0, 'Browser': 0}}, 'middle'",
     "accepted_the_observation": true,
@@ -19316,7 +19626,7 @@
    "kind": "check",
    "tag": "1039/it/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'Registrazione ritmo libera': 0, 'Riproduci': 0, 'Sostituisci': 0, 'Accordatore': 0, 'Assolo': 0, 'Precount': 1, 'Inspector': 1, 'Aiuto rapido': 0, 'Barra strumenti': 0, 'Smart Control': 0, 'Editor': 0, 'Editor elenchi': 0, 'Blocchi note': 0, 'Browser Loop': 0, 'Browser': 0}, 'middle': {'Registrazione ritmo libera': 0, 'Riproduci': 0, 'Sostituisci': 0, 'Accordato",
     "accepted_the_observation": true,
@@ -19350,7 +19660,7 @@
    "kind": "check",
    "tag": "1039/it/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Ciclo': 0, 'Registrazione ritmo libera': 0, 'Riproduci': 0, 'Sostituisci': 0, 'Accordatore': 0, 'Assolo': 0, 'Precount': 1, 'Clic metronomo': 0, 'Libreria': 1, 'Inspector': 1, 'Aiuto rapido': 0, 'Barra strumenti': 0, 'Smart Control': 0, 'Mixer': 0, 'Editor': 0, 'Editor elenchi': 0, 'Blocchi note': 0, 'Browser Loop': 0, 'Browser': 0}}, 'middle': {",
     "accepted_the_observation": true,
@@ -19384,7 +19694,7 @@
    "kind": "check",
    "tag": "1039/pt/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 12, '1:AXGroup': 5, '3:AXPopUpButton': 5, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '3:AXMenuButton': 2, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2",
     "accepted_the_observation": true,
@@ -19418,7 +19728,7 @@
    "kind": "check",
    "tag": "1039/pt/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -19452,7 +19762,7 @@
    "kind": "check",
    "tag": "1039/pt/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Grava\u00e7\u00e3o de Andamento Livre': 0, 'Grava': 0, 'Reproduz': 0, 'Substitui': 0, 'Afinador': 0, 'Solo': 0, 'Contagem preparat\u00f3ria': 1, 'Clique do metr\u00f4nomo': 0, 'Biblioteca': 1, 'Inspetor': 1, 'Ajuda r\u00e1pida': 0, 'Barra de ferramentas': 0, 'Smart Controls': 0, 'Mixer': 1, 'Editores': 0, 'Editores de listas': 0, 'Blocos de notas': 0, 'Navegador de loops",
     "accepted_the_observation": true,
@@ -19486,7 +19796,7 @@
    "kind": "check",
    "tag": "1039/pt/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Repeti\u00e7\u00e3o': 0, 'Grava\u00e7\u00e3o de Andamento Livre': 0, 'Grava': 0, 'Reproduz': 0, 'Substitui': 0, 'Afinador': 0, 'Solo': 0, 'Contagem preparat\u00f3ria': 1, 'Biblioteca': 1, 'Inspetor': 1, 'Ajuda r\u00e1pida': 0, 'Barra de ferramentas': 0, 'Smart Controls': 0, 'Mixer': 1, 'Editores': 0, 'Editores de listas': 0, 'Blocos de notas': 0, 'Navegador de loops': 0, 'Nav",
     "accepted_the_observation": true,
@@ -19520,7 +19830,7 @@
    "kind": "check",
    "tag": "1039/pt/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Repeti\u00e7\u00e3o': 0, 'Grava\u00e7\u00e3o de Andamento Livre': 0, 'Grava': 0, 'Reproduz': 0, 'Substitui': 0, 'Afinador': 0, 'Solo': 0, 'Contagem preparat\u00f3ria': 1, 'Clique do metr\u00f4nomo': 0, 'Inspetor': 1, 'Ajuda r\u00e1pida': 0, 'Barra de ferramentas': 0, 'Smart Controls': 0, 'Mixer': 1, 'Editores': 0, 'Editores de listas': 0, 'Blocos de notas': 0, 'Navegador de loops'",
     "accepted_the_observation": true,
@@ -19554,7 +19864,7 @@
    "kind": "check",
    "tag": "1039/pt/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'Repeti\u00e7\u00e3o': 0, 'Grava\u00e7\u00e3o de Andamento Livre': 0, 'Grava': 0, 'Reproduz': 0, 'Substitui': 0, 'Afinador': 0, 'Solo': 0, 'Contagem preparat\u00f3ria': 1, 'Clique do metr\u00f4nomo': 0, 'Biblioteca': 1, 'Inspetor': 1, 'Ajuda r\u00e1pida': 0, 'Barra de ferramentas': 0, 'Smart Controls': 0, 'Editores': 0, 'Editores de listas': 0, 'Blocos de notas': 0, 'Navegador de l",
     "accepted_the_observation": true,
@@ -19588,7 +19898,7 @@
    "kind": "check",
    "tag": "1039/pt/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'Grava\u00e7\u00e3o de Andamento Livre': 0, 'Reproduz': 0, 'Substitui': 0, 'Afinador': 0, 'Solo': 0, 'Contagem preparat\u00f3ria': 1, 'Inspetor': 1, 'Ajuda r\u00e1pida': 0, 'Barra de ferramentas': 0, 'Smart Controls': 0, 'Editores': 0, 'Editores de listas': 0, 'Blocos de notas': 0, 'Navegador de loops': 0, 'Navegadores': 0}, 'middle': {'Grava\u00e7\u00e3o de Andamento Livre': 0, 'Reproduz': 0",
     "accepted_the_observation": true,
@@ -19622,7 +19932,7 @@
    "kind": "check",
    "tag": "1039/pt/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'Repeti\u00e7\u00e3o': 0, 'Grava\u00e7\u00e3o de Andamento Livre': 0, 'Reproduz': 0, 'Substitui': 0, 'Afinador': 0, 'Solo': 0, 'Contagem preparat\u00f3ria': 1, 'Clique do metr\u00f4nomo': 0, 'Biblioteca': 1, 'Inspetor': 1, 'Ajuda r\u00e1pida': 0, 'Barra de ferramentas': 0, 'Smart Controls': 0, 'Mixer': 0, 'Editores': 0, 'Editores de listas': 0, 'Blocos de notas': 0, 'Navegador de l",
     "accepted_the_observation": true,
@@ -19656,7 +19966,7 @@
    "kind": "check",
    "tag": "1039/zh_CN/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 13, '1:AXGroup': 5, '3:AXPopUpButton': 7, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2:AXGroup': 6, '3:AXGr",
     "accepted_the_observation": true,
@@ -19690,7 +20000,7 @@
    "kind": "check",
    "tag": "1039/zh_CN/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -19724,7 +20034,7 @@
    "kind": "check",
    "tag": "1039/zh_CN/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8282\u62cd\u5668\u5494\u55d2\u58f0': 0, '\u8d44\u6e90\u5e93': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '\u5de5\u5177\u680f': 0, '\u667a\u80fd\u63a7\u5236': 0, '\u6df7\u97f3\u5668': 1, '\u7f16\u8f91\u5668': 0, '\u5217\u8868\u7f16\u8f91\u5668': 0, '\u97f3\u7b26\u80cc\u666f\u97f3': 0, '\u5faa\u73af\u6d4f\u89c8\u5668': 0, '\u6d4f\u89c8\u5668': 0}}, 'middle': {'target': 1, 'others': {'\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8282\u62cd\u5668\u5494\u55d2\u58f0': 0, '\u8d44\u6e90\u5e93': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '",
     "accepted_the_observation": true,
@@ -19758,7 +20068,7 @@
    "kind": "check",
    "tag": "1039/zh_CN/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\u5faa\u73af': 0, '\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8d44\u6e90\u5e93': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '\u5de5\u5177\u680f': 0, '\u667a\u80fd\u63a7\u5236': 0, '\u6df7\u97f3\u5668': 1, '\u7f16\u8f91\u5668': 0, '\u5217\u8868\u7f16\u8f91\u5668': 0, '\u97f3\u7b26\u80cc\u666f\u97f3': 0, '\u5faa\u73af\u6d4f\u89c8\u5668': 0, '\u6d4f\u89c8\u5668': 0}}, 'middle': {'target': 1, 'others': {'\u5faa\u73af': 0, '\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8d44\u6e90\u5e93': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '\u5de5\u5177\u680f': 0,",
     "accepted_the_observation": true,
@@ -19792,7 +20102,7 @@
    "kind": "check",
    "tag": "1039/zh_CN/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'\u5faa\u73af': 0, '\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8282\u62cd\u5668\u5494\u55d2\u58f0': 0, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '\u5de5\u5177\u680f': 0, '\u667a\u80fd\u63a7\u5236': 0, '\u6df7\u97f3\u5668': 1, '\u7f16\u8f91\u5668': 0, '\u5217\u8868\u7f16\u8f91\u5668': 0, '\u97f3\u7b26\u80cc\u666f\u97f3': 0, '\u5faa\u73af\u6d4f\u89c8\u5668': 0, '\u6d4f\u89c8\u5668': 0}}, 'middle': {'target': 0, 'others': {'\u5faa\u73af': 0, '\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8282\u62cd\u5668\u5494\u55d2\u58f0': 0, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '\u5de5\u5177",
     "accepted_the_observation": true,
@@ -19826,7 +20136,7 @@
    "kind": "check",
    "tag": "1039/zh_CN/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'\u5faa\u73af': 0, '\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8282\u62cd\u5668\u5494\u55d2\u58f0': 0, '\u8d44\u6e90\u5e93': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '\u5de5\u5177\u680f': 0, '\u667a\u80fd\u63a7\u5236': 0, '\u7f16\u8f91\u5668': 0, '\u5217\u8868\u7f16\u8f91\u5668': 0, '\u97f3\u7b26\u80cc\u666f\u97f3': 0, '\u5faa\u73af\u6d4f\u89c8\u5668': 0, '\u6d4f\u89c8\u5668': 0}}, 'middle': {'target': 0, 'others': {'\u5faa\u73af': 0, '\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8282\u62cd\u5668\u5494\u55d2\u58f0': 0, '\u8d44\u6e90\u5e93': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e",
     "accepted_the_observation": true,
@@ -19860,7 +20170,7 @@
    "kind": "check",
    "tag": "1039/zh_CN/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '\u5de5\u5177\u680f': 0, '\u667a\u80fd\u63a7\u5236': 0, '\u7f16\u8f91\u5668': 0, '\u5217\u8868\u7f16\u8f91\u5668': 0, '\u97f3\u7b26\u80cc\u666f\u97f3': 0, '\u5faa\u73af\u6d4f\u89c8\u5668': 0, '\u6d4f\u89c8\u5668': 0}, 'middle': {'\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '\u5de5\u5177\u680f': 0, '\u667a\u80fd\u63a7\u5236': 0, '\u7f16\u8f91\u5668': 1, '\u5217\u8868\u7f16\u8f91\u5668': 0, '\u97f3\u7b26\u80cc\u666f\u97f3': 0, '\u5faa\u73af\u6d4f\u89c8\u5668': 0, '\u6d4f\u89c8\u5668': 0}, 'after': {'\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': ",
     "accepted_the_observation": true,
@@ -19894,7 +20204,7 @@
    "kind": "check",
    "tag": "1039/zh_CN/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\u5faa\u73af': 0, '\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u64ad\u653e': 0, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8282\u62cd\u5668\u5494\u55d2\u58f0': 0, '\u8d44\u6e90\u5e93': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '\u5de5\u5177\u680f': 0, '\u667a\u80fd\u63a7\u5236': 0, '\u6df7\u97f3\u5668': 0, '\u7f16\u8f91\u5668': 0, '\u5217\u8868\u7f16\u8f91\u5668': 0, '\u97f3\u7b26\u80cc\u666f\u97f3': 0, '\u5faa\u73af\u6d4f\u89c8\u5668': 0, '\u6d4f\u89c8\u5668': 0}}, 'middle': {'target': 1, 'others': {'\u5faa\u73af': 0, '\u81ea\u7531\u901f\u5ea6\u5f55\u97f3': 0, '\u64ad\u653e': 1, '\u66ff\u6362': 0, '\u8c03\u97f3\u5668': 0, '\u72ec\u594f': 0, '\u9884\u5907': 1, '\u8282\u62cd\u5668\u5494\u55d2\u58f0': 1, '\u8d44\u6e90\u5e93': 1, '\u68c0\u67e5\u5668': 1, '\u5feb\u901f\u5e2e\u52a9': 0, '",
     "accepted_the_observation": true,
@@ -19928,7 +20238,7 @@
    "kind": "check",
    "tag": "1039/zh_TW/candidate/automation.toggle_view",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'structure', 'before': {'2:AXGroup': 6, '3:AXGroup': 13, '1:AXGroup': 5, '3:AXPopUpButton': 7, '7:AXPopUpButton': 12, '7:AXGroup': 1, '4:AXLayoutArea': 1, '6:AXGroup': 9, '6:AXPopUpButton': 2, '4:AXGroup': 68, '5:AXPopUpButton': 2, '5:AXGroup': 7, '4:AXMenuButton': 8, '6:AXLayoutArea': 1, '7:AXLayoutArea': 20, '2:AXLayoutArea': 1, '4:AXPopUpButton': 21}, 'middle': {'2:AXGroup': 6, '3:AXGr",
     "accepted_the_observation": true,
@@ -19962,7 +20272,7 @@
    "kind": "check",
    "tag": "1039/zh_TW/candidate/nav.zoom_to_fit",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'sliders', 'before': [120.0, 0.6839377880096436, 0.21336662769317627], 'middle': [120.0, 0.0, 0.585365891456604], 'after': [120.0, 0.6839377880096436, 0.21531778573989868], 'changed': True, 'came_back': True, 'others_kept': True, 'replies': [{'state': 'B', 'success': True, 'reason': 'readback_unavailable', 'method': 'cgevent', 'operation': 'nav.zoom_to_fit', 'input_source_switched': True,",
     "accepted_the_observation": true,
@@ -19996,7 +20306,7 @@
    "kind": "check",
    "tag": "1039/zh_TW/candidate/transport.toggle_cycle",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u9304\u97f3': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u7bc0\u62cd\u5668\u5361\u55d2\u8072': 0, '\u8cc7\u6599\u5eab': 1, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9\u8aaa\u660e': 0, '\u5de5\u5177\u5217': 0, '\u667a\u6167\u578b\u63a7\u5236\u9805\u76ee': 0, '\u6df7\u97f3\u5668': 1, '\u7de8\u8f2f\u5668': 0, '\u5217\u51fa\u7de8\u8f2f\u8005': 0, '\u8a18\u4e8b\u672c': 0, '\u5faa\u74b0\u6a02\u6bb5\u700f\u89bd\u5668': 0, '\u700f\u89bd\u5668': 0}}, 'middle': {'target': 1, 'others': {'\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u9304\u97f3': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u7bc0\u62cd\u5668\u5361\u55d2\u8072': 0, '\u8cc7\u6599\u5eab': 1, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9",
     "accepted_the_observation": true,
@@ -20030,7 +20340,7 @@
    "kind": "check",
    "tag": "1039/zh_TW/candidate/transport.toggle_metronome",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\u5faa\u74b0': 0, '\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u9304\u97f3': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u8cc7\u6599\u5eab': 1, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9\u8aaa\u660e': 0, '\u5de5\u5177\u5217': 0, '\u667a\u6167\u578b\u63a7\u5236\u9805\u76ee': 0, '\u6df7\u97f3\u5668': 1, '\u7de8\u8f2f\u5668': 0, '\u5217\u51fa\u7de8\u8f2f\u8005': 0, '\u8a18\u4e8b\u672c': 0, '\u5faa\u74b0\u6a02\u6bb5\u700f\u89bd\u5668': 0, '\u700f\u89bd\u5668': 0}}, 'middle': {'target': 1, 'others': {'\u5faa\u74b0': 0, '\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u9304\u97f3': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u8cc7\u6599\u5eab': 1, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9\u8aaa\u660e': 0, ",
     "accepted_the_observation": true,
@@ -20064,7 +20374,7 @@
    "kind": "check",
    "tag": "1039/zh_TW/candidate/view.toggle_library",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'\u5faa\u74b0': 0, '\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u9304\u97f3': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u7bc0\u62cd\u5668\u5361\u55d2\u8072': 0, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9\u8aaa\u660e': 0, '\u5de5\u5177\u5217': 0, '\u667a\u6167\u578b\u63a7\u5236\u9805\u76ee': 0, '\u6df7\u97f3\u5668': 1, '\u7de8\u8f2f\u5668': 0, '\u5217\u51fa\u7de8\u8f2f\u8005': 0, '\u8a18\u4e8b\u672c': 0, '\u5faa\u74b0\u6a02\u6bb5\u700f\u89bd\u5668': 0, '\u700f\u89bd\u5668': 0}}, 'middle': {'target': 0, 'others': {'\u5faa\u74b0': 0, '\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u9304\u97f3': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u7bc0\u62cd\u5668\u5361\u55d2\u8072': 0, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9\u8aaa\u660e",
     "accepted_the_observation": true,
@@ -20098,7 +20408,7 @@
    "kind": "check",
    "tag": "1039/zh_TW/candidate/view.toggle_mixer",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 1, 'others': {'\u5faa\u74b0': 0, '\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u9304\u97f3': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u7bc0\u62cd\u5668\u5361\u55d2\u8072': 0, '\u8cc7\u6599\u5eab': 1, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9\u8aaa\u660e': 0, '\u5de5\u5177\u5217': 0, '\u667a\u6167\u578b\u63a7\u5236\u9805\u76ee': 0, '\u7de8\u8f2f\u5668': 0, '\u5217\u51fa\u7de8\u8f2f\u8005': 0, '\u8a18\u4e8b\u672c': 0, '\u5faa\u74b0\u6a02\u6bb5\u700f\u89bd\u5668': 0, '\u700f\u89bd\u5668': 0}}, 'middle': {'target': 0, 'others': {'\u5faa\u74b0': 0, '\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u9304\u97f3': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u7bc0\u62cd\u5668\u5361\u55d2\u8072': 0, '\u8cc7\u6599\u5eab': 1, '\u6aa2\u95b1\u5668': ",
     "accepted_the_observation": true,
@@ -20132,7 +20442,7 @@
    "kind": "check",
    "tag": "1039/zh_TW/candidate/view.toggle_piano_roll",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'unnamed_box', 'before': {'\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9\u8aaa\u660e': 0, '\u5de5\u5177\u5217': 0, '\u667a\u6167\u578b\u63a7\u5236\u9805\u76ee': 0, '\u7de8\u8f2f\u5668': 0, '\u5217\u51fa\u7de8\u8f2f\u8005': 0, '\u8a18\u4e8b\u672c': 0, '\u5faa\u74b0\u6a02\u6bb5\u700f\u89bd\u5668': 0, '\u700f\u89bd\u5668': 0}, 'middle': {'\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9\u8aaa\u660e': 0, '\u5de5\u5177\u5217': 0, '\u667a\u6167\u578b\u63a7\u5236\u9805\u76ee': 0, '\u7de8\u8f2f\u5668': 1, '\u5217\u51fa\u7de8\u8f2f\u8005': 0, '\u8a18\u4e8b\u672c': 0, '\u5faa\u74b0\u6a02\u6bb5\u700f\u89bd\u5668': 0, '\u700f\u89bd\u5668': 0}, 'after': {'\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u64ad\u653e",
     "accepted_the_observation": true,
@@ -20166,7 +20476,7 @@
    "kind": "check",
    "tag": "1039/zh_TW/candidate/transport.record",
    "passed": true,
-   "expected": "under 2-Set Korean through CGEvent alone the key is posted under ABC, the reading changes and comes back, and the source reads 2-Set Korean after; for a key Logic leaves unbound, only the switch and the restore",
+   "expected": "under 2-Set Korean through CGEvent alone the key is posted under com.apple.keylayout.ABC, the reading changes and comes back, and the source reads 2-Set Korean after",
    "observed": {
     "observation": "{'kind': 'box', 'before': {'target': 0, 'others': {'\u5faa\u74b0': 0, '\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u64ad\u653e': 0, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u7bc0\u62cd\u5668\u5361\u55d2\u8072': 0, '\u8cc7\u6599\u5eab': 1, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9\u8aaa\u660e': 0, '\u5de5\u5177\u5217': 0, '\u667a\u6167\u578b\u63a7\u5236\u9805\u76ee': 0, '\u6df7\u97f3\u5668': 0, '\u7de8\u8f2f\u5668': 0, '\u5217\u51fa\u7de8\u8f2f\u8005': 0, '\u8a18\u4e8b\u672c': 0, '\u5faa\u74b0\u6a02\u6bb5\u700f\u89bd\u5668': 0, '\u700f\u89bd\u5668': 0}}, 'middle': {'target': 1, 'others': {'\u5faa\u74b0': 0, '\u81ea\u7531\u62cd\u901f\u9304\u88fd': 0, '\u64ad\u653e': 1, '\u53d6\u4ee3': 0, '\u8abf\u97f3\u5668': 0, '\u7368\u594f': 0, '\u9810\u5099\u62cd': 1, '\u7bc0\u62cd\u5668\u5361\u55d2\u8072': 1, '\u8cc7\u6599\u5eab': 1, '\u6aa2\u95b1\u5668': 1, '\u5feb\u901f\u8f14\u52a9",
     "accepted_the_observation": true,
