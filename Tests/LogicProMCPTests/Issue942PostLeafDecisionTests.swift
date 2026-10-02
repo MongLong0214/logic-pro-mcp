@@ -326,15 +326,37 @@ struct Issue942PostLeafDecisionTests {
         let windows: [[String: Any]] = [
             Self.window(owner: NSNumber(value: Self.logicPID), number: 1, layer: NSNumber(value: 0)),
         ]
-        let everyPidIsLogic: (pid_t) -> Bool = { _ in true }
+        let everyPidIsLogic: (pid_t) -> String? = { _ in Self.logicBundleID }
         #expect(!ProcessUtils.logicOwnsTheKeyboard(
-            windows: windows, focusedApplicationPID: Self.finderPID, isKnownLogicPID: everyPidIsLogic))
+            windows: windows, focusedApplicationPID: Self.finderPID, bundleIDForPID: everyPidIsLogic))
         #expect(ProcessUtils.logicOwnsTheKeyboard(
-            windows: windows, focusedApplicationPID: Self.logicPID, isKnownLogicPID: everyPidIsLogic))
+            windows: windows, focusedApplicationPID: Self.logicPID, bundleIDForPID: everyPidIsLogic))
         #expect(ProcessUtils.logicOwnsTheKeyboard(
-            windows: windows, focusedApplicationPID: nil, isKnownLogicPID: everyPidIsLogic))
+            windows: windows, focusedApplicationPID: nil, bundleIDForPID: everyPidIsLogic))
         #expect(!ProcessUtils.logicOwnsTheKeyboard(
-            windows: windows, focusedApplicationPID: Self.logicPID, isKnownLogicPID: { _ in false }))
+            windows: windows, focusedApplicationPID: Self.logicPID, bundleIDForPID: { _ in "com.apple.finder" }))
+    }
+
+    static let logicBundleID = "com.apple.logic10"
+    static let helperPID: pid_t = 77
+
+    /// Review R2 of #1082: a helper process whose bundle does not read owns the front window, at
+    /// the normal layer and at the modal-panel level, and holds the focus. Both readings name the
+    /// same process, and it is not Logic. Mutation this kills: the owner accepted when its bundle
+    /// does not read (`isKnownLogicPID`), which answered true for both. The control is the same
+    /// screen with the owner reading as Logic's bundle.
+    @Test(arguments: [0, 8])
+    func aFocusedProcessWhoseBundleDoesNotReadDoesNotPassForLogic(layer: Int) {
+        let windows: [[String: Any]] = [
+            Self.window(owner: NSNumber(value: Self.helperPID), number: 9, layer: NSNumber(value: layer)),
+            Self.window(owner: NSNumber(value: Self.logicPID), number: 1, layer: NSNumber(value: 0)),
+        ]
+        let unreadHelper: (pid_t) -> String? = { $0 == Self.logicPID ? Self.logicBundleID : nil }
+        #expect(!ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.helperPID, bundleIDForPID: unreadHelper))
+        let readsAsLogic: (pid_t) -> String? = { _ in Self.logicBundleID }
+        #expect(ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.helperPID, bundleIDForPID: readsAsLogic))
     }
 
     /// Both readings must say Logic. Mutation this kills: the focused application overriding the

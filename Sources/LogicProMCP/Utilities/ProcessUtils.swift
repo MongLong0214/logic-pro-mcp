@@ -147,7 +147,7 @@ enum ProcessUtils {
         // The focused application is read after the window list: the system-wide read fails until
         // this process has called the window server (`focusedApplicationPID`).
         return logicOwnsTheKeyboard(
-            windows: infos, focusedApplicationPID: focusedApplicationPID(), isKnownLogicPID: isKnownLogicPID
+            windows: infos, focusedApplicationPID: focusedApplicationPID(), bundleIDForPID: bundleIDForPID
         )
     }
 
@@ -156,15 +156,18 @@ enum ProcessUtils {
     /// modal-panel level included, and that owner must be Logic. An application with no window on
     /// screen holds the keyboard without being in the list, and the accessibility server names it
     /// (`LogicOnScreenWindows.keyboardOwnerIsLogic`): when it answered, it must name that same
-    /// process. Not merely a process `isKnownLogicPID` accepts: that answers true for a pid whose
-    /// bundle does not read, so a focused helper or command-line process would pass (review R1 of
-    /// #1082). Unread, the window reading answers alone, as it did before.
+    /// process. Unread, the window reading answers alone, as it did before.
+    ///
+    /// The owner must read as Logic by its bundle identifier. `isKnownLogicPID` answers true for a
+    /// pid whose bundle does not read, so a helper or command-line process that owned the front
+    /// window and held the focus passed, both readings naming it (review R2 of #1082; R1 had closed
+    /// the same hole for the focused application alone).
     static func logicOwnsTheKeyboard(
-        windows: [[String: Any]], focusedApplicationPID: pid_t?, isKnownLogicPID: (pid_t) -> Bool
+        windows: [[String: Any]], focusedApplicationPID: pid_t?, bundleIDForPID: (pid_t) -> String?
     ) -> Bool {
         guard let window = LogicOnScreenWindows.keyboardWindow(windows),
               let pid = pidValue(from: window[kCGWindowOwnerPID as String]),
-              isKnownLogicPID(pid) else { return false }
+              LogicProTarget.isLogicFrontmostBundleID(bundleIDForPID(pid)) else { return false }
         guard let focusedApplicationPID else { return true }
         return focusedApplicationPID == pid
     }
