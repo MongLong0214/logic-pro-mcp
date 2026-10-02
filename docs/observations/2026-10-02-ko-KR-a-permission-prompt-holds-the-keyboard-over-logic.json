@@ -1,0 +1,118 @@
+{
+  "schema": 3,
+  "id": "2026-10-02-ko-KR-a-permission-prompt-holds-the-keyboard-over-logic",
+  "date": "2026-10-02",
+  "subject": "which process holds the keyboard when a UserNotificationCenter permission prompt sits in front of Logic, and what the frontmost gate reads",
+  "question": "With a permission prompt at the modal-panel level over Logic, does the first layer-0 window still name the keyboard's owner, and what do a server on that rule and a server on the modal-panel rule answer?",
+  "verdict": "works",
+  "surface": "system.accessibility",
+  "issues": [
+    942
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "with a permission prompt from another process left up over Logic, read CGWindowListCopyWindowInfo front to back and lsappinfo front, then drive one logic_transport goto_position hold through each binary",
+    "expected": "the first window at layer 0 or 8 is the prompt's; lsappinfo front names UserNotificationCenter; the layer-0 binary answers already_frontmost and the modal-panel binary answers activated",
+    "cost": "needs another process's permission prompt on screen, which cannot be raised on demand, and LIVE.lock"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/LogicOnScreenWindows.swift:keyboardWindow",
+    "Sources/LogicProMCP/Utilities/ProcessUtils.swift:logicOwnsTheKeyboard"
+  ],
+  "evidence": [
+    "evidence/2026-10-02-942-keyboard-owner-window-list.json",
+    "evidence/2026-10-02-942-keyboard-owner-drive.json"
+  ],
+  "method": "The window list was read by /usr/bin/python3 under the LPM shell while the prompts were up. Then each binary served one goto_position hold with nothing arranged: the candidate built at 9899b052 (layer-0 rule) and the one built at a28300da (layer 0 or 8).",
+  "observations": [
+    {
+      "locale": "ko-KR",
+      "reading": "window list, front to back, to the first layer-0 window",
+      "lsappinfo_front": "user_notification_center",
+      "groups": [
+        {
+          "owner": "window_server",
+          "pid": 391,
+          "layer": 2147483630,
+          "windows": 4
+        },
+        {
+          "owner": "other",
+          "pid": 661,
+          "layer": 25,
+          "windows": 45
+        },
+        {
+          "owner": "window_server",
+          "pid": 391,
+          "layer": 24,
+          "windows": 3
+        },
+        {
+          "owner": "other",
+          "pid": 733,
+          "layer": 21,
+          "windows": 1
+        },
+        {
+          "owner": "user_notification_center",
+          "pid": 81314,
+          "layer": 8,
+          "windows": 2
+        },
+        {
+          "owner": "logic",
+          "pid": 6765,
+          "layer": 3,
+          "windows": 1
+        },
+        {
+          "owner": "logic",
+          "pid": 6765,
+          "layer": 0,
+          "windows": 1
+        }
+      ]
+    },
+    {
+      "locale": "ko-KR",
+      "binary": "layer0_rule_9899b052",
+      "front_before": "user_notification_center",
+      "mirror_owner_is_logic_before": false,
+      "frontmost_preparation": "already_frontmost",
+      "settlement_read_keyboard_owner": "logic",
+      "escapes_sent": 0,
+      "front_after": "user_notification_center",
+      "mirror_owner_is_logic_after": false,
+      "logic_dialog_layer_after": 0
+    },
+    {
+      "locale": "ko-KR",
+      "binary": "modal_panel_rule_a28300da",
+      "front_before": "user_notification_center",
+      "mirror_owner_is_logic_before": false,
+      "frontmost_preparation": "activated",
+      "settlement_read_keyboard_owner": "logic",
+      "escapes_sent": 0,
+      "front_after": "logic",
+      "mirror_owner_is_logic_after": true,
+      "logic_dialog_layer_after": 8
+    }
+  ],
+  "conclusion": "The first window at layer 0 or 8 was UserNotificationCenter's at layer 8, while the first at layer 0 was Logic's; lsappinfo front named UserNotificationCenter. The layer-0 binary answered already_frontmost; the modal-panel binary answered activated, after which lsappinfo front named Logic. Neither sent an Escape.",
+  "limits": [
+    "One screen, two prompts from other processes, one Logic installation in Korean; the prompts could not be raised on demand, so the drive was made once.",
+    "With Logic active and a prompt still in front of its normal windows, the modal-panel rule reads the prompt's owner; which process the keyboard went to then was not read."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states which process the window server lists in front and what the server's frontmost gate answered, not a string Logic ships."
+  }
+}
