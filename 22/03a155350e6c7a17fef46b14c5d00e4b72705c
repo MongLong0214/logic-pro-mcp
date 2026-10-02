@@ -1,0 +1,69 @@
+Limit: which read of the idle cycle ends an inline rename is not measured; the yield removes the whole cycle while the focus reads as text editing, so it cannot say which part mattered
+Limit: the focus is read once at the start of a tick; a cycle already running when the user starts typing runs to its end, and a 74-track project's cycle was measured at a 12.6 s median
+Unverified: that Logic's inline track rename reads as a focused AXTextField was not checked on Logic; the mute/arm guard makes the same assumption, and no live run of this change has been made
+Record-Id: r-55ecf566dc6f
+Provenance: inherited 4502bfd89a42076f3ae857ce6ea3e6918fdc2fef
+
+Limit: one fixture, one Logic installation, Korean only, nothing typed; which read in the poll cycle takes the focus is not narrowed, because the candidate yields the whole cycle
+Limit: the control is a build of main 9dc6fea2, not of e01122eb; the idle poll cycle is the same code in both
+Record-Id: r-f7867c686b28
+Provenance: inherited bd02c95b18e8ba1ab807401b526953c186b4e8b3
+
+Limit: a read already under way runs to its end; the track walk has no point to stop at, so a rename opened during it still waits for that one read
+Limit: the probe opens the rename through Track > Rename Track, not by double-clicking the name, and types under 2-Set Korean, not under ABC
+Warn: the in-cycle checks apply only to the loop's own cycle; a cycle that serves queued callers must not yield, or a refreshAfterWrite could come back without the read it waited for
+Record-Id: r-2b94187d83b1
+Provenance: inherited 240d18cb1de2a78d99f25e94093bbd41c42bbd85
+
+Limit: one header's reads already under way still run to their end; that window is one header's AXHelp reads, not the walk
+Limit: the bisection ran in Korean on one fixture; which other areas' AXHelp ends an inline edit was read for the tracks area and the mixer only
+Ruled-out: dropping AXHelp from inferTrackType instead | Logic's help sentences are what it counts track types by, and the types would change
+Warn: reading AXHelp of a tracks-area element ends an inline rename in Logic; any new background read of help there must ask the keyboard focus first
+Record-Id: r-3e204877347e
+Provenance: inherited 568b6567fe6d506005d4dc43ff41ac9b25a4723d
+
+Limit: whether a sample began mid-cycle was not read; the mid-cycle and mid-walk stops rest on the unit tests
+Limit: the rename was opened from the Track menu, not by double-clicking the name, and typed under 2-Set Korean
+Record-Id: r-4b96fb617b21
+Provenance: inherited b9375042a1ec3eb6938afbd0c0eae96ddf3b0e13
+
+Limit: Korean only, one fixture, three samples per condition; help reads were tested in the tracks area and the mixer only, and why Logic ends the edit on a help read was not read
+Record-Id: r-5116f02899d5
+Provenance: inherited 7bd7fd155f2894bce37da5ded5db6e585dbdbeef
+
+Limit: inside a header, stop is asked once, after its non-help reads and before its help reads; the help reads of one header already under way run to their end
+Warn: a yield at the document-path query must not write the pathless project info: StateCache reads a path that went missing as a different project and clears every section
+Warn: a yielded background cycle holds its cache keys instead of calling postPoll, because publishing reads resources back (the project path query, a live transport read); finishPoll publishes them on the next whole cycle
+Warn: on this toolchain an #expect comparing an optional-chained contains with true passed with the key absent; spell such checks as a bare #expect on a non-optional value
+Record-Id: r-3d2291a01f3d
+Provenance: inherited 5593fcadd4fe291a19fa80531082797223383fe0
+
+Warn: check-ax-locator-census reads a for loop and a return within the lines after findAllDescendants as a first-match lookup; the help reads are joined with flatMap so the stop's return nil does not read as one
+Record-Id: r-6ecfe55d588e
+Provenance: inherited 086821fd0134256bb8e06dd782cec21d7637ad14
+
+Limit: a resource read already under way when editing begins runs to its end; the stop is asked between reads, not inside one
+Warn: a yield decided inside a poll update closure must end the cycle by a flag; the closure returning false says only that nothing was written, and asking the focus again can fail to read, which polls
+Warn: publishing a cycle's sections reads resources back from Logic; a background cycle asks the focus before publishing and before each resource read, and a cut-short publication holds every key for the next whole cycle
+Record-Id: r-376fd16fec3e
+Provenance: inherited cbd4039fffd5312f0b9aaaa3f4adfe9c9b5d0769
+
+Limit: one AXHelp read already under way when editing begins still runs to its end
+Warn: stop must be asked before every AXHelp read of a header, not once before the batch: a rename opened during one header's help reads was lost to the rest of that batch, at a rate, in the French subscribed runs
+Record-Id: r-cc661ae0ab7a
+Provenance: inherited ad14fa6ea002f065cac6b105d03ce4f800d8f6fb
+
+Limit: only AXHelp reads are guarded, because the bisection measured only those ending the rename; a help read already under way runs to its end
+Ruled-out: plumbing a stop check through the mixer, transport and marker readers | their help reads are spread over plug-in, input, output and send slot readers, and one missed site reopens the hole; the guard sits in the two helpers every help read goes through
+Warn: checks between a background cycle's reads do not reach inside one: a French run lost the rename to the mixer read under way when it opened; every AXHelp read in a background cycle now asks a task-local guard, and a section the guard cut short is discarded, not written or published
+Record-Id: r-8d723e5f352d
+Provenance: inherited 13521f0fa1bb580241a665aaa824746d51eb23b1
+
+Warn: the ad14fa6e record attributes the French subscribed losses to one header's help batch; a later poll trace put the loss inside the mixer read, which the per-read stop in the track walk does not reach
+Record-Id: r-ef82d0e0b859
+Provenance: inherited 711bfc987ba20abce431bf59eb238bef6da7241a
+
+Warn: publication's stop must count the help-read guard's latch as well as the latest focus reading: a focus that reads as editing once and then does not read let a resource whose help was refused be published
+Warn: the probe's verdict needs all three conditions and a row for every language, condition and sample; a control-only or baseline-less run used to pass with no candidate witness
+Record-Id: r-e0617ef03a88
+Provenance: inherited 0383a5ef9471cf198eb04f6127e6d8322c8e7fee
