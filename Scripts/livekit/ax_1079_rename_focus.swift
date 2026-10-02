@@ -22,14 +22,17 @@ func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
     return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
 }
 
-/// The focused element's role and subrole, or null when the focus does not read.
+/// The focused element's role and subrole, and the length of its string value (null when it has
+/// none), or a null role when the focus does not read. The length, not the text: the text is a
+/// track name and whatever was typed, and only whether it grew is asked.
 func focus() -> String {
     guard let value = attribute(app, kAXFocusedUIElementAttribute),
           CFGetTypeID(value) == AXUIElementGetTypeID() else { return "{\"role\":null}" }
     let element = value as! AXUIElement
     let role = attribute(element, kAXRoleAttribute) as? String ?? ""
     let subrole = attribute(element, kAXSubroleAttribute) as? String ?? ""
-    return "{\"role\":\"\(role)\",\"subrole\":\"\(subrole)\"}"
+    let length = (attribute(element, kAXValueAttribute) as? String).map { String($0.count) } ?? "null"
+    return "{\"role\":\"\(role)\",\"subrole\":\"\(subrole)\",\"value_length\":\(length)}"
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())

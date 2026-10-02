@@ -236,14 +236,17 @@ actor StatePoller {
     /// cycles instead of N, every caller's reads begin after its own request, and no two cycles
     /// overlap — which is also why poller-vs-poller `dropped_stale_writes` becomes unreachable
     /// here, this time by construction rather than by my assuming it.
-    private func runCoalescedCycle() async -> Bool {
+    /// `yieldingToTextEditing` is the background loop's: its cycle stops at the next read once
+    /// Logic's keyboard focus reads as text editing (`pollOnce`). A caller that queues behind a
+    /// cycle is served by a cycle of its own, which never yields.
+    private func runCoalescedCycle(yieldingToTextEditing: Bool = false) async -> Bool {
         // A stop is under way; starting a cycle now is the AX work that stop exists to end.
         if stopped { return false }
         if cycleInProgress {
             return await withCheckedContinuation { waitingForNextCycle.append($0) }
         }
         cycleInProgress = true
-        let mine = await pollOnce(axChannel: axChannel, cache: cache)
+        let mine = await pollOnce(axChannel: axChannel, cache: cache, yieldingToTextEditing: yieldingToTextEditing)
         if waitingForNextCycle.isEmpty {
             strandWaiters()
             releaseCycle()
@@ -277,7 +280,7 @@ actor StatePoller {
             if Task.isCancelled { break }
             let batch = waitingForNextCycle
             waitingForNextCycle = []
-            let shared = await pollOnce(axChannel: axChannel, cache: cache)
+            let shared = await pollOnce(axChannel: axChannel, cache: cache, yieldingToTextEditing: false)
             for waiter in batch { waiter.resume(returning: shared) }
         }
     }
@@ -334,7 +337,7 @@ actor StatePoller {
             // check and `runCoalescedCycle`'s — still holds.
             if !cycleInProgress, !runtime.mutationInFlight(),
                !Self.backgroundTickYields(to: runtime.keyboardFocus()) {
-                _ = await runCoalescedCycle()
+                _ = await runCoalescedCycle(yieldingToTextEditing: true)
             }
 
             do {
@@ -397,8 +400,21 @@ actor StatePoller {
         return true
     }
 
+    /// #1079 review R1: the focus read at the top of a tick does not cover a user who starts an
+    /// inline edit while a background cycle is already running, and a 74-track project's cycle was
+    /// measured at a 12.6 s median. So a background cycle reads the focus again before each of its
+    /// reads -- the project read, the document-path query, the track read, transport, mixer and
+    /// markers -- and stops there, leaving the rest unread, once it reads as text editing. A read
+    /// already under way runs to its end: the track walk is one AX call chain with no point to stop
+    /// it at, so a rename opened during it waits for that one read, not for the cycle.
+    private func backgroundCycleYields(_ yieldingToTextEditing: Bool) -> Bool {
+        yieldingToTextEditing && Self.backgroundTickYields(to: runtime.keyboardFocus())
+    }
+
     @discardableResult
-    private func pollOnce(axChannel: AccessibilityChannel, cache: StateCache) async -> Bool {
+    private func pollOnce(
+        axChannel: AccessibilityChannel, cache: StateCache, yieldingToTextEditing: Bool
+    ) async -> Bool {
         var cacheKeys: [ResourceCacheKey] = []
         guard runtime.hasVisibleWindow() else {
             // Be conservative: a single missed window check is often a transient
@@ -427,6 +443,7 @@ actor StatePoller {
         // their outcome. `nil` when no blocking dialog owns the Logic window.
         await cache.updateBlockingDialogButtons(runtime.blockingDialogInfo()?.buttonTitles)
 
+        if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
         let projectReady = await poll(
             operation: "project.get_info", label: "ProjectInfo",
             section: .project,
@@ -434,6 +451,7 @@ actor StatePoller {
         ) { cache, info, observed in
             var identityBacked = info
             if (identityBacked.filePath ?? "").isEmpty,
+               !(yieldingToTextEditing && Self.backgroundTickYields(to: runtime.keyboardFocus())),
                let metadata = await LogicProjectFileReader.read(runtime: runtime.projectFileReader) {
                 identityBacked.filePath = metadata.bundlePath.path
             }
@@ -441,6 +459,7 @@ actor StatePoller {
         }
         // #668: readability drives `hasDocument`; only an APPLIED write is reported as refreshed.
         if projectReady.applied { cacheKeys.append(.project) }
+        if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
         let tracksReady: PollOutcome
         let tracksVersion = await cache.currentVersion(for: .tracks)
         if let tracks = await axChannel.readTrackStates() {
@@ -508,6 +527,7 @@ actor StatePoller {
             return await finishPoll(cacheKeys)
         }
 
+        if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
         let transportReady = await poll(
             operation: "transport.get_state", label: "Transport",
             section: .transport,
@@ -516,6 +536,7 @@ actor StatePoller {
             await cache.updateTransport(state, ifCurrent: observed)
         }
         if transportReady.applied { cacheKeys.append(.transport) }
+        if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
         let mixerReady = await poll(
             operation: "mixer.get_state", label: "Mixer",
             section: .mixer,
@@ -526,6 +547,7 @@ actor StatePoller {
         if mixerReady.applied { cacheKeys.append(.mixer) }
         markerPollTick += 1
         if markerPollTick >= Self.markerPollInterval {
+            if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
             markerPollTick = 0
             let markersReady = await pollUnversioned(
                 operation: "nav.get_markers", label: "Marker",

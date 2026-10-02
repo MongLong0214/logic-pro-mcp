@@ -165,7 +165,8 @@ struct Issue1079PollYieldsToTextEditingTests {
     func notTextEditingRunsTheCycle() async {
         let log = await Self.runBackgroundLoop(ticks: 3) { .notTextEditing }
 
-        #expect(log.count(.focus) == 3)
+        // At least once per tick: the gate. A running cycle also reads it before each read.
+        #expect(log.count(.focus) >= 3)
         for read in [Read.window, .blockingDialog, .project, .tracks, .transport, .mixer, .documentPath] {
             #expect(log.count(read) == 3, "\(read) ran \(log.count(read)) times in 3 ticks")
         }
@@ -179,9 +180,58 @@ struct Issue1079PollYieldsToTextEditingTests {
     func unreadableFocusPolls(stage: AccessibilityChannel.LogicKeyboardFocus.UnreadableStage) async {
         let log = await Self.runBackgroundLoop(ticks: 2) { .unreadable(stage) }
 
-        #expect(log.count(.focus) == 2)
+        #expect(log.count(.focus) >= 2)
         for read in [Read.window, .project, .tracks, .transport, .mixer, .documentPath] {
             #expect(log.count(read) == 2, "\(read) ran \(log.count(read)) times in 2 ticks")
+        }
+    }
+
+    // MARK: - Editing that begins while a background cycle is running (review R1)
+
+    final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func next() -> Int { lock.lock(); defer { lock.unlock() }; value += 1; return value }
+    }
+
+    /// The focus reads as text editing from its `firstEditingReading`th reading on. Within one
+    /// background cycle the focus is read at the tick's gate (1), then before the project read (2),
+    /// the document-path query (3), the track read (4), transport (5), mixer (6) and markers (7),
+    /// which are due on the first cycle. The window check and the blocking-dialog sample come
+    /// before reading 2 and always run once the gate passes.
+    struct MidCycle: Sendable, CustomTestStringConvertible {
+        let firstEditingReading: Int
+        let ran: [Read]
+        let skipped: [Read]
+        var testDescription: String { "editing from focus reading \(firstEditingReading)" }
+    }
+
+    static let midCycle: [MidCycle] = {
+        let order: [Read] = [.project, .documentPath, .tracks, .transport, .mixer, .markers]
+        return (2...8).map { first in
+            let reached = first - 2
+            return MidCycle(firstEditingReading: first,
+                            ran: [.window, .blockingDialog] + order.prefix(reached),
+                            skipped: Array(order.dropFirst(reached)))
+        }
+    }()
+
+    /// Mutations this kills: any one of the six in-cycle checks removed (its row runs the read it
+    /// guarded), and the checks consulted for a refresh's cycle (`refreshNowIsNotGated`). The last
+    /// row, where editing never begins within the cycle, is the control: every read runs.
+    @Test("a background cycle stops at the read after editing begins", arguments: midCycle)
+    func aBackgroundCycleStopsAtTheReadAfterEditingBegins(_ c: MidCycle) async {
+        let readings = Counter()
+        let log = await Self.runBackgroundLoop(ticks: 1) {
+            readings.next() >= c.firstEditingReading
+                ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false)
+                : .notTextEditing
+        }
+        for read in c.ran {
+            #expect(log.count(read) == 1, "\(read) ran \(log.count(read)) times, not once")
+        }
+        for read in c.skipped {
+            #expect(log.count(read) == 0, "\(read) ran after editing began")
         }
     }
 
