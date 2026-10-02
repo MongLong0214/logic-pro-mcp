@@ -13,7 +13,7 @@
     "app": "Logic Pro",
     "version": "12.3",
     "build": "6674",
-    "locale": "ko-KR",
+    "locale": "en-US",
     "os": "macOS 26.3 (25D125)"
   },
   "reverify": {
@@ -25,81 +25,17 @@
   "depends": [
     "Sources/LogicProMCP/State/StatePoller.swift:backgroundTickYields",
     "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:readLogicKeyboardFocus",
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift:inferTrackType",
     "Scripts/livekit/probe_1079_rename_keeps_focus.py:sample",
     "Scripts/livekit/ax_1079_rename_focus.swift:focus"
   ],
   "evidence": [
     "evidence/2026-10-02-1079-rename-focus-ten-languages.json"
   ],
-  "method": "probe_1079_rename_keeps_focus.py ran at 568b6567 in ten languages, two samples per condition, on a fresh launch of the locale-campaign fixture per language. The candidate was the debug build of 568b6567, whose background track walk also stops before each header; the control was the same tree with StatePoller.swift as on main 3cb68e44, which has no yield. Each sample raised the arrange window, focused the Tracks header rail, pressed Track > Rename Track, and counted the rename open only once the focus had been read as a text field (polled every 0.1 s for 2 s). It then read the focus every 0.5 s for 20 s and typed K at the HID tap every second, under the 2-Set Korean source, and recorded when the focus left the field and how the field's value length grew.",
+  "method": "probe_1079_rename_keeps_focus.py ran at 086821fd in ten languages, two samples per condition, on a fresh launch of the locale-campaign fixture per language. The candidate was the debug build of 086821fd, whose background track walk stops before each header and again before each header's AXHelp reads, and whose yielded cycles publish nothing; the control was the same tree with StatePoller.swift as on main 3cb68e44, which has no yield. Each sample raised the arrange window, focused the Tracks header rail, pressed Track > Rename Track, and counted the rename open only once the focus had been read as a text field (polled every 0.1 s for 2 s). It then read the focus every 0.5 s for 20 s and typed K at the HID tap every second, under the 2-Set Korean source, and recorded when the focus left the field and how the field's value length grew.",
   "observations": [
     {
       "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "locale": "ko-KR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.07
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "locale": "ko-KR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 0.56,
-      "typed": 0,
-      "reads": 2,
-      "role_after": "AXCheckBox",
-      "value_grew_by": null,
-      "role_after_cancel": "AXSlider",
-      "locale": "ko-KR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 1,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.1,
-      "typed": 0,
-      "reads": 3,
-      "role_after": "AXTextField",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXCheckBox",
-      "locale": "ko-KR",
-      "attempts": 2,
-      "field_seen_after_s": [
-        null,
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
       "sample": 0,
       "outcome": "kept",
       "focus_lost_after_s": null,
@@ -115,7 +51,7 @@
       ]
     },
     {
-      "condition": "candidate",
+      "condition": "none",
       "sample": 1,
       "outcome": "kept",
       "focus_lost_after_s": null,
@@ -125,10 +61,76 @@
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "locale": "ko-KR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 1.08,
+      "typed": 0,
+      "reads": 3,
+      "role_after": "AXTextField",
+      "value_grew_by": 0,
+      "role_after_cancel": "AXTextField",
+      "locale": "ko-KR",
       "attempts": 2,
       "field_seen_after_s": [
         null,
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 1.08,
+      "typed": 0,
+      "reads": 3,
+      "role_after": "AXSlider",
+      "value_grew_by": 0,
+      "role_after_cancel": "AXSlider",
+      "locale": "ko-KR",
+      "attempts": 2,
+      "field_seen_after_s": [
+        null,
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "ko-KR",
+      "attempts": 1,
+      "field_seen_after_s": [
         0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 5,
+      "role_after_cancel": "AXWindow",
+      "locale": "ko-KR",
+      "attempts": 2,
+      "field_seen_after_s": [
+        null,
+        0.04
       ]
     },
     {
@@ -136,7 +138,7 @@
       "sample": 0,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
+      "typed": 19,
       "reads": 38,
       "role_after": "AXTextField",
       "value_grew_by": 6,
@@ -153,37 +155,37 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 37,
+      "reads": 38,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "locale": "en-US",
       "attempts": 1,
       "field_seen_after_s": [
-        0.04
+        0.03
       ]
     },
     {
       "condition": "control",
       "sample": 0,
       "outcome": "lost",
-      "focus_lost_after_s": 1.63,
-      "typed": 1,
-      "reads": 4,
+      "focus_lost_after_s": 1.08,
+      "typed": 0,
+      "reads": 3,
       "role_after": "AXSlider",
       "value_grew_by": 0,
-      "role_after_cancel": "AXSlider",
+      "role_after_cancel": "AXTextField",
       "locale": "en-US",
       "attempts": 1,
       "field_seen_after_s": [
-        0.04
+        0.03
       ]
     },
     {
       "condition": "control",
       "sample": 1,
       "outcome": "lost",
-      "focus_lost_after_s": 1.09,
+      "focus_lost_after_s": 1.08,
       "typed": 0,
       "reads": 3,
       "role_after": "AXTextField",
@@ -201,14 +203,14 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 37,
+      "reads": 38,
       "role_after": "AXTextField",
-      "value_grew_by": 18,
+      "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "locale": "en-US",
       "attempts": 1,
       "field_seen_after_s": [
-        0.03
+        0.04
       ]
     },
     {
@@ -217,9 +219,9 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 36,
+      "reads": 38,
       "role_after": "AXTextField",
-      "value_grew_by": 17,
+      "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "locale": "en-US",
       "attempts": 1,
@@ -233,7 +235,7 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 36,
+      "reads": 38,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
@@ -249,26 +251,26 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 37,
+      "reads": 38,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "locale": "ja-JP",
       "attempts": 1,
       "field_seen_after_s": [
-        0.04
+        0.03
       ]
     },
     {
       "condition": "control",
       "sample": 0,
       "outcome": "lost",
-      "focus_lost_after_s": 4.4,
+      "focus_lost_after_s": 3.88,
       "typed": 3,
-      "reads": 9,
-      "role_after": "AXSlider",
-      "value_grew_by": -10,
-      "role_after_cancel": "AXSlider",
+      "reads": 8,
+      "role_after": "AXTextField",
+      "value_grew_by": -11,
+      "role_after_cancel": "AXTextField",
       "locale": "ja-JP",
       "attempts": 1,
       "field_seen_after_s": [
@@ -282,7 +284,7 @@
       "focus_lost_after_s": 4.39,
       "typed": 3,
       "reads": 9,
-      "role_after": "AXTextField",
+      "role_after": "AXSlider",
       "value_grew_by": 0,
       "role_after_cancel": "AXSlider",
       "locale": "ja-JP",
@@ -296,15 +298,15 @@
       "sample": 0,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
+      "typed": 19,
+      "reads": 38,
       "role_after": "AXTextField",
       "value_grew_by": 16,
       "role_after_cancel": "AXWindow",
       "locale": "ja-JP",
       "attempts": 1,
       "field_seen_after_s": [
-        0.03
+        0.04
       ]
     },
     {
@@ -312,8 +314,8 @@
       "sample": 1,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
+      "typed": 19,
+      "reads": 38,
       "role_after": "AXTextField",
       "value_grew_by": 16,
       "role_after_cancel": "AXWindow",
@@ -328,24 +330,8 @@
       "sample": 0,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 5,
-      "role_after_cancel": "AXWindow",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
+      "typed": 20,
+      "reads": 38,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
@@ -356,12 +342,28 @@
       ]
     },
     {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "de-DE",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
       "condition": "control",
       "sample": 0,
       "outcome": "lost",
-      "focus_lost_after_s": 3.31,
-      "typed": 2,
-      "reads": 7,
+      "focus_lost_after_s": 3.82,
+      "typed": 3,
+      "reads": 8,
       "role_after": "AXTextField",
       "value_grew_by": -11,
       "role_after_cancel": "AXTextField",
@@ -375,287 +377,93 @@
       "condition": "control",
       "sample": 1,
       "outcome": "lost",
-      "focus_lost_after_s": 3.84,
-      "typed": 3,
-      "reads": 8,
-      "role_after": "AXTextField",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXTextField",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 16,
-      "role_after_cancel": "AXWindow",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 16,
-      "role_after_cancel": "AXWindow",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.64,
-      "typed": 1,
-      "reads": 4,
-      "role_after": "AXSlider",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXTextField",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 1,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.64,
-      "typed": 1,
-      "reads": 4,
-      "role_after": "AXCheckBox",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXSlider",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 18,
-      "role_after_cancel": "AXWindow",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 18,
-      "role_after_cancel": "AXWindow",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "locale": "fr-FR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 5,
-      "role_after_cancel": "AXWindow",
-      "locale": "fr-FR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 0.56,
-      "typed": 0,
-      "reads": 2,
-      "role_after": "AXSlider",
-      "value_grew_by": null,
-      "role_after_cancel": "AXSlider",
-      "locale": "fr-FR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 1,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.1,
-      "typed": 0,
-      "reads": 3,
-      "role_after": "AXCheckBox",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXSlider",
-      "locale": "fr-FR",
-      "attempts": 2,
-      "field_seen_after_s": [
-        null,
-        0.03
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "locale": "fr-FR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXTextField",
-      "locale": "fr-FR",
-      "attempts": 2,
-      "field_seen_after_s": [
-        null,
-        0.04
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "locale": "it-IT",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 5,
-      "role_after_cancel": "AXWindow",
-      "locale": "it-IT",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
       "focus_lost_after_s": 4.38,
       "typed": 3,
       "reads": 9,
-      "role_after": "AXSlider",
-      "value_grew_by": -10,
+      "role_after": "AXTextField",
+      "value_grew_by": 0,
       "role_after_cancel": "AXTextField",
-      "locale": "it-IT",
+      "locale": "de-DE",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 37,
+      "role_after": "AXTextField",
+      "value_grew_by": 16,
+      "role_after_cancel": "AXWindow",
+      "locale": "de-DE",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 37,
+      "role_after": "AXTextField",
+      "value_grew_by": 15,
+      "role_after_cancel": "AXWindow",
+      "locale": "de-DE",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "es-ES",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "es-ES",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 2.15,
+      "typed": 1,
+      "reads": 5,
+      "role_after": "AXTextField",
+      "value_grew_by": -12,
+      "role_after_cancel": "AXSlider",
+      "locale": "es-ES",
       "attempts": 1,
       "field_seen_after_s": [
         0.03
@@ -665,13 +473,13 @@
       "condition": "control",
       "sample": 1,
       "outcome": "lost",
-      "focus_lost_after_s": 3.84,
-      "typed": 3,
-      "reads": 8,
+      "focus_lost_after_s": 2.14,
+      "typed": 1,
+      "reads": 5,
       "role_after": "AXSlider",
-      "value_grew_by": -1,
+      "value_grew_by": 0,
       "role_after_cancel": "AXSlider",
-      "locale": "it-IT",
+      "locale": "es-ES",
       "attempts": 1,
       "field_seen_after_s": [
         0.04
@@ -682,12 +490,12 @@
       "sample": 0,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
+      "typed": 19,
+      "reads": 38,
       "role_after": "AXTextField",
-      "value_grew_by": 16,
+      "value_grew_by": 18,
       "role_after_cancel": "AXWindow",
-      "locale": "it-IT",
+      "locale": "es-ES",
       "attempts": 1,
       "field_seen_after_s": [
         0.04
@@ -701,9 +509,9 @@
       "typed": 19,
       "reads": 36,
       "role_after": "AXTextField",
-      "value_grew_by": 15,
+      "value_grew_by": 17,
       "role_after_cancel": "AXWindow",
-      "locale": "it-IT",
+      "locale": "es-ES",
       "attempts": 1,
       "field_seen_after_s": [
         0.04
@@ -719,7 +527,7 @@
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
-      "locale": "pt-BR",
+      "locale": "fr-FR",
       "attempts": 1,
       "field_seen_after_s": [
         0.05
@@ -731,14 +539,14 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 37,
+      "reads": 36,
       "role_after": "AXTextField",
-      "value_grew_by": 6,
+      "value_grew_by": 5,
       "role_after_cancel": "AXWindow",
-      "locale": "pt-BR",
+      "locale": "fr-FR",
       "attempts": 1,
       "field_seen_after_s": [
-        0.03
+        0.04
       ]
     },
     {
@@ -748,29 +556,30 @@
       "focus_lost_after_s": 1.08,
       "typed": 0,
       "reads": 3,
-      "role_after": "AXTextField",
+      "role_after": "AXSlider",
       "value_grew_by": 0,
       "role_after_cancel": "AXTextField",
-      "locale": "pt-BR",
-      "attempts": 1,
+      "locale": "fr-FR",
+      "attempts": 2,
       "field_seen_after_s": [
-        0.03
+        null,
+        0.04
       ]
     },
     {
       "condition": "control",
       "sample": 1,
       "outcome": "lost",
-      "focus_lost_after_s": 1.09,
+      "focus_lost_after_s": 0.04,
       "typed": 0,
-      "reads": 3,
-      "role_after": "AXTextField",
-      "value_grew_by": 0,
+      "reads": 1,
+      "role_after": "AXCheckBox",
+      "value_grew_by": null,
       "role_after_cancel": "AXTextField",
-      "locale": "pt-BR",
+      "locale": "fr-FR",
       "attempts": 1,
       "field_seen_after_s": [
-        0.04
+        0.03
       ]
     },
     {
@@ -781,7 +590,200 @@
       "typed": 19,
       "reads": 36,
       "role_after": "AXTextField",
-      "value_grew_by": 5,
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "fr-FR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 20,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "fr-FR",
+      "attempts": 2,
+      "field_seen_after_s": [
+        null,
+        0.03
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 37,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.05
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 20,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 3.9,
+      "typed": 3,
+      "reads": 8,
+      "role_after": "AXCheckBox",
+      "value_grew_by": -11,
+      "role_after_cancel": "AXSlider",
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 3.9,
+      "typed": 3,
+      "reads": 8,
+      "role_after": "AXCheckBox",
+      "value_grew_by": -1,
+      "role_after_cancel": "AXTextField",
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 16,
+      "role_after_cancel": "AXWindow",
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 16,
+      "role_after_cancel": "AXWindow",
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 1.1,
+      "typed": 0,
+      "reads": 3,
+      "role_after": "AXSlider",
+      "value_grew_by": 0,
+      "role_after_cancel": "AXSlider",
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 1.09,
+      "typed": 0,
+      "reads": 3,
+      "role_after": "AXSlider",
+      "value_grew_by": 0,
+      "role_after_cancel": "AXSlider",
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "locale": "pt-BR",
       "attempts": 1,
@@ -794,8 +796,8 @@
       "sample": 1,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
+      "typed": 19,
+      "reads": 36,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
@@ -808,6 +810,22 @@
     {
       "condition": "none",
       "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "locale": "zh-CN",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
@@ -822,51 +840,35 @@
       ]
     },
     {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "locale": "zh-CN",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
       "condition": "control",
       "sample": 0,
       "outcome": "lost",
-      "focus_lost_after_s": 1.65,
+      "focus_lost_after_s": 1.64,
       "typed": 1,
       "reads": 4,
-      "role_after": "AXSlider",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXSlider",
-      "locale": "zh-CN",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 1,
-      "outcome": "lost",
-      "focus_lost_after_s": 2.21,
-      "typed": 1,
-      "reads": 5,
       "role_after": "AXTextField",
       "value_grew_by": 0,
       "role_after_cancel": "AXTextField",
       "locale": "zh-CN",
       "attempts": 1,
       "field_seen_after_s": [
-        0.04
+        0.03
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 1.65,
+      "typed": 1,
+      "reads": 4,
+      "role_after": "AXTextField",
+      "value_grew_by": 0,
+      "role_after_cancel": "AXTextField",
+      "locale": "zh-CN",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
       ]
     },
     {
@@ -875,7 +877,7 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 37,
+      "reads": 36,
       "role_after": "AXTextField",
       "value_grew_by": 18,
       "role_after_cancel": "AXWindow",
@@ -890,15 +892,15 @@
       "sample": 1,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
+      "typed": 19,
+      "reads": 36,
       "role_after": "AXTextField",
       "value_grew_by": 18,
       "role_after_cancel": "AXWindow",
       "locale": "zh-CN",
       "attempts": 1,
       "field_seen_after_s": [
-        0.04
+        0.03
       ]
     },
     {
@@ -909,7 +911,7 @@
       "typed": 19,
       "reads": 36,
       "role_after": "AXTextField",
-      "value_grew_by": 5,
+      "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "locale": "zh-TW",
       "attempts": 1,
@@ -940,9 +942,9 @@
       "focus_lost_after_s": 0.55,
       "typed": 0,
       "reads": 2,
-      "role_after": "AXTextField",
+      "role_after": "AXCheckBox",
       "value_grew_by": null,
-      "role_after_cancel": "AXTextField",
+      "role_after_cancel": "AXSlider",
       "locale": "zh-TW",
       "attempts": 1,
       "field_seen_after_s": [
@@ -953,12 +955,12 @@
       "condition": "control",
       "sample": 1,
       "outcome": "lost",
-      "focus_lost_after_s": 0.56,
+      "focus_lost_after_s": 0.57,
       "typed": 0,
       "reads": 2,
-      "role_after": "AXSlider",
+      "role_after": "AXCheckBox",
       "value_grew_by": null,
-      "role_after_cancel": "AXTextField",
+      "role_after_cancel": "AXSlider",
       "locale": "zh-TW",
       "attempts": 1,
       "field_seen_after_s": [
@@ -971,14 +973,14 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 37,
+      "reads": 36,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "locale": "zh-TW",
       "attempts": 1,
       "field_seen_after_s": [
-        0.03
+        0.04
       ]
     },
     {
@@ -986,15 +988,15 @@
       "sample": 1,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
+      "typed": 19,
+      "reads": 36,
       "role_after": "AXTextField",
-      "value_grew_by": 6,
+      "value_grew_by": 5,
       "role_after_cancel": "AXWindow",
       "locale": "zh-TW",
       "attempts": 1,
       "field_seen_after_s": [
-        0.03
+        0.04
       ]
     },
     {
@@ -1009,8 +1011,8 @@
       "hold_seconds": 20.0,
       "type_every_seconds": 1.0,
       "failures": 0,
-      "control_lost_after_s_min": 0.55,
-      "control_lost_after_s_max": 4.4
+      "control_lost_after_s_min": 0.04,
+      "control_lost_after_s_max": 4.39
     }
   ],
   "conclusion": "In 10 languages, with no server the field kept the focus in 20 of 20 samples and its value grew under typing. With the control connected and idle it lost the focus in 20 of 20. With the candidate it kept the focus in 20 of 20 and its value grew.",
@@ -1019,7 +1021,8 @@
     "When editing begins mid-cycle the candidate stops at the next read, and during the track walk at the next header; whether a sample began mid-cycle was not read, so that path rests on the unit tests.",
     "One Logic installation and one fixture; the fixture's poll cycle is short, unlike the 74-track project where a 12.6 s median was measured.",
     "The control is this tree with main's poller, not a commit of its own.",
-    "The run was made at the probe head with the candidate built at that head; the commit after it adds only the bisection probe."
+    "The run was made at the probe head with the candidate built at that head.",
+    "Whether a yield came at the document-path query, inside a header before its help reads, or held a notification was not read in this run; those paths rest on the unit tests and their mutants."
   ],
   "supersedes": "2026-10-02-ko-KR-an-idle-poll-ends-an-inline-track-rename",
   "canon_not_applicable": {
