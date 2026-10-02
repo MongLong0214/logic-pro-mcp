@@ -2,8 +2,8 @@
  "binaries": {
   "control": "/Users/isaac/lpm-evidence/1079/bin-086821fd/control/LogicProMCP",
   "control_sha256": "2aa80e63c2255acd1d04322fe3f18aeb9d8455719d0f72158557ca2f11b20c4e",
-  "candidate": "/Users/isaac/lpm-evidence/1079/bin-13521f0f/candidate/LogicProMCP",
-  "candidate_sha256": "099e4e641fdf326c700f79fb621ab0ee9f99a96f940776ddcaec797df6ded2ba"
+  "candidate": "/Users/isaac/lpm-evidence/1079/bin-0383a5ef/candidate/LogicProMCP",
+  "candidate_sha256": "863cb46d8892ceb988f31389401f0b607a00a584bf373dbade9c2056766f4d6c"
  },
  "hold_seconds": 20.0,
  "type_every_seconds": 1.0,
@@ -167,7 +167,7 @@
       "bar": "트랙",
       "item": "트랙 이름 변경"
      },
-     "field_seen_after_s": 0.04,
+     "field_seen_after_s": 0.05,
      "frame": [
       703,
       190,
@@ -176,7 +176,7 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790970288689,
+   "opened_epoch_ms": 1790977347188,
    "focus_lost_after_s": null,
    "typed": 19,
    "reads": 38,
@@ -213,10 +213,10 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790970313742,
+   "opened_epoch_ms": 1790977371956,
    "focus_lost_after_s": null,
    "typed": 19,
-   "reads": 37,
+   "reads": 38,
    "role_after": "AXTextField",
    "value_grew_by": 6,
    "outcome": "kept",
@@ -250,10 +250,10 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790970342532,
+   "opened_epoch_ms": 1790977402071,
    "focus_lost_after_s": null,
    "typed": 19,
-   "reads": 38,
+   "reads": 37,
    "role_after": "AXTextField",
    "value_grew_by": 6,
    "outcome": "kept",
@@ -287,7 +287,7 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790970371585,
+   "opened_epoch_ms": 1790977430766,
    "focus_lost_after_s": null,
    "typed": 19,
    "reads": 38,
@@ -332,11 +332,11 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790970405129,
-   "lost_epoch_ms": 1790970406220,
-   "focus_lost_after_s": 1.09,
-   "typed": 0,
-   "reads": 3,
+   "opened_epoch_ms": 1790977463684,
+   "lost_epoch_ms": 1790977465295,
+   "focus_lost_after_s": 1.61,
+   "typed": 1,
+   "reads": 4,
    "role_after": "AXSlider",
    "value_grew_by": 0,
    "outcome": "lost",
@@ -361,1095 +361,13 @@
       "bar": "트랙",
       "item": "트랙 이름 변경"
      },
-     "field_seen_after_s": 0.03,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970414361,
-   "lost_epoch_ms": 1790970414923,
-   "focus_lost_after_s": 0.56,
-   "typed": 0,
-   "reads": 2,
-   "role_after": "AXCheckBox",
-   "value_grew_by": null,
-   "outcome": "lost",
-   "role_after_cancel": "AXCheckBox",
-   "lproj": "ko"
-  },
-  {
-   "condition": "none",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXGroup",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXGroup"
-    }
-   ],
-   "role_before_server": "AXGroup",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Track",
-      "item": "Rename Track"
-     },
-     "field_seen_after_s": 0.06,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970454991,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 38,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "en"
-  },
-  {
-   "condition": "none",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Track",
-      "item": "Rename Track"
-     },
-     "field_seen_after_s": 0.03,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970478679,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 38,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "en"
-  },
-  {
-   "condition": "candidate",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Track",
-      "item": "Rename Track"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970506343,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 38,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "en"
-  },
-  {
-   "condition": "candidate",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Track",
-      "item": "Rename Track"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970534013,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 38,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "en"
-  },
-  {
-   "condition": "control",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Track",
-      "item": "Rename Track"
-     },
-     "field_seen_after_s": 0.03,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970562182,
-   "lost_epoch_ms": 1790970563269,
-   "focus_lost_after_s": 1.09,
-   "typed": 0,
-   "reads": 3,
-   "role_after": "AXCheckBox",
-   "value_grew_by": 0,
-   "outcome": "lost",
-   "role_after_cancel": "AXSlider",
-   "lproj": "en"
-  },
-  {
-   "condition": "control",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXCheckBox",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXCheckBox"
-    }
-   ],
-   "role_before_server": "AXCheckBox",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Track",
-      "item": "Rename Track"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970570275,
-   "lost_epoch_ms": 1790970571917,
-   "focus_lost_after_s": 1.64,
-   "typed": 1,
-   "reads": 4,
-   "role_after": "AXSlider",
-   "value_grew_by": 0,
-   "outcome": "lost",
-   "role_after_cancel": "AXSlider",
-   "lproj": "en"
-  },
-  {
-   "condition": "none",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXGroup",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXGroup"
-    }
-   ],
-   "role_before_server": "AXGroup",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "トラック",
-      "item": "トラック名を変更"
-     },
-     "field_seen_after_s": 0.07,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970605338,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "ja"
-  },
-  {
-   "condition": "none",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "トラック",
-      "item": "トラック名を変更"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970631163,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 38,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "ja"
-  },
-  {
-   "condition": "candidate",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "トラック",
-      "item": "トラック名を変更"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970661697,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 38,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "ja"
-  },
-  {
-   "condition": "candidate",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "トラック",
-      "item": "トラック名を変更"
-     },
-     "field_seen_after_s": 0.03,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970692221,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "ja"
-  },
-  {
-   "condition": "control",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "トラック",
-      "item": "トラック名を変更"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970722572,
-   "lost_epoch_ms": 1790970726408,
-   "focus_lost_after_s": 3.84,
-   "typed": 3,
-   "reads": 8,
-   "role_after": "AXTextField",
-   "value_grew_by": -11,
-   "outcome": "lost",
-   "role_after_cancel": "AXTextField",
-   "lproj": "ja"
-  },
-  {
-   "condition": "control",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXSlider",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXSlider"
-    }
-   ],
-   "role_before_server": "AXSlider",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "トラック",
-      "item": "トラック名を変更"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970735929,
-   "lost_epoch_ms": 1790970739737,
-   "focus_lost_after_s": 3.81,
-   "typed": 3,
-   "reads": 8,
-   "role_after": "AXSlider",
-   "value_grew_by": -1,
-   "outcome": "lost",
-   "role_after_cancel": "AXTextField",
-   "lproj": "ja"
-  },
-  {
-   "condition": "none",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXGroup",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXGroup"
-    }
-   ],
-   "role_before_server": "AXGroup",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Spur",
-      "item": "Spur umbenennen"
-     },
-     "field_seen_after_s": 0.06,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970769068,
-   "focus_lost_after_s": null,
-   "typed": 20,
-   "reads": 38,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "de"
-  },
-  {
-   "condition": "none",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Spur",
-      "item": "Spur umbenennen"
-     },
-     "field_seen_after_s": 0.05,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970798207,
-   "focus_lost_after_s": null,
-   "typed": 20,
-   "reads": 38,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "de"
-  },
-  {
-   "condition": "candidate",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Spur",
-      "item": "Spur umbenennen"
-     },
-     "field_seen_after_s": 0.05,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970831411,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 38,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "de"
-  },
-  {
-   "condition": "candidate",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Spur",
-      "item": "Spur umbenennen"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970863525,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "de"
-  },
-  {
-   "condition": "control",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Spur",
-      "item": "Spur umbenennen"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970895415,
-   "lost_epoch_ms": 1790970898698,
-   "focus_lost_after_s": 3.28,
-   "typed": 2,
-   "reads": 7,
-   "role_after": "AXSlider",
-   "value_grew_by": -11,
-   "outcome": "lost",
-   "role_after_cancel": "AXSlider",
-   "lproj": "de"
-  },
-  {
-   "condition": "control",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXSlider",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXSlider"
-    }
-   ],
-   "role_before_server": "AXSlider",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Spur",
-      "item": "Spur umbenennen"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970909683,
-   "lost_epoch_ms": 1790970912906,
-   "focus_lost_after_s": 3.22,
-   "typed": 2,
-   "reads": 7,
-   "role_after": "AXSlider",
-   "value_grew_by": 0,
-   "outcome": "lost",
-   "role_after_cancel": "AXSlider",
-   "lproj": "de"
-  },
-  {
-   "condition": "none",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXGroup",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXGroup"
-    }
-   ],
-   "role_before_server": "AXGroup",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renombrar pista"
-     },
-     "field_seen_after_s": 0.05,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970943190,
-   "focus_lost_after_s": null,
-   "typed": 20,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "es"
-  },
-  {
-   "condition": "none",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renombrar pista"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790970972481,
-   "focus_lost_after_s": null,
-   "typed": 20,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "es"
-  },
-  {
-   "condition": "candidate",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renombrar pista"
-     },
-     "field_seen_after_s": 0.03,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971005921,
-   "focus_lost_after_s": null,
-   "typed": 20,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "es"
-  },
-  {
-   "condition": "candidate",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renombrar pista"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971039294,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "es"
-  },
-  {
-   "condition": "control",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renombrar pista"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971072710,
-   "lost_epoch_ms": 1790971074353,
-   "focus_lost_after_s": 1.64,
-   "typed": 1,
-   "reads": 4,
-   "role_after": "AXSlider",
-   "value_grew_by": 0,
-   "outcome": "lost",
-   "role_after_cancel": "AXTextField",
-   "lproj": "es"
-  },
-  {
-   "condition": "control",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXSlider",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXSlider"
-    }
-   ],
-   "role_before_server": "AXSlider",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renombrar pista"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971086773,
-   "lost_epoch_ms": 1790971088417,
-   "focus_lost_after_s": 1.64,
-   "typed": 1,
-   "reads": 4,
-   "role_after": "AXCheckBox",
-   "value_grew_by": 0,
-   "outcome": "lost",
-   "role_after_cancel": "AXSlider",
-   "lproj": "es"
-  },
-  {
-   "condition": "none",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXGroup",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXGroup"
-    }
-   ],
-   "role_before_server": "AXGroup",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Piste",
-      "item": "Renommer la piste"
-     },
-     "field_seen_after_s": 0.05,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971115756,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "fr"
-  },
-  {
-   "condition": "none",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Piste",
-      "item": "Renommer la piste"
-     },
-     "field_seen_after_s": 0.05,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971146486,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "fr"
-  },
-  {
-   "condition": "candidate",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Piste",
-      "item": "Renommer la piste"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971181308,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "fr"
-  },
-  {
-   "condition": "candidate",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Piste",
-      "item": "Renommer la piste"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971216091,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 36,
-   "role_after": "AXTextField",
-   "value_grew_by": 5,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "fr"
-  },
-  {
-   "condition": "control",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Piste",
-      "item": "Renommer la piste"
-     },
      "field_seen_after_s": null,
      "frame": null
     },
     {
      "pressed": {
-      "bar": "Piste",
-      "item": "Renommer la piste"
+      "bar": "트랙",
+      "item": "트랙 이름 변경"
      },
      "field_seen_after_s": 0.04,
      "frame": [
@@ -1460,510 +378,16 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971261005,
-   "lost_epoch_ms": 1790971262098,
-   "focus_lost_after_s": 1.09,
-   "typed": 0,
-   "reads": 3,
-   "role_after": "AXTextField",
-   "value_grew_by": 0,
-   "outcome": "lost",
-   "role_after_cancel": "AXTextField",
-   "lproj": "fr"
-  },
-  {
-   "condition": "control",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXSlider",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXSlider"
-    }
-   ],
-   "role_before_server": "AXSlider",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Piste",
-      "item": "Renommer la piste"
-     },
-     "field_seen_after_s": null,
-     "frame": null
-    },
-    {
-     "pressed": {
-      "bar": "Piste",
-      "item": "Renommer la piste"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971286602,
-   "lost_epoch_ms": 1790971287159,
-   "focus_lost_after_s": 0.56,
-   "typed": 0,
-   "reads": 2,
-   "role_after": "AXTextField",
-   "value_grew_by": null,
-   "outcome": "lost",
-   "role_after_cancel": "AXTextField",
-   "lproj": "fr"
-  },
-  {
-   "condition": "none",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXGroup",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXGroup"
-    }
-   ],
-   "role_before_server": "AXGroup",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Traccia",
-      "item": "Rinomina traccia"
-     },
-     "field_seen_after_s": 0.06,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971316199,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "it"
-  },
-  {
-   "condition": "none",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Traccia",
-      "item": "Rinomina traccia"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971348549,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "it"
-  },
-  {
-   "condition": "candidate",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Traccia",
-      "item": "Rinomina traccia"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971384784,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "it"
-  },
-  {
-   "condition": "candidate",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Traccia",
-      "item": "Rinomina traccia"
-     },
-     "field_seen_after_s": 0.03,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971420790,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "it"
-  },
-  {
-   "condition": "control",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Traccia",
-      "item": "Rinomina traccia"
-     },
-     "field_seen_after_s": 0.03,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971456883,
-   "lost_epoch_ms": 1790971461306,
-   "focus_lost_after_s": 4.42,
-   "typed": 3,
-   "reads": 9,
-   "role_after": "AXSlider",
-   "value_grew_by": -10,
-   "outcome": "lost",
-   "role_after_cancel": "AXSlider",
-   "lproj": "it"
-  },
-  {
-   "condition": "control",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXSlider",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXSlider"
-    }
-   ],
-   "role_before_server": "AXSlider",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Traccia",
-      "item": "Rinomina traccia"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971476511,
-   "lost_epoch_ms": 1790971480921,
-   "focus_lost_after_s": 4.41,
-   "typed": 3,
-   "reads": 9,
-   "role_after": "AXSlider",
-   "value_grew_by": 0,
-   "outcome": "lost",
-   "role_after_cancel": "AXSlider",
-   "lproj": "it"
-  },
-  {
-   "condition": "none",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXGroup",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXGroup"
-    }
-   ],
-   "role_before_server": "AXGroup",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renomear Pista"
-     },
-     "field_seen_after_s": 0.05,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971509380,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "pt"
-  },
-  {
-   "condition": "none",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renomear Pista"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      703,
-      190,
-      213,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971539379,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 36,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "pt"
-  },
-  {
-   "condition": "candidate",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renomear Pista"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971573087,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 37,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "pt"
-  },
-  {
-   "condition": "candidate",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renomear Pista"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971606859,
-   "focus_lost_after_s": null,
-   "typed": 19,
-   "reads": 36,
-   "role_after": "AXTextField",
-   "value_grew_by": 6,
-   "outcome": "kept",
-   "role_after_cancel": "AXWindow",
-   "lproj": "pt"
-  },
-  {
-   "condition": "control",
-   "sample": 0,
-   "settle": [
-    {
-     "role": "AXWindow",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXWindow"
-    }
-   ],
-   "role_before_server": "AXWindow",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renomear Pista"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971640383,
-   "lost_epoch_ms": 1790971641471,
-   "focus_lost_after_s": 1.09,
-   "typed": 0,
-   "reads": 3,
-   "role_after": "AXSlider",
-   "value_grew_by": 0,
-   "outcome": "lost",
-   "role_after_cancel": "AXTextField",
-   "lproj": "pt"
-  },
-  {
-   "condition": "control",
-   "sample": 1,
-   "settle": [
-    {
-     "role": "AXSlider",
-     "keyboard_owner_is_logic": true,
-     "escaped": false,
-     "role_after": "AXSlider"
-    }
-   ],
-   "role_before_server": "AXSlider",
-   "attempts": [
-    {
-     "pressed": {
-      "bar": "Pista",
-      "item": "Renomear Pista"
-     },
-     "field_seen_after_s": 0.04,
-     "frame": [
-      708,
-      190,
-      208,
-      20
-     ]
-    }
-   ],
-   "opened_epoch_ms": 1790971655247,
-   "lost_epoch_ms": 1790971656331,
+   "opened_epoch_ms": 1790977477819,
+   "lost_epoch_ms": 1790977478896,
    "focus_lost_after_s": 1.08,
    "typed": 0,
    "reads": 3,
    "role_after": "AXSlider",
    "value_grew_by": 0,
    "outcome": "lost",
-   "role_after_cancel": "AXTextField",
-   "lproj": "pt"
+   "role_after_cancel": "AXSlider",
+   "lproj": "ko"
   },
   {
    "condition": "none",
@@ -1980,10 +404,10 @@
    "attempts": [
     {
      "pressed": {
-      "bar": "轨道",
-      "item": "给轨道重新命名"
+      "bar": "Track",
+      "item": "Rename Track"
      },
-     "field_seen_after_s": 0.05,
+     "field_seen_after_s": 0.04,
      "frame": [
       703,
       190,
@@ -1992,15 +416,15 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971697226,
+   "opened_epoch_ms": 1790977506050,
    "focus_lost_after_s": null,
    "typed": 19,
-   "reads": 36,
+   "reads": 37,
    "role_after": "AXTextField",
-   "value_grew_by": 5,
+   "value_grew_by": 6,
    "outcome": "kept",
    "role_after_cancel": "AXWindow",
-   "lproj": "zh_CN"
+   "lproj": "en"
   },
   {
    "condition": "none",
@@ -2017,8 +441,8 @@
    "attempts": [
     {
      "pressed": {
-      "bar": "轨道",
-      "item": "给轨道重新命名"
+      "bar": "Track",
+      "item": "Rename Track"
      },
      "field_seen_after_s": 0.03,
      "frame": [
@@ -2029,15 +453,15 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971730532,
+   "opened_epoch_ms": 1790977529661,
    "focus_lost_after_s": null,
-   "typed": 20,
+   "typed": 19,
    "reads": 37,
    "role_after": "AXTextField",
    "value_grew_by": 6,
    "outcome": "kept",
    "role_after_cancel": "AXWindow",
-   "lproj": "zh_CN"
+   "lproj": "en"
   },
   {
    "condition": "candidate",
@@ -2054,8 +478,8 @@
    "attempts": [
     {
      "pressed": {
-      "bar": "轨道",
-      "item": "给轨道重新命名"
+      "bar": "Track",
+      "item": "Rename Track"
      },
      "field_seen_after_s": 0.03,
      "frame": [
@@ -2066,15 +490,15 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971768606,
+   "opened_epoch_ms": 1790977556978,
    "focus_lost_after_s": null,
-   "typed": 20,
-   "reads": 37,
+   "typed": 19,
+   "reads": 38,
    "role_after": "AXTextField",
    "value_grew_by": 6,
    "outcome": "kept",
    "role_after_cancel": "AXWindow",
-   "lproj": "zh_CN"
+   "lproj": "en"
   },
   {
    "condition": "candidate",
@@ -2091,10 +515,10 @@
    "attempts": [
     {
      "pressed": {
-      "bar": "轨道",
-      "item": "给轨道重新命名"
+      "bar": "Track",
+      "item": "Rename Track"
      },
-     "field_seen_after_s": 0.03,
+     "field_seen_after_s": 0.04,
      "frame": [
       708,
       190,
@@ -2103,15 +527,15 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971806481,
+   "opened_epoch_ms": 1790977584565,
    "focus_lost_after_s": null,
    "typed": 19,
-   "reads": 37,
+   "reads": 38,
    "role_after": "AXTextField",
    "value_grew_by": 6,
    "outcome": "kept",
    "role_after_cancel": "AXWindow",
-   "lproj": "zh_CN"
+   "lproj": "en"
   },
   {
    "condition": "control",
@@ -2128,10 +552,10 @@
    "attempts": [
     {
      "pressed": {
-      "bar": "轨道",
-      "item": "给轨道重新命名"
+      "bar": "Track",
+      "item": "Rename Track"
      },
-     "field_seen_after_s": 0.05,
+     "field_seen_after_s": 0.03,
      "frame": [
       708,
       190,
@@ -2140,8 +564,680 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971844091,
-   "lost_epoch_ms": 1790971846292,
+   "opened_epoch_ms": 1790977612147,
+   "lost_epoch_ms": 1790977613763,
+   "focus_lost_after_s": 1.62,
+   "typed": 1,
+   "reads": 4,
+   "role_after": "AXSlider",
+   "value_grew_by": 0,
+   "outcome": "lost",
+   "role_after_cancel": "AXSlider",
+   "lproj": "en"
+  },
+  {
+   "condition": "control",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXSlider",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXSlider"
+    }
+   ],
+   "role_before_server": "AXSlider",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Track",
+      "item": "Rename Track"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977620546,
+   "lost_epoch_ms": 1790977622167,
+   "focus_lost_after_s": 1.62,
+   "typed": 1,
+   "reads": 4,
+   "role_after": "AXTextField",
+   "value_grew_by": 0,
+   "outcome": "lost",
+   "role_after_cancel": "AXTextField",
+   "lproj": "en"
+  },
+  {
+   "condition": "none",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXGroup",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXGroup"
+    }
+   ],
+   "role_before_server": "AXGroup",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "トラック",
+      "item": "トラック名を変更"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977644996,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "ja"
+  },
+  {
+   "condition": "none",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "トラック",
+      "item": "トラック名を変更"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977671311,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "ja"
+  },
+  {
+   "condition": "candidate",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "トラック",
+      "item": "トラック名を変更"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977701410,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "ja"
+  },
+  {
+   "condition": "candidate",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "トラック",
+      "item": "トラック名を変更"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977731509,
+   "focus_lost_after_s": null,
+   "typed": 20,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "ja"
+  },
+  {
+   "condition": "control",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "トラック",
+      "item": "トラック名を変更"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977762121,
+   "lost_epoch_ms": 1790977766532,
+   "focus_lost_after_s": 4.41,
+   "typed": 3,
+   "reads": 9,
+   "role_after": "AXTextField",
+   "value_grew_by": -10,
+   "outcome": "lost",
+   "role_after_cancel": "AXTextField",
+   "lproj": "ja"
+  },
+  {
+   "condition": "control",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXSlider",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXSlider"
+    }
+   ],
+   "role_before_server": "AXSlider",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "トラック",
+      "item": "トラック名を変更"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977776059,
+   "lost_epoch_ms": 1790977780443,
+   "focus_lost_after_s": 4.38,
+   "typed": 3,
+   "reads": 9,
+   "role_after": "AXSlider",
+   "value_grew_by": 0,
+   "outcome": "lost",
+   "role_after_cancel": "AXSlider",
+   "lproj": "ja"
+  },
+  {
+   "condition": "none",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXGroup",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXGroup"
+    }
+   ],
+   "role_before_server": "AXGroup",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Spur",
+      "item": "Spur umbenennen"
+     },
+     "field_seen_after_s": 0.05,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977805506,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "de"
+  },
+  {
+   "condition": "none",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Spur",
+      "item": "Spur umbenennen"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977833147,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "de"
+  },
+  {
+   "condition": "candidate",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Spur",
+      "item": "Spur umbenennen"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977864486,
+   "focus_lost_after_s": null,
+   "typed": 20,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "de"
+  },
+  {
+   "condition": "candidate",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Spur",
+      "item": "Spur umbenennen"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977896250,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "de"
+  },
+  {
+   "condition": "control",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Spur",
+      "item": "Spur umbenennen"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977928449,
+   "lost_epoch_ms": 1790977931216,
+   "focus_lost_after_s": 2.77,
+   "typed": 2,
+   "reads": 6,
+   "role_after": "AXTextField",
+   "value_grew_by": -12,
+   "outcome": "lost",
+   "role_after_cancel": "AXTextField",
+   "lproj": "de"
+  },
+  {
+   "condition": "control",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXSlider",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXSlider"
+    }
+   ],
+   "role_before_server": "AXSlider",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Spur",
+      "item": "Spur umbenennen"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977942538,
+   "lost_epoch_ms": 1790977945312,
+   "focus_lost_after_s": 2.77,
+   "typed": 2,
+   "reads": 6,
+   "role_after": "AXTextField",
+   "value_grew_by": -1,
+   "outcome": "lost",
+   "role_after_cancel": "AXTextField",
+   "lproj": "de"
+  },
+  {
+   "condition": "none",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXGroup",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXGroup"
+    }
+   ],
+   "role_before_server": "AXGroup",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renombrar pista"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977969901,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "es"
+  },
+  {
+   "condition": "none",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renombrar pista"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790977999197,
+   "focus_lost_after_s": null,
+   "typed": 20,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "es"
+  },
+  {
+   "condition": "candidate",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renombrar pista"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978032355,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "es"
+  },
+  {
+   "condition": "candidate",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renombrar pista"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978065014,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "es"
+  },
+  {
+   "condition": "control",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renombrar pista"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978097737,
+   "lost_epoch_ms": 1790978099933,
    "focus_lost_after_s": 2.2,
    "typed": 1,
    "reads": 5,
@@ -2149,6 +1245,926 @@
    "value_grew_by": -12,
    "outcome": "lost",
    "role_after_cancel": "AXSlider",
+   "lproj": "es"
+  },
+  {
+   "condition": "control",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXSlider",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXSlider"
+    }
+   ],
+   "role_before_server": "AXSlider",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renombrar pista"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978112079,
+   "lost_epoch_ms": 1790978113717,
+   "focus_lost_after_s": 1.64,
+   "typed": 1,
+   "reads": 4,
+   "role_after": "AXTextField",
+   "value_grew_by": 0,
+   "outcome": "lost",
+   "role_after_cancel": "AXCheckBox",
+   "lproj": "es"
+  },
+  {
+   "condition": "none",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXGroup",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXGroup"
+    }
+   ],
+   "role_before_server": "AXGroup",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Piste",
+      "item": "Renommer la piste"
+     },
+     "field_seen_after_s": 0.05,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978138423,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "fr"
+  },
+  {
+   "condition": "none",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Piste",
+      "item": "Renommer la piste"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978168049,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "fr"
+  },
+  {
+   "condition": "candidate",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Piste",
+      "item": "Renommer la piste"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978201894,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "fr"
+  },
+  {
+   "condition": "candidate",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Piste",
+      "item": "Renommer la piste"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978235797,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 37,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "fr"
+  },
+  {
+   "condition": "control",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Piste",
+      "item": "Renommer la piste"
+     },
+     "field_seen_after_s": null,
+     "frame": null
+    },
+    {
+     "pressed": {
+      "bar": "Piste",
+      "item": "Renommer la piste"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978281138,
+   "lost_epoch_ms": 1790978281690,
+   "focus_lost_after_s": 0.55,
+   "typed": 0,
+   "reads": 2,
+   "role_after": "AXTextField",
+   "value_grew_by": null,
+   "outcome": "lost",
+   "role_after_cancel": "AXTextField",
+   "lproj": "fr"
+  },
+  {
+   "condition": "control",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXSlider",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXSlider"
+    }
+   ],
+   "role_before_server": "AXSlider",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Piste",
+      "item": "Renommer la piste"
+     },
+     "field_seen_after_s": null,
+     "frame": null
+    },
+    {
+     "pressed": {
+      "bar": "Piste",
+      "item": "Renommer la piste"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978306114,
+   "lost_epoch_ms": 1790978306669,
+   "focus_lost_after_s": 0.56,
+   "typed": 0,
+   "reads": 2,
+   "role_after": "AXSlider",
+   "value_grew_by": null,
+   "outcome": "lost",
+   "role_after_cancel": "AXTextField",
+   "lproj": "fr"
+  },
+  {
+   "condition": "none",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXGroup",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXGroup"
+    }
+   ],
+   "role_before_server": "AXGroup",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Traccia",
+      "item": "Rinomina traccia"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978334895,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "it"
+  },
+  {
+   "condition": "none",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Traccia",
+      "item": "Rinomina traccia"
+     },
+     "field_seen_after_s": 0.05,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978366668,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "it"
+  },
+  {
+   "condition": "candidate",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Traccia",
+      "item": "Rinomina traccia"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978401998,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "it"
+  },
+  {
+   "condition": "candidate",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Traccia",
+      "item": "Rinomina traccia"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978437113,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "it"
+  },
+  {
+   "condition": "control",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Traccia",
+      "item": "Rinomina traccia"
+     },
+     "field_seen_after_s": null,
+     "frame": null
+    },
+    {
+     "pressed": {
+      "bar": "Traccia",
+      "item": "Rinomina traccia"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978484115,
+   "lost_epoch_ms": 1790978487992,
+   "focus_lost_after_s": 3.88,
+   "typed": 3,
+   "reads": 8,
+   "role_after": "AXSlider",
+   "value_grew_by": -11,
+   "outcome": "lost",
+   "role_after_cancel": "AXSlider",
+   "lproj": "it"
+  },
+  {
+   "condition": "control",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXSlider",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXSlider"
+    }
+   ],
+   "role_before_server": "AXSlider",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Traccia",
+      "item": "Rinomina traccia"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978503482,
+   "lost_epoch_ms": 1790978507380,
+   "focus_lost_after_s": 3.9,
+   "typed": 3,
+   "reads": 8,
+   "role_after": "AXCheckBox",
+   "value_grew_by": -1,
+   "outcome": "lost",
+   "role_after_cancel": "AXSlider",
+   "lproj": "it"
+  },
+  {
+   "condition": "none",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXGroup",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXGroup"
+    }
+   ],
+   "role_before_server": "AXGroup",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renomear Pista"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978532257,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "pt"
+  },
+  {
+   "condition": "none",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renomear Pista"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978561943,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "pt"
+  },
+  {
+   "condition": "candidate",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renomear Pista"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978595724,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "pt"
+  },
+  {
+   "condition": "candidate",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renomear Pista"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978629536,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "pt"
+  },
+  {
+   "condition": "control",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renomear Pista"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978663325,
+   "lost_epoch_ms": 1790978664407,
+   "focus_lost_after_s": 1.08,
+   "typed": 0,
+   "reads": 3,
+   "role_after": "AXSlider",
+   "value_grew_by": 0,
+   "outcome": "lost",
+   "role_after_cancel": "AXSlider",
+   "lproj": "pt"
+  },
+  {
+   "condition": "control",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXSlider",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXSlider"
+    }
+   ],
+   "role_before_server": "AXSlider",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "Pista",
+      "item": "Renomear Pista"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978677509,
+   "lost_epoch_ms": 1790978678592,
+   "focus_lost_after_s": 1.08,
+   "typed": 0,
+   "reads": 3,
+   "role_after": "AXSlider",
+   "value_grew_by": 0,
+   "outcome": "lost",
+   "role_after_cancel": "AXSlider",
+   "lproj": "pt"
+  },
+  {
+   "condition": "none",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXGroup",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXGroup"
+    }
+   ],
+   "role_before_server": "AXGroup",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "轨道",
+      "item": "给轨道重新命名"
+     },
+     "field_seen_after_s": 0.05,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978717011,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 5,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "zh_CN"
+  },
+  {
+   "condition": "none",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "轨道",
+      "item": "给轨道重新命名"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      703,
+      190,
+      213,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978750533,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "zh_CN"
+  },
+  {
+   "condition": "candidate",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "轨道",
+      "item": "给轨道重新命名"
+     },
+     "field_seen_after_s": 0.03,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978788474,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "zh_CN"
+  },
+  {
+   "condition": "candidate",
+   "sample": 1,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "轨道",
+      "item": "给轨道重新命名"
+     },
+     "field_seen_after_s": 0.04,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978826309,
+   "focus_lost_after_s": null,
+   "typed": 19,
+   "reads": 36,
+   "role_after": "AXTextField",
+   "value_grew_by": 6,
+   "outcome": "kept",
+   "role_after_cancel": "AXWindow",
+   "lproj": "zh_CN"
+  },
+  {
+   "condition": "control",
+   "sample": 0,
+   "settle": [
+    {
+     "role": "AXWindow",
+     "keyboard_owner_is_logic": true,
+     "escaped": false,
+     "role_after": "AXWindow"
+    }
+   ],
+   "role_before_server": "AXWindow",
+   "attempts": [
+    {
+     "pressed": {
+      "bar": "轨道",
+      "item": "给轨道重新命名"
+     },
+     "field_seen_after_s": 0.06,
+     "frame": [
+      708,
+      190,
+      208,
+      20
+     ]
+    }
+   ],
+   "opened_epoch_ms": 1790978864113,
+   "lost_epoch_ms": 1790978865768,
+   "focus_lost_after_s": 1.66,
+   "typed": 1,
+   "reads": 4,
+   "role_after": "AXTextField",
+   "value_grew_by": 0,
+   "outcome": "lost",
+   "role_after_cancel": "AXSlider",
    "lproj": "zh_CN"
   },
   {
@@ -2178,9 +2194,9 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971863179,
-   "lost_epoch_ms": 1790971864826,
-   "focus_lost_after_s": 1.65,
+   "opened_epoch_ms": 1790978883022,
+   "lost_epoch_ms": 1790978884680,
+   "focus_lost_after_s": 1.66,
    "typed": 1,
    "reads": 4,
    "role_after": "AXTextField",
@@ -2207,7 +2223,7 @@
       "bar": "音軌",
       "item": "重新命名音軌"
      },
-     "field_seen_after_s": 0.06,
+     "field_seen_after_s": 0.05,
      "frame": [
       703,
       190,
@@ -2216,10 +2232,10 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971916097,
+   "opened_epoch_ms": 1790978924112,
    "focus_lost_after_s": null,
    "typed": 19,
-   "reads": 37,
+   "reads": 36,
    "role_after": "AXTextField",
    "value_grew_by": 6,
    "outcome": "kept",
@@ -2253,12 +2269,12 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971954673,
+   "opened_epoch_ms": 1790978959385,
    "focus_lost_after_s": null,
    "typed": 19,
    "reads": 36,
    "role_after": "AXTextField",
-   "value_grew_by": 5,
+   "value_grew_by": 6,
    "outcome": "kept",
    "role_after_cancel": "AXWindow",
    "lproj": "zh_TW"
@@ -2281,7 +2297,7 @@
       "bar": "音軌",
       "item": "重新命名音軌"
      },
-     "field_seen_after_s": 0.04,
+     "field_seen_after_s": 0.03,
      "frame": [
       708,
       190,
@@ -2290,12 +2306,12 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790971994941,
+   "opened_epoch_ms": 1790978997854,
    "focus_lost_after_s": null,
-   "typed": 17,
-   "reads": 29,
+   "typed": 19,
+   "reads": 36,
    "role_after": "AXTextField",
-   "value_grew_by": 3,
+   "value_grew_by": 5,
    "outcome": "kept",
    "role_after_cancel": "AXWindow",
    "lproj": "zh_TW"
@@ -2327,12 +2343,12 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790972033644,
+   "opened_epoch_ms": 1790979035962,
    "focus_lost_after_s": null,
-   "typed": 20,
-   "reads": 37,
+   "typed": 19,
+   "reads": 36,
    "role_after": "AXTextField",
-   "value_grew_by": 6,
+   "value_grew_by": 5,
    "outcome": "kept",
    "role_after_cancel": "AXWindow",
    "lproj": "zh_TW"
@@ -2364,15 +2380,15 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790972072405,
-   "lost_epoch_ms": 1790972073493,
-   "focus_lost_after_s": 1.09,
-   "typed": 0,
-   "reads": 3,
+   "opened_epoch_ms": 1790979073975,
+   "lost_epoch_ms": 1790979075612,
+   "focus_lost_after_s": 1.64,
+   "typed": 1,
+   "reads": 4,
    "role_after": "AXSlider",
    "value_grew_by": 0,
    "outcome": "lost",
-   "role_after_cancel": "AXTextField",
+   "role_after_cancel": "AXSlider",
    "lproj": "zh_TW"
   },
   {
@@ -2402,13 +2418,13 @@
      ]
     }
    ],
-   "opened_epoch_ms": 1790972091674,
-   "lost_epoch_ms": 1790972092259,
-   "focus_lost_after_s": 0.58,
-   "typed": 0,
-   "reads": 2,
-   "role_after": "AXCheckBox",
-   "value_grew_by": null,
+   "opened_epoch_ms": 1790979093055,
+   "lost_epoch_ms": 1790979094703,
+   "focus_lost_after_s": 1.65,
+   "typed": 1,
+   "reads": 4,
+   "role_after": "AXSlider",
+   "value_grew_by": 0,
    "outcome": "lost",
    "role_after_cancel": "AXSlider",
    "lproj": "zh_TW"
