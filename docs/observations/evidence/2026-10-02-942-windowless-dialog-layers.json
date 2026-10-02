@@ -1,0 +1,533 @@
+{
+ "modal": 8,
+ "states": [
+  {
+   "tag": "before",
+   "front": "\"LSDisplayName\"=\"Logic Pro\"",
+   "ax_focused_app": {
+    "err": 0,
+    "pid": 998,
+    "comm": "Logic Pro"
+   },
+   "keyboard_window": {
+    "owner": "Logic Pro",
+    "pid": 998,
+    "id": 3342,
+    "layer": 0,
+    "name": "lpm-locale-campaign - 트랙"
+   },
+   "rows": [
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3343,
+     "layer": 3,
+     "name": "lpm-locale-campaign - 마커 목록"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3342,
+     "layer": 0,
+     "name": "lpm-locale-campaign - 트랙"
+    },
+    {
+     "owner": "시스템 설정",
+     "pid": 19928,
+     "id": 1749,
+     "layer": 0,
+     "name": "손쉬운 사용"
+    },
+    {
+     "owner": "universalAccessAuthWarn",
+     "pid": 8017,
+     "id": 2938,
+     "layer": 0,
+     "name": "손쉬운 사용 접근 권한"
+    },
+    {
+     "owner": "Cua Driver",
+     "pid": 19918,
+     "id": 1762,
+     "layer": 0,
+     "name": ""
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 1609,
+     "layer": 0,
+     "name": "isaac@Isaacui-Macmini:~"
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 86,
+     "layer": 0,
+     "name": "✳ Agent-control-plane PR 3개, 이슈 7개 완벽 해결"
+    },
+    {
+     "owner": "Google Chrome",
+     "pid": 628,
+     "id": 293,
+     "layer": 0,
+     "name": "Jev Gate · 실행 관측"
+    }
+   ]
+  },
+  {
+   "tag": "A0_logic_active_dialog",
+   "front": "\"LSDisplayName\"=\"Logic Pro\"",
+   "ax_focused_app": {
+    "err": 0,
+    "pid": 998,
+    "comm": "Logic Pro"
+   },
+   "keyboard_window": {
+    "owner": "Logic Pro",
+    "pid": 998,
+    "id": 3386,
+    "layer": 8,
+    "name": "위치로 이동"
+   },
+   "rows": [
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3386,
+     "layer": 8,
+     "name": "위치로 이동"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3343,
+     "layer": 3,
+     "name": "lpm-locale-campaign - 마커 목록"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3342,
+     "layer": 0,
+     "name": "lpm-locale-campaign - 트랙"
+    },
+    {
+     "owner": "시스템 설정",
+     "pid": 19928,
+     "id": 1749,
+     "layer": 0,
+     "name": "손쉬운 사용"
+    },
+    {
+     "owner": "universalAccessAuthWarn",
+     "pid": 8017,
+     "id": 2938,
+     "layer": 0,
+     "name": "손쉬운 사용 접근 권한"
+    },
+    {
+     "owner": "Cua Driver",
+     "pid": 19918,
+     "id": 1762,
+     "layer": 0,
+     "name": ""
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 1609,
+     "layer": 0,
+     "name": "isaac@Isaacui-Macmini:~"
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 86,
+     "layer": 0,
+     "name": "✳ Agent-control-plane PR 3개, 이슈 7개 완벽 해결"
+    }
+   ]
+  },
+  {
+   "tag": "A1_finder_active_no_new_window",
+   "front": "\"LSDisplayName\"=\"Finder\"",
+   "ax_focused_app": {
+    "err": 0,
+    "pid": 665,
+    "comm": "Finder"
+   },
+   "keyboard_window": {
+    "owner": "Logic Pro",
+    "pid": 998,
+    "id": 3386,
+    "layer": 0,
+    "name": "위치로 이동"
+   },
+   "rows": [
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3343,
+     "layer": 3,
+     "name": "lpm-locale-campaign - 마커 목록"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3386,
+     "layer": 0,
+     "name": "위치로 이동"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3342,
+     "layer": 0,
+     "name": "lpm-locale-campaign - 트랙"
+    },
+    {
+     "owner": "시스템 설정",
+     "pid": 19928,
+     "id": 1749,
+     "layer": 0,
+     "name": "손쉬운 사용"
+    },
+    {
+     "owner": "universalAccessAuthWarn",
+     "pid": 8017,
+     "id": 2938,
+     "layer": 0,
+     "name": "손쉬운 사용 접근 권한"
+    },
+    {
+     "owner": "Cua Driver",
+     "pid": 19918,
+     "id": 1762,
+     "layer": 0,
+     "name": ""
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 1609,
+     "layer": 0,
+     "name": "isaac@Isaacui-Macmini:~"
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 86,
+     "layer": 0,
+     "name": "✳ Agent-control-plane PR 3개, 이슈 7개 완벽 해결"
+    }
+   ]
+  },
+  {
+   "tag": "B1_finder_active_with_window",
+   "front": "\"LSDisplayName\"=\"Finder\"",
+   "ax_focused_app": {
+    "err": 0,
+    "pid": 665,
+    "comm": "Finder"
+   },
+   "keyboard_window": {
+    "owner": "Finder",
+    "pid": 665,
+    "id": 3389,
+    "layer": 0,
+    "name": "Isaac의 Mac mini"
+   },
+   "rows": [
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3343,
+     "layer": 3,
+     "name": "lpm-locale-campaign - 마커 목록"
+    },
+    {
+     "owner": "Finder",
+     "pid": 665,
+     "id": 3389,
+     "layer": 0,
+     "name": "Isaac의 Mac mini"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3386,
+     "layer": 0,
+     "name": "위치로 이동"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3342,
+     "layer": 0,
+     "name": "lpm-locale-campaign - 트랙"
+    },
+    {
+     "owner": "시스템 설정",
+     "pid": 19928,
+     "id": 1749,
+     "layer": 0,
+     "name": "손쉬운 사용"
+    },
+    {
+     "owner": "universalAccessAuthWarn",
+     "pid": 8017,
+     "id": 2938,
+     "layer": 0,
+     "name": "손쉬운 사용 접근 권한"
+    },
+    {
+     "owner": "Cua Driver",
+     "pid": 19918,
+     "id": 1762,
+     "layer": 0,
+     "name": ""
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 1609,
+     "layer": 0,
+     "name": "isaac@Isaacui-Macmini:~"
+    }
+   ]
+  },
+  {
+   "tag": "B2_finder_window_closed",
+   "front": "\"LSDisplayName\"=\"Finder\"",
+   "ax_focused_app": {
+    "err": 0,
+    "pid": 665,
+    "comm": "Finder"
+   },
+   "keyboard_window": {
+    "owner": "Logic Pro",
+    "pid": 998,
+    "id": 3386,
+    "layer": 0,
+    "name": "위치로 이동"
+   },
+   "rows": [
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3343,
+     "layer": 3,
+     "name": "lpm-locale-campaign - 마커 목록"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3386,
+     "layer": 0,
+     "name": "위치로 이동"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3342,
+     "layer": 0,
+     "name": "lpm-locale-campaign - 트랙"
+    },
+    {
+     "owner": "시스템 설정",
+     "pid": 19928,
+     "id": 1749,
+     "layer": 0,
+     "name": "손쉬운 사용"
+    },
+    {
+     "owner": "universalAccessAuthWarn",
+     "pid": 8017,
+     "id": 2938,
+     "layer": 0,
+     "name": "손쉬운 사용 접근 권한"
+    },
+    {
+     "owner": "Cua Driver",
+     "pid": 19918,
+     "id": 1762,
+     "layer": 0,
+     "name": ""
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 1609,
+     "layer": 0,
+     "name": "isaac@Isaacui-Macmini:~"
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 86,
+     "layer": 0,
+     "name": "✳ Agent-control-plane PR 3개, 이슈 7개 완벽 해결"
+    }
+   ]
+  },
+  {
+   "tag": "C_logic_reactivated",
+   "front": "\"LSDisplayName\"=\"Logic Pro\"",
+   "ax_focused_app": {
+    "err": 0,
+    "pid": 998,
+    "comm": "Logic Pro"
+   },
+   "keyboard_window": {
+    "owner": "Logic Pro",
+    "pid": 998,
+    "id": 3386,
+    "layer": 8,
+    "name": "위치로 이동"
+   },
+   "rows": [
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3386,
+     "layer": 8,
+     "name": "위치로 이동"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3343,
+     "layer": 3,
+     "name": "lpm-locale-campaign - 마커 목록"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3342,
+     "layer": 0,
+     "name": "lpm-locale-campaign - 트랙"
+    },
+    {
+     "owner": "시스템 설정",
+     "pid": 19928,
+     "id": 1749,
+     "layer": 0,
+     "name": "손쉬운 사용"
+    },
+    {
+     "owner": "universalAccessAuthWarn",
+     "pid": 8017,
+     "id": 2938,
+     "layer": 0,
+     "name": "손쉬운 사용 접근 권한"
+    },
+    {
+     "owner": "Cua Driver",
+     "pid": 19918,
+     "id": 1762,
+     "layer": 0,
+     "name": ""
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 1609,
+     "layer": 0,
+     "name": "isaac@Isaacui-Macmini:~"
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 86,
+     "layer": 0,
+     "name": "✳ Agent-control-plane PR 3개, 이슈 7개 완벽 해결"
+    }
+   ]
+  },
+  {
+   "tag": "end",
+   "front": "\"LSDisplayName\"=\"Logic Pro\"",
+   "ax_focused_app": {
+    "err": 0,
+    "pid": 998,
+    "comm": "Logic Pro"
+   },
+   "keyboard_window": {
+    "owner": "Logic Pro",
+    "pid": 998,
+    "id": 3342,
+    "layer": 0,
+    "name": "lpm-locale-campaign - 트랙"
+   },
+   "rows": [
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3343,
+     "layer": 3,
+     "name": "lpm-locale-campaign - 마커 목록"
+    },
+    {
+     "owner": "Logic Pro",
+     "pid": 998,
+     "id": 3342,
+     "layer": 0,
+     "name": "lpm-locale-campaign - 트랙"
+    },
+    {
+     "owner": "시스템 설정",
+     "pid": 19928,
+     "id": 1749,
+     "layer": 0,
+     "name": "손쉬운 사용"
+    },
+    {
+     "owner": "universalAccessAuthWarn",
+     "pid": 8017,
+     "id": 2938,
+     "layer": 0,
+     "name": "손쉬운 사용 접근 권한"
+    },
+    {
+     "owner": "Cua Driver",
+     "pid": 19918,
+     "id": 1762,
+     "layer": 0,
+     "name": ""
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 1609,
+     "layer": 0,
+     "name": "isaac@Isaacui-Macmini:~"
+    },
+    {
+     "owner": "iTerm2",
+     "pid": 645,
+     "id": 86,
+     "layer": 0,
+     "name": "✳ Agent-control-plane PR 3개, 이슈 7개 완벽 해결"
+    },
+    {
+     "owner": "Google Chrome",
+     "pid": 628,
+     "id": 293,
+     "layer": 0,
+     "name": "Jev Gate · 실행 관측"
+    }
+   ]
+  }
+ ],
+ "path": {
+  "navigate": "탐색",
+  "go_to": "이동",
+  "position": "위치…"
+ },
+ "dialog": [
+  3386
+ ],
+ "make_window_rc": 0,
+ "dialog_left": []
+}
