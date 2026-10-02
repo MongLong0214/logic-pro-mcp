@@ -34,9 +34,10 @@ extension AccessibilityChannel {
     struct PostLeafScreenReading: Equatable, Sendable {
         let menu: PostLeafMenuReading
         let dialog: PostLeafDialogReading
-        /// From the first normal-layer window's owner, as `LogicOnScreenWindows.keyboardOwnerIsLogic`
-        /// reads it; nil when the list has no such window or its owner is unreadable. An Escape sent
-        /// while another process owns the keyboard is an Escape sent to that process.
+        /// From the keyboard window's owner and the focused application, as
+        /// `LogicOnScreenWindows.keyboardOwnerIsLogic` reads them; nil when the list has no such
+        /// window or its owner is unreadable. An Escape sent while another process owns the
+        /// keyboard is an Escape sent to that process.
         let logicOwnsKeyboard: Bool?
     }
 
@@ -136,14 +137,16 @@ extension AccessibilityChannel {
     /// it is unmeasured: a nil name here refuses as `unidentified_dialog_present`, which is the safe
     /// direction (nothing is pressed), not a reading of the dialog's title.
     static func readPostLeafScreen(
-        baseline: Set<Int>?, logicPID: pid_t?, windows: [[String: Any]]?
+        baseline: Set<Int>?, logicPID: pid_t?, windows: [[String: Any]]?, focusedApplicationPID: pid_t?
     ) -> (reading: PostLeafScreenReading, appeared: [LogicOnScreenWindows.Entry]?) {
         guard let logicPID, let windows else {
             return (PostLeafScreenReading(menu: .unreadable, dialog: .unreadable, logicOwnsKeyboard: nil), nil)
         }
         let popupCount = LogicOnScreenWindows.popupMenuCount(windows, logicPID: logicPID)
         let menu: PostLeafMenuReading = popupCount == 0 ? .closed : .open(count: popupCount)
-        let keyboard = LogicOnScreenWindows.keyboardOwnerIsLogic(windows, logicPID: logicPID)
+        let keyboard = LogicOnScreenWindows.keyboardOwnerIsLogic(
+            windows, logicPID: logicPID, focusedApplicationPID: focusedApplicationPID
+        )
         guard let baseline else {
             return (PostLeafScreenReading(menu: menu, dialog: .unreadable, logicOwnsKeyboard: keyboard), nil)
         }
@@ -281,7 +284,10 @@ extension AccessibilityChannel {
     ) -> PostLeafSettlement {
         let logicPID = runtime.logicProPID()
         func read() -> (reading: PostLeafScreenReading, appeared: [LogicOnScreenWindows.Entry]?) {
-            readPostLeafScreen(baseline: baseline, logicPID: logicPID, windows: runtime.onScreenWindowList())
+            readPostLeafScreen(
+                baseline: baseline, logicPID: logicPID, windows: runtime.onScreenWindowList(),
+                focusedApplicationPID: runtime.focusedApplicationPID()
+            )
         }
 
         let initial = read()

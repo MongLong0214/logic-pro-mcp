@@ -32,6 +32,8 @@ final class GotoDialogScreen: @unchecked Sendable {
     private let listReadable: Bool
     private let menuOpen: Bool
     private let keyboardOwner: pid_t?
+    private let keyboardOwnerHasWindow: Bool
+    private let focusedApplication: pid_t?
     private var openerPosted = false
     private var readsSinceOpener = 0
     private var dialogShown = false
@@ -44,7 +46,9 @@ final class GotoDialogScreen: @unchecked Sendable {
         appearsAfterReads: Int = 0,
         listReadable: Bool = true,
         menuOpen: Bool = false,
-        keyboardOwner: pid_t? = nil
+        keyboardOwner: pid_t? = nil,
+        keyboardOwnerHasWindow: Bool = true,
+        focusedApplication: pid_t? = nil
     ) {
         self.pid = pid
         self.appears = appears
@@ -52,7 +56,13 @@ final class GotoDialogScreen: @unchecked Sendable {
         self.listReadable = listReadable
         self.menuOpen = menuOpen
         self.keyboardOwner = keyboardOwner
+        self.keyboardOwnerHasWindow = keyboardOwnerHasWindow
+        self.focusedApplication = focusedApplication
     }
+
+    /// What the accessibility server names as the focused application: nil (unread) unless the
+    /// case sets it.
+    func focusedApplicationPID() -> pid_t? { focusedApplication }
 
     /// How many times the list was asked for.
     var listReads: Int { lock.lock(); defer { lock.unlock() }; return reads }
@@ -64,18 +74,24 @@ final class GotoDialogScreen: @unchecked Sendable {
         reads += 1
         guard listReadable else { return nil }
         var list: [[String: Any]] = []
+        // Another process holding the keyboard means Logic is not the active application, and an
+        // inactive Logic draws its dialog at the normal level, not the modal-panel one. Measured
+        // 2026-10-02 in Korean: Go To Position at layer 8 while Logic was active, at layer 0 once
+        // Finder was activated, back at 8 when Logic was. The other process's window, when it has
+        // one, is in front of it.
+        let dialogLayer = keyboardOwner == nil ? 8 : 0
+        if let keyboardOwner, keyboardOwnerHasWindow {
+            list.append(Self.window(owner: keyboardOwner, number: 9, layer: 0, title: "Finder"))
+        }
         if menuOpen {
             list.append(Self.window(owner: pid, number: 7, layer: LogicOnScreenWindows.popupMenuLevel, title: nil))
         }
         if openerPosted {
             readsSinceOpener += 1
             if readsSinceOpener > appearsAfterReads, case let .window(title) = appears {
-                list.append(Self.window(owner: pid, number: 2, layer: 8, title: title))
+                list.append(Self.window(owner: pid, number: 2, layer: dialogLayer, title: title))
                 dialogShown = true
             }
-        }
-        if let keyboardOwner {
-            list.append(Self.window(owner: keyboardOwner, number: 9, layer: 0, title: "Finder"))
         }
         list.append(Self.window(owner: pid, number: 1, layer: 0, title: "Untitled - Tracks"))
         return list
@@ -134,7 +150,8 @@ private final class Issue1038Posts: @unchecked Sendable {
                 lock.lock(); defer { lock.unlock() }
                 sleepMicros.append(micros)
             },
-            onScreenWindowList: { screen.windows() }
+            onScreenWindowList: { screen.windows() },
+            focusedApplicationPID: { screen.focusedApplicationPID() }
         )
     }
 }
@@ -235,6 +252,32 @@ struct Issue1038GotoDialogGateTests {
         #expect(posts.posted == [GotoDialogScreen.opener])
         let envelope = try #require(issue1038Envelope(result))
         #expect(try #require(envelope["reason"] as? String) == "dialog_not_typable")
+    }
+
+    /// The keyboard held by an application with no window on screen: Finder after a click on the
+    /// desktop. Logic's demoted dialog is then the first window at either level, so only the
+    /// focused application says Logic does not have the keyboard. The same screen with the focused
+    /// application unread is typed into, which is the control: it shows the refusal comes from the
+    /// focused application and from nothing else on the screen.
+    ///
+    /// Mutation this kills: drop the focused application from `keyboardOwnerIsLogic`, or stop
+    /// passing the runtime's reading into `readPostLeafScreen` from the dialog gate.
+    @Test("the dialog is not typed into while a windowless application has the keyboard")
+    func dialogUnderWindowlessKeyboardOwnerIsNotTyped() async throws {
+        let refused = GotoDialogScreen(
+            pid: Self.pid, keyboardOwner: 77, keyboardOwnerHasWindow: false, focusedApplication: 77)
+        let refusedPosts = Issue1038Posts()
+        let refusedResult = await CGEventChannel(runtime: refusedPosts.runtime(pid: Self.pid, screen: refused))
+            .execute(operation: "transport.goto_position", params: ["position": "5.1.1.1"])
+        #expect(refusedPosts.posted == [GotoDialogScreen.opener])
+        let envelope = try #require(issue1038Envelope(refusedResult))
+        #expect(try #require(envelope["reason"] as? String) == "dialog_not_typable")
+
+        let unread = GotoDialogScreen(pid: Self.pid, keyboardOwner: 77, keyboardOwnerHasWindow: false)
+        let unreadPosts = Issue1038Posts()
+        _ = await CGEventChannel(runtime: unreadPosts.runtime(pid: Self.pid, screen: unread))
+            .execute(operation: "transport.goto_position", params: ["position": "5.1.1.1"])
+        #expect(unreadPosts.posted.count > 1, "the control: with the focused application unread the dialog is typed into")
     }
 
     /// Mutation this kills: read the screen once after the opener instead of polling (the dialog

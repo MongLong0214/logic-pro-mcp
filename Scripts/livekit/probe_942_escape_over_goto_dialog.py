@@ -118,10 +118,50 @@ def logic_windows():
     return found
 
 
+def focused_application_pid():
+    """The pid the accessibility server names as the focused application, as the server reads it
+    (`ProcessUtils.focusedApplicationPID`), or None when it did not answer. Through ctypes: the
+    system python3 that holds the TCC grants ships Quartz but not the ApplicationServices module.
+    The read fails with -25204 until this process has called the window server, so the caller
+    reads the window list first (measured 2026-10-02)."""
+    import ctypes
+    services = ctypes.cdll.LoadLibrary(
+        "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+    foundation = ctypes.cdll.LoadLibrary(
+        "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+    services.AXUIElementCreateSystemWide.restype = ctypes.c_void_p
+    services.AXUIElementCopyAttributeValue.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
+                                                       ctypes.POINTER(ctypes.c_void_p)]
+    services.AXUIElementCopyAttributeValue.restype = ctypes.c_int32
+    services.AXUIElementGetPid.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)]
+    services.AXUIElementGetPid.restype = ctypes.c_int32
+    foundation.CFStringCreateWithCString.restype = ctypes.c_void_p
+    foundation.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+    foundation.CFRelease.argtypes = [ctypes.c_void_p]
+    attribute = foundation.CFStringCreateWithCString(None, b"AXFocusedApplication", 0x08000100)
+    system_wide = services.AXUIElementCreateSystemWide()
+    value = ctypes.c_void_p()
+    try:
+        if services.AXUIElementCopyAttributeValue(system_wide, attribute, ctypes.byref(value)) != 0 \
+                or not value.value:
+            return None
+        pid = ctypes.c_int()
+        if services.AXUIElementGetPid(value, ctypes.byref(pid)) != 0 or pid.value <= 0:
+            return None
+        return pid.value
+    finally:
+        for ref in (value.value, system_wide, attribute):
+            if ref:
+                foundation.CFRelease(ref)
+
+
 def keyboard_owner_is_logic():
-    """Whether the window that holds the keyboard is Logic's, as the server judges it
-    (`LogicOnScreenWindows.keyboardWindow`): the first window at the normal or the modal-panel
-    level, so a permission prompt at layer 8 in front of Logic is the owner; None if unread."""
+    """Whether Logic holds the keyboard, as the server judges it
+    (`LogicOnScreenWindows.keyboardOwnerIsLogic`): the first window at the normal or the
+    modal-panel level must be Logic's, so a permission prompt at layer 8 in front of Logic is the
+    owner; and when the accessibility server names a focused application it must be Logic, so an
+    application with no window on screen (Finder after a click on the desktop) is the owner too.
+    None if the window list or the first window's owner was not read."""
     import Quartz
     windows = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly,
                                                 Quartz.kCGNullWindowID)
@@ -130,7 +170,10 @@ def keyboard_owner_is_logic():
     modal_panel = int(Quartz.CGWindowLevelForKey(Quartz.kCGModalPanelWindowLevelKey))
     for window in windows:
         if int(window.get(Quartz.kCGWindowLayer) or 0) in (0, modal_panel):
-            return E._is_logic_owned_window(window)
+            if not E._is_logic_owned_window(window):
+                return False
+            focused = focused_application_pid()
+            return focused is None or focused == int(window.get(Quartz.kCGWindowOwnerPID))
     return None
 
 

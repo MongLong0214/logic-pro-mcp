@@ -156,7 +156,9 @@ final class Issue942ScriptedWindowServer: @unchecked Sendable {
 
     /// A runtime whose only live-looking seams are the two window-server ones, both bound to
     /// the scripted server. `pid` nil is a Logic that is not running.
-    static func runtime(_ server: Issue942ScriptedWindowServer, pid: pid_t? = logicPID) -> AXLogicProElements.Runtime {
+    static func runtime(
+        _ server: Issue942ScriptedWindowServer, pid: pid_t? = logicPID, focused: pid_t? = nil
+    ) -> AXLogicProElements.Runtime {
         let base = FakeAXRuntimeBuilder().makeLogicRuntime(pid: pid)
         return AXLogicProElements.Runtime(
             logicProPID: base.logicProPID,
@@ -164,17 +166,19 @@ final class Issue942ScriptedWindowServer: @unchecked Sendable {
             executeAppleScript: base.executeAppleScript,
             executeAppleScriptWithTimeout: base.executeAppleScriptWithTimeout,
             onScreenWindowList: { server.windowList() },
-            postPopupMenuEscape: { server.postEscape() }
+            postPopupMenuEscape: { server.postEscape() },
+            focusedApplicationPID: { focused }
         )
     }
 
     /// One settlement pass over the scripted screens, with the receipt object it produces.
     static func settle(
-        _ screens: [Screen], policy: Policy = .current, baseline: Set<Int>? = baseline, pid: pid_t? = logicPID
+        _ screens: [Screen], policy: Policy = .current, baseline: Set<Int>? = baseline, pid: pid_t? = logicPID,
+        focused: pid_t? = nil
     ) throws -> (settlement: Settlement, server: Issue942ScriptedWindowServer, receipt: [String: Any]) {
         let server = Issue942ScriptedWindowServer(screens.map(\.windows))
         let settlement = AccessibilityChannel.settlePostLeafScreen(
-            baseline: baseline, runtime: runtime(server, pid: pid), policy: policy,
+            baseline: baseline, runtime: runtime(server, pid: pid, focused: focused), policy: policy,
             sleepMicros: { server.sleep($0) })
         let receipt = try #require(settlement.receiptFields["post_leaf_settlement"] as? [String: Any])
         return (settlement, server, receipt)
@@ -259,7 +263,7 @@ final class Issue942ScriptedWindowServer: @unchecked Sendable {
     @Test(arguments: Self.readCases)
     func theReadingIsBuiltFromOneListAgainstTheBaseline(_ c: ReadCase) throws {
         let read = AccessibilityChannel.readPostLeafScreen(
-            baseline: c.baseline, logicPID: c.pid, windows: c.screen.windows)
+            baseline: c.baseline, logicPID: c.pid, windows: c.screen.windows, focusedApplicationPID: nil)
         let fields = Settlement.readingFields(read.reading, appeared: read.appeared)
         #expect(try Self.summary(fields) == c.expected)
         #expect(read.appeared?.map(\.number) == c.appeared)
@@ -276,14 +280,32 @@ final class Issue942ScriptedWindowServer: @unchecked Sendable {
     @Test(arguments: AXLocalePolicy.goToPositionDialogTitle.labels)
     func everyShippedDialogTitleIdentifiesTheDialog(_ title: String) throws {
         let read = AccessibilityChannel.readPostLeafScreen(
-            baseline: Self.baseline, logicPID: Self.logicPID, windows: Screen.appearedOnly(name: title).windows)
+            baseline: Self.baseline, logicPID: Self.logicPID, windows: Screen.appearedOnly(name: title).windows,
+            focusedApplicationPID: nil)
         let fields = Settlement.readingFields(read.reading, appeared: read.appeared)
         #expect(try Self.summary(fields) == "closed|identified_ours|logic", "\(title)")
         let prefixed = AccessibilityChannel.readPostLeafScreen(
             baseline: Self.baseline, logicPID: Self.logicPID,
-            windows: Screen.appearedOnly(name: "Untitled - \(title)").windows)
+            windows: Screen.appearedOnly(name: "Untitled - \(title)").windows, focusedApplicationPID: nil)
         #expect(try Self.token(Settlement.readingFields(prefixed.reading, appeared: prefixed.appeared), "dialog")
             == "unidentified", "\(title)")
+    }
+
+    // MARK: - The focused application is read with every list
+
+    /// The menu open over Logic's own window, the first at the normal level, while the
+    /// accessibility server names Finder as focused: the keyboard is Finder's and no Escape goes
+    /// out. The same screens with Logic focused send one, which is the control that shows the
+    /// refusal comes from the focused application. Mutation this kills: the settlement's reading
+    /// built without the runtime's focused application.
+    @Test func noEscapeGoesOutWhileTheAccessibilityServerNamesAnotherApplicationFocused() throws {
+        let refused = try Self.settle([.menuOpen, .menuOpen, .logicFront], focused: Self.finderPID)
+        #expect(refused.server.escapeCount == 0)
+        #expect(try Self.token(Self.reading(refused.receipt, "read"), "keyboard_owner") == "other")
+
+        let control = try Self.settle([.menuOpen, .menuOpen, .logicFront], focused: Self.logicPID)
+        #expect(control.server.escapeCount == 1)
+        #expect(try Self.token(Self.reading(control.receipt, "read"), "keyboard_owner") == "logic")
     }
 
     // MARK: - T_loop: an Escape is preceded by a fresh read and followed by a poll

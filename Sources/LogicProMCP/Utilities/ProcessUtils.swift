@@ -147,8 +147,37 @@ enum ProcessUtils {
         // The list is ordered front to back; `keyboardWindow` names the window whose owner the
         // keyboard belongs to, an alert at the modal-panel level included.
         guard let window = LogicOnScreenWindows.keyboardWindow(infos),
-              let pid = window[kCGWindowOwnerPID as String] as? pid_t else { return false }
-        return isKnownLogicPID(pid)
+              let pid = window[kCGWindowOwnerPID as String] as? pid_t,
+              isKnownLogicPID(pid) else { return false }
+        // An application with no window on screen holds the keyboard without being in the list;
+        // the accessibility server names it (`LogicOnScreenWindows.keyboardOwnerIsLogic`). Unread,
+        // the window reading answers alone, as it did before.
+        guard let focused = focusedApplicationPID() else { return true }
+        return isKnownLogicPID(focused)
+    }
+
+    /// The process the accessibility server names as the focused application, the one keystrokes
+    /// at the HID tap go to; nil when it did not answer. Asked of the system-wide element, which
+    /// reads it live: unlike `NSWorkspace.frontmostApplication` it needs no run loop to stay
+    /// current. Measured 2026-10-02 against `lsappinfo front` across Logic active, Logic active
+    /// under its own Go To Position dialog, and Finder active with and without a window of its
+    /// own: the two named the same process every time.
+    ///
+    /// It answers only once the process has spoken to the window server: measured the same day
+    /// from a fresh python3 holding the Accessibility grant, the read failed with -25204 (cannot
+    /// complete) every time until the process called `CGWindowListCopyWindowInfo`, and succeeded
+    /// from then on. Every caller reads the window list first, in the same expression or the line
+    /// before. An unread answer is nil, never a pid, so a read that fails for this or any other
+    /// reason leaves the window reading to answer alone.
+    static func focusedApplicationPID() -> pid_t? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute as CFString, &value
+        ) == .success, let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        var pid: pid_t = 0
+        // swiftlint:disable:next force_cast
+        guard AXUIElementGetPid(value as! AXUIElement, &pid) == .success, pid > 0 else { return nil }
+        return pid
     }
 
     static func isKnownLogicPID(_ pid: pid_t) -> Bool {

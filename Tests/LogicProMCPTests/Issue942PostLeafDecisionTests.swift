@@ -294,8 +294,38 @@ struct Issue942PostLeafDecisionTests {
         #expect(LogicOnScreenWindows.popupMenuLevel == 101)
     }
 
-    static func keyboardOwner(_ windows: [[String: Any]]) -> String {
-        describe(LogicOnScreenWindows.keyboardOwnerIsLogic(windows, logicPID: logicPID))
+    static func keyboardOwner(_ windows: [[String: Any]], focused: pid_t? = nil) -> String {
+        describe(LogicOnScreenWindows.keyboardOwnerIsLogic(windows, logicPID: logicPID, focusedApplicationPID: focused))
+    }
+
+    /// The screen of 2026-10-02 with Finder activated and no Finder window open
+    /// (lpm-evidence/942/inactive-layer/run2.json, state A1), front to back from layer 8 down:
+    /// Logic's marker list at 3, its Go To Position dialog demoted from 8 to 0, its Tracks window
+    /// at 0. `lsappinfo front` and the system-wide AXFocusedApplication both named Finder.
+    static var windowlessFinderOverLogic: [[String: Any]] {
+        [
+            window(owner: NSNumber(value: logicPID), number: 3343, layer: NSNumber(value: 3)),
+            window(owner: NSNumber(value: logicPID), number: 3386, layer: NSNumber(value: 0)),
+            window(owner: NSNumber(value: logicPID), number: 3342, layer: NSNumber(value: 0)),
+        ]
+    }
+
+    /// Mutations this kills: the focused application ignored (the first expectation reads
+    /// "logic"); an unread focused application taken as "not Logic" (the second reads "other").
+    @Test func anApplicationWithNoWindowHoldsTheKeyboardWhenTheAccessibilityServerSaysSo() {
+        #expect(Self.keyboardOwner(Self.windowlessFinderOverLogic, focused: Self.finderPID) == "other")
+        #expect(Self.keyboardOwner(Self.windowlessFinderOverLogic, focused: nil) == "logic")
+        #expect(Self.keyboardOwner(Self.windowlessFinderOverLogic, focused: Self.logicPID) == "logic")
+    }
+
+    /// Both readings must say Logic. Mutation this kills: the focused application overriding the
+    /// window reading, so a prompt in front of Logic reads as Logic's because Logic is focused.
+    @Test func aFocusedLogicDoesNotOverrideAnotherProcesssKeyboardWindow() {
+        #expect(Self.keyboardOwner(Self.alertOverLogic, focused: Self.logicPID) == "other")
+        let unreadableOwner: [[String: Any]] = [
+            Self.window(owner: "Logic Pro", number: 1, layer: NSNumber(value: 0)),
+        ]
+        #expect(Self.keyboardOwner(unreadableOwner, focused: Self.logicPID) == "unread")
     }
 
     @Test func theKeyboardOwnerIsTheFirstNormalLayerWindowsOwner() {

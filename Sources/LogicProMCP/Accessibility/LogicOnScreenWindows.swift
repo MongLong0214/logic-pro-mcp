@@ -83,14 +83,29 @@ enum LogicOnScreenWindows {
         }
     }
 
-    /// Whether the process that owns the keyboard is Logic, read from `keyboardWindow` as
-    /// `ProcessUtils.logicOwnsTheKeyboard` reads it. This one answers nil, rather than false, when
-    /// there is no such window or its owner cannot be read: an Escape must not be sent on the
-    /// strength of a reading that was not taken.
-    static func keyboardOwnerIsLogic(_ windows: [[String: Any]], logicPID: pid_t) -> Bool? {
+    /// Whether the process that owns the keyboard is Logic, read as `ProcessUtils.logicOwnsTheKeyboard`
+    /// reads it. Two readings must agree: the owner of `keyboardWindow`, and, when the
+    /// accessibility server answered, the application it names as focused
+    /// (`ProcessUtils.focusedApplicationPID`). The second is there because an application with no
+    /// window on screen holds the keyboard without appearing in the list. Measured 2026-10-02 in
+    /// Korean: with Finder activated and no Finder window open, which is what a click on the
+    /// desktop does, Logic's Go To Position dialog dropped from layer 8 to 0 and stayed the first
+    /// window at either level, so the window rule alone said Logic, while `lsappinfo front` and
+    /// the system-wide AXFocusedApplication both named Finder. With a Finder window open, that
+    /// window came first and the window rule said Finder too.
+    ///
+    /// A focused application that was not read leaves the window reading to answer alone, which is
+    /// what this answered before the second reading existed; it is never read as "not Logic".
+    /// This one answers nil, rather than false, when there is no keyboard window or its owner
+    /// cannot be read: an Escape must not be sent on the strength of a reading that was not taken.
+    static func keyboardOwnerIsLogic(
+        _ windows: [[String: Any]], logicPID: pid_t, focusedApplicationPID: pid_t?
+    ) -> Bool? {
         guard let window = keyboardWindow(windows),
               let owner = ProcessUtils.pidValue(from: window[kCGWindowOwnerPID as String]) else { return nil }
-        return owner == logicPID
+        guard owner == logicPID else { return false }
+        if let focusedApplicationPID, focusedApplicationPID != logicPID { return false }
+        return true
     }
 
     /// Logic-owned windows that were not on screen in `baseline`, the menu layer excluded. The
