@@ -462,7 +462,19 @@ actor StatePoller {
         if backgroundCycleYields(yieldingToTextEditing) { return await finishPoll(cacheKeys) }
         let tracksReady: PollOutcome
         let tracksVersion = await cache.currentVersion(for: .tracks)
-        if let tracks = await axChannel.readTrackStates() {
+        // #1079: the track walk reads AXHelp of every header's elements, and that read ends an
+        // inline rename (measured 2026-10-02). The background cycle's walk asks before each header.
+        let trackRead: (states: [TrackState]?, yielded: Bool)
+        if yieldingToTextEditing {
+            let focus = runtime.keyboardFocus
+            trackRead = await axChannel.readTrackStates(stoppingWhen: {
+                Self.backgroundTickYields(to: focus())
+            })
+        } else {
+            trackRead = (await axChannel.readTrackStates(), false)
+        }
+        if trackRead.yielded { return await finishPoll(cacheKeys) }
+        if let tracks = trackRead.states {
             // The read succeeded, so tracks are readable regardless of what the write does. The
             // write outcome is a separate answer and has to come from the CAS, not be assumed:
             // this fast path bypasses `poll`, so it is the one place the old `_ =` discard could

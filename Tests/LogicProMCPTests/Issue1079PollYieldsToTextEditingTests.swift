@@ -18,7 +18,7 @@ struct Issue1079PollYieldsToTextEditingTests {
     // MARK: - Fixtures
 
     enum Read: CaseIterable, CustomStringConvertible {
-        case focus, window, blockingDialog, project, tracks, transport, mixer, markers, documentPath
+        case focus, window, blockingDialog, project, tracks, trackHeader, transport, mixer, markers, documentPath
 
         var description: String {
             switch self {
@@ -27,6 +27,7 @@ struct Issue1079PollYieldsToTextEditingTests {
             case .blockingDialog: "blocking-dialog sample"
             case .project: "project.get_info"
             case .tracks: "track read"
+            case .trackHeader: "one header of the stoppable track read"
             case .transport: "transport.get_state"
             case .mixer: "mixer.get_state"
             case .markers: "nav.get_markers"
@@ -69,8 +70,23 @@ struct Issue1079PollYieldsToTextEditingTests {
     }()
 
     /// An AX channel whose every read the poll cycle makes is counted.
-    private static func countingChannel(_ log: ReadLog) -> AccessibilityChannel {
-        AccessibilityChannel(runtime: .init(
+    /// `headers`, when set, makes the background poll's track read a walk of that many headers
+    /// that asks its `stop` before each one, as the production walk does; each header read is
+    /// counted as `.trackHeader`.
+    private static func countingChannel(_ log: ReadLog, headers: Int? = nil) -> AccessibilityChannel {
+        var stoppable: (@Sendable (@escaping @Sendable () -> Bool) -> (states: [TrackState]?, yielded: Bool))?
+        if let count = headers {
+            stoppable = { @Sendable (stop: @escaping @Sendable () -> Bool) -> (states: [TrackState]?, yielded: Bool) in
+                var states: [TrackState] = []
+                for index in 0..<count {
+                    if stop() { return (nil, true) }
+                    log.bump(.trackHeader)
+                    states.append(TrackState(id: index, name: "Track \(index)", type: .audio))
+                }
+                return (states, false)
+            }
+        }
+        return AccessibilityChannel(runtime: .init(
             isTrusted: { true },
             isLogicProRunning: { true },
             appRoot: { nil },
@@ -80,6 +96,7 @@ struct Issue1079PollYieldsToTextEditingTests {
             setCycleRange: { _ in .error("not under test") },
             tracks: { log.bump(.tracks); return .success("[]") },
             trackStates: { log.bump(.tracks); return [TrackState(id: 0, name: "Vox", type: .audio)] },
+            trackStatesStopping: stoppable,
             selectedTrack: { .error("not under test") },
             selectTrack: { _ in .error("not under test") },
             setTrackToggle: { _, _ in .error("not under test") },
@@ -94,6 +111,7 @@ struct Issue1079PollYieldsToTextEditingTests {
 
     private static func makePoller(
         log: ReadLog,
+        headers: Int? = nil,
         focus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus,
         mutationInFlight: Bool = false,
         sleep: @escaping @Sendable (UInt64) async throws -> Void = { _ in throw CancellationError() }
@@ -113,7 +131,7 @@ struct Issue1079PollYieldsToTextEditingTests {
             keyboardFocus: { log.bump(.focus); return focus() }
         )
         runtime.mutationInFlight = { mutationInFlight }
-        return StatePoller(axChannel: countingChannel(log), cache: StateCache(), runtime: runtime)
+        return StatePoller(axChannel: countingChannel(log, headers: headers), cache: StateCache(), runtime: runtime)
     }
 
     /// Runs the background loop for exactly `ticks` iterations and returns what it read. The loop
@@ -122,11 +140,12 @@ struct Issue1079PollYieldsToTextEditingTests {
     private static func runBackgroundLoop(
         ticks: Int,
         mutationInFlight: Bool = false,
+        headers: Int? = nil,
         focus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus
     ) async -> ReadLog {
         let log = ReadLog()
         let (loopEnded, endLoop) = AsyncStream<Void>.makeStream()
-        let poller = makePoller(log: log, focus: focus, mutationInFlight: mutationInFlight) { _ in
+        let poller = makePoller(log: log, headers: headers, focus: focus, mutationInFlight: mutationInFlight) { _ in
             if log.nextSleep() >= ticks {
                 endLoop.finish()
                 throw CancellationError()
@@ -233,6 +252,73 @@ struct Issue1079PollYieldsToTextEditingTests {
         for read in c.skipped {
             #expect(log.count(read) == 0, "\(read) ran after editing began")
         }
+    }
+
+    /// The track walk itself. Measured 2026-10-02: reading AXHelp of a track header's elements, as
+    /// `inferTrackType` does for every header, ended an inline rename at once, and in the
+    /// ten-language run two candidate samples lost the field to a walk already under way. With
+    /// three headers, the focus is read at the gate (1), before the project read (2), the
+    /// document path (3) and the track read (4), then before each header (5, 6, 7), then before
+    /// transport (8). Editing that begins at reading 6 lets header 1 be read and stops the walk
+    /// before header 2: nothing after it runs. Editing that never begins reads all three headers
+    /// and the rest of the cycle, which is the control.
+    ///
+    /// Mutations this kills: the walk not asking before each header (the stoppable read never
+    /// called, or its `stop` ignored), and the poller carrying on after a walk that yielded, which
+    /// reaches the fallback track read.
+    @Test("a background track walk stops at the next header once editing begins")
+    func aBackgroundTrackWalkStopsAtTheNextHeader() async {
+        let midWalk = Counter()
+        let stopped = await Self.runBackgroundLoop(ticks: 1, headers: 3) {
+            midWalk.next() >= 6
+                ? .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false)
+                : .notTextEditing
+        }
+        #expect(stopped.count(.trackHeader) == 1, "header reads \(stopped.count(.trackHeader)), not 1")
+        // A walk that yielded must not be followed by the fallback track read, `track.get_tracks`,
+        // which walks every header again and would read the help the walk stopped short of.
+        #expect(stopped.count(.tracks) == 0, "the fallback track read ran after the walk yielded")
+        for read in [Read.transport, .mixer, .markers] {
+            #expect(stopped.count(read) == 0, "\(read) ran after the walk yielded")
+        }
+
+        let never = await Self.runBackgroundLoop(ticks: 1, headers: 3) { .notTextEditing }
+        #expect(never.count(.trackHeader) == 3)
+        for read in [Read.transport, .mixer, .markers] {
+            #expect(never.count(read) == 1, "\(read) ran \(never.count(read)) times in the control")
+        }
+    }
+
+    /// The production walk, over a fake window with three track headers. Mutation this kills:
+    /// `defaultGetTrackStates(runtime:stoppingWhen:)` not asking before each header.
+    @Test("the production track walk asks before each header and stops when told")
+    func theProductionTrackWalkAsksBeforeEachHeader() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(1)
+        let window = builder.element(2)
+        let list = builder.element(3)
+        let headers = [builder.element(4), builder.element(5), builder.element(6)]
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setChildren(window, [list])
+        builder.setAttribute(list, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(list, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setChildren(list, headers)
+        for header in headers {
+            builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        }
+        let runtime = builder.makeLogicRuntime(appElement: app)
+
+        let asked = Counter()
+        let stopped = AccessibilityChannel.defaultGetTrackStates(runtime: runtime, stoppingWhen: { asked.next() >= 2 })
+        #expect(stopped.yielded)
+        #expect(stopped.states == nil)
+        #expect(asked.next() == 3, "asked before header 1 and header 2, then stopped")
+
+        let all = Counter()
+        let read = AccessibilityChannel.defaultGetTrackStates(runtime: runtime, stoppingWhen: { _ = all.next(); return false })
+        #expect(!read.yielded)
+        #expect(read.states?.count == 3)
+        #expect(all.next() == 4, "asked once before each of the three headers")
     }
 
     @Test("an explicit refreshNow runs while a text field holds the focus, and does not ask")

@@ -15,10 +15,23 @@ extension AccessibilityChannel {
     }
 
     static func defaultGetTrackStates(runtime: AXLogicProElements.Runtime = .production) -> [TrackState] {
+        defaultGetTrackStates(runtime: runtime, stoppingWhen: { false }).states ?? []
+    }
+
+    /// #1079: the same walk, asking `stop` before each header. Once it answers true the walk ends
+    /// there: `yielded` is true and no states are returned, since a partial list would read as a
+    /// project with fewer tracks. One header's reads already under way run to their end.
+    static func defaultGetTrackStates(
+        runtime: AXLogicProElements.Runtime = .production, stoppingWhen stop: () -> Bool
+    ) -> (states: [TrackState]?, yielded: Bool) {
         let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
-        return headers.enumerated().map { index, header in
-            AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
+        var states: [TrackState] = []
+        states.reserveCapacity(headers.count)
+        for (index, header) in headers.enumerated() {
+            if stop() { return (nil, true) }
+            states.append(AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax))
         }
+        return (states, false)
     }
 
     // MARK: - Verified track sort (#448)
