@@ -488,6 +488,35 @@ for _form in ("[(step := t) for t in (0,)]", "[lambda y=(step := t): y for t in 
     case(f"a walrus in {_form} binds the measured name, and is reported once",
          [f[1] for f in _found] == ["read"], f"found={_found!r}")
 
+# Review of 1adc7aa1: a nested body that declares the measured name `nonlocal` (or, at module level,
+# `global`) and assigns it rebinds it, and is reported once; a `nonlocal` that resolves to an
+# intermediate function, and a nested body's plain local, leave the comparison exempt.
+for _label, _lines in (
+        ("a class body's nonlocal", ["class Inner:", "    nonlocal step", '    step = step["automation_title"]']),
+        ("a nested function's nonlocal", ["def inner():", "    nonlocal step", '    step = step["automation_title"]',
+                                          "inner()"]),
+        ("a nonlocal two functions down", ["def middle():", "    def inner():", "        nonlocal step",
+                                           '        step = step["automation_title"]', "    inner()", "middle()"])):
+    _body = _TAKE + "".join(f"    {line}\n" for line in _lines) + '    return "read" in step\n'
+    ast.parse(_body)
+    _found = scan_verify("runner.py", _body, _READ)
+    case(f"`\"read\" in step` after {_label} write is reported once", [f[1] for f in _found] == ["read"],
+         f"found={_found!r}")
+_body = _TAKE + ("    def middle():\n        step = 1\n        def inner():\n            nonlocal step\n"
+                 "            step = 2\n        inner()\n    middle()\n") + '    return "read" in step\n'
+_found = scan_verify("runner.py", _body, _READ)
+case("a nonlocal that resolves to an intermediate function leaves the measured name exempt", _found == [],
+     f"found={_found!r}")
+_FRONT = "front = osa('tell application \"System Events\" to return name of first process whose frontmost is true')\n"
+_found = scan(_FRONT + "def f():\n    global front\n    front = title\n" + 'v = front == "Logic Pro"\n',
+              {"logic pro": "applicationMenuBarItem"})
+case("a module-level entry after a nested function's global write is reported once",
+     [f[1] for f in _found] == ["Logic Pro"], f"found={_found!r}")
+_found = scan(_FRONT + "def f():\n    front = title\n" + 'v = front == "Logic Pro"\n',
+              {"logic pro": "applicationMenuBarItem"})
+case("a nested function's own local of the same name leaves the module-level entry exempt", _found == [],
+     f"found={_found!r}")
+
 # A comparison in a header is read where the header runs. A decorator at module level, where `step` is
 # bound by nothing, is reported even though the function it decorates is the measured one; one inside
 # the measured function reads its parameter, even when the decorated function has a `step` of its own.
@@ -578,6 +607,9 @@ with tempfile.TemporaryDirectory() as _vcopy:
             ("escaped", 'def _escaped(step):\n    return "re\\x61d" in (step["automation_title"])\n'),
             ("nested-default", 'def _take(ctx: dict, step: dict) -> str:\n'
                                '    def inner(x=(step := step["automation_title"])):\n        pass\n'
+                               '    return "read" in step\n'),
+            ("class-nonlocal", 'def _take(ctx: dict, step: dict) -> str:\n    class Inner:\n'
+                               '        nonlocal step\n        step = step["automation_title"]\n'
                                '    return "read" in step\n')):
         with open(os.path.join(_copy, "runner.py"), "w", encoding="utf-8") as _h:
             _h.write(_runner + "\n\n" + _function)
@@ -589,7 +621,7 @@ case("a copy of the real Scripts/verify passes the entry point",
 case("and the same copy with a title read beside `step` fails it, naming runner.py",
      _dirty.returncode == 1 and "runner.py" in _dirty.stdout and "'read'" in _dirty.stdout,
      (_dirty.stdout + _dirty.stderr).strip()[:200])
-for _label in ("aliased", "escaped", "nested-default"):
+for _label in ("aliased", "escaped", "nested-default", "class-nonlocal"):
     _run = _witness_runs[_label]
     case(f"and with the review's {_label} witness appended it fails, naming runner.py",
          _run.returncode == 1 and "runner.py" in _run.stdout and "'read'" in _run.stdout,

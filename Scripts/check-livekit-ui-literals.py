@@ -68,6 +68,7 @@ import glob
 import importlib.util
 import os
 import re
+import symtable
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -414,6 +415,59 @@ def _runs_around(scope, child, grandchild):
     return False
 
 
+#: The compiler's symbol table of the file being scanned, set by `_scan_root` before it reads the
+#: file's comparisons, so `_declared_writes` reads `nonlocal` and `global` the way Python does.
+_SYMBOLS = None
+
+
+def _table_for(root, scope):
+    """The symbol table of the module, `def` or `class` statement `scope`, or None."""
+    if isinstance(scope, ast.Module):
+        return root
+    stack = list(root.get_children())
+    while stack:
+        table = stack.pop()
+        if table.get_name() == getattr(scope, "name", None) and table.get_lineno() == scope.lineno \
+                and table.get_type() in ("function", "class"):
+            return table
+        stack.extend(table.get_children())
+    return None
+
+
+def _declared_writes(scope, name):
+    """Lines of each nested `def` or `class` body that assigns `name` in `scope` through a
+    declaration: `nonlocal` resolving to `scope`, or `global` when `scope` is the module. Review of
+    1adc7aa1 (#1078): a class body declaring `nonlocal step` and assigning it rebinds the measured
+    parameter, and the binding walk, which does not enter nested bodies, never saw it. A `nonlocal`
+    resolves to the nearest enclosing function that binds the name itself, so a write meant for an
+    intermediate function is not counted here."""
+    if _SYMBOLS is None or not isinstance(scope, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef)):
+        return []
+    target = _table_for(_SYMBOLS, scope)
+    if target is None:
+        return []
+    module = isinstance(scope, ast.Module)
+    lines = []
+
+    def visit(table, between):
+        for child in table.get_children():
+            if child.get_type() not in ("function", "class"):
+                continue
+            symbol = child.lookup(name) if name in child.get_identifiers() else None
+            if symbol is not None and symbol.is_assigned():
+                if module and symbol.is_declared_global():
+                    lines.append(("other", child.get_lineno()))
+                elif not module and symbol.is_nonlocal():
+                    owner = next((t for t in reversed(between) if name in t.get_identifiers()
+                                  and t.lookup(name).is_local()), target)
+                    if owner is target:
+                        lines.append(("other", child.get_lineno()))
+            visit(child, between + ([child] if child.get_type() == "function" else []))
+
+    visit(target, [])
+    return lines
+
+
 def _bindings(scope, name):
     """Every binding of `name` that `scope` itself makes, as keys. One no entry can be written as --
     `+=`, `del`, `with`, `except`, an import, a walrus, a `match` capture, a nested `def` or `class`,
@@ -471,7 +525,7 @@ def _bindings(scope, name):
                 (_MATCH_REST and isinstance(node, _MATCH_REST) and node.rest == name):
             keys.append(("other", node.lineno))
         stack.extend(ast.iter_child_nodes(node))
-    return keys
+    return keys + _declared_writes(scope, name)
 
 
 def _resolved(node, name, parents):
@@ -669,6 +723,14 @@ def _scan_root(root, label, key, known_canonicals, swift_recursive=False):
         except SyntaxError:
             print(f"  {site}: does not parse — not scanned")
             continue
+        global _SYMBOLS
+        # The compiler can refuse what the parser accepts -- Python 3.14 refuses a walrus in an
+        # annotation -- and such a file cannot run either. It is still scanned; only the
+        # declaration check, which needs the symbol table, is left out.
+        try:
+            _SYMBOLS = symtable.symtable(source, path, "exec")
+        except SyntaxError:
+            _SYMBOLS = None
         skip = _docstring_nodes(tree)
         # Pass 1: AppleScript, which lives inside string constants.
         for node in ast.walk(tree):
