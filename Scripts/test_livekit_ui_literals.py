@@ -470,6 +470,24 @@ _found = scan_verify("runner.py", _TAKE + "    def inner():\n        step = titl
                      '    return "read" in step\n', _READ)
 case("a binding in a nested function's body is that function's own, and the comparison stays exempt",
      _found == [], f"found={_found!r}")
+# The review of a1b27a6f: a walrus inside a lambda or def body inside a comprehension binds that
+# function's own local, not the measured name, so it stays exempt in every comprehension form; a
+# walrus in the comprehension itself, or in a lambda default inside it, binds the measured name.
+for _form in ("[lambda: (step := \"title\") for _ in (0,)]", "{lambda: (step := \"title\") for _ in (0,)}",
+              "{0: lambda: (step := \"title\") for _ in (0,)}", "(lambda: (step := \"title\") for _ in (0,))",
+              "[(lambda: [(step := \"title\") for _ in (0,)]) for _ in (0,)]"):
+    _body = _TAKE + f"    def inner(x={_form}):\n        pass\n" + '    return "read" in step\n'
+    ast.parse(_body)
+    _found = scan_verify("runner.py", _body, _READ)
+    case(f"a walrus inside a lambda body in {_form[:14]}... is the lambda's own, and the comparison stays exempt",
+         _found == [], f"found={_found!r}")
+for _form in ("[(step := t) for t in (0,)]", "[lambda y=(step := t): y for t in (0,)]"):
+    _body = _TAKE + f"    def inner(x={_form}):\n        pass\n" + '    return "read" in step\n'
+    ast.parse(_body)
+    _found = scan_verify("runner.py", _body, _READ)
+    case(f"a walrus in {_form} binds the measured name, and is reported once",
+         [f[1] for f in _found] == ["read"], f"found={_found!r}")
+
 # A comparison in a header is read where the header runs. A decorator at module level, where `step` is
 # bound by nothing, is reported even though the function it decorates is the measured one; one inside
 # the measured function reads its parameter, even when the decorated function has a `step` of its own.

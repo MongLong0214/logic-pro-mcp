@@ -383,6 +383,24 @@ def _evaluated_around(node):
     return []
 
 
+def _comprehension_walrus_lines(node, name):
+    """Lines of each walrus to `name` that a comprehension makes in the scope around it. A walrus in
+    any comprehension binds outside it, so nested comprehensions are entered; a `def`, `lambda` or
+    `class` inside it is its own scope, so only what `_evaluated_around` says runs here is entered.
+    The review of a1b27a6f found an unrestricted walk counting `lambda: (step := "title")` -- the
+    lambda's own local -- as a second binding of the measured name."""
+    lines, stack = [], [node]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            stack.extend(_evaluated_around(current))
+            continue
+        if isinstance(current, ast.NamedExpr) and current.target.id == name:
+            lines.append(current.lineno)
+        stack.extend(ast.iter_child_nodes(current))
+    return lines
+
+
 def _runs_around(scope, child, grandchild):
     """Whether `child` of `scope` (reached through `grandchild`) is evaluated in the scope around
     `scope` rather than in it: a header part of a `def`, `lambda` or `class`, or a comprehension's
@@ -430,8 +448,7 @@ def _bindings(scope, name):
             continue
         if isinstance(node, _COMPREHENSIONS):
             # Its own targets bind inside it; a walrus in it binds here.
-            keys += [("other", n.lineno) for n in ast.walk(node)
-                     if isinstance(n, ast.NamedExpr) and n.target.id == name]
+            keys += [("other", line) for line in _comprehension_walrus_lines(node, name)]
             continue
         if isinstance(node, (ast.For, ast.AsyncFor)) and name in _stored(node.target):
             keys.append(("for", ast.dump(node.target), ast.dump(node.iter)))
