@@ -1,0 +1,230 @@
+{
+  "schema": 3,
+  "id": "2026-10-01-ko-KR-904-runner-acknowledges-the-write-alert-and-parks-the-pointer",
+  "date": "2026-10-01",
+  "subject": "the #904 locale campaign runner: the one-button warning Logic raises after set_automation Write, and the pointer before the runner's two shots",
+  "question": "Does the runner at 16eaf99e press the one-button warning after set_automation Write in every language, park the pointer before both Korean shots, and finish the ten-language sweep?",
+  "verdict": "works",
+  "surface": "system.midi",
+  "issues": [
+    904,
+    1077
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_904_labelsets_in_every_locale.py <worktree> <full-40-char-head>",
+    "expected": "acknowledged_alerts holds one press per language, each after set_automation:write; two pointer parks are noted before the two shots; no incomplete language; exit 0",
+    "cost": "needs LPM_LOCALE_FIXTURE naming the campaign fixture, LPM_LIVE_LOCK naming a held lock, LPM_EVIDENCE_ROOT an absolute directory and LPM_BINARY a debug binary built from the head; it holds Logic through ten language switches, each a relaunch"
+  },
+  "depends": [
+    "Scripts/livekit/live_904_labelsets_in_every_locale.py:acknowledge_alert",
+    "Scripts/livekit/live_904_labelsets_in_every_locale.py:park_pointer",
+    "Scripts/livekit/live_904_labelsets_in_every_locale.py:pick_park_point"
+  ],
+  "evidence": [
+    "evidence/2026-10-01-904-runner-r10.json"
+  ],
+  "method": "One run of Scripts/livekit/live_904_labelsets_in_every_locale.py at 16eaf99e, from a clean worktree, with the debug binary built from it, over the ten languages Logic ships, on 2026-10-01. This record reads the run's summary and its evidence file; the evidence file is copied beside it.",
+  "observations": [
+    {
+      "locale": "de-DE",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+        "length": 2
+      },
+      "text": {
+        "sha256": "4dfce49cbc7df808dcb04e94b72395715f64aa5a28f56bdbc8b998277413434f",
+        "length": 86
+      }
+    },
+    {
+      "locale": "en-US",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+        "length": 2
+      },
+      "text": {
+        "sha256": "6a7d6a38f88d4ad78c2a38fe48b747002df0e8d1a321aa15c460127a25b2842f",
+        "length": 8
+      }
+    },
+    {
+      "locale": "es-ES",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "640d6761c178f2ad81e2a8cdb44c589bdc879396563118f96ebba2de686efefa",
+        "length": 7
+      },
+      "text": {
+        "sha256": "8bed4a241a91096918fd7afaccc5b0a77f86f1ae1b9ca15daafbc9c2cdcc0a2f",
+        "length": 12
+      }
+    },
+    {
+      "locale": "fr-FR",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+        "length": 2
+      },
+      "text": {
+        "sha256": "9a0ac8f24400ccaa19c8c77475ac3cf907826af191b3a46ef4cffb8468441b93",
+        "length": 11
+      }
+    },
+    {
+      "locale": "it-IT",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+        "length": 2
+      },
+      "text": {
+        "sha256": "ccb28847f2b38c7b88da8848cbfb5bd39518be347bed3636def61ba99dba8ce2",
+        "length": 6
+      }
+    },
+    {
+      "locale": "ja-JP",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+        "length": 2
+      },
+      "text": {
+        "sha256": "c4f9380d202fdfe326d2dd6be75777023464d17fa7f949fa25dea68638cf2b06",
+        "length": 3
+      }
+    },
+    {
+      "locale": "ko-KR",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "1aacb54c499242964cc07e606bd5b1d628a56b6dd22267ae14202fbd35884fc4",
+        "length": 2
+      },
+      "text": {
+        "sha256": "136e92751826497796281c5734d3d0b9f1687688cbb6ad8252ec8a5b835bf03f",
+        "length": 3
+      }
+    },
+    {
+      "locale": "pt-BR",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+        "length": 2
+      },
+      "text": {
+        "sha256": "d1113d1a723750e135b102f64cef94ffbac4e120e1e93765e750f1031b858241",
+        "length": 8
+      }
+    },
+    {
+      "locale": "zh-CN",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "f867f34178594f891eb70a4260f62b1d9289cfa60394f9fee1cbbe4a8b4bf436",
+        "length": 1
+      },
+      "text": {
+        "sha256": "7cde7c38a534d6a5c93e0a09c9b57e05e4f0556fdd3792e997e85a3a40c15a34",
+        "length": 3
+      }
+    },
+    {
+      "locale": "zh-TW",
+      "call": "set_automation:write",
+      "pressed": true,
+      "button": {
+        "sha256": "f867f34178594f891eb70a4260f62b1d9289cfa60394f9fee1cbbe4a8b4bf436",
+        "length": 1
+      },
+      "text": {
+        "sha256": "7cde7c38a534d6a5c93e0a09c9b57e05e4f0556fdd3792e997e85a3a40c15a34",
+        "length": 3
+      }
+    },
+    {
+      "locale": "ko-KR",
+      "shot": "before",
+      "pointer_parked": true,
+      "from": [
+        -1530.43359375,
+        1139.85546875
+      ],
+      "to": [
+        2460.0,
+        715.0
+      ],
+      "read_back": [
+        2460.0,
+        715.0
+      ]
+    },
+    {
+      "locale": "ko-KR",
+      "shot": "after",
+      "pointer_parked": true,
+      "from": [
+        831.0,
+        571.0
+      ],
+      "to": [
+        2460.0,
+        715.0
+      ],
+      "read_back": [
+        2460.0,
+        715.0
+      ]
+    },
+    {
+      "run": "r10",
+      "languages": 10,
+      "rows": 210,
+      "incomplete_locales": 0,
+      "unnamed_errors": 0,
+      "locale_failures": 0,
+      "acknowledged_alerts": 10,
+      "checks": 11,
+      "checks_passed": 11,
+      "visual_passed": true,
+      "korean_restored": true,
+      "exit_code": 0,
+      "binary_sha256": "2648838ad40cf977c16c53400d2cc3568cc775c28b257798c7ebacfa72b23208",
+      "built_from": "16eaf99e22687ca598b6309b7f8c9f302e59374b",
+      "worktree_clean": true,
+      "artifact_older_than_sources": false
+    }
+  ],
+  "conclusion": "In each of the 10 languages the runner pressed one one-button warning after set_automation:write, so acknowledged_alerts holds 10 presses. The pointer was parked before both Korean shots and read back where it was sent. The sweep finished with 210 rows, no incomplete language and no locale failure, 11 of 11 checks passed with the visual among them, Logic was restored to Korean, and the run exited 0.",
+  "limits": [
+    "One run, on one fixture and one Logic installation; the warning came once per language, after the campaign's one set_automation write.",
+    "Every press here met the one-button and default-button rules, and no other dialog appeared, so the runner refusing a dialog with more buttons was not exercised on Logic.",
+    "The pointer was parked only before the two Korean shots, the only shots the sweep takes.",
+    "The warning's text and button name are kept as digests and lengths; the run's summary file, which holds them in full, stays in local evidence."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states what the #904 runner did on Logic's screen -- whether a one-button dialog was pressed after set_automation write, where the pointer was parked, and whether the sweep finished -- not a string Logic ships. The warning's text and button name are kept only as digests."
+  }
+}

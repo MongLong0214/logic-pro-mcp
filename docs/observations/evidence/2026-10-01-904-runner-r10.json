@@ -1,0 +1,5181 @@
+{
+ "name": "live_904_labelsets_in_every_locale",
+ "head": "16eaf99e22687ca598b6309b7f8c9f302e59374b",
+ "artifact": {
+  "path": "/Users/isaac/lpm-evidence/904/bin-16eaf99e-r10/LogicProMCP",
+  "sha256": "2648838ad40cf977c16c53400d2cc3568cc775c28b257798c7ebacfa72b23208",
+  "built_from": "16eaf99e22687ca598b6309b7f8c9f302e59374b",
+  "worktree_clean": true,
+  "built_from_is_measured": false,
+  "artifact_older_than_sources": false
+ },
+ "records": [
+  {
+   "kind": "declaration",
+   "surface": "ui"
+  },
+  {
+   "kind": "observation",
+   "tag": "904/korean-baseline",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \ud2b8\ub799",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d",
+     "lpm-locale-campaign - \ud2b8\ub799"
+    ]
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "located_band/matched-a-localized-label",
+   "payload": {
+    "requested": "Tracks header",
+    "matched": "\ud2b8\ub799 \ud5e4\ub354"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "located_band/candidates",
+   "payload": {
+    "selector": [
+     "Tracks header"
+    ],
+    "subject": "\ud2b8\ub799 \ud5e4\ub354",
+    "candidates": 1,
+    "counted": true
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/pointer-parked-before-shot",
+   "payload": {
+    "from": [
+     -1530.43359375,
+     1139.85546875
+    ],
+    "to": [
+     2460.0,
+     715.0
+    ],
+    "after": [
+     2460.0,
+     715.0
+    ],
+    "parked": true,
+    "why": null
+   }
+  },
+  {
+   "kind": "capture",
+   "tag": "904/korean-fixture-before",
+   "file": "/Users/isaac/lpm-evidence/904/live-16eaf99e-r10/16eaf99e22687ca598b6309b7f8c9f302e59374b/live_904_labelsets_in_every_locale__904_korean-fixture-before.png",
+   "window": {
+    "id": 1094,
+    "title": "lpm-locale-campaign - \ud2b8\ub799",
+    "x": 0,
+    "y": 30,
+    "w": 1920,
+    "h": 1050
+   },
+   "display": {
+    "display": 0,
+    "bounds": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "wholly_within": true
+   },
+   "hash": "62890d0058eef3d726516866f181314dee733084130c4f7fb23b3285b9bd8c1f",
+   "region_hash": "456c5be204340975495a78686ea7bf043abf5b4bffa259da51d411b3db0c7915",
+   "frames": 2,
+   "settled": true
+  },
+  {
+   "kind": "observation",
+   "tag": "904/de/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Spuren",
+    "language_setting": [
+     "de"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Marker-Liste",
+     "lpm-locale-campaign - Spuren"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "Audio 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/en/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Tracks",
+    "language_setting": [
+     "en"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Marker List",
+     "lpm-locale-campaign - Tracks"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "Audio 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/es/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Pistas",
+    "language_setting": [
+     "es"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Lista marcadores",
+     "lpm-locale-campaign - Pistas"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "Audio 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/fr/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Pistes",
+    "language_setting": [
+     "fr"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Liste des marqueurs",
+     "lpm-locale-campaign - Pistes"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "Audio 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/it/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Tracce",
+    "language_setting": [
+     "it"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Elenco marcatori",
+     "lpm-locale-campaign - Tracce"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "Audio 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/ja/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \u30c8\u30e9\u30c3\u30af",
+    "language_setting": [
+     "ja"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \u30de\u30fc\u30ab\u30fc\u30ea\u30b9\u30c8",
+     "lpm-locale-campaign - \u30c8\u30e9\u30c3\u30af"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "\u30aa\u30fc\u30c7\u30a3\u30aa 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/ko/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \ud2b8\ub799",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d",
+     "lpm-locale-campaign - \ud2b8\ub799"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "\uc624\ub514\uc624 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/pt/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Pistas",
+    "language_setting": [
+     "pt-BR"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Lista de Marcadores",
+     "lpm-locale-campaign - Pistas"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "\u00c1udio 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/zh_CN/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \u8f68\u9053",
+    "language_setting": [
+     "zh-CN"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \u6807\u8bb0\u5217\u8868",
+     "lpm-locale-campaign - \u8f68\u9053"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "\u97f3\u9891 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "param_control_not_found",
+    "hint": null,
+    "verified": false,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "904/zh_TW/language",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \u97f3\u8ecc",
+    "language_setting": [
+     "zh-TW"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \u6a19\u8a18\u5217\u8868",
+     "lpm-locale-campaign - \u97f3\u8ecc"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://project/info",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_instrument",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_audio",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "create_external_midi",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "insert_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "Compressor",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx",
+    "expected_name": "\u97f3\u8a0a 2"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "get_inventory",
+   "params": {
+    "track": 2
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_plugins",
+   "command": "set_param_verified",
+   "params": {
+    "track": 2,
+    "insert": 0,
+    "plugin": "compressor",
+    "param": "limiter_on",
+    "value": "1",
+    "unit": "boolean",
+    "mode": "duplicate_applyback",
+    "project_expected_path": "/Users/isaac/lpm-evidence/fixtures/lpm-locale-campaign.logicx"
+   },
+   "response": {
+    "state": "C",
+    "success": false,
+    "error": "param_control_not_found",
+    "hint": null,
+    "verified": false,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "touch"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 2,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_project",
+   "command": "get_regions",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "restoration",
+   "tag": "904/Logic-language-restored-to-Korean",
+   "restored": true,
+   "detail": "{'switched': True, 'arrange_window': 'lpm-locale-campaign - \ud2b8\ub799', 'language_setting': ['ko'], 'window_names': ['lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d', 'lpm-locale-campaign - \ud2b8\ub799'], 'language_setting_after_restore': ['ko'], 'window_names_after_restore': ['lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d', 'lpm-locale-campaign - \ud2b8\ub799'], 'ok': True}"
+  },
+  {
+   "kind": "observation",
+   "tag": "904/pointer-parked-before-after-shot",
+   "payload": {
+    "from": [
+     831.0,
+     571.0
+    ],
+    "to": [
+     2460.0,
+     715.0
+    ],
+    "after": [
+     2460.0,
+     715.0
+    ],
+    "parked": true,
+    "why": null
+   }
+  },
+  {
+   "kind": "capture",
+   "tag": "904/korean-fixture-after",
+   "file": "/Users/isaac/lpm-evidence/904/live-16eaf99e-r10/16eaf99e22687ca598b6309b7f8c9f302e59374b/live_904_labelsets_in_every_locale__904_korean-fixture-after.png",
+   "window": {
+    "id": 1432,
+    "title": "lpm-locale-campaign - \ud2b8\ub799",
+    "x": 0,
+    "y": 30,
+    "w": 1920,
+    "h": 1050
+   },
+   "display": {
+    "display": 0,
+    "bounds": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "wholly_within": true
+   },
+   "hash": "62890d0058eef3d726516866f181314dee733084130c4f7fb23b3285b9bd8c1f",
+   "region_hash": "456c5be204340975495a78686ea7bf043abf5b4bffa259da51d411b3db0c7915",
+   "frames": 2,
+   "settled": true
+  },
+  {
+   "kind": "visual",
+   "tag": "904/korean-fixture-rail-after-locale-sweep",
+   "region": [
+    603,
+    132,
+    325,
+    918
+   ],
+   "subject": "\ud2b8\ub799 \ud5e4\ub354",
+   "before": "/Users/isaac/lpm-evidence/904/live-16eaf99e-r10/16eaf99e22687ca598b6309b7f8c9f302e59374b/live_904_labelsets_in_every_locale__904_korean-fixture-before.png",
+   "after": "/Users/isaac/lpm-evidence/904/live-16eaf99e-r10/16eaf99e22687ca598b6309b7f8c9f302e59374b/live_904_labelsets_in_every_locale__904_korean-fixture-after.png",
+   "expected": "region does not change \u2014 every language reopened the fixture through a quit that discards, so the tracks each one created and deleted were never saved",
+   "observed": "before 456c5be204340975 after 456c5be204340975 changed=False",
+   "passed": true,
+   "region_requested": [
+    603,
+    132,
+    325,
+    1335
+   ]
+  },
+  {
+   "kind": "recording",
+   "file": "/Users/isaac/lpm-evidence/904/live-16eaf99e-r10/16eaf99e22687ca598b6309b7f8c9f302e59374b/live_904_labelsets_in_every_locale__run.mov",
+   "exists": true,
+   "bytes": 704288431
+  },
+  {
+   "kind": "check",
+   "tag": "904/de/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in de",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/en/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in en",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/es/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in es",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/fr/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in fr",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/it/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in it",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/ja/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in ja",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/ko/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in ko",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/pt/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in pt",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/zh_CN/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in zh_CN",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/zh_TW/every-set-has-a-row",
+   "passed": true,
+   "expected": "at least 15 rows and one for every set in zh_TW",
+   "observed": {
+    "rows": 21
+   },
+   "mutation": "drop the Limit rows from run_locale: every locale is short five sets",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "904/every-requested-language-has-a-named-row-for-every-set",
+   "passed": true,
+   "expected": "every requested language has a row for each of the 15 sets and no reply the classifier cannot name",
+   "observed": {
+    "requested": [
+     "de",
+     "en",
+     "es",
+     "fr",
+     "it",
+     "ja",
+     "ko",
+     "pt",
+     "zh_CN",
+     "zh_TW"
+    ],
+    "incomplete_locales": {},
+    "unnamed_errors": [],
+    "locale_failures": {}
+   },
+   "mutation": "return a State C with no error code from logic_tracks.create_audio: every language's create_audio row becomes an unnamed error",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "environment",
+   "screen_locked": false
+  }
+ ]
+}
