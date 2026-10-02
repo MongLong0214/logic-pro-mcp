@@ -13,7 +13,8 @@ Per language, on a fresh launch of the locale-campaign fixture, three conditions
 
 Each sample makes the arrange window key, gives the Tracks header rail the focus, presses Track >
 Rename Track (canon labels through System Events), and reads the focus every 0.1 s for OPEN_WAIT
-seconds until it is an AXTextField: that first sighting is what makes the rename OPEN. Only a press
+seconds until it is an AXTextField with a string value: that first sighting, and the field's frame,
+is what makes the rename OPEN. Kept means that same field, at that frame, still has the focus. Only a press
 after which no text field was ever seen is tried once more; a field that was seen and then left is
 a focus loss, never a retry. It then reads the focus every 0.5 s for HOLD seconds and types one key
 every TYPE_EVERY seconds at the HID tap, and records when the role stops being AXTextField and how
@@ -92,14 +93,24 @@ def post_key(code):
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, Quartz.CGEventCreateKeyboardEvent(source, code, down))
 
 
+def is_rename_field(reading):
+    """A text field with a string value and a frame: the rename field shows the track's name. A
+    focused text field with no string value was seen in the Korean run of 2026-10-02 after a slow
+    open, and Escape did not close it, so it was not the rename."""
+    return (reading.get("role") == "AXTextField" and reading.get("value_length") is not None
+            and reading.get("frame") is not None)
+
+
 def wait_for_field(helper):
-    """Seconds until the focus first read as an AXTextField, or None within OPEN_WAIT."""
+    """(seconds, frame) when the focus first read as the rename field, or (None, None) within
+    OPEN_WAIT."""
     started = time.monotonic()
     while time.monotonic() - started < OPEN_WAIT:
-        if focused_role(helper) == "AXTextField":
-            return round(time.monotonic() - started, 2)
+        reading = focus(helper)
+        if is_rename_field(reading):
+            return round(time.monotonic() - started, 2), reading["frame"]
         time.sleep(0.1)
-    return None
+    return None, None
 
 
 def open_rename(helper):
@@ -131,11 +142,11 @@ def sample(helper, condition, binary, n):
             row["why"] = "the keyboard is not Logic's"
             return row
         row["attempts"] = []
-        opened = None
+        opened, frame = None, None
         for _ in range(2):
             pressed = open_rename(helper)
-            opened = wait_for_field(helper)
-            row["attempts"].append({"pressed": pressed, "field_seen_after_s": opened})
+            opened, frame = wait_for_field(helper)
+            row["attempts"].append({"pressed": pressed, "field_seen_after_s": opened, "frame": frame})
             if opened is not None:
                 break
         if opened is None:
@@ -146,8 +157,10 @@ def sample(helper, condition, binary, n):
         while time.monotonic() - started < HOLD:
             reading = focus(helper)
             reads.append({"t": round(time.monotonic() - started, 2), "role": reading.get("role"),
-                          "value_length": reading.get("value_length")})
-            if reading.get("role") != "AXTextField":
+                          "value_length": reading.get("value_length"),
+                          "same_field": reading.get("frame") == frame})
+            # Kept means the same field: a text field elsewhere taking the focus is a loss too.
+            if not (is_rename_field(reading) and reading.get("frame") == frame):
                 lost = reads[-1]["t"]
                 break
             if time.monotonic() >= next_key:
@@ -155,7 +168,7 @@ def sample(helper, condition, binary, n):
                 typed += 1
                 next_key += TYPE_EVERY
             time.sleep(0.5)
-        lengths = [r["value_length"] for r in reads if r["role"] == "AXTextField" and r["value_length"] is not None]
+        lengths = [r["value_length"] for r in reads if r["same_field"] and r["value_length"] is not None]
         row.update(focus_lost_after_s=lost, typed=typed, reads=len(reads),
                    role_after=reads[-1]["role"] if reads else None,
                    value_grew_by=(lengths[-1] - lengths[0]) if len(lengths) >= 2 else None,

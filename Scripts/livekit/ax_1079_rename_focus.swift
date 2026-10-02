@@ -32,7 +32,18 @@ func focus() -> String {
     let role = attribute(element, kAXRoleAttribute) as? String ?? ""
     let subrole = attribute(element, kAXSubroleAttribute) as? String ?? ""
     let length = (attribute(element, kAXValueAttribute) as? String).map { String($0.count) } ?? "null"
-    return "{\"role\":\"\(role)\",\"subrole\":\"\(subrole)\",\"value_length\":\(length)}"
+    // Where the element is, in screen points, so the probe can tell the field it saw open from
+    // another text field that takes the focus later.
+    var frame = "null"
+    if let p = attribute(element, kAXPositionAttribute), let z = attribute(element, kAXSizeAttribute),
+       CFGetTypeID(p) == AXValueGetTypeID(), CFGetTypeID(z) == AXValueGetTypeID() {
+        var point = CGPoint.zero, size = CGSize.zero
+        // swiftlint:disable:next force_cast
+        if AXValueGetValue(p as! AXValue, .cgPoint, &point), AXValueGetValue(z as! AXValue, .cgSize, &size) {
+            frame = "[\(Int(point.x)),\(Int(point.y)),\(Int(size.width)),\(Int(size.height))]"
+        }
+    }
+    return "{\"role\":\"\(role)\",\"subrole\":\"\(subrole)\",\"value_length\":\(length),\"frame\":\(frame)}"
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
