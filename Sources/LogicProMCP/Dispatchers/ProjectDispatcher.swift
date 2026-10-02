@@ -4,6 +4,10 @@ import MCP
 struct ProjectDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicProject)
+    /// `plan_session_repair`'s refusal when the cache holds a project with no bound file path.
+    /// One spelling shared with the qualification classifier that matches it exactly.
+    static let planSessionRepairUnboundProjectHint =
+        "planning reads a retained inspection, and the current project has no bound file path, so none of its inspections is retained; save the project and inspect again"
     /// A stem plan may only reuse a recent, complete project/track/region
     /// snapshot. The scanner is deliberately cache-only: dry-run planning
     /// does not open a requested project merely to manufacture subjects.
@@ -18,7 +22,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_project",
-        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, inspect_session, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only. Stem is narrower than the generic projects shape: it refuses unless exactly one currently scanned project has a fresh complete region inventory proving its populated tracks, and output_root is an existing directory; the Export panel must also expose that folder in its browser at execution. Stem filenames and output format are late-bound and unpromised. fail_if_exists examines only top-level non-directory entries with suffix wav|wave|aif|aiff|aifc|m4a|mp3, and it refuses if enumeration fails; skip_existing is refused for stem. export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, drives the stem Export panel or bounces as appropriate, analyzes before/after-observed eligible stem outputs without guessing filename-to-track associations, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume for known-path artifacts; it refuses stem runs because Logic assigns filenames only after export; audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; inspect_session -> { scope?: \"whole_project\"|\"selection\", domains?: [tracks|strips|associations|hierarchy|routing|color], allow_ui_navigation?: Bool, project_ref?: String, snapshot_id?: String } read-only logic_pro_mcp_session_population.v1 JSON built from the state cache alone: every requested domain carries coverage complete|partial|unavailable|unstable plus reasons, tracks/strips rows come with witnesses, and unread data is reported as unread rather than absent. A fresh report has an opaque snapshot_id. snapshot_retention reports whether its observed project bundle path permits retention; an unbound project remains readable but retained=false (project_identity_unobserved) and its ID cannot be looked up. Bound reports are retained for 60 seconds, with at most 8 reports of at most 2 MiB each in this process-local cache. snapshot_id alone returns the original report bytes and original capture interval, not a fresh observation; expired, evicted, cross-session or changed-project handles fail stale_snapshot without regenerating. Lookup cannot combine project_ref or override scope/domains/navigation. allow_ui_navigation=true is refused (State C not_implemented) in this increment; cleanup_apply -> { step_id: String, confirmed: Bool, names?: [String] (exact names aligned to the step's target track indices) | \"newA,newB\" (legacy CSV) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
+        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, inspect_session, plan_session_repair, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only. Stem is narrower than the generic projects shape: it refuses unless exactly one currently scanned project has a fresh complete region inventory proving its populated tracks, and output_root is an existing directory; the Export panel must also expose that folder in its browser at execution. Stem filenames and output format are late-bound and unpromised. fail_if_exists examines only top-level non-directory entries with suffix wav|wave|aif|aiff|aifc|m4a|mp3, and it refuses if enumeration fails; skip_existing is refused for stem. export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, drives the stem Export panel or bounces as appropriate, analyzes before/after-observed eligible stem outputs without guessing filename-to-track associations, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume for known-path artifacts; it refuses stem runs because Logic assigns filenames only after export; audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; inspect_session -> { scope?: \"whole_project\"|\"selection\", domains?: [tracks|strips|associations|hierarchy|routing|color], allow_ui_navigation?: Bool, project_ref?: String, snapshot_id?: String } read-only logic_pro_mcp_session_population.v1 JSON built from the state cache alone: every requested domain carries coverage complete|partial|unavailable|unstable plus reasons, tracks/strips rows come with witnesses, and unread data is reported as unread rather than absent. A fresh report has an opaque snapshot_id. snapshot_retention reports whether its observed project bundle path permits retention; an unbound project remains readable but retained=false (project_identity_unobserved) and its ID cannot be looked up. Bound reports are retained for 60 seconds, with at most 8 reports of at most 2 MiB each in this process-local cache. snapshot_id alone returns the original report bytes and original capture interval, not a fresh observation; expired, evicted, cross-session or changed-project handles fail stale_snapshot without regenerating. Lookup cannot combine project_ref or override scope/domains/navigation. allow_ui_navigation=true is refused (State C not_implemented) in this increment; plan_session_repair -> { snapshot_id: String, policy: finite session intent object, names?: [{ target: declared handle, name: String }] } creates a read-only retained canonical draft; { plan_id: String, digest?: String } retrieves original bytes. Unknown intent is refused, unavailable exact-target and preservation adapters block tasks, and nothing is written. Plans expire with their baseline and are not write authority; cleanup_apply -> { step_id: String, confirmed: Bool, names?: [String] (exact names aligned to the step's target track indices) | \"newA,newB\" (legacy CSV) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
         commandDescription: "Project command to execute"
     )
 
@@ -498,7 +502,8 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 if !bound { return toolTextResult(json) }
                 guard await cache.retainSessionReport(
                     id: report.snapshotId, json: json,
-                    capturedEpoch: capture.projectEpoch, capturedPath: capture.project.filePath
+                    capturedEpoch: capture.projectEpoch, capturedPath: capture.project.filePath,
+                    capture: capture, request: request
                 ) else {
                     return toolStateCResult(.staleSnapshot,
                         hint: "capture could not be retained (project changed, document closed, or report exceeds 2 MiB); no reusable snapshot was issued",
@@ -512,6 +517,67 @@ struct ProjectDispatcher: OperationTraceDispatching {
                     "{\"error\":\"inspect_session encode failed: \(jsonStringEscape(error.localizedDescription))\"}",
                     isError: true
                 )
+            }
+
+        case "plan_session_repair":
+            func refused(_ hint: String, stale: Bool = false) -> CallTool.Result {
+                toolStateCResult(stale ? .staleSnapshot : .invalidParams,
+                    hint: hint, extras: ["write_attempted": false])
+            }
+            guard Set(params.keys).isSubset(of: ["snapshot_id", "policy", "names", "plan_id", "digest"]),
+                  let encoded = try? encodeJSONStrict(Value.object(params), compact: true),
+                  encoded.utf8.count <= StateCache.sessionCaptureByteLimit else {
+                return refused("unknown parameter or input exceeds the 2 MiB draft limit")
+            }
+            if let value = params["plan_id"] {
+                guard case .string(let id) = value, !id.isEmpty,
+                      params["snapshot_id"] == nil, params["policy"] == nil, params["names"] == nil else {
+                    return refused("plan_id lookup cannot reinterpret snapshot, policy or names")
+                }
+                var digest: String?
+                if let raw = params["digest"] {
+                    guard case .string(let supplied) = raw else { return refused("digest must be a string") }
+                    digest = supplied
+                }
+                guard let json = await cache.retainedRepairPlan(id: id, digest: digest) else {
+                    return refused("plan is unknown, expired, evicted, from another cache/project, or digest differs; no replacement was generated", stale: true)
+                }
+                return toolTextResult(json)
+            }
+            guard params["digest"] == nil,
+                  case .string(let snapshot)? = params["snapshot_id"], !snapshot.isEmpty,
+                  case .object(let object)? = params["policy"] else {
+                return refused("planning requires snapshot_id and an approved policy object")
+            }
+            guard let inspection = await cache.retainedInspection(id: snapshot) else {
+                // Said apart from the other causes because inspecting again cannot help: nothing
+                // about an unsaved project is retained, and qualification classifies this exact
+                // refusal as a missing prerequisite rather than a product failure.
+                if !StateCache.sessionReportHasBoundPath(await cache.getProject().filePath) {
+                    return refused(Self.planSessionRepairUnboundProjectHint, stale: true)
+                }
+                return refused("snapshot is unknown, expired, evicted or unbound; inspect again to obtain a new handle", stale: true)
+            }
+            let policy: ProjectSessionAudit.IntentPolicy
+            switch ProjectSessionAudit.parseIntentPolicy(object) {
+            case .accepted(let accepted): policy = accepted
+            case .rejected(let reasons):
+                return refused("invalid repair policy: " + reasons.map(\.sortKey).joined(separator: "; "))
+            }
+            guard let names = ProjectSessionAudit.parseApprovedNames(params["names"], policy: policy) else {
+                return refused("names must be at most 32 unique declared target/name objects with valid scalar names; no partial plan was created")
+            }
+            do {
+                let plan = try ProjectSessionAudit.buildCanonicalRepairPlan(
+                    policy: policy, policyValue: .object(object), names: names,
+                    capture: inspection.capture, request: inspection.request,
+                    snapshotCurrent: await cache.inspectionIsCurrent(inspection.capture))
+                guard await cache.retainRepairPlan(plan, snapshotID: snapshot) else {
+                    return refused("plan source expired or storage limit exceeded; no reusable plan was issued", stale: true)
+                }
+                return toolTextResult(plan.json)
+            } catch {
+                return refused("plan serialization failed; no plan was retained")
             }
 
         case "cleanup_plan":

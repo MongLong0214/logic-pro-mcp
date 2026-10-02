@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 118)   // #884 system.setup_control_surface, #862 mixer.bank, #965 project.inspect_session, #291 mixer.set_output_verified
+        #expect(OperationRegistry.specs.count == 119)   // #884 system.setup_control_surface, #862 mixer.bank, #965 project.inspect_session, #291 mixer.set_output_verified
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -96,7 +96,7 @@ struct OperationRegistryCoverageTests {
                                         // window and so bears no track target either;
                                         // #291 R2 added mixer.set_output_verified, which is
                                         // target-bearing, so `targetless` is unchanged
-        #expect(readOnly.count == 25)   // #965 added project.inspect_session
+        #expect(readOnly.count == 26)   // #965 added project.inspect_session
         #expect(targetBearingIDs == expectedTargetBearingIDs)
         #expect(targetless.count == 77)   // #448 sort_verified, #884 setup_control_surface and #862 bank bear no target
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
