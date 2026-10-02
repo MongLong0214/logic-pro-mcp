@@ -48,10 +48,11 @@ first mixer call the control bar's mixer checkbox is photographed, and the regio
 A KEY LOGIC LEAVES UNBOUND
 -------------------------
 Which keys Logic's current key command set binds with no modifier is read from its preferences
-(`KeyCommands`) per language. An operation whose letter has no such binding cannot change Logic's
-state by its key under any input source, so for it only the switch is judged: the key went out under
-ABC through CGEvent and 2-Set Korean read back after it. Measured 2026-10-02: this machine runs an
-edited U.S. set that binds R, C, X, Y, P, Z and A with no modifier, and not K.
+(`KeyCommands`) per language. An operation whose letter has no such binding, or whose bindings did
+not read, cannot change Logic's state by its key under any input source, and its candidate check
+fails: a switch alone is not the operation acting (review R1 of #1085). Measured 2026-10-02: this
+machine ran an edited U.S. set that bound R, C, X, Y, P, Z and A with no modifier, and not K; K was
+then bound to Toggle Metronome Click before the runs.
 
 PASS
 ----
