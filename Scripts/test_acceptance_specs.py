@@ -129,6 +129,26 @@ class Guard(unittest.TestCase):
         spec["rows"].append(row)
         self._refused(self._tree({PILOT: spec}), "UNDECIDED[('1020.json', 2)]", "delete the entry")
 
+    def test_an_exemption_does_not_cover_another_sentence_at_its_index(self):
+        """The review's counterexample: another sentence verbatim in the same issue, at index 2."""
+        spec = _pilot()
+        spec["sources"][2]["quote"] = "Neither branch reads the current state first."
+        out = self._refused(self._tree({PILOT: spec}), "sources[2] is decided by no row",
+                            "UNDECIDED[('1020.json', 2)] was written for",
+                            "'Neither branch reads the current state first.' in issue:1020")
+        self.assertNotIn("check-spec refused", out, out[-1500:])
+
+    def test_an_exemption_does_not_cover_the_same_sentence_from_another_doc(self):
+        """The same words quoted from a body check-spec can read are still another source."""
+        spec = _pilot()
+        spec["sources"][2]["doc"] = "issue:9020"
+        root = self._tree({PILOT: spec})
+        shutil.copy(os.path.join(root, "issues", "1020.md"), os.path.join(root, "issues", "9020.md"))
+        out = self._refused(root, "sources[2] is decided by no row",
+                            "UNDECIDED[('1020.json', 2)] was written for",
+                            "'A toggle must not be presented as a set.' in issue:9020")
+        self.assertNotIn("check-spec refused", out, out[-1500:])
+
     def test_an_exemption_whose_spec_is_gone_is_reported(self):
         spec = _pilot()
         self._refused(self._tree({"other.json": spec}), "UNDECIDED[('1020.json', 2)]",
