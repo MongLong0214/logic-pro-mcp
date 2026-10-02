@@ -798,6 +798,8 @@ enum AXValueExtractors {
         return nil
     }
 
+    private struct StoppedBeforeHelp: Error {}
+
     private static func inferTrackType(
         from header: AXUIElement, runtime: AXHelpers.Runtime, stoppingBeforeHelp stop: () -> Bool
     ) -> TrackType? {
@@ -829,9 +831,9 @@ enum AXValueExtractors {
                 }
                 return text.replacingOccurrences(of: quoted, with: " ")
             }
-        // #1079: every read but help comes first, then `stop` is asked, then the help reads. The
-        // signals keep the order they always had: each element's description, title, identifier,
-        // help.
+        // #1079: every read but help comes first, then the help reads, with `stop` asked before
+        // each one. The signals keep the order they always had: each element's description, title,
+        // identifier, help.
         let headerSignals = [
             namelessDescription,
             AXHelpers.getTitle(header, runtime: runtime),
@@ -845,11 +847,15 @@ enum AXValueExtractors {
                 AXHelpers.getIdentifier(element, runtime: runtime)
             ]
         }
-        if stop() { return nil }
-        let signals = headerSignals + [AXHelpers.getHelp(header, runtime: runtime)]
-            + zip(descendants, descendantSignals).flatMap { element, readFirst in
-                readFirst + [AXHelpers.getHelp(element, runtime: runtime)]
-            }
+        // Asked before every help read, not once before the batch: a rename opened while one
+        // header's help reads were under way was lost to the rest of that batch (the French
+        // subscribed runs of 2026-10-03, a rate, not every sample). Now at most one read is in flight.
+        guard let helps = try? ([header] + descendants).map({ element -> String? in
+            if stop() { throw StoppedBeforeHelp() }
+            return AXHelpers.getHelp(element, runtime: runtime)
+        }) else { return nil }
+        let signals = headerSignals + [helps[0]]
+            + zip(descendantSignals, helps.dropFirst()).flatMap { readFirst, help in readFirst + [help] }
         let trackName = extractTrackName(from: header, runtime: runtime).name
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()

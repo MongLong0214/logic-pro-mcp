@@ -347,10 +347,11 @@ struct Issue1079PollYieldsToTextEditingTests {
         private let lock = NSLock()
         private var helpReads = 0
         private var editing = false
-        func read(_ attribute: String, onHeaderOne: Bool, editingBeginsOn trigger: String?) {
+        func read(_ attribute: String, onHeaderOne: Bool, editingBeginsOn trigger: String?, afterHelpReads: Int? = nil) {
             lock.lock(); defer { lock.unlock() }
             if attribute == kAXHelpAttribute as String { helpReads += 1 }
             if onHeaderOne, attribute == trigger { editing = true }
+            if let afterHelpReads, helpReads >= afterHelpReads { editing = true }
         }
         var help: Int { lock.lock(); defer { lock.unlock() }; return helpReads }
         var isEditing: Bool { lock.lock(); defer { lock.unlock() }; return editing }
@@ -359,7 +360,9 @@ struct Issue1079PollYieldsToTextEditingTests {
     /// Two headers with one child each, read by the production walk. `trigger` names an attribute
     /// whose read on header 1 starts the edit -- the user opening a rename while that header's
     /// earlier reads are under way, after the walk has asked before it.
-    private static func walkWithEditingBeginningOn(_ trigger: String?) -> (states: [TrackState]?, yielded: Bool, help: Int) {
+    private static func walkWithEditingBeginningOn(
+        _ trigger: String?, afterHelpReads: Int? = nil
+    ) -> (states: [TrackState]?, yielded: Bool, help: Int) {
         let builder = FakeAXRuntimeBuilder()
         let app = builder.element(1)
         let window = builder.element(2)
@@ -382,7 +385,8 @@ struct Issue1079PollYieldsToTextEditingTests {
         let runtime = builder.makeLogicRuntime(
             appElement: app,
             attributeValueHandler: { element, attribute in
-                reads.read(attribute, onHeaderOne: builder.elementID(element) == headerOne, editingBeginsOn: trigger)
+                reads.read(attribute, onHeaderOne: builder.elementID(element) == headerOne, editingBeginsOn: trigger,
+                           afterHelpReads: afterHelpReads)
                 return nil
             },
             setAttributeHandler: nil,
@@ -407,6 +411,18 @@ struct Issue1079PollYieldsToTextEditingTests {
         #expect(!control.yielded)
         #expect(control.states?.count == 2)
         #expect(control.help == 4, "help read \(control.help) times, not once per header and child")
+    }
+
+    /// After review R3: a rename opened during one header's help reads was lost to the rest of that
+    /// header's batch, so the stop is asked before every help read. Editing begins once the first
+    /// help read (header 1's own) has been made; its child's help must not be read. Mutation this
+    /// kills: the stop asked once before the batch (two help reads, then the yield).
+    @Test("editing that begins during a header's help reads stops before the next one")
+    func editingDuringTheHelpReadsStopsBeforeTheNextOne() {
+        let walk = Self.walkWithEditingBeginningOn(nil, afterHelpReads: 1)
+        #expect(walk.yielded)
+        #expect(walk.states == nil)
+        #expect(walk.help == 1, "\(walk.help) help reads; the one under way when editing began is the only one allowed")
     }
 
     /// F1079-01: the cached project has a path; the project read answers without one, so the cycle

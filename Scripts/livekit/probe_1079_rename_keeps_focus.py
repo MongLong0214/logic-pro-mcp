@@ -6,10 +6,11 @@ Usage: LPM_LIVE_LOCK=<held lock> LPM_LOCALE_FIXTURE=<fixture> /usr/bin/python3 \
        [--samples N] [--lprojs lproj ...] [--subscribe]
        (default: two samples, all ten languages; Korean is restored at the end)
 
-Per language, on a fresh launch of the locale-campaign fixture, three conditions, `samples` each:
+Per language, on a fresh launch of the locale-campaign fixture, three conditions, `samples` each, in
+this order:
   none       -- no server, so the probe's own focus reads alone;
-  control    -- a server without the #1079 yield, connected and idle;
-  candidate  -- a server with it, connected and idle.
+  candidate  -- a server with the #1079 yield, connected and idle;
+  control    -- a server without it, connected and idle.
 
 Each sample makes the arrange window key, gives the Tracks header rail the focus, presses Track >
 Rename Track (canon labels through System Events), and reads the focus every 0.1 s for OPEN_WAIT
@@ -329,7 +330,10 @@ def main():
                     or launch.get("language_setting", [])[:1] != [L993.CODES[lproj]]:
                 rows.append({"lproj": lproj, "condition": "launch", "sample": 0, "outcome": "not_launched"})
                 break
-            for condition, binary in (("none", None), ("control", args.control), ("candidate", args.candidate)):
+            # The control runs last: a sample it loses can leave Logic's rename editor open behind the
+            # focus, and a server started then yields from its first tick (2026-10-03, every
+            # candidate sample that followed a control loss had no notification).
+            for condition, binary in (("none", None), ("candidate", args.candidate), ("control", args.control)):
                 if condition not in args.conditions:
                     continue
                 for n in range(args.samples):
