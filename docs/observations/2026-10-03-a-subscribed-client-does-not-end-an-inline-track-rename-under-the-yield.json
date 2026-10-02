@@ -1,8 +1,8 @@
 {
   "schema": 3,
-  "id": "2026-10-02-an-idle-poll-ends-an-inline-track-rename-in-ten-languages",
-  "date": "2026-10-02",
-  "subject": "whether an inline track rename keeps Logic's keyboard focus, and takes typing, while the server sits idle, in ten languages",
+  "id": "2026-10-03-a-subscribed-client-does-not-end-an-inline-track-rename-under-the-yield",
+  "date": "2026-10-03",
+  "subject": "whether an inline track rename keeps Logic's keyboard focus, and takes typing, while the server sits idle with a client subscribed to the resources a cycle publishes",
   "question": "With no server, with a server without the #1079 yield, and with one that has it, does the rename field Track > Rename Track opens keep the focus for 20 s while a key is typed every second?",
   "verdict": "works",
   "surface": "arrange.track_headers",
@@ -19,7 +19,7 @@
   "reverify": {
     "kind": "script",
     "command": "/usr/bin/python3 Scripts/livekit/probe_1079_rename_keeps_focus.py <control-binary> <candidate-binary> <out.json> --samples 2",
-    "expected": "in every language every no-server and candidate sample opened its rename and kept the field for 20 s with its value growing; the control lost the field in every sample that ran. Exit 0 also needs every control sample to have run",
+    "expected": "in every language every no-server and candidate sample opened its rename and kept the field for 20 s with its value growing, and every server sample was sent notifications before the rename opened; the control lost the field in every sample that ran. Exit 0 also needs every control sample to have run",
     "cost": "needs LPM_LIVE_LOCK naming a held lock, LPM_LOCALE_FIXTURE, the 2-Set Korean source and two debug builds; about four minutes per language"
   },
   "depends": [
@@ -30,9 +30,9 @@
     "Scripts/livekit/ax_1079_rename_focus.swift:focus"
   ],
   "evidence": [
-    "evidence/2026-10-02-1079-rename-focus-ten-languages.json"
+    "evidence/2026-10-03-1079-rename-focus-subscribed.json"
   ],
-  "method": "probe_1079_rename_keeps_focus.py ran at 13521f0f in ten languages, two samples per condition, on a fresh launch of the locale-campaign fixture per language. The candidate was the debug build of 13521f0f, whose background cycle ends where a yield is decided, whose track walk asks before each header and before every AXHelp read, and whose publication asks the focus before it starts and before each resource read; the control was the debug build of the 086821fd tree with StatePoller.swift as on main 3cb68e44, which has no yield. Per language the conditions ran in the order none, candidate, control. Before each sample the probe left the focus on the Tracks rail, with an Escape only while Logic held the keyboard and a text field had the focus, and recorded each round. Each sample raised the arrange window, focused the Tracks header rail, pressed Track > Rename Track, and counted the rename open only once the focus had been read as a text field (polled every 0.1 s for 2 s). It then read the focus every 0.5 s for 20 s and typed K at the HID tap every second, under the 2-Set Korean source, and recorded when the focus left the field and how the field's value length grew.",
+  "method": "probe_1079_rename_keeps_focus.py ran at 711bfc98 in ten languages, two samples per condition, on a fresh launch of the locale-campaign fixture per language. The candidate was the debug build of 13521f0f, whose background cycle ends where a yield is decided, whose track walk asks before each header and before every AXHelp read, and whose publication asks the focus before it starts and before each resource read; the control was the debug build of the 086821fd tree with StatePoller.swift as on main 3cb68e44, which has no yield. Per language the conditions ran in the order none, candidate, control. Before each sample the probe left the focus on the Tracks rail, with an Escape only while Logic held the keyboard and a text field had the focus, and recorded each round. Each server was subscribed to logic://project/info, logic://tracks, logic://transport/state, logic://mixer, logic://markers, logic://project/audit right after it started, and the resources/updated notifications it sent in the next 6 s were counted, so that a cycle's publication is shown to have run before the rename. Each sample raised the arrange window, focused the Tracks header rail, pressed Track > Rename Track, and counted the rename open only once the focus had been read as a text field (polled every 0.1 s for 2 s). It then read the focus every 0.5 s for 20 s and typed K at the HID tap every second, under the 2-Set Korean source, and recorded when the focus left the field and how the field's value length grew.",
   "observations": [
     {
       "condition": "none",
@@ -40,12 +40,150 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 38,
+      "reads": 37,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXGroup",
       "locale": "ko-KR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.05
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "locale": "ko-KR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "ko-KR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "ko-KR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 3.8,
+      "typed": 3,
+      "reads": 8,
+      "role_after": "AXSlider",
+      "value_grew_by": -11,
+      "role_after_cancel": "AXSlider",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "ko-KR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 3.76,
+      "typed": 3,
+      "reads": 8,
+      "role_after": "AXTextField",
+      "value_grew_by": -1,
+      "role_after_cancel": "AXTextField",
+      "role_before_server": "AXSlider",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "ko-KR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXGroup",
+      "locale": "en-US",
       "attempts": 1,
       "field_seen_after_s": [
         0.04
@@ -57,15 +195,15 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 37,
+      "reads": 38,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "ko-KR",
+      "locale": "en-US",
       "attempts": 1,
       "field_seen_after_s": [
-        0.04
+        0.03
       ]
     },
     {
@@ -74,15 +212,24 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 38,
+      "reads": 36,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "ko-KR",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "en-US",
       "attempts": 1,
       "field_seen_after_s": [
-        0.04
+        0.03
       ]
     },
     {
@@ -96,7 +243,16 @@
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "ko-KR",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "en-US",
       "attempts": 1,
       "field_seen_after_s": [
         0.03
@@ -105,24 +261,6 @@
     {
       "condition": "control",
       "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.09,
-      "typed": 0,
-      "reads": 3,
-      "role_after": "AXSlider",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXSlider",
-      "role_before_server": "AXWindow",
-      "locale": "ko-KR",
-      "attempts": 2,
-      "field_seen_after_s": [
-        null,
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 1,
       "outcome": "lost",
       "focus_lost_after_s": 0.56,
       "typed": 0,
@@ -130,92 +268,16 @@
       "role_after": "AXCheckBox",
       "value_grew_by": null,
       "role_after_cancel": "AXCheckBox",
-      "role_before_server": "AXSlider",
-      "locale": "ko-KR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXGroup",
-      "locale": "en-US",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.06
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "en-US",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "en-US",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "en-US",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.09,
-      "typed": 0,
-      "reads": 3,
-      "role_after": "AXCheckBox",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXSlider",
-      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
       "locale": "en-US",
       "attempts": 1,
       "field_seen_after_s": [
@@ -226,492 +288,136 @@
       "condition": "control",
       "sample": 1,
       "outcome": "lost",
-      "focus_lost_after_s": 1.64,
-      "typed": 1,
-      "reads": 4,
+      "focus_lost_after_s": 2.7,
+      "typed": 2,
+      "reads": 6,
       "role_after": "AXSlider",
-      "value_grew_by": 0,
+      "value_grew_by": -12,
       "role_after_cancel": "AXSlider",
       "role_before_server": "AXCheckBox",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
       "locale": "en-US",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXGroup",
-      "locale": "ja-JP",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.07
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "ja-JP",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "ja-JP",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "ja-JP",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 3.84,
-      "typed": 3,
-      "reads": 8,
-      "role_after": "AXTextField",
-      "value_grew_by": -11,
-      "role_after_cancel": "AXTextField",
-      "role_before_server": "AXWindow",
-      "locale": "ja-JP",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 1,
-      "outcome": "lost",
-      "focus_lost_after_s": 3.81,
-      "typed": 3,
-      "reads": 8,
-      "role_after": "AXSlider",
-      "value_grew_by": -1,
-      "role_after_cancel": "AXTextField",
-      "role_before_server": "AXSlider",
-      "locale": "ja-JP",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXGroup",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.06
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 38,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 3.28,
-      "typed": 2,
-      "reads": 7,
-      "role_after": "AXSlider",
-      "value_grew_by": -11,
-      "role_after_cancel": "AXSlider",
-      "role_before_server": "AXWindow",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 1,
-      "outcome": "lost",
-      "focus_lost_after_s": 3.22,
-      "typed": 2,
-      "reads": 7,
-      "role_after": "AXSlider",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXSlider",
-      "role_before_server": "AXSlider",
-      "locale": "de-DE",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXGroup",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.64,
-      "typed": 1,
-      "reads": 4,
-      "role_after": "AXSlider",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXTextField",
-      "role_before_server": "AXWindow",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 1,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.64,
-      "typed": 1,
-      "reads": 4,
-      "role_after": "AXCheckBox",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXSlider",
-      "role_before_server": "AXSlider",
-      "locale": "es-ES",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXGroup",
-      "locale": "fr-FR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "fr-FR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "fr-FR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 5,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "fr-FR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.09,
-      "typed": 0,
-      "reads": 3,
-      "role_after": "AXTextField",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXTextField",
-      "role_before_server": "AXWindow",
-      "locale": "fr-FR",
       "attempts": 2,
       "field_seen_after_s": [
         null,
+        0.03
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXGroup",
+      "locale": "ja-JP",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 37,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "locale": "ja-JP",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "ja-JP",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 38,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "ja-JP",
+      "attempts": 1,
+      "field_seen_after_s": [
         0.04
       ]
     },
     {
       "condition": "control",
-      "sample": 1,
+      "sample": 0,
       "outcome": "lost",
-      "focus_lost_after_s": 0.56,
-      "typed": 0,
-      "reads": 2,
+      "focus_lost_after_s": 2.7,
+      "typed": 2,
+      "reads": 6,
       "role_after": "AXTextField",
-      "value_grew_by": null,
-      "role_after_cancel": "AXTextField",
-      "role_before_server": "AXSlider",
-      "locale": "fr-FR",
-      "attempts": 2,
-      "field_seen_after_s": [
-        null,
-        0.04
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXGroup",
-      "locale": "it-IT",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.06
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
+      "value_grew_by": -12,
+      "role_after_cancel": "AXCheckBox",
       "role_before_server": "AXWindow",
-      "locale": "it-IT",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "it-IT",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "it-IT",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "ja-JP",
       "attempts": 1,
       "field_seen_after_s": [
         0.03
@@ -719,37 +425,12 @@
     },
     {
       "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 4.42,
-      "typed": 3,
-      "reads": 9,
-      "role_after": "AXSlider",
-      "value_grew_by": -10,
-      "role_after_cancel": "AXSlider",
-      "role_before_server": "AXWindow",
-      "locale": "it-IT",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.03
-      ]
-    },
-    {
-      "condition": "control",
       "sample": 1,
-      "outcome": "lost",
-      "focus_lost_after_s": 4.41,
-      "typed": 3,
-      "reads": 9,
-      "role_after": "AXSlider",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXSlider",
-      "role_before_server": "AXSlider",
-      "locale": "it-IT",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
+      "outcome": "not_run",
+      "role_before_server": "AXTextField",
+      "locale": "ja-JP",
+      "attempts": 0,
+      "field_seen_after_s": []
     },
     {
       "condition": "none",
@@ -758,113 +439,11 @@
       "focus_lost_after_s": null,
       "typed": 19,
       "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXGroup",
-      "locale": "pt-BR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.05
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "pt-BR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 37,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "pt-BR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "candidate",
-      "sample": 1,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
-      "role_after": "AXTextField",
-      "value_grew_by": 6,
-      "role_after_cancel": "AXWindow",
-      "role_before_server": "AXWindow",
-      "locale": "pt-BR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 0,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.09,
-      "typed": 0,
-      "reads": 3,
-      "role_after": "AXSlider",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXTextField",
-      "role_before_server": "AXWindow",
-      "locale": "pt-BR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "control",
-      "sample": 1,
-      "outcome": "lost",
-      "focus_lost_after_s": 1.08,
-      "typed": 0,
-      "reads": 3,
-      "role_after": "AXSlider",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXTextField",
-      "role_before_server": "AXSlider",
-      "locale": "pt-BR",
-      "attempts": 1,
-      "field_seen_after_s": [
-        0.04
-      ]
-    },
-    {
-      "condition": "none",
-      "sample": 0,
-      "outcome": "kept",
-      "focus_lost_after_s": null,
-      "typed": 19,
-      "reads": 36,
       "role_after": "AXTextField",
       "value_grew_by": 5,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXGroup",
-      "locale": "zh-CN",
+      "locale": "de-DE",
       "attempts": 1,
       "field_seen_after_s": [
         0.05
@@ -875,16 +454,16 @@
       "sample": 1,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
+      "typed": 19,
       "reads": 37,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "zh-CN",
+      "locale": "de-DE",
       "attempts": 1,
       "field_seen_after_s": [
-        0.03
+        0.04
       ]
     },
     {
@@ -892,13 +471,22 @@
       "sample": 0,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
+      "typed": 19,
       "reads": 37,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "zh-CN",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "de-DE",
       "attempts": 1,
       "field_seen_after_s": [
         0.03
@@ -910,49 +498,76 @@
       "outcome": "kept",
       "focus_lost_after_s": null,
       "typed": 19,
-      "reads": 37,
+      "reads": 36,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "zh-CN",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "de-DE",
       "attempts": 1,
       "field_seen_after_s": [
-        0.03
+        0.04
       ]
     },
     {
       "condition": "control",
       "sample": 0,
       "outcome": "lost",
-      "focus_lost_after_s": 2.2,
+      "focus_lost_after_s": 2.21,
       "typed": 1,
       "reads": 5,
       "role_after": "AXSlider",
       "value_grew_by": -12,
       "role_after_cancel": "AXSlider",
       "role_before_server": "AXWindow",
-      "locale": "zh-CN",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "de-DE",
       "attempts": 1,
       "field_seen_after_s": [
-        0.05
+        0.04
       ]
     },
     {
       "condition": "control",
       "sample": 1,
       "outcome": "lost",
-      "focus_lost_after_s": 1.65,
+      "focus_lost_after_s": 2.2,
       "typed": 1,
-      "reads": 4,
-      "role_after": "AXTextField",
+      "reads": 5,
+      "role_after": "AXSlider",
       "value_grew_by": 0,
       "role_after_cancel": "AXTextField",
       "role_before_server": "AXSlider",
-      "locale": "zh-CN",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "de-DE",
       "attempts": 1,
       "field_seen_after_s": [
-        0.03
+        0.04
       ]
     },
     {
@@ -960,16 +575,16 @@
       "sample": 0,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 19,
+      "typed": 20,
       "reads": 37,
       "role_after": "AXTextField",
       "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXGroup",
-      "locale": "zh-TW",
+      "locale": "es-ES",
       "attempts": 1,
       "field_seen_after_s": [
-        0.06
+        0.05
       ]
     },
     {
@@ -980,10 +595,10 @@
       "typed": 19,
       "reads": 36,
       "role_after": "AXTextField",
-      "value_grew_by": 5,
+      "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "zh-TW",
+      "locale": "es-ES",
       "attempts": 1,
       "field_seen_after_s": [
         0.04
@@ -994,16 +609,25 @@
       "sample": 0,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 17,
-      "reads": 29,
+      "typed": 19,
+      "reads": 36,
       "role_after": "AXTextField",
-      "value_grew_by": 3,
+      "value_grew_by": 6,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "zh-TW",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "es-ES",
       "attempts": 1,
       "field_seen_after_s": [
-        0.04
+        0.03
       ]
     },
     {
@@ -1011,30 +635,48 @@
       "sample": 1,
       "outcome": "kept",
       "focus_lost_after_s": null,
-      "typed": 20,
-      "reads": 37,
+      "typed": 19,
+      "reads": 36,
       "role_after": "AXTextField",
-      "value_grew_by": 6,
+      "value_grew_by": 5,
       "role_after_cancel": "AXWindow",
       "role_before_server": "AXWindow",
-      "locale": "zh-TW",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "es-ES",
       "attempts": 1,
       "field_seen_after_s": [
-        0.03
+        0.04
       ]
     },
     {
       "condition": "control",
       "sample": 0,
       "outcome": "lost",
-      "focus_lost_after_s": 1.09,
+      "focus_lost_after_s": 0.57,
       "typed": 0,
-      "reads": 3,
-      "role_after": "AXSlider",
-      "value_grew_by": 0,
-      "role_after_cancel": "AXTextField",
+      "reads": 2,
+      "role_after": "AXCheckBox",
+      "value_grew_by": null,
+      "role_after_cancel": "AXSlider",
       "role_before_server": "AXWindow",
-      "locale": "zh-TW",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "es-ES",
       "attempts": 1,
       "field_seen_after_s": [
         0.03
@@ -1051,6 +693,705 @@
       "value_grew_by": null,
       "role_after_cancel": "AXSlider",
       "role_before_server": "AXSlider",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "es-ES",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 5,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXGroup",
+      "locale": "fr-FR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.05
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "locale": "fr-FR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.05
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 5,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "fr-FR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 5,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "fr-FR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 4.98,
+      "typed": 4,
+      "reads": 10,
+      "role_after": "AXTextField",
+      "value_grew_by": -10,
+      "role_after_cancel": "AXSlider",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "fr-FR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 4.97,
+      "typed": 4,
+      "reads": 10,
+      "role_after": "AXSlider",
+      "value_grew_by": -1,
+      "role_after_cancel": "AXSlider",
+      "role_before_server": "AXSlider",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "fr-FR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 5,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXGroup",
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 5,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 3.86,
+      "typed": 3,
+      "reads": 8,
+      "role_after": "AXTextField",
+      "value_grew_by": -11,
+      "role_after_cancel": "AXTextField",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 4,
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 3.87,
+      "typed": 3,
+      "reads": 8,
+      "role_after": "AXTextField",
+      "value_grew_by": -1,
+      "role_after_cancel": "AXTextField",
+      "role_before_server": "AXSlider",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "it-IT",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXGroup",
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 0.56,
+      "typed": 0,
+      "reads": 2,
+      "role_after": "AXCheckBox",
+      "value_grew_by": null,
+      "role_after_cancel": "AXCheckBox",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 0.57,
+      "typed": 0,
+      "reads": 2,
+      "role_after": "AXButton",
+      "value_grew_by": null,
+      "role_after_cancel": "AXCheckBox",
+      "role_before_server": "AXCheckBox",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 4,
+      "locale": "pt-BR",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXGroup",
+      "locale": "zh-CN",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.05
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "locale": "zh-CN",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "zh-CN",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "zh-CN",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 1.08,
+      "typed": 0,
+      "reads": 3,
+      "role_after": "AXTextField",
+      "value_grew_by": 0,
+      "role_after_cancel": "AXSlider",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "zh-CN",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 1.09,
+      "typed": 0,
+      "reads": 3,
+      "role_after": "AXSlider",
+      "value_grew_by": 0,
+      "role_after_cancel": "AXSlider",
+      "role_before_server": "AXSlider",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "zh-CN",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXGroup",
+      "locale": "zh-TW",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "locale": "zh-TW",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.04
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "zh-TW",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "outcome": "kept",
+      "focus_lost_after_s": null,
+      "typed": 19,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "value_grew_by": 6,
+      "role_after_cancel": "AXWindow",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 6,
+      "locale": "zh-TW",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "outcome": "lost",
+      "focus_lost_after_s": 0.56,
+      "typed": 0,
+      "reads": 2,
+      "role_after": "AXSlider",
+      "value_grew_by": null,
+      "role_after_cancel": "AXTextField",
+      "role_before_server": "AXWindow",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
+      "locale": "zh-TW",
+      "attempts": 1,
+      "field_seen_after_s": [
+        0.03
+      ]
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "outcome": "lost",
+      "focus_lost_after_s": 1.09,
+      "typed": 0,
+      "reads": 3,
+      "role_after": "AXSlider",
+      "value_grew_by": 0,
+      "role_after_cancel": "AXSlider",
+      "role_before_server": "AXSlider",
+      "subscribed": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "notifications_before_rename": 5,
       "locale": "zh-TW",
       "attempts": 1,
       "field_seen_after_s": [
@@ -1062,27 +1403,39 @@
       "languages": 10,
       "none_kept": 20,
       "none_samples": 20,
-      "control_lost": 20,
+      "control_lost": 19,
       "control_samples": 20,
       "candidate_kept": 20,
       "candidate_samples": 20,
       "hold_seconds": 20.0,
       "type_every_seconds": 1.0,
-      "failures": 0,
+      "failures": 1,
       "control_lost_after_s_min": 0.56,
-      "control_lost_after_s_max": 4.42
+      "control_lost_after_s_max": 4.98,
+      "subscriptions_accepted_in_every_server_sample": true,
+      "notifications_before_rename_min": 4,
+      "notifications_before_rename_max": 6,
+      "subscribed_to": [
+        "logic://project/info",
+        "logic://tracks",
+        "logic://transport/state",
+        "logic://mixer",
+        "logic://markers",
+        "logic://project/audit"
+      ]
     }
   ],
-  "conclusion": "In 10 languages, with no server the field kept the focus in 20 of 20 samples and its value grew under typing. With the control connected and idle it lost the focus in 20 of the 20 samples that ran. With the candidate it kept the focus in 20 of 20 and its value grew.",
+  "conclusion": "In 10 languages, with no server the field kept the focus in 20 of 20 samples and its value grew under typing. With the control connected and idle it lost the focus in 19 of the 19 samples that ran; 1 did not run, because a text field kept the focus through the settle step's three Escapes after the control sample before it. With the candidate it kept the focus in 20 of 20 and its value grew. Every server sample that ran had its six subscriptions accepted and sent between 4 and 6 notifications before the rename opened.",
   "limits": [
     "The rename was opened through Track > Rename Track, not by double-clicking the name, and the typing was under 2-Set Korean, not ABC.",
     "When editing begins mid-cycle the candidate stops at the next read, and during the track walk before the next help read; one help read already under way runs to its end. Whether a sample began mid-cycle was not read, so that path rests on the unit tests.",
     "One Logic installation and one fixture; the fixture's poll cycle is short, unlike the 74-track project where a 12.6 s median was measured.",
     "The control is the 086821fd tree with main's poller, not a commit of its own; main's poller does not compile against this head's publication interface.",
-    "The run was made at 13521f0f with the candidate built at that head.",
-    "Whether a yield came at the document-path query, inside a header before its help reads, at the publication or between resource reads was not read in this run; those paths rest on the unit tests and their mutants."
+    "The run was made at 711bfc98 with the candidate built at 13521f0f; the commits between change only the probe.",
+    "Whether a yield came at the document-path query, inside a header before its help reads, at the publication or between resource reads was not read in this run; those paths rest on the unit tests and their mutants.",
+    "The subscribed client never read a resource itself; it only received notifications."
   ],
-  "supersedes": "2026-10-02-ko-KR-an-idle-poll-ends-an-inline-track-rename",
+  "supersedes": null,
   "canon_not_applicable": {
     "reason": "This record states roles, timings and value lengths the probe read; it quotes no string Logic ships."
   }
