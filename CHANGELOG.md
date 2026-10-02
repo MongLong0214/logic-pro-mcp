@@ -51,7 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   none types the letter the failure is `layout_types_another_letter`. Driven against Logic 12.3 under 2-Set Korean in ten
   languages, eight of the ten went out through CGEvent under ABC, changed Logic's state and back,
   and left 2-Set Korean current. With Dvorak made TIS's ASCII-capable layout before every call, the
-  A key went out under Dvorak, which types a there, and the other seven under ABC, each acting.
+  A key went out under Dvorak, which types a there, and the other seven under ABC, each acting; with
+  ABC also disabled and U.S. enabled, the seven went out under U.S.
   `edit.quantize` and `view.toggle_score_editor` were not driven, and the two waits were not varied.
 - **`track.set_automation` on MCU no longer leaves Logic's Write warning up behind its reply
   (#1077).** Logic answered the Write press with a one-button warning and left it up, and quitting

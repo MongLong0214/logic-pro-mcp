@@ -1,0 +1,1652 @@
+{
+  "schema": 3,
+  "id": "2026-10-03-plain-letter-keys-act-under-2-set-korean-through-cgevent",
+  "date": "2026-10-03",
+  "subject": "whether the eight operations that post a plain letter act under the 2-Set Korean input source when CGEvent posts the key under ABC and selects 2-Set Korean back",
+  "question": "Driven through CGEventChannel alone, with the MIDI key-command approval withdrawn, does each of the eight plain-letter operations change Logic's state under the candidate and not under the control, and is 2-Set Korean the input source after every call?",
+  "verdict": "works",
+  "surface": "arrange.transport",
+  "issues": [
+    1039
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "fr-FR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_1039_plain_letters_under_2set_korean.py <worktree> <head> <candidate debug build> <control debug build without the switch> (run as /usr/bin/python3 under 2-Set Korean, with LPM_LIVE_LOCK naming a held lock and LPM_EVIDENCE_ROOT an absolute directory exported)",
+    "expected": "exit 0; every control call refused and moved nothing; every candidate call went out under ABC through CGEvent, moved its reading and moved it back, and 2-Set Korean read back after it",
+    "cost": "about three minutes per language on the locale-campaign fixture; needs LIVE.lock, the 2-Set Korean source, and the Accessibility grant for /usr/bin/python3"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/CGEventChannel.swift:switchToASCIICapableLayout",
+    "Sources/LogicProMCP/Channels/ChannelRouter.swift:effectiveChain"
+  ],
+  "evidence": [
+    "evidence/2026-10-03-1039-plain-letters-run.json"
+  ],
+  "method": "live_1039_plain_letters_under_2set_korean.py ran at 0c9f1fa5 under the 2-Set Korean source in ten languages. Both servers were debug builds started with LOGIC_MCP_DEBUG_ONLY_CHANNEL=CGEvent, and the MIDI key-command approval was withdrawn for the run and put back byte for byte. The candidate was built at 0c9f1fa5; the control from the same tree with CGEventChannel.swift as at 07d76426, which has no input-source switch. Per language, on a fresh launch of the fixture, the control was called once per operation and the candidate twice per toggle; record was followed by stop and undo. The state was read through Accessibility from the harness process: the control-bar checkbox the canon names for record, cycle, metronome, mixer and library, the one unnamed control-bar checkbox for the piano roll, per-depth role counts for automation, and slider values for zoom to fit. The arrange window was raised and the Tracks header rail focused before every call. Which letters Logic's key command set binds with no modifier was read from its preferences (KeyCommands) in each language. Before the run, this host's key command 474, Toggle Metronome Click, was moved from Control-Shift-R to plain K, the binding Apple's U.S. preset gives it; the preferences were backed up first.",
+  "observations": [
+    {
+      "locale": "en-US",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "locale": "ko-KR",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "locale": "ja-JP",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "locale": "de-DE",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "locale": "es-ES",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "locale": "fr-FR",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "locale": "it-IT",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "locale": "pt-BR",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "locale": "zh-CN",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "locale": "zh-TW",
+      "letters_bound_without_a_modifier": [
+        "a",
+        "c",
+        "k",
+        "p",
+        "r",
+        "x",
+        "y",
+        "z"
+      ],
+      "operations": {
+        "automation.toggle_view": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "nav.zoom_to_fit": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_cycle": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.toggle_metronome": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_library": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_mixer": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "view.toggle_piano_roll": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        },
+        "transport.record": {
+          "key_bound": true,
+          "control_state_unchanged": true,
+          "control_success": false,
+          "control_reason": "input_source_blocks_plain_letters",
+          "candidate_changed": true,
+          "candidate_came_back": true,
+          "candidate_method": "cgevent",
+          "candidate_switched": true,
+          "candidate_switched_to": "com.apple.keylayout.ABC",
+          "candidate_restored": true,
+          "source_after_every_call": [
+            "com.apple.inputmethod.Korean.2SetKorean"
+          ],
+          "every_reply_switched_to": [
+            "com.apple.keylayout.ABC"
+          ]
+        }
+      }
+    },
+    {
+      "reading": "harness checks",
+      "checks": 160,
+      "passed": 160,
+      "languages": 10,
+      "operations": 8,
+      "operations_that_changed_state_in_every_language": 8,
+      "operations_whose_letter_is_unbound": [],
+      "restorations": {
+        "operator-approvals-restored-byte-for-byte": true,
+        "Logic-language-restored-to-Korean": true,
+        "input-source-is-2-Set-Korean-at-the-end": true
+      }
+    }
+  ],
+  "conclusion": "160 of 160 checks passed in 10 languages. The control refused every call and no reading moved. Under the candidate every call went out through CGEvent and 2-Set Korean read back after it; automation.toggle_view, nav.zoom_to_fit, transport.record, transport.toggle_cycle, transport.toggle_metronome, view.toggle_library, view.toggle_mixer, view.toggle_piano_roll went out under com.apple.keylayout.ABC in every language, by the layout each reply named; 8 of the 8 operations changed Logic's state and changed it back in every language. ",
+  "limits": [
+    "One Logic installation, one fixture, one keyboard input source (2-Set Korean).",
+    "This host's key command set was changed for the run: command 474 moved from Control-Shift-R to plain K. With the host's own set, K reaches Logic and runs nothing, and the metronome cannot change by its key.",
+    "The piano roll, automation and zoom readings are structural and unnamed; the canon has no label for the editors' checkbox or the automation view.",
+    "The waits around the key (100 ms each side) were not varied.",
+    "The run was made at 0c9f1fa5 with both binaries built from that tree.",
+    "TIS offered ABC, the layout this host's 2-Set Korean types Latin through; the Dvorak pass is its own record."
+  ],
+  "supersedes": "2026-10-02-plain-letter-keys-act-under-2-set-korean-through-cgevent",
+  "canon_not_applicable": {
+    "reason": "This record states what the harness read as booleans, counts and operation ids, and the input-source ids the server reported; it quotes no string Logic ships."
+  }
+}
