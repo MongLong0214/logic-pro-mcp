@@ -1,0 +1,38 @@
+Limit: the watch is at most ten polls 50 ms apart after the press; a warning Logic raises after the last poll is not seen, and whether Logic raises it on every Write press, and how soon after it, is unmeasured
+Warn: do not act in every poll that sees a blocker: a warning that does not close would be pressed on each of the ten polls; each kind is acted on once, then reported open
+Warn: do not stop at the first clean read once the mode matched: one clean read taken just before a late warning ends the loop behind a State A reply
+Warn: the acting reader is the preflight scope with clearMandatoryNewTrack false; true would press Create on a New Track sheet the press did not raise
+Warn: lastRead tests the blocker before the clean streak; that order is untested because the shared reader carries an unreadable reason only beside .none, so the mutant that swaps it survives; a reader change that reports a blocker with an unreadable reason needs a test here
+Unverified: every proof here is a fixture shaped like Logic's AX tree; no live Logic has run this code, so the seam firing on a real warning, in any of the ten locales, and a clean quit afterwards are unmeasured (the screen was locked)
+Record-Id: r-4f220b8de64f
+Provenance: inherited a9ea816b0a9adbfe1894c2046565ca3f2661ac29
+
+Limit: the window thread waits 20 ms after each listing, so listings are 20 ms plus a listing's own time apart; a window Logic raises and the candidate clears between two listings is not seen, and the candidate check then fails on during_write rather than passing
+Limit: one track, the first row of logic://tracks, on one fixture and one Logic installation; the automation mode readback is recorded, not judged, because Read and Touch also returned readback_unavailable on the #904 runs
+Warn: do not acknowledge the control's warning in the crash-control languages: the crash check is the positive control for the crash reading, and the #904 X5 run that acknowledged it did not crash
+Warn: keep the dialog text out of the evidence: a record that quotes a corpus-held string is refused by the canon checker's rule 13, so only its sha256 and length are stored
+Unverified: written and checked offline while the screen was locked; no live run has used it yet
+Record-Id: r-aa540915ab48
+Provenance: inherited d5039752c7fc85c1adcc27c4558f341e71508096
+
+Limit: the 16-point inset is sized from one German dialog's 5 differing pixels, all within 7 points of its edge; a change Logic makes to the warning within 16 points of its edge is not compared
+Unverified: that the edge pixels differ because the rounded outline is blended with what Logic draws behind the dialog is the likely cause and was not measured
+Record-Id: r-d3b922850457
+Provenance: inherited ec01c1dbbd216eaa6671602dd27a73183b1082db
+
+Limit: one Write press per launch, on the first track of one fixture, on one Logic 12.3 installation, and that track is a stack header; a later press in the same launch or a press on another track was not measured
+Warn: a9ea816b's message says the base binary answered State A over the warning; every base reply in this run was State B readback_unavailable, so do not cite that message for the mode
+Unverified: the candidate's sighting is matched to the warning by layer, position and timing, which are those of the control's counted dialog; its text was not read during the call
+Record-Id: r-380b44b7dffb
+Provenance: inherited 16f07396e3fcf3cf35de78e607fa3de70b20c1de
+
+Limit: the ten-language live run cited by this pull request was made at ec01c1db, before the latch; MCUChannel and the delete loop changed since, so that run does not show this code on Logic until it is run again
+Warn: the delete loop now reports, for a kind acted on earlier and seen again after another kind, the action first taken on it rather than none; a reader comparing replies across versions will see that field change
+Warn: live_993 is shared by every locale harness; logic_census was added beside logic_running without changing it, and the harness that owns the file has not been run at this head
+Record-Id: r-0275c99f929d
+Provenance: inherited 2331fd0c30b506748c2ed14c903107d3307a3e62
+
+Limit: seven records come from a run whose crash-control quit wrote no crash report; their crash reading's positive control is in the fr/de/es run at the same head and binaries
+Limit: the base binary is main 9dc6fea2, not the merge base of this branch; it predates the change and leaves the warning up in every language, which is what the control role needs
+Record-Id: r-8efb2cb93ed4
+Provenance: inherited 7c056064e33c9b7934110b62b9d210e951ed7762
