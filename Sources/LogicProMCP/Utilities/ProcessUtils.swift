@@ -144,16 +144,29 @@ enum ProcessUtils {
         guard let infos = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
         ) as? [[String: Any]] else { return false }
-        // The list is ordered front to back; `keyboardWindow` names the window whose owner the
-        // keyboard belongs to, an alert at the modal-panel level included.
-        guard let window = LogicOnScreenWindows.keyboardWindow(infos),
-              let pid = window[kCGWindowOwnerPID as String] as? pid_t,
+        // The focused application is read after the window list: the system-wide read fails until
+        // this process has called the window server (`focusedApplicationPID`).
+        return logicOwnsTheKeyboard(
+            windows: infos, focusedApplicationPID: focusedApplicationPID(), isKnownLogicPID: isKnownLogicPID
+        )
+    }
+
+    /// The decision `logicOwnsTheKeyboard` takes, from what it read. The list is ordered front to
+    /// back; `keyboardWindow` names the window whose owner the keyboard belongs to, an alert at the
+    /// modal-panel level included, and that owner must be Logic. An application with no window on
+    /// screen holds the keyboard without being in the list, and the accessibility server names it
+    /// (`LogicOnScreenWindows.keyboardOwnerIsLogic`): when it answered, it must name that same
+    /// process. Not merely a process `isKnownLogicPID` accepts: that answers true for a pid whose
+    /// bundle does not read, so a focused helper or command-line process would pass (review R1 of
+    /// #1082). Unread, the window reading answers alone, as it did before.
+    static func logicOwnsTheKeyboard(
+        windows: [[String: Any]], focusedApplicationPID: pid_t?, isKnownLogicPID: (pid_t) -> Bool
+    ) -> Bool {
+        guard let window = LogicOnScreenWindows.keyboardWindow(windows),
+              let pid = pidValue(from: window[kCGWindowOwnerPID as String]),
               isKnownLogicPID(pid) else { return false }
-        // An application with no window on screen holds the keyboard without being in the list;
-        // the accessibility server names it (`LogicOnScreenWindows.keyboardOwnerIsLogic`). Unread,
-        // the window reading answers alone, as it did before.
-        guard let focused = focusedApplicationPID() else { return true }
-        return isKnownLogicPID(focused)
+        guard let focusedApplicationPID else { return true }
+        return focusedApplicationPID == pid
     }
 
     /// The process the accessibility server names as the focused application, the one keystrokes

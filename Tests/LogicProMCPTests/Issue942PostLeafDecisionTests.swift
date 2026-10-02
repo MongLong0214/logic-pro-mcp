@@ -318,6 +318,25 @@ struct Issue942PostLeafDecisionTests {
         #expect(Self.keyboardOwner(Self.windowlessFinderOverLogic, focused: Self.logicPID) == "logic")
     }
 
+    /// The production predicate, from what it read. Review R1 of #1082: the focused application
+    /// was accepted through `isKnownLogicPID`, which answers true for a pid whose bundle does not
+    /// read, so a focused helper process passed. Mutation this kills: accepting the focused pid by
+    /// `isKnownLogicPID` instead of requiring it to be the keyboard window's own process.
+    @Test func theFrontmostGateNeedsTheFocusedApplicationToBeTheKeyboardWindowsOwnProcess() {
+        let windows: [[String: Any]] = [
+            Self.window(owner: NSNumber(value: Self.logicPID), number: 1, layer: NSNumber(value: 0)),
+        ]
+        let everyPidIsLogic: (pid_t) -> Bool = { _ in true }
+        #expect(!ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.finderPID, isKnownLogicPID: everyPidIsLogic))
+        #expect(ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.logicPID, isKnownLogicPID: everyPidIsLogic))
+        #expect(ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: nil, isKnownLogicPID: everyPidIsLogic))
+        #expect(!ProcessUtils.logicOwnsTheKeyboard(
+            windows: windows, focusedApplicationPID: Self.logicPID, isKnownLogicPID: { _ in false }))
+    }
+
     /// Both readings must say Logic. Mutation this kills: the focused application overriding the
     /// window reading, so a prompt in front of Logic reads as Logic's because Logic is focused.
     @Test func aFocusedLogicDoesNotOverrideAnotherProcesssKeyboardWindow() {

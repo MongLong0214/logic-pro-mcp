@@ -2,6 +2,11 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
+// The executor these tests drive exists only in debug builds (`postLeafLiveHoldExecutor` is under
+// `#if DEBUG`), so the suite is too: a release build of the test target must still compile (review
+// R1 of #1082). Release builds are kept from reading the variable by the same condition.
+#if DEBUG
+
 /// #942. The debug-build live-hold seam (`AccessibilityChannel+GotoPostLeafLiveHold.swift`): the
 /// executor a live harness drives the dialog route through in place of the script. What these
 /// tests establish is that each name the harness writes becomes the result the route classifies as
@@ -196,3 +201,4 @@ import Testing
         #expect(AccessibilityChannel.postLeafLiveHoldExecutorFromEnvironment() == nil)
     }
 }
+#endif
