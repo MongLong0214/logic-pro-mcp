@@ -1,0 +1,66 @@
+Limit: the hold substitutes the script's result, so a live run through it shows what the route does with each of the fourteen over the screens it arranged, never that Logic reaches any of them or that a real failure leaves a screen like the arranged one
+Warn: the hold is chosen after an injected executeDialogScript and before the runtime's eight-second script, and only when executeDialogScript is nil does the route take GoToPositionDialogExecutionLock; a caller that injects a script bypasses the lock and the hold alike
+Unverified: release builds exclude the hold by #if DEBUG in postLeafLiveHoldExecutorFromEnvironment; no test runs a release build to observe that LOGIC_MCP_942_POST_LEAF_HOLD_DIR has no effect there
+Unverified: live_942_post_leaf_settlement_in_every_locale.py has not run on Logic at this commit; its window reads, predicates and Korean restore are checked by py_compile and check-falsifiable-adoption only
+Record-Id: r-1395f17ebe6c
+Provenance: inherited f84c45e4c73920c3c05fffcf37c759fbbfe1799b
+
+Limit: what the nameless layer-103 Logic window is was not read; it was on screen before the nothing hold and stayed through it, and by popupMenuCount it is not a menu
+Warn: probe_942_escape_over_goto_dialog now counts menus at layer 101 only and reads appeared windows at any other layer, so its clean-up no longer sends Escape at a Logic window above the menu level
+Unverified: the harness has not run on Logic with these readings; the ko pilot at f84c45e4 is the only run, and it read windows by the old rules
+Record-Id: r-2c66526edf6f
+Provenance: inherited c7fa26afcc3aed82500ab891e1bed0ab948eb0c5
+
+Limit: the closing time was measured once, in Korean, on one Logic; the wait allows ARRANGE_WAIT, 4 s, and a window still closing after that is read as left behind
+Record-Id: r-087b43129420
+Provenance: inherited 9899b0527acf7b7ff87b21bbc7227a1a6e24ee74
+
+Limit: the modal-panel rule rests on one measured screen, two UserNotificationCenter prompts over a Korean Logic; a window another process keeps at layer 8 without holding the keyboard would make the gate refuse
+Warn: a permission prompt left up in front of Logic now makes the frontmost gate refuse every keystroke route until it is answered; whether activating Logic lowers such a prompt was not measured
+Unverified: no server binary was driven against the prompts with the new rule; its reading is shown by the fixture test and by the harness mirror read live
+Record-Id: r-a47c3ea09b2e
+Provenance: inherited a28300dae52ad016b999544937fca9020c0bab0e
+
+Limit: the modal-panel rule rests on one measured screen, UserNotificationCenter prompts over a Korean Logic; a window another process keeps at layer 8 without holding the keyboard makes the gate refuse
+Limit: with Logic active and a prompt left at layer 8 in front of Logic's normal windows the rule reads the prompt's owner, measured while lsappinfo front named Logic, so the gate refuses as logic_not_frontmost until the prompt is answered; which process held the keyboard then was not read
+Record-Id: r-2227d2848297
+Supersedes: r-a47c3ea09b2e
+Provenance: inherited a7913248ceaea139bd135ce2a62db288f00896bc
+
+Limit: the English record rests on the rerun; in the ten-language run the English dialog and menu-over-dialog holds each needed a second Escape at the dialog, and that was not reproduced in the rerun or in sixteen probe samples
+Limit: the runs were made at a7913248; the branch has since merged main, whose changes are outside the settlement and the keyboard reading, and no run was made at the merged head
+Record-Id: r-f7b909fb500b
+Provenance: inherited 685f3582f9bbfc561415ad16dc7c08f971648bfa
+
+Limit: the focused application was compared with lsappinfo front on one Korean Logic, for Logic and Finder only; under the permission prompts the modal-panel rule was built for it was not read
+Limit: the system-wide read fails with -25204 until the process has called the window server; every caller reads the window list first, and any failed read leaves the window rule alone, which still misreads a windowless application
+Limit: not driven on Logic at this commit; the e2e is a separate step
+Ruled-out: reading an unread focused application as not Logic | a process's first read before any window-server call fails with -25204, and every gate would refuse on it
+Ruled-out: the focused application alone, without the window rule | it was not read under the permission prompts the window rule was measured on, and an unread answer would leave nothing to decide with
+Warn: a runtime that does not set focusedApplicationPID reads it as unread; a new production runtime must set it, as AXLogicProElements.Runtime.production and CGEventChannel.Runtime.production do
+Record-Id: r-564ce3ebf003
+Provenance: inherited 69a33c12af0725704c5127606b395a60fe8ccb28
+
+Limit: one windowless application, Finder; the modal-panel prompts the window rule was built for cannot be raised on demand and are not in this harness
+Warn: the harness reads the window list before the focused application, because the accessibility read fails with -25204 until the process has called the window server
+Record-Id: r-4dc88e1fc445
+Provenance: inherited 308c91b7fe6623ee2a280dc886be3db5a2c733c3
+
+Limit: one windowless application, Finder, one fixture, one Logic installation; the script was replaced by the #942 hold, so no keystroke into Finder was posted and its effect is not shown
+Limit: the run was made at 308c91b7 with the candidate built at 69a33c12; the commits between add only the harness and a guard floor
+Record-Id: r-482acc1281f8
+Provenance: inherited ae59e0c8962636c340a3c80cdc59ffa69412a915
+
+Limit: the release test build was not run at this commit; the guard follows the one around the declaration
+Warn: do not accept the focused application through isKnownLogicPID: it answers true for a pid whose bundle does not read, so a focused helper or command-line process passed the frontmost gate
+Record-Id: r-a101556bdcf4
+Provenance: inherited c651599186049358426ff2b323970855947148fc
+
+Limit: one windowless application, Finder, one fixture, one Logic installation; no keystroke into Finder was posted, so its effect is not shown
+Record-Id: r-64c04393a6c9
+Provenance: inherited c986732f27284843d58a3ac9f020fbbcd99d2345
+
+Limit: isKnownLogicPID keeps its permissive answer for its other callers (preferredLogicPID); only the keyboard-ownership decision stopped using it
+Warn: the keyboard-window owner must read as Logic by its bundle identifier; isKnownLogicPID answers true for an unreadable bundle, so a helper that owns the front window and holds the focus passed the frontmost gate
+Record-Id: r-7b0db5f176fe
+Provenance: inherited e0af4f1248ffbeea1c53d5afdbb6cfddbee2913f
