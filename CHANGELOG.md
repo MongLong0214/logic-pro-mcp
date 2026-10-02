@@ -33,17 +33,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
-- **The background state poll skips its cycle while a text field in Logic has keyboard focus
-  (#1079).** With the server connected and idle, an inline track rename lost focus partway through
-  typing and the rest of the keystrokes reached Logic as key commands; with the process killed it
-  did not. Each 3 s tick now reads Logic's focused element first and, when it is a text field, text
-  area, combo box or any element with a text insertion point, runs no AX walk and no `osascript`
-  document-path read. That is the same classifier the mute, solo and arm keys use to refuse a
-  synthetic key, now one function for both. A focus that does not read still polls, since a
-  failed read is not evidence of a text field and Logic not running never reads; a modal dialog
-  alone does not stop polling. `system.refresh_cache` is not gated. Unit-tested only: the focus
-  loss has not been reproduced, so which read caused it, and whether this removes it, is
-  unmeasured.
+- **The background state poll yields while a text field in Logic has keyboard focus (#1079).**
+  With the server connected and idle, an inline track rename lost focus partway through and the
+  rest of the keystrokes reached Logic as key commands; with the process killed it did not. Each 3 s
+  tick now reads Logic's focused element first and, when it is a text field, text area, combo box or
+  any element with a text insertion point, runs no AX walk and no `osascript` document-path read. A
+  cycle already running reads the focus again before each of its reads and stops at the first one
+  that finds text editing; a read already under way runs to its end. That is the same classifier the
+  mute, solo and arm keys use to refuse a synthetic key, now one function for both. A focus that
+  does not read still polls, since a failed read is not evidence of a text field and Logic not
+  running never reads; a modal dialog alone does not stop polling. `system.refresh_cache` is not
+  gated. Measured live: an idle server without the yield ended the rename, and one with it did not
+  (`docs/observations/2026-10-02-an-idle-poll-ends-an-inline-track-rename-in-ten-languages.json`).
+- **`track.set_automation` on MCU no longer leaves Logic's Write warning up behind its reply
+  (#1077).** Logic answered the Write press with a one-button warning and left it up, and quitting
+  Logic under it crashed Logic in 4 of 4 runs on a German Logic. Every poll after the mode press now
+  reads Logic's modal set after the mode, and clears a one-button informational alert or a stray
+  menu through the preflight reconciler, at most once per kind; any other dialog or sheet is left
+  as it is and the reply is State B `modal_left_open`. The poll stops early only once the mode
+  matches and two consecutive complete reads found no blocker. `modal_after_press` says what the
+  last read found (`clear`, `open`, `unreadable`) and `reconciled_modal_kind` / `reconciled_action`
+  name the blocker seen; a modal set that did not read keeps a matched mode out of State A.
 - **`transport.goto_position`'s CGEvent fallback types nothing until the Go To Position dialog is
   on screen (#1038).** It used to post the position and Return right after the key that opens the
   dialog, so when the dialog did not open they went to whatever held the keyboard. The opening key

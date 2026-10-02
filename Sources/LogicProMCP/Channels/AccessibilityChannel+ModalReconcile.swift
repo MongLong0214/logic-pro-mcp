@@ -406,9 +406,11 @@ extension AccessibilityChannel {
     /// Reconcile a blocking modal left by a just-completed mutation. Performs
     /// every actionable decision (clickCreate / confirmDelete / escapeMenu);
     /// fail-closed and no-action never touch the UI. `isDeleteContext` authorises
-    /// confirming a delete-channel-strips sheet.
+    /// confirming a delete-channel-strips sheet. A kind in `withholding` is read and reported but
+    /// not acted on; see `ModalActionLatch`.
     static func reconcileAfterMutation(
         isDeleteContext: Bool,
+        withholding: Set<ModalReconciliation.BlockingModalKind> = [],
         runtime: AXLogicProElements.Runtime = .production,
         witnessAttempts: Int = 30,
         witnessDelayNanoseconds: UInt64 = 100_000_000
@@ -417,6 +419,7 @@ extension AccessibilityChannel {
             isDeleteContext: isDeleteContext,
             preflight: false,
             clearMandatoryNewTrack: true,
+            withholding: withholding,
             runtime: runtime,
             witnessAttempts: witnessAttempts,
             witnessDelayNanoseconds: witnessDelayNanoseconds
@@ -492,10 +495,90 @@ extension AccessibilityChannel {
         )
     }
 
+    /// What a poll asks of a modal reader that may also act (#1077): read only, or read again and
+    /// act on what that read finds unless its kind is withheld.
+    enum ModalWatchRequest: Sendable, Equatable {
+        case observe
+        case reconcile(withholding: Set<ModalReconciliation.BlockingModalKind>)
+    }
+
+    /// The modal reader an MCU automation press polls with (#1077). `.observe` only reads;
+    /// `.reconcile` runs the preflight scope, which clears a one-button informational alert or a
+    /// stray menu and never presses Create or confirms a delete, and acts on no withheld kind.
+    static func automationModalReconciler(
+        runtime: AXLogicProElements.Runtime = .production,
+        witnessAttempts: Int = 30,
+        witnessDelayNanoseconds: UInt64 = 100_000_000
+    ) -> @Sendable (_ request: ModalWatchRequest) async -> ModalReconcileOutcome {
+        { request in
+            switch request {
+            case .observe:
+                return observeModalAfterMutation(isDeleteContext: false, runtime: runtime)
+            case .reconcile(let withholding):
+                return await reconcile(
+                    isDeleteContext: false,
+                    preflight: true,
+                    clearMandatoryNewTrack: false,
+                    withholding: withholding,
+                    runtime: runtime,
+                    witnessAttempts: witnessAttempts,
+                    witnessDelayNanoseconds: witnessDelayNanoseconds
+                )
+            }
+        }
+    }
+
+    /// At most one direct action per blocker kind across one operation's polls (#346, #1077).
+    ///
+    /// A poll observes, and calls the executor only for a blocker whose kind nothing has acted on.
+    /// The executor then reads again, and that read can find a different kind from the one the
+    /// observation saw: a menu observed, an alert raised again by the time the executor looks.
+    /// Checking the observed kind alone let that second read press the alert a second time. So the
+    /// latch hands the executor every kind already acted on and the executor declines those
+    /// itself: the limit holds on the kind actually pressed, not on the kind observed.
+    ///
+    /// `poll` returns the observation beside the executor's outcome. A blocker the observation saw
+    /// is a fact even when the executor's own read then fails, and the caller keeps it.
+    struct ModalActionLatch: Sendable {
+        /// Kinds the executor may not act on again until `reopen`.
+        private(set) var actedKinds: Set<ModalReconciliation.BlockingModalKind> = []
+        /// The last outcome in which the executor issued an action on each kind. `reopen` keeps
+        /// these: they say what was done, and that stays true.
+        private var actions: [ModalReconciliation.BlockingModalKind: ModalReconcileOutcome] = [:]
+
+        mutating func poll(
+            observe: () async -> ModalReconcileOutcome,
+            reconcile: (_ withholding: Set<ModalReconciliation.BlockingModalKind>) async -> ModalReconcileOutcome
+        ) async -> (observed: ModalReconcileOutcome, reconciled: ModalReconcileOutcome?) {
+            let observed = await observe()
+            guard observed.kind != .none, !actedKinds.contains(observed.kind) else {
+                return (observed, nil)
+            }
+            let reconciled = await reconcile(actedKinds)
+            if reconciled.actionAttempted {
+                actedKinds.insert(reconciled.kind)
+                actions[reconciled.kind] = reconciled
+            }
+            return (observed, reconciled)
+        }
+
+        /// The outcome of the last action issued on `kind`, or nil when nothing acted on it.
+        func action(on kind: ModalReconciliation.BlockingModalKind) -> ModalReconcileOutcome? {
+            actions[kind]
+        }
+
+        /// A complete clean read shows the kinds acted on have closed; a later instance of one may
+        /// receive one fresh action.
+        mutating func reopen() {
+            actedKinds.removeAll()
+        }
+    }
+
     private static func reconcile(
         isDeleteContext: Bool,
         preflight: Bool,
         clearMandatoryNewTrack: Bool,
+        withholding: Set<ModalReconciliation.BlockingModalKind> = [],
         runtime: AXLogicProElements.Runtime,
         witnessAttempts: Int,
         witnessDelayNanoseconds: UInt64
@@ -513,12 +596,14 @@ extension AccessibilityChannel {
 
         // At preflight, only the non-destructive blockers are auto-cleared (and
         // the mandatory New Track sheet only when `clearMandatoryNewTrack`); the
-        // scoping policy is the pure `preflightShouldPerform`.
-        if preflight,
-           !ModalReconciliation.preflightShouldPerform(
-                kind: kind,
-                clearMandatoryNewTrack: clearMandatoryNewTrack
-           ) {
+        // scoping policy is the pure `preflightShouldPerform`. A withheld kind was already acted on
+        // in this operation; this read reports it and does not act on it again.
+        if withholding.contains(kind)
+            || (preflight
+                && !ModalReconciliation.preflightShouldPerform(
+                    kind: kind,
+                    clearMandatoryNewTrack: clearMandatoryNewTrack
+                )) {
             return ModalReconcileOutcome(
                 kind: kind,
                 decision: decision,

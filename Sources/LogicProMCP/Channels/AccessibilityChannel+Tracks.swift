@@ -2495,7 +2495,6 @@ extension AccessibilityChannel {
         // rather than a fabricated success.
         var reconcileKind = ModalReconciliation.BlockingModalKind.none
         var reconcileAction = "none"
-        var reconcileActionKind = ModalReconciliation.BlockingModalKind.none
         // #453: an acknowledgement the executor declined must reach the envelope.
         // Kept beside kind/action so a refusal on any attempt survives to the
         // result, rather than being overwritten by a later clean pass.
@@ -2506,9 +2505,63 @@ extension AccessibilityChannel {
         // #549: which exact node/scan the sheet scan gave up on, mirrored
         // beside `reconcileUnreadableReason` at every site that sets/clears it.
         var reconcileSheetScanFailureDetail: ModalSheetScanFailureDetail?
-        var actionAttemptedModalKinds: Set<String> = []
+        // #1077: the one-action-per-kind rule lives in `ModalActionLatch`, shared
+        // with the MCU automation watch. It also keeps what was done about each
+        // kind, so a kind seen again after a different one still reports its
+        // own action.
+        var modalLatch = ModalActionLatch()
         var mandatoryNewTrackReconciliationPerformed = false
         var consecutiveCleanModalObservations = 0
+
+        // Absorbs one modal reading into the envelope's provenance. A poll
+        // passes its observation and then, when the executor ran, the
+        // executor's own read, in the order they were taken (#1077): a blocker
+        // the observation saw is kept even when the fresh read then fails or
+        // finds nothing.
+        func absorbModalReading(_ outcome: ModalReconcileOutcome) {
+            if outcome.kind != .none {
+                reconcileKind = outcome.kind
+                // Never claim a decision label as an action when no direct
+                // press/key event was issued. A kind something acted on keeps
+                // its own action and witness whenever it is seen again; a kind
+                // nothing acted on reports `none` and does not inherit another
+                // kind's witness.
+                if let acted = modalLatch.action(on: outcome.kind) {
+                    reconcileAction = reconcileActionLabel(acted.decision)
+                    reconcileWitnessSummary = acted.witnessSummary
+                } else {
+                    reconcileAction = "none"
+                    reconcileWitnessSummary = outcome.witnessSummary
+                }
+                if let refusal = outcome.refusal { reconcileRefusal = refusal }
+                if let actionFailure = outcome.actionFailure { reconcileActionFailure = actionFailure }
+                if let unreadableReason = outcome.unreadableReason {
+                    reconcileUnreadableReason = unreadableReason
+                    reconcileSheetScanFailureDetail = outcome.sheetScanFailureDetail
+                }
+                // `mandatoryNewTrackReconciliationPerformed` feeds both
+                // `mandatory_track_reconciliation_performed` and
+                // `new_track_dialog_auto_confirmed` below. `actionAttempted`
+                // is true even when AX rejected the press (e.g. -25202 on a
+                // stale Create button); only `actionAccepted` means AX itself
+                // took the click.
+                if outcome.kind == .mandatoryNewTrack, outcome.actionAccepted {
+                    mandatoryNewTrackReconciliationPerformed = true
+                }
+            } else if outcome.modalObservationIsComplete {
+                // A complete clean pass proves the prior visible kinds closed,
+                // so a later instance is eligible for one fresh direct action.
+                modalLatch.reopen()
+                reconcileUnreadableReason = nil
+                reconcileSheetScanFailureDetail = nil
+            } else if let unreadableReason = outcome.unreadableReason {
+                // An incomplete no-modal answer is neither a blocker nor a
+                // clean pass. Preserve its diagnostic and leave the action
+                // latch intact until a later complete observation settles it.
+                reconcileUnreadableReason = unreadableReason
+                reconcileSheetScanFailureDetail = outcome.sheetScanFailureDetail
+            }
+        }
 
         // `nil` means no post-delete rail read succeeded. Do not initialize this
         // from `beforeCount`: serialising that pre-delete number as "after" makes
@@ -2541,69 +2594,28 @@ extension AccessibilityChannel {
             }
             // Observe first, then action only once for that visible sheet kind.
             // This bounds a Create press without globally wedging a later,
-            // different blocker in the same delete operation.
-            let observed = observeModalAfterMutation(
-                isDeleteContext: true,
-                arrangeWindow: arrangeWindow,
-                runtime: runtime
+            // different blocker in the same delete operation. The executor's
+            // fresh read is handed the kinds already acted on and declines
+            // them, so finding one of those again does not press it again.
+            let step = await modalLatch.poll(
+                observe: {
+                    observeModalAfterMutation(
+                        isDeleteContext: true,
+                        arrangeWindow: arrangeWindow,
+                        runtime: runtime
+                    )
+                },
+                reconcile: { withholding in
+                    await reconcileAfterMutation(
+                        isDeleteContext: true,
+                        withholding: withholding,
+                        runtime: runtime
+                    )
+                }
             )
-            let outcome: ModalReconcileOutcome
-            if observed.kind != .none,
-               !actionAttemptedModalKinds.contains(reconcileKindLabel(observed.kind)) {
-                outcome = await reconcileAfterMutation(isDeleteContext: true, runtime: runtime)
-                if outcome.actionAttempted {
-                    actionAttemptedModalKinds.insert(reconcileKindLabel(outcome.kind))
-                }
-            } else {
-                outcome = observed
-            }
-            if outcome.kind != .none {
-                reconcileKind = outcome.kind
-                // Never claim a decision label as an action when no direct
-                // press/key event was issued. If this is a later observation of
-                // the same sheet kind, retain its earlier actual action label;
-                // if it is a new unacted kind, clear the old kind's label.
-                if outcome.actionAttempted {
-                    reconcileAction = reconcileActionLabel(outcome.decision)
-                    reconcileActionKind = outcome.kind
-                } else if reconcileActionKind != outcome.kind {
-                    reconcileAction = "none"
-                    reconcileActionKind = .none
-                }
-                if let refusal = outcome.refusal { reconcileRefusal = refusal }
-                if let actionFailure = outcome.actionFailure { reconcileActionFailure = actionFailure }
-                if let unreadableReason = outcome.unreadableReason {
-                    reconcileUnreadableReason = unreadableReason
-                    reconcileSheetScanFailureDetail = outcome.sheetScanFailureDetail
-                }
-                // A current unacted *new* blocker must not inherit a witness
-                // from a prior sheet. A repeated observation of the same kind
-                // retains its own prior direct-action witness.
-                if outcome.actionAttempted || reconcileActionKind != outcome.kind {
-                    reconcileWitnessSummary = outcome.witnessSummary
-                }
-                // `mandatoryNewTrackReconciliationPerformed` feeds both
-                // `mandatory_track_reconciliation_performed` and
-                // `new_track_dialog_auto_confirmed` below. `actionAttempted`
-                // is true even when AX rejected the press (e.g. -25202 on a
-                // stale Create button); only `actionAccepted` means AX itself
-                // took the click.
-                if outcome.kind == .mandatoryNewTrack, outcome.actionAccepted {
-                    mandatoryNewTrackReconciliationPerformed = true
-                }
-            } else if outcome.modalObservationIsComplete {
-                // A complete clean pass proves the prior visible kinds closed,
-                // so a later instance is eligible for one fresh direct action.
-                actionAttemptedModalKinds.removeAll()
-                reconcileUnreadableReason = nil
-                reconcileSheetScanFailureDetail = nil
-            } else if let unreadableReason = outcome.unreadableReason {
-                // An incomplete no-modal answer is neither a blocker nor a
-                // clean pass. Preserve its diagnostic and leave the action
-                // latch intact until a later complete observation settles it.
-                reconcileUnreadableReason = unreadableReason
-                reconcileSheetScanFailureDetail = outcome.sheetScanFailureDetail
-            }
+            let observed = step.observed
+            absorbModalReading(observed)
+            if let reconciled = step.reconciled { absorbModalReading(reconciled) }
             let observedTrackCountDecreased = beforeCount.flatMap { beforeCount in
                 currentCount.map { $0 < beforeCount }
             } ?? false

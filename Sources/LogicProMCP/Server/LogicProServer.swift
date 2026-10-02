@@ -411,7 +411,8 @@ actor LogicProServer {
             readArmed: { track in
                 guard let button = AXLogicProElements.findTrackArmButton(trackIndex: track) else { return nil }
                 return AXValueExtractors.extractButtonState(button)
-            }
+            },
+            reconcileModal: AccessibilityChannel.automationModalReconciler()
         )
         self.mcuChannel = MCUChannel(transport: mcuTransport, cache: cache, axReadback: mcuAXReadback)
 
@@ -1394,6 +1395,11 @@ actor LogicProServer {
         await server.stop()
         await resourceSubscriptions.clear()
         await resourceNotifier.reset()
+    }
+
+    /// #1077: the channel the server builds is the one that reads the modal set after a press.
+    var mcuObservesModalAfterAutomationPressForTesting: Bool {
+        mcuChannel.observesModalAfterAutomationPress
     }
 
     func replaceTracksForTesting(_ tracks: [TrackState]) async {

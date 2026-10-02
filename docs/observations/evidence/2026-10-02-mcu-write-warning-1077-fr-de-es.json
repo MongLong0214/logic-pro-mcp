@@ -1,0 +1,2389 @@
+{
+ "name": "live_1077_write_warning_is_cleared_in_every_locale",
+ "head": "2331fd0c30b506748c2ed14c903107d3307a3e62",
+ "artifact": {
+  "path": "/Users/isaac/lpm-evidence/1077/bin-2331fd0c/candidate/LogicProMCP",
+  "sha256": "52f799c25109e505a81fa635ccedcae558d8ae569a2c1f1b5fac08e96a81f5cb",
+  "built_from": "2331fd0c30b506748c2ed14c903107d3307a3e62",
+  "worktree_clean": true,
+  "built_from_is_measured": false,
+  "artifact_older_than_sources": false
+ },
+ "records": [
+  {
+   "kind": "declaration",
+   "surface": "ui"
+  },
+  {
+   "kind": "observation",
+   "tag": "1077/binaries",
+   "payload": {
+    "candidate": "/Users/isaac/lpm-evidence/1077/bin-2331fd0c/candidate/LogicProMCP",
+    "candidate_sha256": "52f799c25109e505a81fa635ccedcae558d8ae569a2c1f1b5fac08e96a81f5cb",
+    "control": "/Users/isaac/lpm-evidence/1077/bin-control-main-9dc6/LogicProMCP",
+    "control_sha256": "c8502e006ed8283baf313c05f3ad245c0472fd6ce03a17ba5f3880f7b35f3b32",
+    "lprojs": [
+     "fr",
+     "de",
+     "es"
+    ],
+    "crash_control": [
+     "de",
+     "fr",
+     "es"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "capture",
+   "tag": "1077/fr/control-dialog-after-reply",
+   "file": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_fr_control-dialog-after-reply.png",
+   "window": {
+    "id": 2767,
+    "title": "",
+    "x": 808,
+    "y": 226,
+    "w": 304,
+    "h": 266
+   },
+   "display": {
+    "display": 0,
+    "bounds": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "wholly_within": true
+   },
+   "hash": "0761b0b0884ce1825a1e9d9f06964186cf8e2cd36d89ee047006b3e017c414dd",
+   "region_hash": "ae7c24bc96c488a6ddbe6bdd8bdab94b3135536303df97100468ba6afa505a7b",
+   "frames": 2,
+   "settled": true
+  },
+  {
+   "kind": "capture",
+   "tag": "1077/fr/control-dialog-after-survival",
+   "file": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_fr_control-dialog-after-survival.png",
+   "window": {
+    "id": 2767,
+    "title": "",
+    "x": 808,
+    "y": 226,
+    "w": 304,
+    "h": 266
+   },
+   "display": {
+    "display": 0,
+    "bounds": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "wholly_within": true
+   },
+   "hash": "d52d7b18b295a4a0b6b2f13627ef2ef7a5a5f3ff37ca29a9f785753e4d31dfaf",
+   "region_hash": "ae7c24bc96c488a6ddbe6bdd8bdab94b3135536303df97100468ba6afa505a7b",
+   "frames": 2,
+   "settled": true
+  },
+  {
+   "kind": "visual",
+   "tag": "1077/fr/control-dialog-unchanged",
+   "region": [
+    16,
+    16,
+    272,
+    234
+   ],
+   "subject": "the inside of the rounded edge of the Logic window below the pop-up menu level that the window server first listed after this control's Write press",
+   "before": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_fr_control-dialog-after-reply.png",
+   "after": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_fr_control-dialog-after-survival.png",
+   "expected": "region does not change \u2014 nothing dismissed or changed the window the Write press raised",
+   "observed": "before ae7c24bc96c488a6 after ae7c24bc96c488a6 changed=False",
+   "passed": true
+  },
+  {
+   "kind": "observation",
+   "tag": "1077/fr/control",
+   "payload": {
+    "host": {
+     "app": "Logic Pro",
+     "version": "12.3",
+     "build": "6674",
+     "locale": "fr-FR",
+     "os": "macOS 26.3 (25D125)"
+    },
+    "launch": {
+     "switched": true,
+     "arrange_window": "lpm-locale-campaign - Pistes",
+     "language_setting": [
+      "fr"
+     ],
+     "window_names": [
+      "lpm-locale-campaign - Liste des marqueurs",
+      "lpm-locale-campaign - Pistes"
+     ]
+    },
+    "phase": {
+     "track": {
+      "automationMode": "off",
+      "id": 0,
+      "is_stack_header": true,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": true,
+      "isSoloed": false,
+      "name": "Absolute Zero",
+      "pan": 0.007874015748031496,
+      "stack_collapsed": true,
+      "track_ref": "trk_9A72C887-43A5-43B1-AE9D-83C09EABCF47",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     },
+     "toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_EEB03657-5350-476F-8772-D8551C35E7F2",
+      "verified": false
+     },
+     "first_read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_F4D37447-844B-411F-A410-D515A08CC116",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "second_toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_ACBC272A-319B-44C7-AA09-592CDC9BA2B8",
+      "verified": false
+     },
+     "read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_4D2DD9C6-919A-4505-B60B-16D729D05DE7",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "before_write": {
+      "windows": [
+       {
+        "id": 2764,
+        "layer": 3,
+        "bounds": {
+         "X": 20,
+         "Height": 746,
+         "Y": 50,
+         "Width": 452
+        }
+       },
+       {
+        "id": 2763,
+        "layer": 0,
+        "bounds": {
+         "X": 0,
+         "Height": 1050,
+         "Y": 30,
+         "Width": 1920
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "write": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "mode": "write",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_1F1001CD-EF54-43A6-9F50-750C6DAB232F",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "write_seconds": 5.732,
+     "during_write": {
+      "reads": 216,
+      "unread": 0,
+      "new_windows": [
+       {
+        "id": 2767,
+        "layer": 8,
+        "bounds": {
+         "X": 956,
+         "Height": 6,
+         "Y": 356,
+         "Width": 8
+        },
+        "first_seen": 1.009,
+        "last_seen": 5.709
+       }
+      ]
+     },
+     "after_reply": {
+      "new_windows": [
+       {
+        "id": 2767,
+        "layer": 8,
+        "bounds": {
+         "X": 808,
+         "Height": 266,
+         "Y": 226,
+         "Width": 304
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 1,
+       "texts": [
+        {
+         "sha256": "9a0ac8f24400ccaa19c8c77475ac3cf907826af191b3a46ef4cffb8468441b93",
+         "length": 11
+        }
+       ]
+      }
+     },
+     "after_survival": {
+      "new_windows": [
+       {
+        "id": 2767,
+        "layer": 8,
+        "bounds": {
+         "X": 808,
+         "Height": 266,
+         "Y": 226,
+         "Width": 304
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 1,
+       "texts": [
+        {
+         "sha256": "9a0ac8f24400ccaa19c8c77475ac3cf907826af191b3a46ef4cffb8468441b93",
+         "length": 11
+        }
+       ]
+      }
+     },
+     "server_pids_after_close": []
+    },
+    "quit": {
+     "quit_returned": true,
+     "quit_seconds": 10.367,
+     "census_before": {
+      "status": "running",
+      "raw": "1"
+     },
+     "census_after": {
+      "status": "gone",
+      "raw": "0"
+     },
+     "new_crash_reports": [
+      "Logic Pro-2026-10-02-122302.ips"
+     ]
+    },
+    "acknowledged": null,
+    "after_acknowledge": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1077/fr/candidate",
+   "payload": {
+    "host": {
+     "app": "Logic Pro",
+     "version": "12.3",
+     "build": "6674",
+     "locale": "fr-FR",
+     "os": "macOS 26.3 (25D125)"
+    },
+    "launch": {
+     "switched": true,
+     "arrange_window": "lpm-locale-campaign - Pistes",
+     "language_setting": [
+      "fr"
+     ],
+     "window_names": [
+      "lpm-locale-campaign - Liste des marqueurs",
+      "lpm-locale-campaign - Pistes"
+     ]
+    },
+    "phase": {
+     "track": {
+      "automationMode": "off",
+      "id": 0,
+      "is_stack_header": true,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": true,
+      "isSoloed": false,
+      "name": "Absolute Zero",
+      "pan": 0.007874015748031496,
+      "stack_collapsed": true,
+      "track_ref": "trk_A1F33B38-F922-4990-AED0-BDB1B60289D5",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     },
+     "toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_6BC96DAD-77D5-4385-BA14-0EB35F033FFE",
+      "verified": false
+     },
+     "first_read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "modal_after_press": "clear",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_0D37DC57-3AB4-4D24-BE5D-58C43974B9DD",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "second_toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_B98C40A4-4A20-4417-B801-5A4E6286A860",
+      "verified": false
+     },
+     "read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "modal_after_press": "clear",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_7BF9A515-45DC-4B5E-95E6-30D286DE1E4F",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "before_write": {
+      "windows": [
+       {
+        "id": 2792,
+        "layer": 3,
+        "bounds": {
+         "X": 20,
+         "Height": 746,
+         "Y": 50,
+         "Width": 452
+        }
+       },
+       {
+        "id": 2791,
+        "layer": 0,
+        "bounds": {
+         "X": 0,
+         "Height": 1050,
+         "Y": 30,
+         "Width": 1920
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "write": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "modal_after_press": "clear",
+      "modal_reconciliation_witness": {
+       "blocker_set_clear": true,
+       "observations": {
+        "gone": 1
+       },
+       "polls": 1
+      },
+      "mode": "write",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "reconciled_action": "acknowledge_alert",
+      "reconciled_modal_kind": "informational_alert",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_4E6B2BEA-1BB4-45A9-8F8C-4AD38EBE432F",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "write_seconds": 7.437,
+     "during_write": {
+      "reads": 280,
+      "unread": 0,
+      "new_windows": [
+       {
+        "id": 2795,
+        "layer": 8,
+        "bounds": {
+         "X": 957,
+         "Height": 6,
+         "Y": 356,
+         "Width": 6
+        },
+        "first_seen": 1.126,
+        "last_seen": 1.995
+       }
+      ]
+     },
+     "after_reply": {
+      "new_windows": [],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "after_survival": {
+      "new_windows": [],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "server_pids_after_close": []
+    },
+    "quit": {
+     "quit_returned": true,
+     "quit_seconds": 14.292,
+     "census_before": {
+      "status": "running",
+      "raw": "1"
+     },
+     "census_after": {
+      "status": "gone",
+      "raw": "0"
+     },
+     "new_crash_reports": []
+    },
+    "acknowledged": null,
+    "after_acknowledge": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "capture",
+   "tag": "1077/de/control-dialog-after-reply",
+   "file": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_de_control-dialog-after-reply.png",
+   "window": {
+    "id": 2823,
+    "title": "",
+    "x": 811,
+    "y": 230,
+    "w": 297,
+    "h": 250
+   },
+   "display": {
+    "display": 0,
+    "bounds": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "wholly_within": true
+   },
+   "hash": "9a1c94eb3a850ff6c74bc7e07fef03c3df25c67d0b683335ecd3514cb2f912fd",
+   "region_hash": "f67762848fe548046b95b73b456e9fc14a0f309d87e3f3c14e728694140a0fc3",
+   "frames": 2,
+   "settled": true
+  },
+  {
+   "kind": "capture",
+   "tag": "1077/de/control-dialog-after-survival",
+   "file": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_de_control-dialog-after-survival.png",
+   "window": {
+    "id": 2823,
+    "title": "",
+    "x": 811,
+    "y": 230,
+    "w": 297,
+    "h": 250
+   },
+   "display": {
+    "display": 0,
+    "bounds": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "wholly_within": true
+   },
+   "hash": "79952fbefdaaf327d9e01bec0b00ea21867c4ff64550d8a207530625d5a0acad",
+   "region_hash": "f67762848fe548046b95b73b456e9fc14a0f309d87e3f3c14e728694140a0fc3",
+   "frames": 2,
+   "settled": true
+  },
+  {
+   "kind": "visual",
+   "tag": "1077/de/control-dialog-unchanged",
+   "region": [
+    16,
+    16,
+    265,
+    218
+   ],
+   "subject": "the inside of the rounded edge of the Logic window below the pop-up menu level that the window server first listed after this control's Write press",
+   "before": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_de_control-dialog-after-reply.png",
+   "after": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_de_control-dialog-after-survival.png",
+   "expected": "region does not change \u2014 nothing dismissed or changed the window the Write press raised",
+   "observed": "before f67762848fe54804 after f67762848fe54804 changed=False",
+   "passed": true
+  },
+  {
+   "kind": "observation",
+   "tag": "1077/de/control",
+   "payload": {
+    "host": {
+     "app": "Logic Pro",
+     "version": "12.3",
+     "build": "6674",
+     "locale": "de-DE",
+     "os": "macOS 26.3 (25D125)"
+    },
+    "launch": {
+     "switched": true,
+     "arrange_window": "lpm-locale-campaign - Spuren",
+     "language_setting": [
+      "de"
+     ],
+     "window_names": [
+      "lpm-locale-campaign - Marker-Liste",
+      "lpm-locale-campaign - Spuren"
+     ]
+    },
+    "phase": {
+     "track": {
+      "automationMode": "off",
+      "id": 0,
+      "is_stack_header": true,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": true,
+      "isSoloed": false,
+      "name": "Absolute Zero",
+      "pan": 0.007874015748031496,
+      "stack_collapsed": true,
+      "track_ref": "trk_AEA92191-4E1A-4237-87B6-710F0F9F34B1",
+      "type": "unknown",
+      "volume": 0
+     },
+     "toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_958D387F-4C2A-4E09-B743-8FC4424CA7B8",
+      "verified": false
+     },
+     "first_read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_2F084AB2-9697-4646-BADE-EB3DEF3AB3EB",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "second_toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_AA05E6B9-350E-418A-8A73-F3A1FE7408CD",
+      "verified": false
+     },
+     "read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_8C09C40F-B8D0-4637-A0C3-E5BD43EC3553",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "before_write": {
+      "windows": [
+       {
+        "id": 2820,
+        "layer": 3,
+        "bounds": {
+         "X": 20,
+         "Height": 746,
+         "Y": 50,
+         "Width": 452
+        }
+       },
+       {
+        "id": 2819,
+        "layer": 0,
+        "bounds": {
+         "X": 0,
+         "Height": 1050,
+         "Y": 30,
+         "Width": 1920
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "write": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "mode": "write",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_C557B6B5-9F8E-4EDC-98ED-3E230E44D845",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "write_seconds": 4.832,
+     "during_write": {
+      "reads": 180,
+      "unread": 0,
+      "new_windows": [
+       {
+        "id": 2823,
+        "layer": 8,
+        "bounds": {
+         "X": 958,
+         "Height": 4,
+         "Y": 353,
+         "Width": 3
+        },
+        "first_seen": 0.798,
+        "last_seen": 4.819
+       }
+      ]
+     },
+     "after_reply": {
+      "new_windows": [
+       {
+        "id": 2823,
+        "layer": 8,
+        "bounds": {
+         "X": 811,
+         "Height": 250,
+         "Y": 230,
+         "Width": 297
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 1,
+       "texts": [
+        {
+         "sha256": "4dfce49cbc7df808dcb04e94b72395715f64aa5a28f56bdbc8b998277413434f",
+         "length": 86
+        }
+       ]
+      }
+     },
+     "after_survival": {
+      "new_windows": [
+       {
+        "id": 2823,
+        "layer": 8,
+        "bounds": {
+         "X": 811,
+         "Height": 250,
+         "Y": 230,
+         "Width": 297
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 1,
+       "texts": [
+        {
+         "sha256": "4dfce49cbc7df808dcb04e94b72395715f64aa5a28f56bdbc8b998277413434f",
+         "length": 86
+        }
+       ]
+      }
+     },
+     "server_pids_after_close": []
+    },
+    "quit": {
+     "quit_returned": true,
+     "quit_seconds": 10.181,
+     "census_before": {
+      "status": "running",
+      "raw": "1"
+     },
+     "census_after": {
+      "status": "gone",
+      "raw": "0"
+     },
+     "new_crash_reports": [
+      "Logic Pro-2026-10-02-122513.ips"
+     ]
+    },
+    "acknowledged": null,
+    "after_acknowledge": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1077/de/candidate",
+   "payload": {
+    "host": {
+     "app": "Logic Pro",
+     "version": "12.3",
+     "build": "6674",
+     "locale": "de-DE",
+     "os": "macOS 26.3 (25D125)"
+    },
+    "launch": {
+     "switched": true,
+     "arrange_window": "lpm-locale-campaign - Spuren",
+     "language_setting": [
+      "de"
+     ],
+     "window_names": [
+      "lpm-locale-campaign - Marker-Liste",
+      "lpm-locale-campaign - Spuren"
+     ]
+    },
+    "phase": {
+     "track": {
+      "automationMode": "off",
+      "id": 0,
+      "is_stack_header": true,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": true,
+      "isSoloed": false,
+      "name": "Absolute Zero",
+      "pan": 0.007874015748031496,
+      "stack_collapsed": true,
+      "track_ref": "trk_21A4E912-4807-4691-A229-8175FB152681",
+      "type": "unknown",
+      "volume": 0
+     },
+     "toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_E3CB55F2-0B6E-400B-B3A9-0F707B884F35",
+      "verified": false
+     },
+     "first_read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "modal_after_press": "clear",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_41BF08EC-8566-4426-BAD2-AFD6003AD16C",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "second_toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_4B8FE3B7-3741-413C-B769-F6C7746D6BB1",
+      "verified": false
+     },
+     "read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "modal_after_press": "clear",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_2FB642D5-165A-4C18-BBED-B80F108B82D3",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "before_write": {
+      "windows": [
+       {
+        "id": 2848,
+        "layer": 3,
+        "bounds": {
+         "X": 20,
+         "Height": 746,
+         "Y": 50,
+         "Width": 452
+        }
+       },
+       {
+        "id": 2847,
+        "layer": 0,
+        "bounds": {
+         "X": 0,
+         "Height": 1050,
+         "Y": 30,
+         "Width": 1920
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "write": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "modal_after_press": "clear",
+      "modal_reconciliation_witness": {
+       "blocker_set_clear": true,
+       "observations": {
+        "gone": 1
+       },
+       "polls": 1
+      },
+      "mode": "write",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "reconciled_action": "acknowledge_alert",
+      "reconciled_modal_kind": "informational_alert",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_038DD8B8-546C-4B52-91C3-7705F9D1F2B6",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "write_seconds": 6.202,
+     "during_write": {
+      "reads": 229,
+      "unread": 0,
+      "new_windows": [
+       {
+        "id": 2851,
+        "layer": 8,
+        "bounds": {
+         "X": 955,
+         "Height": 6,
+         "Y": 352,
+         "Width": 9
+        },
+        "first_seen": 0.821,
+        "last_seen": 1.562
+       }
+      ]
+     },
+     "after_reply": {
+      "new_windows": [],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "after_survival": {
+      "new_windows": [],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "server_pids_after_close": []
+    },
+    "quit": {
+     "quit_returned": true,
+     "quit_seconds": 10.66,
+     "census_before": {
+      "status": "running",
+      "raw": "1"
+     },
+     "census_after": {
+      "status": "gone",
+      "raw": "0"
+     },
+     "new_crash_reports": []
+    },
+    "acknowledged": null,
+    "after_acknowledge": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "capture",
+   "tag": "1077/es/control-dialog-after-reply",
+   "file": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_es_control-dialog-after-reply.png",
+   "window": {
+    "id": 2879,
+    "title": "",
+    "x": 806,
+    "y": 230,
+    "w": 308,
+    "h": 250
+   },
+   "display": {
+    "display": 0,
+    "bounds": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "wholly_within": true
+   },
+   "hash": "177a3234ce4443303e432b9a0e4e799d713898e32bb26ded6ab548732017c7f5",
+   "region_hash": "30b43b8e2378fa1cbdf25f51fbd6752828565a2182fb3e8f45fc60112b3b298b",
+   "frames": 2,
+   "settled": true
+  },
+  {
+   "kind": "capture",
+   "tag": "1077/es/control-dialog-after-survival",
+   "file": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_es_control-dialog-after-survival.png",
+   "window": {
+    "id": 2879,
+    "title": "",
+    "x": 806,
+    "y": 230,
+    "w": 308,
+    "h": 250
+   },
+   "display": {
+    "display": 0,
+    "bounds": [
+     0,
+     0,
+     1920,
+     1080
+    ],
+    "wholly_within": true
+   },
+   "hash": "2d293b90575356611599f39ba9e392976be58f991ea99b73ef1254a1954453bf",
+   "region_hash": "30b43b8e2378fa1cbdf25f51fbd6752828565a2182fb3e8f45fc60112b3b298b",
+   "frames": 2,
+   "settled": true
+  },
+  {
+   "kind": "visual",
+   "tag": "1077/es/control-dialog-unchanged",
+   "region": [
+    16,
+    16,
+    276,
+    218
+   ],
+   "subject": "the inside of the rounded edge of the Logic window below the pop-up menu level that the window server first listed after this control's Write press",
+   "before": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_es_control-dialog-after-reply.png",
+   "after": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__1077_es_control-dialog-after-survival.png",
+   "expected": "region does not change \u2014 nothing dismissed or changed the window the Write press raised",
+   "observed": "before 30b43b8e2378fa1c after 30b43b8e2378fa1c changed=False",
+   "passed": true
+  },
+  {
+   "kind": "observation",
+   "tag": "1077/es/control",
+   "payload": {
+    "host": {
+     "app": "Logic Pro",
+     "version": "12.3",
+     "build": "6674",
+     "locale": "es-ES",
+     "os": "macOS 26.3 (25D125)"
+    },
+    "launch": {
+     "switched": true,
+     "arrange_window": "lpm-locale-campaign - Pistas",
+     "language_setting": [
+      "es"
+     ],
+     "window_names": [
+      "lpm-locale-campaign - Lista marcadores",
+      "lpm-locale-campaign - Pistas"
+     ]
+    },
+    "phase": {
+     "track": {
+      "automationMode": "off",
+      "id": 0,
+      "is_stack_header": true,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": true,
+      "isSoloed": false,
+      "name": "Absolute Zero",
+      "pan": 0.007874015748031496,
+      "stack_collapsed": true,
+      "track_ref": "trk_F7110BFF-599E-4982-8788-BA78A3DA75AB",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     },
+     "toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_648F239E-874C-46C4-84CC-6BBE533DD5ED",
+      "verified": false
+     },
+     "first_read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_0D7B2E48-C92A-4073-A28C-6B99EEDB8CAE",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "second_toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_F2C1DD43-39D4-410B-A657-D80E5874C5A6",
+      "verified": false
+     },
+     "read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_A062E531-7472-40EE-A7A9-6BDE7B5A03A5",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "before_write": {
+      "windows": [
+       {
+        "id": 2876,
+        "layer": 3,
+        "bounds": {
+         "X": 20,
+         "Height": 746,
+         "Y": 50,
+         "Width": 452
+        }
+       },
+       {
+        "id": 2875,
+        "layer": 0,
+        "bounds": {
+         "X": 0,
+         "Height": 1050,
+         "Y": 30,
+         "Width": 1920
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "write": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "mode": "write",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_AE3CC941-B765-4152-A903-6B4A1E7DFC99",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "write_seconds": 5.623,
+     "during_write": {
+      "reads": 212,
+      "unread": 0,
+      "new_windows": [
+       {
+        "id": 2879,
+        "layer": 8,
+        "bounds": {
+         "X": 957,
+         "Height": 4,
+         "Y": 353,
+         "Width": 6
+        },
+        "first_seen": 1.077,
+        "last_seen": 5.616
+       }
+      ]
+     },
+     "after_reply": {
+      "new_windows": [
+       {
+        "id": 2879,
+        "layer": 8,
+        "bounds": {
+         "X": 806,
+         "Height": 250,
+         "Y": 230,
+         "Width": 308
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 1,
+       "texts": [
+        {
+         "sha256": "8bed4a241a91096918fd7afaccc5b0a77f86f1ae1b9ca15daafbc9c2cdcc0a2f",
+         "length": 12
+        }
+       ]
+      }
+     },
+     "after_survival": {
+      "new_windows": [
+       {
+        "id": 2879,
+        "layer": 8,
+        "bounds": {
+         "X": 806,
+         "Height": 250,
+         "Y": 230,
+         "Width": 308
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 1,
+       "texts": [
+        {
+         "sha256": "8bed4a241a91096918fd7afaccc5b0a77f86f1ae1b9ca15daafbc9c2cdcc0a2f",
+         "length": 12
+        }
+       ]
+      }
+     },
+     "server_pids_after_close": []
+    },
+    "quit": {
+     "quit_returned": true,
+     "quit_seconds": 10.144,
+     "census_before": {
+      "status": "running",
+      "raw": "1"
+     },
+     "census_after": {
+      "status": "gone",
+      "raw": "0"
+     },
+     "new_crash_reports": [
+      "Logic Pro-2026-10-02-122717.ips"
+     ]
+    },
+    "acknowledged": null,
+    "after_acknowledge": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "refresh_cache",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic://tracks",
+   "command": "resources/read",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_navigate",
+   "command": "toggle_view",
+   "params": {
+    "view": "automation"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "read"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_tracks",
+   "command": "set_automation",
+   "params": {
+    "index": 0,
+    "mode": "write"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1077/es/candidate",
+   "payload": {
+    "host": {
+     "app": "Logic Pro",
+     "version": "12.3",
+     "build": "6674",
+     "locale": "es-ES",
+     "os": "macOS 26.3 (25D125)"
+    },
+    "launch": {
+     "switched": true,
+     "arrange_window": "lpm-locale-campaign - Pistas",
+     "language_setting": [
+      "es"
+     ],
+     "window_names": [
+      "lpm-locale-campaign - Lista marcadores",
+      "lpm-locale-campaign - Pistas"
+     ]
+    },
+    "phase": {
+     "track": {
+      "automationMode": "off",
+      "id": 0,
+      "is_stack_header": true,
+      "isArmed": false,
+      "isInputMonitoring": false,
+      "isMuted": false,
+      "isSelected": true,
+      "isSoloed": false,
+      "name": "Absolute Zero",
+      "pan": 0.007874015748031496,
+      "stack_collapsed": true,
+      "track_ref": "trk_5C1BEA4A-C6C3-4AC7-91D6-93191E13E8B1",
+      "type": "unknown",
+      "volume": 0.7578947368421053
+     },
+     "toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_F0F838E8-F6D6-4D29-AA59-61F89803C2D9",
+      "verified": false
+     },
+     "first_read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "modal_after_press": "clear",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_AE35C49E-5F39-492A-B531-0316FBBD1AD2",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "second_toggle_view": {
+      "cc": 85,
+      "channel": 16,
+      "method": "midi_key_command",
+      "operation": "automation.toggle_view",
+      "raw": "Key command triggered: automation.toggle_view (CC 85 CH 16)",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_82129221-B941-4530-B8E4-9126221725EA",
+      "verified": false
+     },
+     "read": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "modal_after_press": "clear",
+      "mode": "read",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_D43DF3A5-CEA3-4D2C-A05C-C4880D081136",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "before_write": {
+      "windows": [
+       {
+        "id": 2904,
+        "layer": 3,
+        "bounds": {
+         "X": 20,
+         "Height": 746,
+         "Y": 50,
+         "Width": 452
+        }
+       },
+       {
+        "id": 2903,
+        "layer": 0,
+        "bounds": {
+         "X": 0,
+         "Height": 1050,
+         "Y": 30,
+         "Width": 1920
+        }
+       }
+      ],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "write": {
+      "automation_write_attempted": true,
+      "function": "set_automation",
+      "modal_after_press": "clear",
+      "modal_reconciliation_witness": {
+       "blocker_set_clear": true,
+       "observations": {
+        "gone": 1
+       },
+       "polls": 1
+      },
+      "mode": "write",
+      "observed_selected_track": 0,
+      "reason": "readback_unavailable",
+      "reconciled_action": "acknowledge_alert",
+      "reconciled_modal_kind": "informational_alert",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_E1260770-9DCC-489A-A15B-DDBFE34BD65C",
+      "track": 0,
+      "verified": false,
+      "write_attempted": true
+     },
+     "write_seconds": 6.18,
+     "during_write": {
+      "reads": 230,
+      "unread": 0,
+      "new_windows": [
+       {
+        "id": 2907,
+        "layer": 8,
+        "bounds": {
+         "X": 958,
+         "Height": 4,
+         "Y": 353,
+         "Width": 4
+        },
+        "first_seen": 0.788,
+        "last_seen": 1.562
+       }
+      ]
+     },
+     "after_reply": {
+      "new_windows": [],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "after_survival": {
+      "new_windows": [],
+      "one_button_dialogs": {
+       "count": 0,
+       "texts": []
+      }
+     },
+     "server_pids_after_close": []
+    },
+    "quit": {
+     "quit_returned": true,
+     "quit_seconds": 10.729,
+     "census_before": {
+      "status": "running",
+      "raw": "1"
+     },
+     "census_after": {
+      "status": "gone",
+      "raw": "0"
+     },
+     "new_crash_reports": []
+    },
+    "acknowledged": null,
+    "after_acknowledge": null
+   }
+  },
+  {
+   "kind": "restoration",
+   "tag": "1077/Logic-language-restored-to-Korean",
+   "restored": true,
+   "detail": "{'switched': True, 'arrange_window': 'lpm-locale-campaign - \ud2b8\ub799', 'language_setting': ['ko'], 'window_names': ['lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d', 'lpm-locale-campaign - \ud2b8\ub799'], 'language_setting_after_restore': ['ko'], 'window_names_after_restore': ['lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d', 'lpm-locale-campaign - \ud2b8\ub799'], 'ok': True}"
+  },
+  {
+   "kind": "recording",
+   "file": "/Users/isaac/lpm-evidence/1077/full-2331fd0c-r2/2331fd0c30b506748c2ed14c903107d3307a3e62/live_1077_write_warning_is_cleared_in_every_locale__run.mov",
+   "exists": true,
+   "bytes": 362811625
+  },
+  {
+   "kind": "observation",
+   "tag": "1077/locale-failures",
+   "payload": {}
+  },
+  {
+   "kind": "check",
+   "tag": "1077/fr/control-leaves-the-warning-up",
+   "passed": true,
+   "expected": "the base binary's Write press leaves a one-button Logic dialog up after the reply and 1.5 s later, where none was up before the press",
+   "observed": {
+    "observation": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_9A72C887-43A5-43B1-AE9D-83C09EABCF47', 'type': 'unknown', 'volume': 0.7578947368421053}, 'toggle_view': {'cc': 85, 'channel': 16, ",
+    "accepted_the_observation": true,
+    "counterexample": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_A1F33B38-F922-4990-AED0-BDB1B60289D5', 'type': 'unknown', 'volume': 0.7578947368421053}, 'toggle_view': {'cc': 85, 'channel': 16, ",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a Logic that raised no warning would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "1077/fr/candidate-clears-the-warning",
+   "passed": true,
+   "expected": "the candidate's reply names informational_alert, acknowledge_alert and modal_after_press clear; a Logic window appeared during the call; no new window and no one-button dialog is left after the reply or 1.5 s later",
+   "observed": {
+    "observation": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_A1F33B38-F922-4990-AED0-BDB1B60289D5', 'type': 'unknown', 'volume': 0.7578947368421053}, 'toggle_view': {'cc': 85, 'channel': 16, ",
+    "accepted_the_observation": true,
+    "counterexample": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_9A72C887-43A5-43B1-AE9D-83C09EABCF47', 'type': 'unknown', 'volume': 0.7578947368421053}, 'toggle_view': {'cc': 85, 'channel': 16, ",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the modal poll after the mode press (MCUChannel executeAutomation): the warning stays up as it does for the control",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "1077/fr/candidate-quit-leaves-no-crash-report",
+   "passed": true,
+   "expected": "the quit that follows the candidate's Write press returned True, Logic's process count read as running before it and as 0 after it, and no Logic Pro crash report appeared within 8 s",
+   "observed": {
+    "quit_returned": true,
+    "quit_seconds": 14.292,
+    "census_before": {
+     "status": "running",
+     "raw": "1"
+    },
+    "census_after": {
+     "status": "gone",
+     "raw": "0"
+    },
+    "new_crash_reports": []
+   },
+   "mutation": "drop the modal poll after the mode press: the quit then meets the warning, as the control's does",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "1077/de/control-leaves-the-warning-up",
+   "passed": true,
+   "expected": "the base binary's Write press leaves a one-button Logic dialog up after the reply and 1.5 s later, where none was up before the press",
+   "observed": {
+    "observation": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_AEA92191-4E1A-4237-87B6-710F0F9F34B1', 'type': 'unknown', 'volume': 0}, 'toggle_view': {'cc': 85, 'channel': 16, 'method': 'midi_k",
+    "accepted_the_observation": true,
+    "counterexample": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_21A4E912-4807-4691-A229-8175FB152681', 'type': 'unknown', 'volume': 0}, 'toggle_view': {'cc': 85, 'channel': 16, 'method': 'midi_k",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a Logic that raised no warning would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "1077/de/candidate-clears-the-warning",
+   "passed": true,
+   "expected": "the candidate's reply names informational_alert, acknowledge_alert and modal_after_press clear; a Logic window appeared during the call; no new window and no one-button dialog is left after the reply or 1.5 s later",
+   "observed": {
+    "observation": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_21A4E912-4807-4691-A229-8175FB152681', 'type': 'unknown', 'volume': 0}, 'toggle_view': {'cc': 85, 'channel': 16, 'method': 'midi_k",
+    "accepted_the_observation": true,
+    "counterexample": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_AEA92191-4E1A-4237-87B6-710F0F9F34B1', 'type': 'unknown', 'volume': 0}, 'toggle_view': {'cc': 85, 'channel': 16, 'method': 'midi_k",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the modal poll after the mode press (MCUChannel executeAutomation): the warning stays up as it does for the control",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "1077/de/candidate-quit-leaves-no-crash-report",
+   "passed": true,
+   "expected": "the quit that follows the candidate's Write press returned True, Logic's process count read as running before it and as 0 after it, and no Logic Pro crash report appeared within 8 s",
+   "observed": {
+    "quit_returned": true,
+    "quit_seconds": 10.66,
+    "census_before": {
+     "status": "running",
+     "raw": "1"
+    },
+    "census_after": {
+     "status": "gone",
+     "raw": "0"
+    },
+    "new_crash_reports": []
+   },
+   "mutation": "drop the modal poll after the mode press: the quit then meets the warning, as the control's does",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "1077/es/control-leaves-the-warning-up",
+   "passed": true,
+   "expected": "the base binary's Write press leaves a one-button Logic dialog up after the reply and 1.5 s later, where none was up before the press",
+   "observed": {
+    "observation": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_F7110BFF-599E-4982-8788-BA78A3DA75AB', 'type': 'unknown', 'volume': 0.7578947368421053}, 'toggle_view': {'cc': 85, 'channel': 16, ",
+    "accepted_the_observation": true,
+    "counterexample": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_5C1BEA4A-C6C3-4AC7-91D6-93191E13E8B1', 'type': 'unknown', 'volume': 0.7578947368421053}, 'toggle_view': {'cc': 85, 'channel': 16, ",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "none: this is the positive control; a Logic that raised no warning would fail it and void the candidate check",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "1077/es/candidate-clears-the-warning",
+   "passed": true,
+   "expected": "the candidate's reply names informational_alert, acknowledge_alert and modal_after_press clear; a Logic window appeared during the call; no new window and no one-button dialog is left after the reply or 1.5 s later",
+   "observed": {
+    "observation": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_5C1BEA4A-C6C3-4AC7-91D6-93191E13E8B1', 'type': 'unknown', 'volume': 0.7578947368421053}, 'toggle_view': {'cc': 85, 'channel': 16, ",
+    "accepted_the_observation": true,
+    "counterexample": "{'track': {'automationMode': 'off', 'id': 0, 'is_stack_header': True, 'isArmed': False, 'isInputMonitoring': False, 'isMuted': False, 'isSelected': True, 'isSoloed': False, 'name': 'Absolute Zero', 'pan': 0.007874015748031496, 'stack_collapsed': True, 'track_ref': 'trk_F7110BFF-599E-4982-8788-BA78A3DA75AB', 'type': 'unknown', 'volume': 0.7578947368421053}, 'toggle_view': {'cc': 85, 'channel': 16, ",
+    "rejected_the_counterexample": true
+   },
+   "mutation": "drop the modal poll after the mode press (MCUChannel executeAutomation): the warning stays up as it does for the control",
+   "mutation_claimed": true,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "1077/es/candidate-quit-leaves-no-crash-report",
+   "passed": true,
+   "expected": "the quit that follows the candidate's Write press returned True, Logic's process count read as running before it and as 0 after it, and no Logic Pro crash report appeared within 8 s",
+   "observed": {
+    "quit_returned": true,
+    "quit_seconds": 10.729,
+    "census_before": {
+     "status": "running",
+     "raw": "1"
+    },
+    "census_after": {
+     "status": "gone",
+     "raw": "0"
+    },
+    "new_crash_reports": []
+   },
+   "mutation": "drop the modal poll after the mode press: the quit then meets the warning, as the control's does",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "check",
+   "tag": "1077/control-quit-under-the-warning-writes-a-crash-report",
+   "passed": true,
+   "expected": "quitting Logic with the base binary's warning still up writes a Logic Pro crash report in at least one crash-control language, so the crash reading can see a crash",
+   "observed": {
+    "de": {
+     "quit_returned": true,
+     "quit_seconds": 10.181,
+     "census_before": {
+      "status": "running",
+      "raw": "1"
+     },
+     "census_after": {
+      "status": "gone",
+      "raw": "0"
+     },
+     "new_crash_reports": [
+      "Logic Pro-2026-10-02-122513.ips"
+     ]
+    },
+    "fr": {
+     "quit_returned": true,
+     "quit_seconds": 10.367,
+     "census_before": {
+      "status": "running",
+      "raw": "1"
+     },
+     "census_after": {
+      "status": "gone",
+      "raw": "0"
+     },
+     "new_crash_reports": [
+      "Logic Pro-2026-10-02-122302.ips"
+     ]
+    },
+    "es": {
+     "quit_returned": true,
+     "quit_seconds": 10.144,
+     "census_before": {
+      "status": "running",
+      "raw": "1"
+     },
+     "census_after": {
+      "status": "gone",
+      "raw": "0"
+     },
+     "new_crash_reports": [
+      "Logic Pro-2026-10-02-122717.ips"
+     ]
+    }
+   },
+   "mutation": "none: this is the positive control for the crash reading",
+   "mutation_claimed": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "environment",
+   "screen_locked": false
+  }
+ ]
+}
