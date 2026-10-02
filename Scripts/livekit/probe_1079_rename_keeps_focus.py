@@ -26,6 +26,8 @@ With --subscribe, each server is first subscribed to every resource a poll cycle
 cycle's publication reads them back (#1079 review R3). The notifications that arrive during the
 idle wait are counted: a server sample with none fails, since its publication was not shown to run.
 
+Before each sample the focus is left on the Tracks rail (`settle_focus`), and the role read there is
+recorded; a sample that cannot leave a text field does not run.
 PASS: every sample in every language opened its rename; every none and candidate sample kept the
 field for HOLD seconds and its value grew; and the control lost the field in at least one sample
 per language, so the run shows the defect it rules out. A sample that did not run or did not open
@@ -161,9 +163,34 @@ def drain_notifications(driver, seconds):
             count += 1
 
 
+TEXT_ROLES = ("AXTextField", "AXTextArea")
+
+
+def settle_focus(helper):
+    """Leave the focus on the Tracks rail before a sample starts, and return its role. A sample
+    that lost the field can leave a text field focused, and a server started then yields from its
+    first tick, so its publication never runs (seen 2026-10-03: the candidate's first subscribed
+    sample in every language had no notification). One Escape is sent, only while Logic holds the
+    keyboard, if a text field still has the focus."""
+    if focused_role(helper) in TEXT_ROLES and P.keyboard_owner_is_logic() is True:
+        P.post_escape()
+        time.sleep(0.5)
+    P.osa('tell application "Logic Pro" to activate')
+    subprocess.run([helper, "keymain", *P.names("arrangeWindowTitleSuffix")], capture_output=True,
+                   text=True, timeout=10)
+    subprocess.run([helper, "focusrail", *P.names("trackHeadersDescription")], capture_output=True,
+                   text=True, timeout=15)
+    return focused_role(helper)
+
+
 def sample(helper, condition, binary, n):
     row, driver = {"condition": condition, "sample": n}, None
     try:
+        row["role_before_server"] = settle_focus(helper)
+        if row["role_before_server"] in TEXT_ROLES:
+            row["outcome"] = "not_run"
+            row["why"] = "a text field kept the focus before the server started"
+            return row
         if binary:
             driver = E.Driver(binary=binary)
             if SUBSCRIBING:
