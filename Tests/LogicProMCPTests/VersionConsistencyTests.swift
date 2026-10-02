@@ -199,7 +199,10 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
     #expect(api.contains("| `toggle_autopunch` | — | State A/B/C contract envelope | Accessibility |"))
     #expect(api.contains("| `set_tempo` | `{ tempo: number }` (5–999, matches Logic's actual accepted range) | text | Accessibility |"))
     #expect(api.contains("`set_automation`"))
-    #expect(api.contains("State B (MCU write, no readback echo)"))
+    // #1077: the MCU write now reads Logic's modal set after the press, and the page says what the
+    // reply reports about it; the old one-line "no readback echo" contract went with that change.
+    #expect(api.contains("`modal_after_press` is what the last read found: `clear`, `open`"))
+    #expect(api.contains("State B `modal_left_open` whatever the mode read"))
 }
 
 /// Issue #22 (thomas-doesburg): `brew install` broke at v3.4.6/v3.5.0 because

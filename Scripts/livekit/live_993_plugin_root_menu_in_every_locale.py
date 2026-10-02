@@ -97,14 +97,23 @@ SYSTEM_EVENTS_RESTARTS = []
 SYSTEM_EVENTS_RELAUNCH_WAIT = 2.0
 
 
-def osa(script, timeout=20):
+def osa(script, timeout=20, deadline=None):
     # Measured 2026-09-29 (#904 r5): a System Events respawned mid-run answered every GUI read with
     # -25211 while python AX kept working, and killing it made the next on-demand instance answer.
     # So -25211 alone earns one kill and one retry; every other failure is returned as before.
+    # A caller that passes `deadline`, a time.monotonic() reading, gets nothing that runs past it:
+    # each osascript and the kill get only the time left, the relaunch wait is cut to it, and no
+    # attempt starts once it has passed. Without one, nothing here reads the clock.
+    def within(seconds):
+        return seconds if deadline is None else min(seconds, deadline - time.monotonic())
+
     for attempt in range(2):
+        limit = within(timeout)
+        if limit <= 0:
+            return None
         try:
             result = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True,
-                                    text=True, timeout=timeout)
+                                    text=True, timeout=limit)
         except subprocess.TimeoutExpired:
             return None
         if result.returncode == 0:
@@ -112,11 +121,22 @@ def osa(script, timeout=20):
         stderr = result.stderr or ""
         if attempt or "-25211" not in stderr:
             return None
-        SYSTEM_EVENTS_RESTARTS.append({
-            "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
-            "stderr_tail": stderr.strip()[-300:]})
-        subprocess.run(["/usr/bin/killall", "System Events"], capture_output=True, text=True)
-        time.sleep(SYSTEM_EVENTS_RELAUNCH_WAIT)
+        # The restart's budget is read after its record is built and just before the kill, and that
+        # reading is the one the kill is given: one taken earlier, or read again later, can be past
+        # the deadline by the time the kill starts (reviews R2 and R3 of #1081). An expired budget
+        # records and launches nothing.
+        restart = {"at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+                   "stderr_tail": stderr.strip()[-300:]}
+        budget = within(timeout)
+        if budget <= 0:
+            return None
+        SYSTEM_EVENTS_RESTARTS.append(restart)
+        try:
+            subprocess.run(["/usr/bin/killall", "System Events"], capture_output=True, text=True,
+                           timeout=None if deadline is None else budget)
+        except subprocess.TimeoutExpired:
+            return None
+        time.sleep(max(0.0, within(SYSTEM_EVENTS_RELAUNCH_WAIT)))
     return None
 
 
@@ -133,9 +153,26 @@ def language_setting():
     return re.findall(r"[\w-]+", result.stdout) if result.returncode == 0 else []
 
 
+LOGIC_PROCESS_COUNT = ('tell application "System Events" to return (count of (every process whose '
+                       'name is "Logic Pro"))')
+
+
+def logic_census():
+    """Logic's process count through System Events, with an answer that did not read kept apart.
+
+    `logic_running` folds a failed or malformed answer into False, which reads as "not running".
+    A quit witness must not do that: a count that did not read is not a Logic that quit (#1077
+    R1077-2). `status` is "running" (a count of one or more), "gone" (a count of 0) or "unreadable"
+    (osascript failed, or answered something that is not a count); `raw` is what it answered.
+    """
+    raw = osa(LOGIC_PROCESS_COUNT)
+    if raw is None or not re.fullmatch(r"[0-9]+", raw):
+        return {"status": "unreadable", "raw": raw}
+    return {"status": "running" if int(raw) > 0 else "gone", "raw": raw}
+
+
 def logic_running():
-    return osa('tell application "System Events" to return (count of (every process whose '
-               'name is "Logic Pro"))') == "1"
+    return logic_census()["raw"] == "1"
 
 
 def window_names():
