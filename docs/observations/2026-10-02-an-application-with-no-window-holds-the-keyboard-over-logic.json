@@ -31,7 +31,7 @@
     "evidence/2026-10-02-942-windowless-dialog-layers.json",
     "evidence/2026-10-02-942-windowless-keyboard-owner-run.json"
   ],
-  "method": "First, in Korean, /usr/bin/python3 opened Go To Position from the menu bar and read the window list, lsappinfo front and the system-wide AXFocusedApplication with Logic active, with Finder activated and no Finder window, with a Finder window opened, with it closed, and with Logic active again. Then live_942_windowless_keyboard_owner.py ran at 308c91b7 in ten languages, two samples each. Per sample it activated Finder with no window, held one goto_position call per binary at the #942 seam, activated Finder again at the hold and read the screen by pids, then released. The candidate was the debug build of 69a33c12; the control was the debug build of a7913248, on the window rule alone. A third hold per sample ran the candidate with Logic left active.",
+  "method": "First, in Korean, /usr/bin/python3 opened Go To Position from the menu bar and read the window list, lsappinfo front and the system-wide AXFocusedApplication with Logic active, with Finder activated and no Finder window, with a Finder window opened, with it closed, and with Logic active again. Then live_942_windowless_keyboard_owner.py ran at 5977af91 in ten languages, two samples each. Per sample it activated Finder with no window, held one goto_position call per binary at the #942 seam, activated Finder again at the hold and read the screen by pids, then released. The candidate was the debug build of 5977af91; the control was the debug build of a7913248, on the window rule alone. A third hold per sample ran the candidate with Logic left active.",
   "observations": [
     {
       "locale": "ko-KR",
@@ -996,7 +996,7 @@
     "One windowless application, Finder, on one Logic installation and one fixture.",
     "The script is replaced by the #942 hold; no keystroke was posted into Finder by either binary, so what such a keystroke would have done is not shown.",
     "The focused application was not read under the permission prompts the modal-panel rule was built for; with the read failing the window rule answers alone, as before.",
-    "The run was made at 308c91b7 with the candidate built at 69a33c12; the commits between them add only the harness and a guard's floor."
+    "The run was made at 5977af91 with the candidate built at 5977af91."
   ],
   "supersedes": null,
   "canon_not_applicable": {
