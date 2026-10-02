@@ -15,8 +15,9 @@ dialog is unresolved, and it is measured here rather than assumed.
 
 HOW IT IS READ
 --------------
-Everything is read from the window server's on-screen list, not from AX: a modal dialog poisons AX
-reads, and an open menu wedges AppleEvents, so neither can be trusted in exactly the state under test.
+The menu and the dialog are read from the window server's on-screen list, not from AX: a modal dialog
+poisons AX reads, and an open menu wedges AppleEvents, so neither can be trusted in exactly the state
+under test. The one AX read is the system-wide focused application, for the keyboard owner below.
 A Logic menu is a Logic-owned window at the pop-up menu level, layer 101, and no other. The dialog is the Logic-owned
 window that appeared after its menu item was clicked and whose window-server name is one of the
 dialog's measured titles in docs/locale/ui-labels.json. A list the window server did not hand back is
@@ -24,10 +25,13 @@ unknown, and the sample fails.
 
 The Escape is posted the way the server posts it (`AXLogicProElements.Runtime.livePostPopupMenuEscape`):
 a key-down and key-up for virtual key 53 at the HID event tap, which goes to whichever application owns
-the keyboard. Before every Escape the keyboard's owner is read the way the server reads it: the first
-window at layer 0 or at the modal-panel level, layer 8, whose owner must be Logic, and the focused
-application, which when it reads must be that same process (`keyboard_owner_is_logic`). A sample in
-which it is not Logic fails, because that Escape would have gone somewhere else.
+the keyboard. Before each of the two measured Escapes the keyboard's owner is read
+(`keyboard_owner_is_logic`): the first window at layer 0 or at the modal-panel level, layer 8, whose
+owner must be Logic, and the focused application, which when it reads must be that same process. A
+sample in which it is not Logic fails, because that Escape would have gone somewhere else. This is the
+server's rule with one difference: Logic is recognized here by the window's owner name, where the
+server requires one of Logic's bundle identifiers. The clean-up Escapes after a sample are not
+preceded by an owner read.
 
 Each sample, from a screen with no Logic menu and no dialog:
   1. open the dialog from the menu bar; one Escape; the dialog must be gone. This is the control: it
