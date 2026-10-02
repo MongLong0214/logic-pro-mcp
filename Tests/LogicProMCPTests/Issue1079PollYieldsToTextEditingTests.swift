@@ -688,6 +688,35 @@ struct Issue1079PollYieldsToTextEditingTests {
         }
     }
 
+    /// Supplementary review S-01: publication's stop must count the guard's latch. Inside the
+    /// publication a help read is made while the focus reads as editing (reading 9), so the guard
+    /// refuses it; the focus then does not read at all. The stop must still answer true, or the
+    /// resource whose help was refused would be published. Mutation this kills: the stop asking
+    /// only the latest focus reading.
+    @Test("publication's stop answers true once the guard has refused a help read")
+    func publicationStopCountsTheGuardsLatch() async {
+        let reads = AttributeReads()
+        let (axRuntime, element) = Self.countingAXRuntime(reads)
+        let answers = Published()
+        let readings = Counter()
+        _ = await Self.runBackgroundLoop(
+            ticks: 1,
+            postPoll: { _, stop in
+                _ = AXHelpers.getHelp(element, runtime: axRuntime)
+                answers.add(stop() ? [.document] : [])
+                return true
+            }
+        ) {
+            switch readings.next() {
+            case ..<9: .notTextEditing
+            case 9: .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false)
+            default: .unreadable(.focusedElement)
+            }
+        }
+        #expect(reads.count(kAXHelpAttribute as String) == 0, "the help read was made after editing began")
+        #expect(answers.all.first == [.document], "the stop answered false after the guard had refused a read")
+    }
+
     @Test("an explicit refreshNow runs while a text field holds the focus, and does not ask")
     func refreshNowIsNotGated() async {
         let log = ReadLog()

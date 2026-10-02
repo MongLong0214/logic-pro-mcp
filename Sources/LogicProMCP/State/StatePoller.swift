@@ -430,9 +430,13 @@ actor StatePoller {
             return !cacheKeys.isEmpty
         }
         let focus = runtime.keyboardFocus
+        // Supplementary review S-01: a help read the guard refused stays refused. A focus that
+        // reads as editing once and then does not read at all must not let a resource whose help
+        // was refused be published, so the guard's latch counts as well as the latest reading.
+        let guardian = AXHelpers.HelpReadGuard.current
         let stop: @Sendable () -> Bool
         if yieldingToTextEditing {
-            stop = { Self.backgroundTickYields(to: focus()) }
+            stop = { guardian?.stopped == true || Self.backgroundTickYields(to: focus()) }
         } else {
             stop = { false }
         }

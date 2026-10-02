@@ -18,7 +18,7 @@
   },
   "reverify": {
     "kind": "script",
-    "command": "/usr/bin/python3 Scripts/livekit/probe_1079_rename_keeps_focus.py <control-binary> <candidate-binary> <out.json> --samples 2",
+    "command": "/usr/bin/python3 Scripts/livekit/probe_1079_rename_keeps_focus.py <control-binary> <candidate-binary> <out.json> --samples 2 --subscribe",
     "expected": "in every language every no-server and candidate sample opened its rename and kept the field for 20 s with its value growing, and every server sample was sent notifications before the rename opened; the control lost the field in every sample that ran. Exit 0 also needs every control sample to have run",
     "cost": "needs LPM_LIVE_LOCK naming a held lock, LPM_LOCALE_FIXTURE, the 2-Set Korean source and two debug builds; about four minutes per language"
   },
