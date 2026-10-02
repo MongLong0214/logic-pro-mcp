@@ -46,9 +46,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `input_source_after`, with a `hint` when the user's source did not read back. A switch that
   cannot be made or does not read back posts nothing and refuses `input_source_blocks_plain_letters`
   with `input_source_switch_failure`; a source that does not read is refused
-  `input_source_unreadable` as before. Shown with a fake input-source API only: whether a
-  selection made by the server reaches the key Logic reads, and how long the two waits need to
-  be, were not measured against a running Logic.
+  `input_source_unreadable` as before. Driven against Logic 12.3 under 2-Set Korean in ten
+  languages, eight of the ten went out through CGEvent under ABC, changed Logic's state and back,
+  and left 2-Set Korean current; `edit.quantize` and `view.toggle_score_editor` were not driven,
+  and the two waits were not varied.
+- **`track.set_automation` on MCU no longer leaves Logic's Write warning up behind its reply
+  (#1077).** Logic answered the Write press with a one-button warning and left it up, and quitting
+  Logic under it crashed Logic in 4 of 4 runs on a German Logic. Every poll after the mode press now
+  reads Logic's modal set after the mode, and clears a one-button informational alert or a stray
+  menu through the preflight reconciler, at most once per kind; any other dialog or sheet is left
+  as it is and the reply is State B `modal_left_open`. The poll stops early only once the mode
+  matches and two consecutive complete reads found no blocker. `modal_after_press` says what the
+  last read found (`clear`, `open`, `unreadable`) and `reconciled_modal_kind` / `reconciled_action`
+  name the blocker seen; a modal set that did not read keeps a matched mode out of State A.
 - **`transport.goto_position`'s CGEvent fallback types nothing until the Go To Position dialog is
   on screen (#1038).** It used to post the position and Return right after the key that opens the
   dialog, so when the dialog did not open they went to whatever held the keyboard. The opening key
