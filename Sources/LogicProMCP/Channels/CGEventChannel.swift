@@ -45,6 +45,9 @@ actor CGEventChannel: Channel {
         /// it does not read. The default reads nothing: a runtime that says nothing about what a
         /// layout types cannot switch, and the plain letter is refused.
         let layoutLetter: @Sendable (String, CGKeyCode) -> String?
+        /// #1039 review R2: whether the input source with this id is enabled, the only kind
+        /// `selectInputSource` can select. The default says no.
+        let layoutIsEnabled: @Sendable (String) -> Bool
         /// #1039: the wait after a switched layout reads back as current, before the key, and
         /// again after the key, before the user's source is selected back
         /// (`inputSourceSwitchSettleMicros`).
@@ -76,6 +79,7 @@ actor CGEventChannel: Channel {
             asciiCapableLayoutID: @escaping @Sendable () -> String? = { nil },
             selectInputSource: @escaping @Sendable (String) -> Bool = { _ in false },
             layoutLetter: @escaping @Sendable (String, CGKeyCode) -> String? = { _, _ in nil },
+            layoutIsEnabled: @escaping @Sendable (String) -> Bool = { _ in false },
             inputSourceSettleMicros: useconds_t = CGEventChannel.inputSourceSwitchSettleMicros,
             onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = { nil }
         ) {
@@ -89,6 +93,7 @@ actor CGEventChannel: Channel {
             self.asciiCapableLayoutID = asciiCapableLayoutID
             self.selectInputSource = selectInputSource
             self.layoutLetter = layoutLetter
+            self.layoutIsEnabled = layoutIsEnabled
             self.inputSourceSettleMicros = inputSourceSettleMicros
             self.onScreenWindowList = onScreenWindowList
         }
@@ -106,6 +111,7 @@ actor CGEventChannel: Channel {
             asciiCapableLayoutID: { CGEventChannel.readASCIICapableLayoutID() },
             selectInputSource: { CGEventChannel.selectEnabledInputSource(id: $0) },
             layoutLetter: { CGEventChannel.readLayoutLetter(layoutID: $0, keyCode: $1) },
+            layoutIsEnabled: { CGEventChannel.isEnabledInputSource(id: $0) },
             onScreenWindowList: AXLogicProElements.Runtime.liveOnScreenWindowList
         )
     }
@@ -177,6 +183,14 @@ actor CGEventChannel: Channel {
         )
         guard status == noErr, length > 0 else { return nil }
         return String(utf16CodeUnits: characters, count: length)
+    }
+
+    /// #1039 review R2: whether an enabled input source has this id. A disabled layout still reads
+    /// its key map (`readLayoutLetter` reads installed ones) but cannot be selected.
+    static func isEnabledInputSource(id: String) -> Bool {
+        let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
+        guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() else { return false }
+        return CFArrayGetCount(list) > 0
     }
 
     /// #1039 review R1: layouts that type the U.S. letter on every letter key, tried when TIS's
@@ -531,7 +545,9 @@ actor CGEventChannel: Channel {
     /// name Dvorak or AZERTY, where the key for R types P or another letter, and with key-label
     /// assignments that is another command. So the layout must type the U.S. letter on this key,
     /// read from its key map before anything is selected; when TIS's does not, ABC or U.S. is
-    /// tried, and when none does, nothing is selected or posted.
+    /// tried, and when none does, nothing is selected or posted. Review R2: a candidate must also be
+    /// enabled, since only an enabled source can be selected; a disabled ABC is passed over for an
+    /// enabled U.S.
     func switchToASCIICapableLayout(from source: InputSourceReading, keyCode: CGKeyCode) -> InputSourceSwitch {
         guard let originalID = source.id else {
             return .refused(failure: "source_id_unreadable", restore: nil)
@@ -541,7 +557,9 @@ actor CGEventChannel: Channel {
         }
         let candidates = [offered] + Self.usLetterLayoutIDs.filter { $0 != offered }
         guard let letter = Shortcut.usLetters[keyCode],
-              let layoutID = candidates.first(where: { runtime.layoutLetter($0, keyCode) == letter }) else {
+              let layoutID = candidates.first(where: {
+                  runtime.layoutIsEnabled($0) && runtime.layoutLetter($0, keyCode) == letter
+              }) else {
             return .refused(failure: "layout_types_another_letter", restore: nil)
         }
         let selected = runtime.selectInputSource(layoutID)
@@ -713,8 +731,8 @@ actor CGEventChannel: Channel {
             case "no_ascii_capable_layout":
                 why = " TIS named no ASCII-capable keyboard layout to select for the key."
             case "layout_types_another_letter":
-                why = " Neither TIS's ASCII-capable layout nor ABC or U.S. reads as typing this key's "
-                    + "letter, so the key could run another command; no layout was selected."
+                why = " Neither TIS's ASCII-capable layout nor an enabled ABC or U.S. reads as typing "
+                    + "this key's letter, so the key could run another command; no layout was selected."
             case let failure?:
                 why = " Selecting TIS's ASCII-capable layout for the key did not read back as the current "
                     + "source (\(failure))."

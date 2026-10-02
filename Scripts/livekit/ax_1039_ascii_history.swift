@@ -11,6 +11,7 @@ import Foundation
 let korean = "com.apple.inputmethod.Korean.2SetKorean"
 let abc = "com.apple.keylayout.ABC"
 let dvorak = "com.apple.keylayout.Dvorak"
+let us = "com.apple.keylayout.US"
 
 func source(_ id: String, installed: Bool) -> TISInputSource? {
     let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
@@ -50,11 +51,12 @@ func state() -> [String: Any] {
         "ascii_layout": id(TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue()),
         "dvorak_enabled": enabled,
         "abc_enabled": source(abc, installed: false) != nil,
+        "us_enabled": source(us, installed: false) != nil,
         "r_key_types": ["abc": letter(abc, 15), "us": letter("com.apple.keylayout.US", 15), "dvorak": letter(dvorak, 15)],
         // For each U.S. letter key, what ABC and Dvorak type on it: the harness derives from this
         // which layout a key must go out under.
         "us_letter_keys": Dictionary(uniqueKeysWithValues: usKeys.map { letterName, code in
-            (letterName, ["abc": letter(abc, code), "dvorak": letter(dvorak, code)])
+            (letterName, ["abc": letter(abc, code), "us": letter(us, code), "dvorak": letter(dvorak, code)])
         }),
     ]
 }
@@ -85,6 +87,35 @@ case "dvorak":
     let s = state()
     emit(steps)
     exit((s["ascii_layout"] as? String) == dvorak && (s["current"] as? String) == korean ? 0 : 1)
+case "dvorak-us":
+    // #1085 review R2: ABC installed but disabled, U.S. enabled, Dvorak offered. U.S. is enabled
+    // before ABC is disabled, so an ASCII-capable layout stays enabled throughout.
+    var steps: [String: Any] = [:]
+    for id in [us, dvorak] where source(id, installed: false) == nil {
+        if let s = source(id, installed: true) { steps["enable_\(id)"] = TISEnableInputSource(s) == noErr; usleep(300_000) }
+    }
+    steps["select_dvorak"] = select(dvorak)
+    steps["select_korean"] = select(korean)
+    if let s = source(abc, installed: false) { steps["disable_abc"] = TISDisableInputSource(s) == noErr; usleep(300_000) }
+    let s = state()
+    emit(steps)
+    exit((s["ascii_layout"] as? String) == dvorak && (s["current"] as? String) == korean
+         && (s["abc_enabled"] as? Bool) == false && (s["us_enabled"] as? Bool) == true ? 0 : 1)
+case "reset-us":
+    // Undo dvorak-us: ABC enabled and offered again, U.S. and Dvorak disabled.
+    var steps: [String: Any] = [:]
+    if source(abc, installed: false) == nil, let s = source(abc, installed: true) {
+        steps["enable_abc"] = TISEnableInputSource(s) == noErr; usleep(300_000)
+    }
+    steps["select_abc"] = select(abc)
+    steps["select_korean"] = select(korean)
+    for id in [dvorak, us] {
+        if let s = source(id, installed: false) { steps["disable_\(id)"] = TISDisableInputSource(s) == noErr; usleep(300_000) }
+    }
+    let s = state()
+    emit(steps)
+    exit((s["ascii_layout"] as? String) == abc && (s["current"] as? String) == korean
+         && (s["abc_enabled"] as? Bool) == true ? 0 : 1)
 case "reset":
     var steps: [String: Any] = ["select_abc": select(abc), "select_korean": select(korean)]
     if let s = source(dvorak, installed: false) {

@@ -43,8 +43,11 @@ def main():
     harness = load("live_1039_plain_letters_under_2set_korean")
     row = stored_row(harness)
     # What the tool reads on this host: Dvorak types t on the U.S. K key and a on the A key.
-    keys = {"k": {"abc": "k", "dvorak": "t"}, "a": {"abc": "a", "dvorak": "a"}}
-    dvorak = {"ok": True, "ascii_layout": harness.DVORAK, "current": harness.KOREAN_2SET, "us_letter_keys": keys}
+    keys = {"k": {"abc": "k", "us": "k", "dvorak": "t"}, "a": {"abc": "a", "us": "a", "dvorak": "a"}}
+    dvorak = {"ok": True, "ascii_layout": harness.DVORAK, "current": harness.KOREAN_2SET, "us_letter_keys": keys,
+              "abc_enabled": True}
+    abc_off = dict(dvorak, abc_enabled=False, us_enabled=True)
+    on_us = [dict(r, input_source_switched_to=harness.US) for r in row["replies"]]
     automation = "automation.toggle_view"
     a_row = dict(row, op=automation, accessibility_first=False)
     on_dvorak = [dict(r, input_source_switched_to=harness.DVORAK) for r in row["replies"]]
@@ -74,6 +77,13 @@ def main():
          dict(a_row, history_required=True, ascii_histories=[dvorak, dvorak], replies=on_dvorak), True),
         ("A under a Dvorak history, gone out under ABC although Dvorak types a",
          dict(a_row, history_required=True, ascii_histories=[dvorak, dvorak]), False),
+        # Review R2 of #1085: ABC disabled and U.S. enabled.
+        ("K with ABC disabled, gone out under U.S.",
+         dict(row, history_required=True, ascii_histories=[abc_off, abc_off], replies=on_us), True),
+        ("K with ABC disabled, gone out under ABC",
+         dict(row, history_required=True, ascii_histories=[abc_off, abc_off]), False),
+        ("K with ABC enabled, gone out under U.S.",
+         dict(row, history_required=True, ascii_histories=[dvorak, dvorak], replies=on_us), False),
     ]
     unexpected = 0
     for name, case, want in cases:

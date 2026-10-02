@@ -135,6 +135,9 @@ def arguments():
                         help="before every call, run `<path> dvorak`, which must leave 2-Set Korean current "
                              "with Dvorak as TIS's ASCII-capable layout, and record its reading (review R1 of "
                              "#1085); `<path> reset` runs once at the end")
+    parser.add_argument("--ascii-history-mode", choices=("dvorak", "dvorak-us"), default="dvorak",
+                        help="dvorak: Dvorak offered, ABC enabled; dvorak-us: Dvorak offered, ABC disabled "
+                             "and U.S. enabled (review R2 of #1085)")
     parser.add_argument("--expect-switched-to", default="com.apple.keylayout.ABC", metavar="id",
                         help="the layout every candidate reply must name as switched to")
     args = parser.parse_args()
@@ -463,14 +466,16 @@ def activate_logic():
 
 
 ASCII_HISTORY_TOOL = None
+ASCII_HISTORY_MODE = "dvorak"
 DVORAK = "com.apple.keylayout.Dvorak"
+US = "com.apple.keylayout.US"
 ABC = "com.apple.keylayout.ABC"
 
 
 def set_ascii_history():
     """Run the history tool: Dvorak becomes TIS's ASCII-capable layout and 2-Set Korean stays current.
     Its reading is returned with whether the tool said it held."""
-    done = subprocess.run([ASCII_HISTORY_TOOL, "dvorak"], capture_output=True, text=True, timeout=20)
+    done = subprocess.run([ASCII_HISTORY_TOOL, ASCII_HISTORY_MODE], capture_output=True, text=True, timeout=20)
     try:
         reading = json.loads(done.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
@@ -637,15 +642,22 @@ def candidate_switched(row):
     histories = (row.get("ascii_histories") or [])[:len(toggled)]
     if row.get("history_required"):
         # Each call was made with Dvorak as TIS's offer, read by the tool just before it. Dvorak
-        # is kept for a key it types as the U.S. letter (A), and ABC is selected for any other.
+        # is kept for a key it types as the U.S. letter (A); for any other key the first enabled of
+        # ABC and U.S. is selected (review R2: with ABC disabled, U.S.).
         letter = CHARACTERS.get(row.get("op"))
         offered = len(histories) == len(toggled) and all(
             isinstance(h, dict) and h.get("ok") is True and h.get("ascii_layout") == DVORAK
             for h in histories)
+
+        def expected_for(h):
+            keys = (h.get("us_letter_keys") or {}).get(letter) or {}
+            if keys.get("dvorak") == letter:
+                return DVORAK
+            fallback, key = (ABC, "abc") if h.get("abc_enabled") is True else (US, "us")
+            return fallback if keys.get(key) == letter else None
+
         named = offered and letter is not None and all(
-            r.get("input_source_switched_to")
-            == (DVORAK if ((h.get("us_letter_keys") or {}).get(letter) or {}).get("dvorak") == letter else ABC)
-            and ((h.get("us_letter_keys") or {}).get(letter) or {}).get("abc") == letter
+            expected_for(h) is not None and r.get("input_source_switched_to") == expected_for(h)
             for r, h in zip(toggled, histories))
     else:
         expected = row.get("expect_switched_to")
@@ -671,8 +683,9 @@ def control_refused(row):
 
 def main():
     args = arguments()
-    global ASCII_HISTORY_TOOL
+    global ASCII_HISTORY_TOOL, ASCII_HISTORY_MODE
     ASCII_HISTORY_TOOL = args.ascii_history_tool
+    ASCII_HISTORY_MODE = args.ascii_history_mode
     sys.path.insert(0, os.path.join(args.worktree, "Scripts"))
     import logic_canon  # noqa: E402
     setattr(L993, "logic_canon", logic_canon)
@@ -761,7 +774,8 @@ def main():
                           and restored["arrange_window"] in (restored["window_names_after_restore"] or []))
         ev.restored("1039/Logic-language-restored-to-Korean", restored["ok"], repr(restored))
         if ASCII_HISTORY_TOOL:
-            reset = subprocess.run([ASCII_HISTORY_TOOL, "reset"], capture_output=True, text=True, timeout=20)
+            reset = subprocess.run([ASCII_HISTORY_TOOL, "reset" if ASCII_HISTORY_MODE == "dvorak" else "reset-us"],
+                                   capture_output=True, text=True, timeout=20)
             ev.restored("1039/ascii-history-reset-to-ABC-and-Dvorak-disabled", reset.returncode == 0,
                         reset.stdout.strip()[-400:])
         ev.restored("1039/input-source-is-2-Set-Korean-at-the-end", source.current() == KOREAN_2SET,
@@ -784,6 +798,7 @@ def main():
                            f"{args.expect_switched_to}, the reading changes and comes back, and the source "
                            "reads 2-Set Korean after"
                            + (", with Dvorak as TIS's ASCII-capable layout before each call"
+                              + (" and ABC disabled" if args.ascii_history_mode == "dvorak-us" else "")
                               if args.ascii_history_tool else ""),
                            mutation="remove the switch from CGEventChannel.execute (the control binary): "
                                     "the key is refused and nothing changes")
