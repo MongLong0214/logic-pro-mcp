@@ -33,6 +33,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **The background state poll skips its cycle while a text field in Logic has keyboard focus
+  (#1079).** With the server connected and idle, an inline track rename lost focus partway through
+  typing and the rest of the keystrokes reached Logic as key commands; with the process killed it
+  did not. Each 3 s tick now reads Logic's focused element first and, when it is a text field, text
+  area, combo box or any element with a text insertion point, runs no AX walk and no `osascript`
+  document-path read. That is the same classifier the mute, solo and arm keys use to refuse a
+  synthetic key, now one function for both. A focus that does not read still polls, since a
+  failed read is not evidence of a text field and Logic not running never reads; a modal dialog
+  alone does not stop polling. `system.refresh_cache` is not gated. Unit-tested only: the focus
+  loss has not been reproduced, so which read caused it, and whether this removes it, is
+  unmeasured.
 - **`transport.goto_position`'s CGEvent fallback types nothing until the Go To Position dialog is
   on screen (#1038).** It used to post the position and Return right after the key that opens the
   dialog, so when the dialog did not open they went to whatever held the keyboard. The opening key

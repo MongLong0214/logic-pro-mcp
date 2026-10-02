@@ -1509,39 +1509,42 @@ extension AccessibilityChannel {
         return nil
     }
 
-    /// #6 — refuse a synthetic global command key when Logic's keyboard focus is
-    /// NOT known-safe: a modal/sheet is present, or the focused element is an
-    /// editable text surface (rename field, Notes, search/combo box, or any
-    /// element exposing a text insertion point). Posting 'm', 's', or the arm chord into
-    /// such focus would type text or trigger the wrong command. Returns a refusal
-    /// (⇒ do NOT post the key) on POSITIVE danger; nil ⇒ no unsafe focus detected
-    /// (a nil focus is the common non-text case — the modal check covers sheets).
-    /// Mute, Solo, and arm all use this gate before their synthetic key rung.
-    static func syntheticKeyFocusRefusal(
-        runtime: AXLogicProElements.Runtime
-    ) -> RungRefusal? {
-        if AXLogicProElements.dialogPresent(runtime: runtime) {
-            return unsafeFocusRefusal(reason: "a modal dialog or sheet is present", focus: "modal")
+    /// What Logic's keyboard focus is, as far as AX can tell.
+    ///
+    /// One reading with two consumers: `syntheticKeyFocusRefusal` posts a key only on
+    /// `.notTextEditing`, and the background `StatePoller` loop yields its tick on `.textEditing`
+    /// (#1079). The rule lives here once so the two cannot disagree about what a text field is.
+    enum LogicKeyboardFocus: Equatable, Sendable {
+        /// Where the reading stopped. A stage that did not read says nothing about the focus.
+        enum UnreadableStage: Equatable, Sendable, CaseIterable {
+            case appRoot
+            case focusedElement
+            case role
         }
+
+        /// The focused element edits text. `byInsertionPoint` is false when its role is an
+        /// editable one and true when only a text insertion point gave it away.
+        case textEditing(role: String, byInsertionPoint: Bool)
+        /// The focused element and its role were read, and it does not edit text.
+        case notTextEditing
+        case unreadable(UnreadableStage)
+    }
+
+    /// Reads Logic's focused UI element (the application element's `AXFocusedUIElement`) and
+    /// classifies it: an editable text surface (rename field, Notes, search/combo box) by role, or
+    /// any element exposing a text insertion point, since that marks an editable surface even when
+    /// the role is unusual.
+    static func readLogicKeyboardFocus(runtime: AXLogicProElements.Runtime) -> LogicKeyboardFocus {
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
-            return unsafeFocusRefusal(
-                reason: "the Logic application root is unreadable — focus safety cannot be proven",
-                focus: "app_root_unreadable"
-            )
+            return .unreadable(.appRoot)
         }
         guard let focused: AXUIElement = AXHelpers.getAttribute(
             app, kAXFocusedUIElementAttribute, runtime: runtime.ax
         ) else {
-            return unsafeFocusRefusal(
-                reason: "Logic's focused element is unreadable — focus safety cannot be proven",
-                focus: "focus_unreadable"
-            )
+            return .unreadable(.focusedElement)
         }
         guard let role = AXHelpers.getRole(focused, runtime: runtime.ax) else {
-            return unsafeFocusRefusal(
-                reason: "the focused element's role is unreadable — focus safety cannot be proven",
-                focus: "role_unreadable"
-            )
+            return .unreadable(.role)
         }
         let editableRoles: Set<String> = [
             kAXTextFieldRole as String,
@@ -1549,21 +1552,57 @@ extension AccessibilityChannel {
             kAXComboBoxRole as String
         ]
         if editableRoles.contains(role) {
-            return unsafeFocusRefusal(
-                reason: "an editable text field is focused (role \(role))", focus: role
-            )
+            return .textEditing(role: role, byInsertionPoint: false)
         }
-        // A text insertion point marks an editable text surface even when the role
-        // is unusual — a synthetic key would type into it.
         if let _: NSNumber = AXHelpers.getAttribute(
             focused, kAXInsertionPointLineNumberAttribute, runtime: runtime.ax
         ) {
+            return .textEditing(role: role, byInsertionPoint: true)
+        }
+        return .notTextEditing
+    }
+
+    /// #6 — refuse a synthetic global command key when Logic's keyboard focus is
+    /// NOT known-safe: a modal/sheet is present, the focus does not read, or the
+    /// focused element is an editable text surface (`readLogicKeyboardFocus`).
+    /// Posting 'm', 's', or the arm chord into such focus would type text or
+    /// trigger the wrong command. Returns a refusal (⇒ do NOT post the key);
+    /// nil ⇒ the focus read and is not a text surface.
+    /// Mute, Solo, and arm all use this gate before their synthetic key rung.
+    static func syntheticKeyFocusRefusal(
+        runtime: AXLogicProElements.Runtime
+    ) -> RungRefusal? {
+        if AXLogicProElements.dialogPresent(runtime: runtime) {
+            return unsafeFocusRefusal(reason: "a modal dialog or sheet is present", focus: "modal")
+        }
+        switch readLogicKeyboardFocus(runtime: runtime) {
+        case .unreadable(.appRoot):
+            return unsafeFocusRefusal(
+                reason: "the Logic application root is unreadable — focus safety cannot be proven",
+                focus: "app_root_unreadable"
+            )
+        case .unreadable(.focusedElement):
+            return unsafeFocusRefusal(
+                reason: "Logic's focused element is unreadable — focus safety cannot be proven",
+                focus: "focus_unreadable"
+            )
+        case .unreadable(.role):
+            return unsafeFocusRefusal(
+                reason: "the focused element's role is unreadable — focus safety cannot be proven",
+                focus: "role_unreadable"
+            )
+        case .textEditing(let role, byInsertionPoint: false):
+            return unsafeFocusRefusal(
+                reason: "an editable text field is focused (role \(role))", focus: role
+            )
+        case .textEditing(let role, byInsertionPoint: true):
             return unsafeFocusRefusal(
                 reason: "a text-editing surface with an insertion point is focused",
                 focus: role
             )
+        case .notTextEditing:
+            return nil
         }
-        return nil
     }
 
     /// The active macOS keyboard input source, or nil when it cannot be read.

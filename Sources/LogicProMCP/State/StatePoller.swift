@@ -46,6 +46,13 @@ actor StatePoller {
         /// Defaults to "no mutation in flight", which is the pre-existing behaviour.
         var mutationInFlight: @Sendable () -> Bool = { false }
 
+        /// #1079 — what Logic's keyboard focus is right now, read through the same rule that keeps
+        /// a synthetic key out of a text field (`AccessibilityChannel.readLogicKeyboardFocus`).
+        /// The background loop yields its tick while this answers `.textEditing`; see
+        /// `backgroundTickYields(to:)`. Defaults to "no text editing", the pre-existing behaviour,
+        /// so a test runtime never reaches the live AX API by omission.
+        let keyboardFocus: @Sendable () -> AccessibilityChannel.LogicKeyboardFocus
+
         /// Source-compatible init: if `sleep` isn't supplied, use
         /// `Task.sleep(nanoseconds:)` so existing callers (mostly tests that
         /// only override `hasVisibleWindow`) keep compiling without change.
@@ -63,13 +70,15 @@ actor StatePoller {
                 try await Task.sleep(nanoseconds: ns)
             },
             blockingDialogInfo: @Sendable @escaping () -> AXLogicProElements.BlockingDialogInfo? = { nil },
-            projectFileReader: LogicProjectFileReader.Runtime = .unavailable
+            projectFileReader: LogicProjectFileReader.Runtime = .unavailable,
+            keyboardFocus: @Sendable @escaping () -> AccessibilityChannel.LogicKeyboardFocus = { .notTextEditing }
         ) {
             self.hasVisibleWindow = hasVisibleWindow
             self.dialogPresent = dialogPresent
             self.sleep = sleep
             self.blockingDialogInfo = blockingDialogInfo
             self.projectFileReader = projectFileReader
+            self.keyboardFocus = keyboardFocus
         }
 
         /// The AX project reader supplies a title but cannot provide a trusted
@@ -82,7 +91,8 @@ actor StatePoller {
             hasVisibleWindow: { ProcessUtils.hasVisibleWindow() },
             dialogPresent: { AXLogicProElements.dialogPresent() },
             blockingDialogInfo: { AXLogicProElements.blockingDialogInfo() },
-            projectFileReader: .production
+            projectFileReader: .production,
+            keyboardFocus: { AccessibilityChannel.readLogicKeyboardFocus(runtime: .production) }
         )
 
         /// Test-friendly runtime for lifecycle-only coverage. Short-circuits
@@ -312,7 +322,18 @@ actor StatePoller {
             // itself — it starves the operation the user is waiting on, and the operations carry
             // deadlines. Skip the tick; the next one is `intervalNs` away and the cache is
             // invalidated after the mutation regardless.
-            if !cycleInProgress, !runtime.mutationInFlight() {
+            //
+            // #1079: the user is typing into a Logic text field (an inline track rename). With the
+            // server connected and idle, the rename lost keyboard focus partway through and the
+            // rest of the keystrokes reached Logic as key commands; with the process killed it did
+            // not. Which read takes the focus is not measured; a cycle is AX walks plus an
+            // `osascript` Apple Event, and none of it runs while the focus reads as text editing.
+            // An explicit `refreshNow` is not gated: a caller asking is not the background loop.
+            // Read last: it is itself an AX read, and while a mutation holds the surface even that
+            // is one too many. Synchronous, so the invariant above — no suspension between this
+            // check and `runCoalescedCycle`'s — still holds.
+            if !cycleInProgress, !runtime.mutationInFlight(),
+               !Self.backgroundTickYields(to: runtime.keyboardFocus()) {
                 _ = await runCoalescedCycle()
             }
 
@@ -327,6 +348,28 @@ actor StatePoller {
         }
 
         Log.info("AX Supplementary Poller loop exited", subsystem: "poller")
+    }
+
+    /// #1079 — whether the background loop gives up its tick for what Logic's keyboard focus is.
+    ///
+    /// Only text editing yields. `syntheticKeyFocusRefusal` also refuses on a modal dialog, but the
+    /// poller must keep running under one: its cycle is what records the occlusion (`axOccluded`)
+    /// and the blocking dialog's buttons that `logic://project/audit` reports. A text field inside
+    /// a dialog that reads as the focused element yields like any other text field.
+    ///
+    /// An unreadable focus polls. That is not a claim that no text field is focused — a reading
+    /// that failed says nothing either way. It is the cheaper wrong answer: polling is exactly the
+    /// behaviour before #1079, while yielding would stop the loop for as long as the focus does not
+    /// read, and it never reads while Logic is not running (no application root). The cycle that
+    /// counts window misses and eventually reports the document closed would never run, so the
+    /// cache would keep serving a document that is gone, with nothing to say it stopped.
+    static func backgroundTickYields(to focus: AccessibilityChannel.LogicKeyboardFocus) -> Bool {
+        switch focus {
+        case .textEditing:
+            return true
+        case .notTextEditing, .unreadable:
+            return false
+        }
     }
 
     /// What one section's poll answers. #668 — a single `Bool` could not distinguish "the value
