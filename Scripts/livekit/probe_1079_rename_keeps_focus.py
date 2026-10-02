@@ -136,8 +136,9 @@ def open_rename(helper):
     return None
 
 
-SUBSCRIBE = ("logic://project/info", "logic://tracks", "logic://transport/state", "logic://mixer",
+SUBSCRIBE_ALL = ("logic://project/info", "logic://tracks", "logic://transport/state", "logic://mixer",
              "logic://markers", "logic://project/audit")
+SUBSCRIBE = SUBSCRIBE_ALL
 SUBSCRIBING = False
 
 
@@ -170,23 +171,34 @@ def settle_focus(helper):
     """Leave the focus on the Tracks rail before a sample starts, and return its role. A sample
     that lost the field can leave a text field focused, and a server started then yields from its
     first tick, so its publication never runs (seen 2026-10-03: the candidate's first subscribed
-    sample in every language had no notification). One Escape is sent, only while Logic holds the
-    keyboard, if a text field still has the focus."""
-    if focused_role(helper) in TEXT_ROLES and P.keyboard_owner_is_logic() is True:
-        P.post_escape()
-        time.sleep(0.5)
-    P.osa('tell application "Logic Pro" to activate')
-    subprocess.run([helper, "keymain", *P.names("arrangeWindowTitleSuffix")], capture_output=True,
-                   text=True, timeout=10)
-    subprocess.run([helper, "focusrail", *P.names("trackHeadersDescription")], capture_output=True,
-                   text=True, timeout=15)
-    return focused_role(helper)
+    sample in every language had no notification). Up to three rounds: an Escape, sent only while
+    Logic holds the keyboard and a text field has the focus, then the rail. Every round is returned,
+    so a sample that could not leave a text field says why (seen in German: two in a row)."""
+    attempts = []
+    for _ in range(3):
+        P.osa('tell application "Logic Pro" to activate')
+        role = focused_role(helper)
+        owner = P.keyboard_owner_is_logic()
+        escaped = role in TEXT_ROLES and owner is True
+        if escaped:
+            P.post_escape()
+            time.sleep(0.7)
+        subprocess.run([helper, "keymain", *P.names("arrangeWindowTitleSuffix")], capture_output=True,
+                       text=True, timeout=10)
+        subprocess.run([helper, "focusrail", *P.names("trackHeadersDescription")], capture_output=True,
+                       text=True, timeout=15)
+        after = focused_role(helper)
+        attempts.append({"role": role, "keyboard_owner_is_logic": owner, "escaped": escaped, "role_after": after})
+        if after not in TEXT_ROLES:
+            break
+    return attempts
 
 
 def sample(helper, condition, binary, n):
     row, driver = {"condition": condition, "sample": n}, None
     try:
-        row["role_before_server"] = settle_focus(helper)
+        row["settle"] = settle_focus(helper)
+        row["role_before_server"] = row["settle"][-1]["role_after"]
         if row["role_before_server"] in TEXT_ROLES:
             row["outcome"] = "not_run"
             row["why"] = "a text field kept the focus before the server started"
@@ -281,6 +293,11 @@ def arguments():
     parser.add_argument("--lprojs", nargs="+", default=list(L993.DEFAULT_LPROJS))
     parser.add_argument("--subscribe", action="store_true",
                         help="subscribe each server to the resources a poll cycle publishes")
+    parser.add_argument("--subscribe-uri", action="append", choices=SUBSCRIBE_ALL, metavar="uri",
+                        help="with --subscribe, only this resource (repeatable); to find which one matters")
+    parser.add_argument("--conditions", nargs="+", choices=("none", "control", "candidate"),
+                        default=["none", "control", "candidate"],
+                        help="the conditions to run; a run without all three is a search, not a verdict")
     args = parser.parse_args()
     unknown = [name for name in args.lprojs if name not in L993.CODES]
     if unknown:
@@ -290,8 +307,10 @@ def arguments():
 
 def main():
     args = arguments()
-    global SUBSCRIBING
+    global SUBSCRIBING, SUBSCRIBE
     SUBSCRIBING = args.subscribe
+    if args.subscribe_uri:
+        SUBSCRIBE = tuple(args.subscribe_uri)
     if not os.environ.get("LPM_LIVE_LOCK") or not os.path.exists(os.environ["LPM_LIVE_LOCK"]):
         sys.exit("cannot run: LPM_LIVE_LOCK must name a held lock")
     E.REPO = os.path.dirname(os.path.dirname(HERE))
@@ -311,6 +330,8 @@ def main():
                 rows.append({"lproj": lproj, "condition": "launch", "sample": 0, "outcome": "not_launched"})
                 break
             for condition, binary in (("none", None), ("control", args.control), ("candidate", args.candidate)):
+                if condition not in args.conditions:
+                    continue
                 for n in range(args.samples):
                     row = sample(helper, condition, binary, n)
                     row["lproj"] = lproj
