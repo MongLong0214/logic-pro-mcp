@@ -142,14 +142,94 @@ actor ChannelRouter {
         return (error, (object["hint"] as? String) ?? "")
     }
 
+    // MARK: - Debug: one channel only (#1039)
+
+    static let debugOnlyChannelEnvironmentKey = "LOGIC_MCP_DEBUG_ONLY_CHANNEL"
+
+    /// What a debug build's `LOGIC_MCP_DEBUG_ONLY_CHANNEL` asked for.
+    enum DebugOnlyChannel: Equatable, Sendable {
+        /// Unset: every chain is walked as the table has it.
+        case unrestricted
+        /// Every chain keeps this channel alone.
+        case only(ChannelID)
+        /// Set to something that is not a channel id. Every routed operation is refused rather
+        /// than walked in full, so a misspelt name cannot pass for a restriction that held.
+        case invalid(String)
+    }
+
+    /// #1039 asks for each plain-letter operation to be driven live through CGEventChannel alone,
+    /// and three of them (record, cycle, metronome) reach the Accessibility channel first. A debug
+    /// build started with `LOGIC_MCP_DEBUG_ONLY_CHANNEL=<ChannelID raw value>` keeps only that
+    /// channel in every chain, and refuses an operation whose chain does not hold it. Release
+    /// builds never read the variable.
+    static let debugOnlyChannel: DebugOnlyChannel = {
+        #if DEBUG
+        return debugOnlyChannel(from: ProcessInfo.processInfo.environment)
+        #else
+        return .unrestricted
+        #endif
+    }()
+
+    static func debugOnlyChannel(from environment: [String: String]) -> DebugOnlyChannel {
+        guard let raw = environment[debugOnlyChannelEnvironmentKey] else { return .unrestricted }
+        return ChannelID(rawValue: raw).map(DebugOnlyChannel.only) ?? .invalid(raw)
+    }
+
+    /// The chain `route` walks under `restriction`, or the refusal it answers instead. Pure, so the
+    /// restriction is tested without the environment.
+    static func effectiveChain(
+        _ chain: [ChannelID], operation: String, restriction: DebugOnlyChannel
+    ) -> Result<[ChannelID], RoutingRefusal> {
+        switch restriction {
+        case .unrestricted:
+            return .success(chain)
+        case let .only(channel):
+            let kept = chain.filter { $0 == channel }
+            guard !kept.isEmpty else {
+                return .failure(RoutingRefusal(message:
+                    "This debug build routes only through \(channel.rawValue) "
+                    + "(\(debugOnlyChannelEnvironmentKey)), and \(operation)'s chain does not include it."))
+            }
+            return .success(kept)
+        case let .invalid(raw):
+            return .failure(RoutingRefusal(message:
+                "\(debugOnlyChannelEnvironmentKey) is set to \(raw), which names no channel; "
+                + "nothing was routed."))
+        }
+    }
+
+    /// An operation whose chain is empty needs no channel and succeeds. A restriction that names
+    /// no channel refuses it all the same, since that restriction refuses everything (#1039 review
+    /// R1, R-1039-03: `project.is_running`, `system.health` and `system.permissions` answered).
+    /// One that keeps a channel leaves it alone: there is no chain for it to narrow.
+    static func emptyChainResult(operation: String, restriction: DebugOnlyChannel) -> ChannelResult {
+        if case .invalid = restriction,
+           case let .failure(refusal) = effectiveChain([], operation: operation, restriction: restriction) {
+            return .error(refusal.message)
+        }
+        return .success("No channel required for \(operation)")
+    }
+
+    struct RoutingRefusal: Error, Equatable {
+        let message: String
+    }
+
     func route(operation: String, params: [String: String] = [:]) async -> ChannelResult {
-        guard let chain = Self.routingTable[operation] else {
+        guard let tableChain = Self.routingTable[operation] else {
             return .error("Unknown operation: \(operation)")
         }
 
         // Operations with empty chain don't need a channel
-        if chain.isEmpty {
-            return .success("No channel required for \(operation)")
+        if tableChain.isEmpty {
+            return Self.emptyChainResult(operation: operation, restriction: Self.debugOnlyChannel)
+        }
+
+        let chain: [ChannelID]
+        switch Self.effectiveChain(tableChain, operation: operation, restriction: Self.debugOnlyChannel) {
+        case let .success(kept):
+            chain = kept
+        case let .failure(refusal):
+            return .error(refusal.message)
         }
 
         // ADR-005: no-op unless an active mutation trace registered in this
