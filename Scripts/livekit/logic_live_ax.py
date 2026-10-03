@@ -188,6 +188,7 @@ def target_box(boxes, key):
 
 class Source:
     def __init__(self):
+        from logic_input_source import TISRuntime  # Scripts/, which the harnesses put on sys.path
         self.runtime = TISRuntime.load()
 
     def current(self):
