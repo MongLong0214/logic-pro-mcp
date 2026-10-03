@@ -56,6 +56,24 @@ private func cache(holding bundle: URL) async -> StateCache {
     return cache
 }
 
+/// A reader that runs `duringRead` inside its front-document query, as Logic's answer can arrive after the
+/// poller has moved the cache, then names `front` (or no document when `front` is nil).
+private func movingReader(front: URL?, count: Int,
+                          duringRead: @escaping @Sendable () async -> Void) -> LogicProjectFileReader.Runtime {
+    LogicProjectFileReader.Runtime(
+        currentDocumentPath: {
+            await duringRead()
+            return front?.path
+        },
+        now: { Date(timeIntervalSince1970: 1_700_000_500) },
+        readPlistData: { _ in
+            try? PropertyListSerialization.data(fromPropertyList: ["NumberOfTracks": count], format: .binary, options: 0)
+        },
+        mtime: { _ in Date(timeIntervalSince1970: 1_700_000_000) },
+        sleep: { _ in }
+    )
+}
+
 private func gap(_ report: ProjectSessionAudit.AuditReport) -> ProjectSessionAudit.Finding? {
     report.findings.first { $0.id == "track_readback_gap" }
 }
@@ -90,6 +108,36 @@ struct Issue965AuditReadsTheSharedObservationTests {
 
         let finding = try #require(gap(report))
         #expect(finding.evidence.values == ["file_track_count=5", "ax_track_count=2"])
+    }
+
+    @Test func aRailThatGrewDuringTheFileReadIsComparedAtItsNewCount() async throws {
+        // #1096 review round 1, R965-1: the poller moves the cache while the reader awaits Logic.
+        // Mutation killed: the cache read before the file read (the two rows read before the await are
+        // compared with the five the file names, a false gap).
+        let bundles = try Bundles()
+        defer { bundles.remove() }
+        let cache = await cache(holding: bundles.cached)
+        let reader = movingReader(front: bundles.cached, count: 5) {
+            await cache.updateTracks((0..<5).map { TrackState(id: $0, name: "Track \($0 + 1)", type: .audio) })
+        }
+
+        let report = await ProjectSessionAudit.buildAudit(cache: cache, fileReader: reader)
+
+        #expect(gap(report) == nil, "\(gap(report).map { "\($0.evidence.values)" } ?? "")")
+    }
+
+    @Test func aDocumentThatClosedDuringTheFileReadIsReportedClosed() async throws {
+        // R965-1's second case: the document closes while the reader awaits Logic and the reader names
+        // none. Mutation killed: the cache read before the file read (the audit reports the open
+        // document it read first).
+        let bundles = try Bundles()
+        defer { bundles.remove() }
+        let cache = await cache(holding: bundles.cached)
+        let reader = movingReader(front: nil, count: 5) { await cache.updateDocumentState(false) }
+
+        let report = await ProjectSessionAudit.buildAudit(cache: cache, fileReader: reader)
+
+        #expect(report.findings.contains { $0.id == "no_open_document" }, "\(report.findings.map(\.id))")
     }
 
     @Test func theInspectionAndTheAuditKeepTheSameCount() async throws {

@@ -16,9 +16,9 @@ H = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(H)
 
 
-def row(expected, names_gap, audit_count):
+def row(expected, names_gap, audit_count, answered=True):
     return {"inspection_expected_count": expected, "inspection_names_the_gap": names_gap,
-            "audit_gap_file_count": audit_count}
+            "audit_gap_file_count": audit_count, "audit_answered": answered}
 
 
 class Agreement(unittest.TestCase):
@@ -34,6 +34,15 @@ class Agreement(unittest.TestCase):
 
     def test_no_expected_count_is_not_agreement(self):
         self.assertFalse(H.agree(row(None, False, None)))
+
+    def test_an_audit_that_did_not_answer_is_not_agreement(self):
+        # #1096 review round 1, R965-2: a missing or error-shaped audit read as "no gap".
+        self.assertFalse(H.agree(row(19, False, None, answered=False)))
+        self.assertFalse(H.agree(row(42, True, 42, answered=False)))
+        for reply in (None, {}, {"_transport_error": None}, {"state": "C", "error": "invalid_params"},
+                      {"status": "ok"}, {"findings": []}, {"status": "", "findings": []}):
+            self.assertFalse(H.audit_answered(reply), repr(reply))
+        self.assertTrue(H.audit_answered({"status": "degraded", "findings": []}))
 
     def test_the_gap_count_is_read_from_the_finding(self):
         audit = {"findings": [{"id": "track_readback_gap", "evidence": {"values": ["file_track_count=26", "ax_track_count=19"]}}]}

@@ -49,9 +49,20 @@ def gap_count(audit):
     return None
 
 
+def audit_answered(audit):
+    """Whether the audit reply is an audit report: a status and a findings list. A transport error, an
+    empty reply or a State C error carries neither (#1096 review round 1, R965-2)."""
+    return isinstance(audit, dict) and isinstance(audit.get("status"), str) and bool(audit.get("status")) \
+        and isinstance(audit.get("findings"), list) and audit.get("state") != "C"
+
+
 def agree(row):
-    """The inspection names an expected count, and the audit's gap finding is present exactly when the
-    inspection's tracks reasons carry `track_readback_gap`, with the same count."""
+    """The audit answered, the inspection names an expected count, and the audit's gap finding is present
+    exactly when the inspection's tracks reasons carry `track_readback_gap`, with the same count. Where
+    neither names a gap only that much is compared: the audit states its file count in the gap finding
+    alone."""
+    if row.get("audit_answered") is not True:
+        return False
     expected = row.get("inspection_expected_count")
     if not isinstance(expected, int):
         return False
@@ -87,6 +98,7 @@ def read_language(driver):
         "inspection_rows": witnesses.get("count"),
         "inspection_reasons": tracks.get("reasons"),
         "inspection_names_the_gap": "track_readback_gap" in (tracks.get("reasons") or []),
+        "audit_answered": audit_answered(audit),
         "audit_gap_file_count": gap_count(audit),
         "audit_status": audit.get("status"),
         "audit_finding_ids": [f.get("id") for f in audit.get("findings") or []],

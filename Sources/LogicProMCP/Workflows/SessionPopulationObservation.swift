@@ -188,8 +188,14 @@ enum SessionPopulationObservation {
     }
 
     static func observe(cache: StateCache, fileReader: LogicProjectFileReader.Runtime) async -> Reading {
-        let state = await cache.auditSnapshot()
+        // The file first, then the cache, as the audit read them before #965 O3. The reader awaits
+        // Logic, so a cache read taken before that await can be older than the bundle it is compared
+        // with: a rail that grew during the read was compared at its old count, a false
+        // track_readback_gap (#1096 review round 1, R965-1). Read after, the cache is the newer of the
+        // two, and a project that changed in between fails the bundle-path binding instead of lending
+        // its count to another rail. `capture`'s boundaries still bracket both reads.
         let metadata = await LogicProjectFileReader.read(runtime: fileReader)
+        let state = await cache.auditSnapshot()
         let fileBound = metadata.map { sameBundle($0.bundlePath, cachedPath: state.project.filePath) }
         return Reading(
             state: state,
