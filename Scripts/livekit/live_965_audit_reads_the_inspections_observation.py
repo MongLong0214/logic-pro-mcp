@@ -67,13 +67,21 @@ def disagreeing(row):
 
 
 def read_language(driver):
+    """The inspection is read again, up to three times, while it says the cache moved during its
+    capture: an unstable capture states no reasons (ja, 2026-10-03, bc9a0a1c). The audit is read right
+    after the first stable one."""
     driver.tool("logic_system", "refresh_cache")
     time.sleep(1.0)
-    report = driver.tool("logic_project", "inspect_session", {"domains": ["tracks"]}) or {}
+    for attempt in range(1, 4):
+        report = driver.tool("logic_project", "inspect_session", {"domains": ["tracks"]}) or {}
+        tracks = report.get("tracks") or {}
+        if "cache_moved_during_capture" not in (tracks.get("reasons") or []):
+            break
+        time.sleep(1.0)
     audit = driver.tool("logic_project", "audit") or {}
-    tracks = report.get("tracks") or {}
     witnesses = tracks.get("witnesses") or {}
     return {
+        "inspection_attempts": attempt,
         "inspection_expected_count": witnesses.get("expected_count"),
         "inspection_expected_count_source": witnesses.get("expected_count_source"),
         "inspection_rows": witnesses.get("count"),
