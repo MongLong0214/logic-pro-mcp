@@ -319,14 +319,23 @@ class DuplicateAndCloseIdentity(unittest.TestCase):
     def setUp(self):
         use_words()
 
-    def test_duplicate_needs_the_source_tracks_strip_name(self):
-        extra = {"selected_track": {"name": "Absolute Zero"}, "renamed_track": {"name": "LPM1029 0 50374"},
-                 "new_track_description": "Track 25 'Absolute Zero'"}
+    def test_duplicate_needs_the_source_strips_patch_name(self):
+        extra = {"selected_track": {"index": 0, "name": "Absolute Zero"}, "renamed_track": {"name": "LPM1029 0 50374"},
+                 "source_patch": "Absolute Zero", "new_track_description": "Track 25 'Absolute Zero'"}
         self.assertTrue(H.carries_source_settings({}, {}, extra))
         for described in ("Track 25 '<audio> 2'", "Track 25 'Deluxe Classic'"):
             self.assertFalse(H.carries_source_settings({}, {}, dict(extra, new_track_description=described)),
                              "a created track passed as a duplicate")
         self.assertFalse(H.carries_source_settings({}, {}, {"new_track_description": "x"}))
+        self.assertFalse(H.carries_source_settings({}, {}, dict(extra, source_patch=None)), "no patch name read")
+        self.assertFalse(H.carries_source_settings({}, {}, dict(extra, selected_track={"index": 2})), "another source")
+
+    def test_a_chinese_duplicate_carries_the_localized_patch_name(self):
+        # zh_CN on 2026-10-04: the source reads Absolute Zero, the duplicate 绝对零度.
+        extra = {"selected_track": {"index": 0, "name": "Absolute Zero"}, "source_patch": "绝对零度",
+                 "new_track_description": "轨道 25“绝对零度”"}
+        self.assertTrue(H.carries_source_settings({}, {}, extra))
+        self.assertFalse(H.carries_source_settings({}, {}, dict(extra, source_patch="Absolute Zero")))
 
     def test_close_needs_every_fixture_window_gone(self):
         two = ["fixture - Tracks", "fixture - Marker List"]
@@ -428,6 +437,20 @@ class ProductionCompletion(unittest.TestCase):
         shell = {"en": {"rows": [row, dict(row, after={"boxes": {}, "tracks": None})]}}
         self.assertFalse(H.production_complete(shell, ["en"], 2, {"restorations_failed": 0}),
                          "an AX window shell with nothing read passed")
+
+
+class QuotedName(unittest.TestCase):
+    """The 2026-10-04 full run failed German duplicate: the source's name read as None from „…“."""
+
+    def test_every_language_quote_style_reads_the_name(self):
+        for description in ("트랙 1 ‘Absolute Zero’", "Track 1 “Absolute Zero”", "Spur 1 „Absolute Zero“",
+                            "Piste 1 « Absolute Zero »", "トラック 1「Absolute Zero」", "Track 1 'Absolute Zero'"):
+            self.assertEqual(H.quoted_name(description), "Absolute Zero", description)
+
+    def test_no_quotes_or_an_empty_pair_is_no_name(self):
+        self.assertIsNone(H.quoted_name("Track 1"))
+        self.assertIsNone(H.quoted_name("Track 1 “”"))
+        self.assertIsNone(H.quoted_name(None))
 
 
 if __name__ == "__main__":

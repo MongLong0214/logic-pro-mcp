@@ -314,6 +314,11 @@ UNDO_UNIT_MARK = "Logic.framework"
 #: language being driven, in the corpus's spelling (`zh_CN`), and is set by `run_language`.
 UNDO_TABLE = {}
 CANON_LOCALE = {"value": None}
+#: The fixture's first track carries the Absolute Zero kit. A duplicate takes the strip's patch name,
+#: which Logic localizes from the Library's Item.strings: the 2026-10-04 full run read the new track as
+#: 绝对零度 in zh_CN and 絕對零度 in zh_TW, and Absolute Zero in the other eight languages.
+SOURCE_PATCH_KEY = "InsP/Absolute Zero"
+PATCH_UNIT_MARK = "ContentDatabaseV01.db"
 
 
 def load_undo_table(logic_canon):
@@ -324,6 +329,8 @@ def load_undo_table(logic_canon):
     table = {}
     for unit, locale, key, field, value in logic_canon.extract_strings(L993.APP):
         if field == "value" and key in wanted and UNDO_UNIT_MARK in unit and unit.endswith("Localizable.strings"):
+            table.setdefault(key, {})[locale] = value
+        elif field == "value" and key == SOURCE_PATCH_KEY and PATCH_UNIT_MARK in unit and unit.endswith("Item.strings"):
             table.setdefault(key, {})[locale] = value
     UNDO_TABLE.clear()
     UNDO_TABLE.update(table)
@@ -415,14 +422,16 @@ def track_kind(audio):
 
 
 def carries_source_settings(before, after, extra):
-    """Duplicate copies the selected track's channel strip, and the new track takes the strip's name: the
-    source's name as it read before the setup renamed it (measured in Korean on 2026-10-04: a renamed
-    Absolute Zero track duplicated as Absolute Zero). The setup selects the fixture's first track, an
-    Absolute Zero kit, whose name a new instrument track (Deluxe Classic) or audio track does not take
-    (#1091 review R2, R1091-06)."""
-    name = (extra.get("selected_track") or {}).get("name")
+    """Duplicate copies the selected track's channel strip, and the new track takes the strip's patch
+    name in the run's language, read from the Library's Item.strings (`source_patch`). The setup
+    selects the fixture's first track, an Absolute Zero kit, whose patch name a new instrument track
+    (Deluxe Classic) or audio track does not take (#1091 review R2, R1091-06). The source's own name is
+    not compared: Chinese Logic names the duplicate 绝对零度 / 絕對零度 while the source reads
+    Absolute Zero (2026-10-04 full run)."""
+    patch = extra.get("source_patch")
     described = extra.get("new_track_description")
-    return bool(name) and isinstance(described, str) and name in described
+    source = (extra.get("selected_track") or {}).get("index")
+    return source == 0 and bool(patch) and isinstance(described, str) and patch in described
 
 
 def both(first, second):
@@ -583,8 +592,28 @@ def selected_track(ax):
     if len(chosen) != 1:
         return None, None
     index, row = chosen[0]
-    found = re.search(r"[\u2018'\u201c\"](.+?)[\u2019'\u201d\"]", ax.value(row, "AXDescription") or "")
-    return index, (found.group(1) if found else None)
+    return index, quoted_name(ax.value(row, "AXDescription"))
+
+
+#: Opening quote -> the closing quotes Logic writes after it, by language: ko/zh ‘’ “”, de „“,
+#: fr « » (with spaces), ja 「」.
+QUOTES = {"\u2018": "\u2019", "\u201c": "\u201d", "\u201e": "\u201c", "\u00ab": "\u00bb",
+          "\u300c": "\u300d", "'": "'", '"': '"'}
+
+
+def quoted_name(description):
+    """The track name inside the first pair of quotes Logic's header description puts around it, or
+    None. The 2026-10-04 full run read German „Absolute Zero“ as no name: the pattern knew only
+    ‘ ' “ " as opening quotes."""
+    text = description or ""
+    for start, char in enumerate(text):
+        close = QUOTES.get(char)
+        if close is None:
+            continue
+        end = text.find(close, start + 1)
+        if end > start + 1:
+            return text[start + 1:end].strip() or None
+    return None
 
 
 def selected_indices(ax):
@@ -606,6 +635,7 @@ def setup_duplicate(driver, ax, extra):
         time.sleep(0.25)
     extra["selected_after_select"] = selected_indices(ax)
     extra["first_track_selected"] = selected_track(ax)[0] == 0
+    extra["source_patch"] = undo_word(SOURCE_PATCH_KEY)
     setup_selected_track(driver, ax, extra)
 
 
@@ -908,11 +938,34 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
         print(json.dumps({"lproj": lproj, "mode": mode, "op": op, "function": row.get("function"),
                           "others_moved": row.get("others_moved"), "method": summary.get("method"),
                           "success": summary.get("success")}, ensure_ascii=False), flush=True)
+        if mode == "isolated":
+            if op == "edit.paste":
+                witness_copy_by_paste(rows)
+                for copied in [r for r in rows if r.get("op") == "edit.copy" and not r.get("checked")]:
+                    record_check(ev, lproj, copied)
+            if op != "edit.copy":
+                record_check(ev, lproj, row)
     witness_copy_by_paste(rows)
+    if mode == "isolated":
+        for copied in [r for r in rows if r.get("op") == "edit.copy" and not r.get("checked")]:
+            record_check(ev, lproj, copied)
     # Leave the transport stopped whatever happened above, unless the project was closed.
     if A.arrange_window(ax) is not None:
         call(driver, ax, "logic_transport", "stop", {})
     return rows
+
+
+def record_check(ev, lproj, row):
+    """The row's falsifiable check, recorded while the run is still in the row's language: `judge`
+    reads the undo nouns and box labels for `CANON_LOCALE`, and the check's modal snapshot reads the
+    Logic the row ran in. The 2026-10-04 full run recorded every check after the last language, so
+    nine languages were judged with Traditional Chinese words (163 of 440 failed) and every snapshot
+    read cannot_tell."""
+    row["checked"] = True
+    ev.falsifiable(f"1029/{lproj}/{row['index']:02d}/{row['op']}", judge, row, unchanged(row),
+                   "through CGEvent alone the keystroke changed the op's reading and no other",
+                   mutation="a keystroke bound to another command, or none: the op's reading "
+                            "does not move, or another one does")
 
 
 def witness_copy_by_paste(rows):
@@ -1109,13 +1162,6 @@ def main():
         ev.stop_recording(recording)
 
     ev.note("1029/failures", failures)
-    if args.mode == "isolated":
-        for lproj in args.lprojs:
-            for row in (runs.get(lproj) or {}).get("rows") or []:
-                ev.falsifiable(f"1029/{lproj}/{row['index']:02d}/{row['op']}", judge, row, unchanged(row),
-                               "through CGEvent alone the keystroke changed the op's reading and no other",
-                               mutation="a keystroke bound to another command, or none: the op's reading "
-                                        "does not move, or another one does")
     out = ev.write()
     if args.mode == "isolated":
         clean = E.is_clean(out)
