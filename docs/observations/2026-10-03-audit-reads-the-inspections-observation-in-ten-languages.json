@@ -1,0 +1,243 @@
+{
+  "schema": 3,
+  "id": "2026-10-03-audit-reads-the-inspections-observation-in-ten-languages",
+  "date": "2026-10-03",
+  "subject": "whether logic_project audit and logic_project inspect_session report the same file-bound track count on one server, in ten languages",
+  "question": "On the locale fixture, does the audit raise track_readback_gap exactly when the inspection's tracks reasons name it, with file_track_count equal to the inspection's expected_count, in each of Logic's ten languages?",
+  "verdict": "works",
+  "surface": "arrange.track_headers",
+  "issues": [
+    965
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_965_audit_reads_the_inspections_observation.py <worktree> <full-40-char-head> <debug binary>",
+    "expected": "every language's row passes: the audit's gap finding matches the inspection's file-bound count",
+    "cost": "run as /usr/bin/python3 with LPM_LIVE_LOCK naming a held lock, LPM_EVIDENCE_ROOT an absolute path outside the repository and LPM_LOCALE_FIXTURE the locale fixture; relaunches Logic once per language, under a minute per language"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Workflows/SessionPopulationObservation.swift:observe",
+    "Sources/LogicProMCP/Workflows/ProjectSessionAudit.swift:buildAudit",
+    "Scripts/livekit/live_965_audit_reads_the_inspections_observation.py:agree"
+  ],
+  "evidence": [
+    "evidence/2026-10-03-965-audit-reads-the-inspections-observation.json"
+  ],
+  "method": "One run of Scripts/livekit/live_965_audit_reads_the_inspections_observation.py at d850559d97261cff954a866e69fb111df569e01f drove a debug build of that head (sha256 bb63d56227549c1ae89477a254d458a3388ea2495dc1a14a9347f78d08c2ca33). For each language Logic was quit, its AppleLanguages set, and the lpm-locale-campaign fixture reopened; one server refreshed its cache, then logic_project inspect_session (domains tracks) was read, again up to three times while its reasons said the cache moved during the capture, and logic_project audit right after. A row passes when the inspection names an expected count and the audit's track_readback_gap finding is present exactly when the inspection's tracks reasons carry it, with the same file count. Each row's check was also run against the same row with the audit counting five more tracks, which it must reject.",
+  "observations": [
+    {
+      "checks": 10,
+      "passed": 10
+    },
+    {
+      "per_locale": [
+        {
+          "locale": "en-US",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_structure_missing",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        },
+        {
+          "locale": "ko-KR",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_structure_missing",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        },
+        {
+          "locale": "ja-JP",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_structure_missing",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        },
+        {
+          "locale": "de-DE",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_inventory_unread",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        },
+        {
+          "locale": "es-ES",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_inventory_unread",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        },
+        {
+          "locale": "fr-FR",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_structure_missing",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        },
+        {
+          "locale": "it-IT",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_inventory_unread",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        },
+        {
+          "locale": "pt-BR",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_inventory_unread",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        },
+        {
+          "locale": "zh-CN",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_structure_missing",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        },
+        {
+          "locale": "zh-TW",
+          "inspection_attempts": 1,
+          "inspection_expected_count": 42,
+          "inspection_rows": 19,
+          "inspection_reasons": [
+            "collapsed_track_stack",
+            "track_readback_gap"
+          ],
+          "audit_gap_file_count": 42,
+          "audit_finding_ids": [
+            "duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10",
+            "duplicate_track_names_studio-grand_11_12_13_14_15_16_17_18",
+            "marker_structure_missing",
+            "occupied_plugin_slots_present",
+            "region_inventory_unread",
+            "track_readback_gap"
+          ]
+        }
+      ]
+    }
+  ],
+  "conclusion": "10 of 10 checks passed: in each passing language the audit and the inspection read the same file-bound count from the fixture's bundle; observations[1] holds each language's counts and reasons.",
+  "limits": [
+    "On the fixture the front document is the cached project, so this shows the two readers agree where the count is bound; the mismatch case is driven by the unit tests with real bundle directories.",
+    "One Logic installation (12.3, build 6674), one fixture, one host."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states counts, booleans, reason ids and finding ids; it quotes no string Logic ships."
+  }
+}
