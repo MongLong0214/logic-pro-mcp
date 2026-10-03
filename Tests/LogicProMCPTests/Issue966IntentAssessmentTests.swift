@@ -1570,3 +1570,115 @@ struct Issue966IntentAssessmentTests {
         #expect(candidates.map { Set($0.keys) } == [["handle", "track_ref"]])
     }
 }
+
+// MARK: - Receiving-aux steps over a graph bound to its capture (#1090 review R1090-001)
+
+/// Kick (trk_0) and Snare (trk_1) observed on the reverb bus (4), both approved onto the drum bus
+/// (3): two wrong-route findings over a graph published for this capture, with every domain read.
+private func receiverGraph(receiver: Bool, snapshotId: String = baselineSnapshotId) -> RoutingGraph {
+    let aux = auxNode("aux_drum_return")
+    var edges = [mainOutput(from: 0, to: reverbBus.id), mainOutput(from: 1, to: reverbBus.id)]
+    if receiver { edges.append(inputAssignment(from: drumBus, to: aux)) }
+    return graph(snapshotId: snapshotId,
+                 nodes: [trackNode(0), trackNode(1), drumBus, reverbBus, aux], edges: edges)
+}
+
+private func twoTargetPolicy() throws -> (Audit.IntentPolicy, Value) {
+    let object = policyObject(
+        targets: [targetEntry("kick", "trk_0"), targetEntry("snare", "trk_1")],
+        outputs: [targetOutput("kick", bus: 3), targetOutput("snare", bus: 3)]
+    )
+    let policy = try #require(accepted(Audit.parseIntentPolicy(object)))
+    return (policy, .object(object))
+}
+
+private func receiverPlan(receiver: Bool, allow: Bool, snapshotId: String = baselineSnapshotId) throws -> [String: Any] {
+    let (policy, value) = try twoTargetPolicy()
+    var options = Audit.PlanningOptions()
+    options.allowCreateAux = allow
+    let plan = try Audit.buildCanonicalRepairPlan(
+        policy: policy, policyValue: value, names: [], capture: threeTrackCapture,
+        request: Observation.Request(domains: [.tracks, .strips, .routing]), snapshotCurrent: true,
+        options: options, graphOverride: receiverGraph(receiver: receiver, snapshotId: snapshotId))
+    return try #require(sharedJSONObject(plan.json))
+}
+
+private func planSteps(_ body: [String: Any]) throws -> [[String: Any]] {
+    try #require(body["steps"] as? [[String: Any]])
+}
+
+@Suite("Receiving-aux steps over a bound graph (#966 P2)")
+struct Issue966ReceivingAuxBoundGraphTests {
+    /// Control for the fixture: the gate accepts this graph for this capture and both outputs are
+    /// violations, so the receiver branches below run over evidence the planner may use.
+    @Test func theFixtureGraphIsBoundToItsCaptureAndBothRoutesAreWrong() throws {
+        let (policy, _) = try twoTargetPolicy()
+        let bound = Audit.assessmentGate(policy: policy, capture: threeTrackCapture, graph: receiverGraph(receiver: false))
+        #expect(bound == nil)
+        let assessment = Audit.assessIntent(policy: policy, capture: threeTrackCapture, graph: receiverGraph(receiver: false))
+        let violations = assessment.findings.filter { $0.status == .violation }.count
+        #expect(violations == 2)
+    }
+
+    /// No aux reads bus 3 and creation is allowed: one create_aux step, before both outputs, each
+    /// output depending on it, one inventory entry. Mutations this kills: the aux step after its
+    /// outputs, one aux per output.
+    @Test func oneAuxIsPlannedBeforeEveryOutputThatNeedsIt() throws {
+        let body = try receiverPlan(receiver: false, allow: true)
+        let steps = try planSteps(body)
+        let kinds = steps.compactMap { $0["kind"] as? String }
+        #expect(kinds == ["create_aux", "main_output", "main_output"])
+        let auxID = try #require(steps.first?["id"] as? String)
+        for output in steps.dropFirst() {
+            let dependencies = try #require(output["dependencies"] as? [String])
+            #expect(dependencies == [auxID])
+        }
+        let inventory = try #require(body["new_object_inventory"] as? [[String: Any]])
+        #expect(inventory.count == 1)
+        #expect(inventory.first?["created_by"] as? String == auxID)
+    }
+
+    /// Mutation this kills: a missing receiver ignored when creation is not allowed.
+    @Test func aMissingReceiverBlocksTheOutputsWhenCreationIsNotAllowed() throws {
+        let body = try receiverPlan(receiver: false, allow: false)
+        let steps = try planSteps(body)
+        let kinds = steps.compactMap { $0["kind"] as? String }
+        #expect(kinds == ["main_output", "main_output"])
+        for output in steps {
+            let blocked = try #require(output["blocked_reasons"] as? [String])
+            #expect(blocked.contains("receiving_aux_missing"))
+            #expect(blocked.contains("create_aux_not_allowed"))
+        }
+    }
+
+    /// Control: an observed receiver adds no aux step and no receiver reason.
+    @Test func anObservedReceiverAddsNothing() throws {
+        let steps = try planSteps(try receiverPlan(receiver: true, allow: true))
+        let kinds = steps.compactMap { $0["kind"] as? String }
+        #expect(kinds == ["main_output", "main_output"])
+        for output in steps {
+            let blocked = try #require(output["blocked_reasons"] as? [String])
+            let mentionsReceiver = blocked.contains { $0.contains("receiv") || $0.contains("aux") }
+            #expect(!mentionsReceiver, "\(blocked)")
+        }
+    }
+
+    /// R1090-001: a graph the gate rejects as another capture's says nothing about this session's
+    /// receivers. Mutation this kills: receiver evidence read from a rejected graph, which planned
+    /// an aux from it.
+    @Test func aGraphFromAnotherCapturePlansNoAux() throws {
+        let body = try receiverPlan(receiver: false, allow: true, snapshotId: "another_capture")
+        let steps = try planSteps(body)
+        let createsAux = steps.contains { $0["kind"] as? String == "create_aux" }
+        #expect(!createsAux)
+        let inventory = try #require(body["new_object_inventory"] as? [Any])
+        #expect(inventory.isEmpty)
+        for output in steps where output["kind"] as? String == "main_output" {
+            let blocked = try #require(output["blocked_reasons"] as? [String])
+            #expect(blocked.contains("bus_receiver_unverified"))
+            #expect(!blocked.contains("receiving_aux_missing"))
+        }
+        let reasons = try #require(body["reasons"] as? [String])
+        #expect(reasons.contains("graph_not_from_capture"))
+    }
+}

@@ -101,9 +101,8 @@ extension ProjectSessionAudit {
         var reasons = Set<String>()
         if !snapshotCurrent { reasons.insert("snapshot_changed") }
         if request.scope != .wholeProject { reasons.insert("whole_project_scope_required") }
-        if let gate = assessmentGate(policy: policy, capture: capture, graph: graph) {
-            reasons.insert(gate.reason.rawValue)
-        }
+        let gate = assessmentGate(policy: policy, capture: capture, graph: graph)
+        if let gate { reasons.insert(gate.reason.rawValue) }
         if options.onAmbiguity == .reportOnly { reasons.insert("report_only_requested") }
         // Steps that create a receiving aux come before the outputs that need one
         // (destination before source), and each bus gets at most one.
@@ -130,7 +129,10 @@ extension ProjectSessionAudit {
             }
             var dependencies: [String] = []
             if finding.expected.output == .bus, let bus = finding.expected.busNumber {
-                switch receivingAux(bus: bus, graph: graph) {
+                // A graph the gate rejected (another capture, another project, inconsistent) is not
+                // evidence about this session's receivers, so neither presence nor absence is read
+                // from it (#1090 review R1090-001).
+                switch gate == nil ? receivingAux(bus: bus, graph: graph) : .unverified {
                 case .present:
                     break
                 case .unverified:
