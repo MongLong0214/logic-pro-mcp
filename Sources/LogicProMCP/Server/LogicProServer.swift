@@ -439,6 +439,13 @@ actor LogicProServer {
         // Skipping a tick costs nothing: the cache is invalidated after a mutation anyway, and the
         // next tick is three seconds later. An explicit `refreshNow` is NOT affected — a caller
         // asking for a refresh is not the background loop.
+        //
+        // #1079 — the loop also yields while Logic's focused element is a text field (an inline
+        // rename lost its focus with the server idle, and did not with the process killed). That
+        // gate is not attached here: it needs nothing from the server, so
+        // `StatePoller.Runtime.production` carries it beside the other live AX reads. Attaching it
+        // to whatever runtime arrives would hand a live AX reader to test runtimes that are inert
+        // on purpose.
         var runtimeWithGate = pollerRuntime
         let pollerMutationGate = self.mutationGate
         runtimeWithGate.mutationInFlight = { pollerMutationGate.isHeldByEntitledHolder() }
@@ -446,7 +453,7 @@ actor LogicProServer {
             axChannel: axChannel,
             cache: cache,
             runtime: runtimeWithGate,
-            postPoll: { cacheKeys in
+            postPoll: { cacheKeys, stopBeforeNextRead in
                 await resourceNotifier.publishChangedResources(
                     cacheKeys: cacheKeys,
                     cache: cache,
@@ -458,7 +465,8 @@ actor LogicProServer {
                             router: router,
                             targetRegistry: targetRegistry
                         )
-                    }
+                    },
+                    stopBeforeEachRead: stopBeforeNextRead
                 ) { uri in
                     try await server.notify(ResourceUpdatedNotification.message(.init(uri: uri)))
                 }

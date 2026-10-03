@@ -26,10 +26,32 @@ actor CGEventChannel: Channel {
         /// production path goes through AppleScript.
         let activateLogic: @Sendable () -> Bool
         /// #1029 review R-03 / #1039: the current keyboard input source, or nil when it did not
-        /// read. A plain letter is refused under nil as under a non-ASCII source, so the default is
-        /// an ASCII-capable source with no id: the permissive one, for the same reason as the two
-        /// #440 defaults below. `.production` reads TIS.
+        /// read. A plain letter is refused under nil, and under a non-ASCII source it is posted
+        /// only through a verified switch, so the default is an ASCII-capable source with no id:
+        /// the permissive one, for the same reason as the two #440 defaults below. `.production`
+        /// reads TIS.
         let currentInputSource: @Sendable () -> InputSourceReading?
+        /// #1039: the id of the ASCII-capable keyboard layout TIS offers
+        /// (`TISCopyCurrentASCIICapableKeyboardLayoutInputSource`), or nil when there is none or
+        /// its id does not read. The default is nil: a runtime that says nothing about layouts
+        /// cannot switch, and a plain letter under a non-ASCII source is refused as before.
+        let asciiCapableLayoutID: @Sendable () -> String?
+        /// #1039: select the enabled input source with this id (`TISSelectInputSource`); true when
+        /// TIS returned noErr. That return is not taken as the switch: the channel reads
+        /// `currentInputSource` again. The default selects nothing.
+        let selectInputSource: @Sendable (String) -> Bool
+        /// #1039 review R1: the character the keyboard layout with this id types for this key with
+        /// no modifier (`UCKeyTranslate` over its `kTISPropertyUnicodeKeyLayoutData`), or nil when
+        /// it does not read. The default reads nothing: a runtime that says nothing about what a
+        /// layout types cannot switch, and the plain letter is refused.
+        let layoutLetter: @Sendable (String, CGKeyCode) -> String?
+        /// #1039 review R2: whether the input source with this id is enabled, the only kind
+        /// `selectInputSource` can select. The default says no.
+        let layoutIsEnabled: @Sendable (String) -> Bool
+        /// #1039: the wait after a switched layout reads back as current, before the key, and
+        /// again after the key, before the user's source is selected back
+        /// (`inputSourceSwitchSettleMicros`).
+        let inputSourceSettleMicros: useconds_t
         /// #1038: the window server's on-screen list, the one `AXLogicProElements.Runtime`
         /// `.onScreenWindowList` reads for the AX route's post-leaf settlement; nil when it did not
         /// come back. goto_position types nothing until this list shows the Go To Position dialog,
@@ -60,6 +82,11 @@ actor CGEventChannel: Channel {
             currentInputSource: @escaping @Sendable () -> InputSourceReading? = {
                 InputSourceReading(id: nil, isASCIICapable: true)
             },
+            asciiCapableLayoutID: @escaping @Sendable () -> String? = { nil },
+            selectInputSource: @escaping @Sendable (String) -> Bool = { _ in false },
+            layoutLetter: @escaping @Sendable (String, CGKeyCode) -> String? = { _, _ in nil },
+            layoutIsEnabled: @escaping @Sendable (String) -> Bool = { _ in false },
+            inputSourceSettleMicros: useconds_t = CGEventChannel.inputSourceSwitchSettleMicros,
             onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = { nil },
             focusedApplicationPID: @escaping @Sendable () -> pid_t? = { nil }
         ) {
@@ -70,6 +97,11 @@ actor CGEventChannel: Channel {
             self.isLogicFrontmost = isLogicFrontmost
             self.activateLogic = activateLogic
             self.currentInputSource = currentInputSource
+            self.asciiCapableLayoutID = asciiCapableLayoutID
+            self.selectInputSource = selectInputSource
+            self.layoutLetter = layoutLetter
+            self.layoutIsEnabled = layoutIsEnabled
+            self.inputSourceSettleMicros = inputSourceSettleMicros
             self.onScreenWindowList = onScreenWindowList
             self.focusedApplicationPID = focusedApplicationPID
         }
@@ -84,6 +116,10 @@ actor CGEventChannel: Channel {
             isLogicFrontmost: ProcessUtils.Runtime.production.logicIsFrontmost,
             activateLogic: ProcessUtils.Runtime.production.activateLogicPro,
             currentInputSource: { CGEventChannel.readCurrentInputSource() },
+            asciiCapableLayoutID: { CGEventChannel.readASCIICapableLayoutID() },
+            selectInputSource: { CGEventChannel.selectEnabledInputSource(id: $0) },
+            layoutLetter: { CGEventChannel.readLayoutLetter(layoutID: $0, keyCode: $1) },
+            layoutIsEnabled: { CGEventChannel.isEnabledInputSource(id: $0) },
             onScreenWindowList: AXLogicProElements.Runtime.liveOnScreenWindowList,
             focusedApplicationPID: { ProcessUtils.focusedApplicationPID() }
         )
@@ -103,6 +139,78 @@ actor CGEventChannel: Channel {
             .map { Unmanaged<CFString>.fromOpaque($0).takeUnretainedValue() as String }
         return InputSourceReading(id: id, isASCIICapable: capable)
     }
+
+    /// #1039: the id of the keyboard layout TIS gives for ASCII typing under the current source
+    /// (for 2-Set Korean, the layout its Latin mode types through). nil when TIS returns none or
+    /// its id does not read. No other layout is guessed at.
+    static func readASCIICapableLayoutID() -> String? {
+        guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else {
+            return nil
+        }
+        return Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
+    }
+
+    /// #1039: `TISSelectInputSource` on the enabled source whose id is `id`. False when no enabled
+    /// source has that id or TIS returns an error. Called off the main thread from the channel's
+    /// actor, where `readCurrentInputSource` was measured to read; whether a selection made here
+    /// reaches the keys Logic receives is the live check's to show.
+    static func selectEnabledInputSource(id: String) -> Bool {
+        let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
+        guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue(),
+              CFArrayGetCount(list) > 0,
+              let raw = CFArrayGetValueAtIndex(list, 0) else {
+            return false
+        }
+        let source = Unmanaged<TISInputSource>.fromOpaque(raw).takeUnretainedValue()
+        return TISSelectInputSource(source) == noErr
+    }
+
+    /// #1039 review R1: the character the installed keyboard layout `layoutID` types for `keyCode`
+    /// with no modifier, read from the layout's own key map. nil when no installed source has that
+    /// id, it carries no Unicode key layout, or the translation produces nothing.
+    static func readLayoutLetter(layoutID: String, keyCode: CGKeyCode) -> String? {
+        let filter = [kTISPropertyInputSourceID as String: layoutID] as CFDictionary
+        guard let list = TISCreateInputSourceList(filter, true)?.takeRetainedValue(),
+              CFArrayGetCount(list) > 0,
+              let raw = CFArrayGetValueAtIndex(list, 0) else {
+            return nil
+        }
+        let source = Unmanaged<TISInputSource>.fromOpaque(raw).takeUnretainedValue()
+        guard let rawData = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+            return nil
+        }
+        let data = Unmanaged<CFData>.fromOpaque(rawData).takeUnretainedValue()
+        guard let bytes = CFDataGetBytePtr(data) else { return nil }
+        let layout = UnsafeRawPointer(bytes).assumingMemoryBound(to: UCKeyboardLayout.self)
+        var deadKeyState: UInt32 = 0
+        var characters = [UniChar](repeating: 0, count: 4)
+        var length = 0
+        let status = UCKeyTranslate(
+            layout, UInt16(keyCode), UInt16(kUCKeyActionDown), 0, UInt32(LMGetKbdType()),
+            OptionBits(kUCKeyTranslateNoDeadKeysBit), &deadKeyState, characters.count, &length, &characters
+        )
+        guard status == noErr, length > 0 else { return nil }
+        return String(utf16CodeUnits: characters, count: length)
+    }
+
+    /// #1039 review R2: whether an enabled input source has this id. A disabled layout still reads
+    /// its key map (`readLayoutLetter` reads installed ones) but cannot be selected.
+    static func isEnabledInputSource(id: String) -> Bool {
+        let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
+        guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() else { return false }
+        return CFArrayGetCount(list) > 0
+    }
+
+    /// #1039 review R1: layouts that type the U.S. letter on every letter key, tried when TIS's
+    /// ASCII-capable layout types another (Dvorak, AZERTY). Each is still checked key by key.
+    static let usLetterLayoutIDs = ["com.apple.keylayout.ABC", "com.apple.keylayout.US"]
+
+    /// #1039: how long a switched layout is given to reach Logic before the key, and the key to be
+    /// read by Logic before the user's source goes back. The read-back is this process's view; it
+    /// does not show when Logic sees the selection, or that Logic has read a posted key. Not
+    /// measured: the live check of #1039 is to set it.
+    static let inputSourceSwitchSettleMicros: useconds_t = 100_000
 
     /// #440 D: why no event was posted. A CGEvent keystroke delivered while
     /// Logic is in the background is swallowed by the window server, and the
@@ -168,13 +276,17 @@ actor CGEventChannel: Channel {
             Shortcut(keyCode: code, flags: .maskNumericPad)
         }
 
-        /// The 26 letter keys (HIToolbox `kVK_ANSI_A` ... `kVK_ANSI_Z`).
-        static let letterKeyCodes: Set<CGKeyCode> = Set([
-            kVK_ANSI_A, kVK_ANSI_B, kVK_ANSI_C, kVK_ANSI_D, kVK_ANSI_E, kVK_ANSI_F, kVK_ANSI_G,
-            kVK_ANSI_H, kVK_ANSI_I, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L, kVK_ANSI_M, kVK_ANSI_N,
-            kVK_ANSI_O, kVK_ANSI_P, kVK_ANSI_Q, kVK_ANSI_R, kVK_ANSI_S, kVK_ANSI_T, kVK_ANSI_U,
-            kVK_ANSI_V, kVK_ANSI_W, kVK_ANSI_X, kVK_ANSI_Y, kVK_ANSI_Z,
-        ].map { CGKeyCode($0) })
+        /// The 26 letter keys (HIToolbox `kVK_ANSI_A` ... `kVK_ANSI_Z`) and the letter each types
+        /// on a U.S. layout, which is the letter the key map means (#1039 review R1).
+        static let usLetters: [CGKeyCode: String] = ([
+            kVK_ANSI_A: "a", kVK_ANSI_B: "b", kVK_ANSI_C: "c", kVK_ANSI_D: "d", kVK_ANSI_E: "e",
+            kVK_ANSI_F: "f", kVK_ANSI_G: "g", kVK_ANSI_H: "h", kVK_ANSI_I: "i", kVK_ANSI_J: "j",
+            kVK_ANSI_K: "k", kVK_ANSI_L: "l", kVK_ANSI_M: "m", kVK_ANSI_N: "n", kVK_ANSI_O: "o",
+            kVK_ANSI_P: "p", kVK_ANSI_Q: "q", kVK_ANSI_R: "r", kVK_ANSI_S: "s", kVK_ANSI_T: "t",
+            kVK_ANSI_U: "u", kVK_ANSI_V: "v", kVK_ANSI_W: "w", kVK_ANSI_X: "x", kVK_ANSI_Y: "y",
+            kVK_ANSI_Z: "z",
+        ] as [Int: String]).reduce(into: [CGKeyCode: String]()) { $0[CGKeyCode($1.key)] = $1.value }
+        static let letterKeyCodes = Set(usLetters.keys)
 
         /// A letter key with no Command, Control or Option: the key an input method turns into its
         /// own character. Shift does not stop it (Shift-Q is ㅃ under 2-Set Korean).
@@ -198,8 +310,10 @@ actor CGEventChannel: Channel {
     /// keys ran their commands. Under the ABC layout Q, N and X ran theirs too. #1039 reports the
     /// other plain letters here (R, C, K, P, Y, A, Z) dead the same way. Setting the event's Unicode
     /// string to the Latin letter did not help (measured 2026-09-28, Q, N and X, two focus
-    /// placements), so `execute` refuses every plain letter under a source that is not
-    /// ASCII-capable (`Shortcut.isPlainLetter`, `inputSourceRefusal`) and posts nothing.
+    /// placements), so under a source that is not ASCII-capable `execute` posts a plain letter
+    /// (`Shortcut.isPlainLetter`) only after selecting TIS's ASCII-capable layout and reading it
+    /// back as current, then selects the user's source again (`switchToASCIICapableLayout`). When
+    /// the switch cannot be made or read back it refuses and posts nothing (`inputSourceRefusal`).
     ///
     /// An op whose function has no default binding carries NO entry: a keystroke bound to some
     /// other command changes the wrong state and reports that it was sent, which is worse than the
@@ -346,31 +460,150 @@ actor CGEventChannel: Channel {
         // Logic under 2-Set Korean. The same setting can turn 2-Set Korean into ABC on activation,
         // so no earlier reading refuses either. The cost: a refused key may have brought Logic
         // forward, and nothing is posted.
+        // #1039: a non-ASCII source no longer refuses outright. The key goes out between a
+        // verified switch to TIS's ASCII-capable layout and the user's source selected back.
+        var switched: (originalID: String, layoutID: String)?
         if shortcut.isPlainLetter {
             guard let source = runtime.currentInputSource() else {
                 return Self.inputSourceRefusal(operation: operation, source: nil)
             }
             if !source.isASCIICapable {
-                return Self.inputSourceRefusal(operation: operation, source: source)
+                switch switchToASCIICapableLayout(from: source, keyCode: shortcut.keyCode) {
+                case let .refused(failure, restore):
+                    return Self.inputSourceRefusal(
+                        operation: operation, source: source, switchFailure: failure, restore: restore
+                    )
+                case let .switched(originalID, layoutID):
+                    switched = (originalID, layoutID)
+                    runtime.sleepMicros(runtime.inputSourceSettleMicros)
+                }
             }
         }
 
         let sent = runtime.postKeyEvent(shortcut.keyCode, shortcut.flags, pid)
+        var restore: InputSourceRestore?
+        if let switched {
+            if sent {
+                runtime.sleepMicros(runtime.inputSourceSettleMicros)
+            }
+            restore = restoreInputSource(switched.originalID)
+        }
         if sent {
             // v3.1.1 (P2-2) — same rationale as above. Single key chord
             // delivered; no read-back possible from this channel.
-            return .success(HonestContract.encodeStateB(
-                reason: .readbackUnavailable,
-                extras: [
-                    "operation": operation,
-                    "method": "cgevent",
-                    "frontmost_preparation": preparation.rawValue,
-                    "sent": true
-                ]
-            ))
+            var extras: [String: Any] = [
+                "operation": operation,
+                "method": "cgevent",
+                "frontmost_preparation": preparation.rawValue,
+                "sent": true
+            ]
+            if let switched, let restore {
+                extras.merge(Self.switchedExtras(
+                    originalID: switched.originalID, layoutID: switched.layoutID, restore: restore
+                )) { _, new in new }
+            } else if shortcut.isPlainLetter {
+                // Read as ASCII-capable just above: posted with no switch.
+                extras["input_source_switched"] = false
+            }
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
         } else {
-            return .error("Failed to post CGEvent for \(operation)")
+            var message = "Failed to post CGEvent for \(operation)"
+            if let switched, let restore {
+                message += restore.restored
+                    ? ". The input source was switched to \(switched.layoutID) for the key and reads "
+                        + "\(switched.originalID) again."
+                    : ". The input source was switched to \(switched.layoutID) for the key and could not "
+                        + "be selected back: it reads \(restore.after?.id ?? "unreadable"), not "
+                        + "\(switched.originalID). Select \(switched.originalID) again."
+            }
+            return .error(message)
         }
+    }
+
+    // MARK: - #1039 input-source switch
+
+    /// What selecting TIS's ASCII-capable layout for one plain letter came to.
+    enum InputSourceSwitch {
+        /// `layoutID` read back as the current, ASCII-capable source after it was selected.
+        case switched(originalID: String, layoutID: String)
+        /// Nothing may be posted. `failure` names the step that stopped it; `restore` is the
+        /// reading after the user's source was put back, nil when nothing had been selected.
+        case refused(failure: String, restore: InputSourceRestore?)
+    }
+
+    /// The input source as read after a switch was undone.
+    struct InputSourceRestore {
+        /// The reading after the user's source was selected back; nil when it did not read.
+        let after: InputSourceReading?
+        /// The user's source id, which `after` must name.
+        let originalID: String
+
+        /// The source reads as the one the user had. Decided by the reading, not by what
+        /// `TISSelectInputSource` returned.
+        var restored: Bool { after?.id == originalID }
+    }
+
+    /// #1039: select the ASCII-capable layout for a plain letter whose current source is not
+    /// ASCII-capable, and read it back as the current source before anything is posted.
+    ///
+    /// A source whose id did not read is not switched away from: nothing could select it back.
+    /// When the selection does not read back, the user's source is put back (unless the reading
+    /// already names it) and the switch is refused.
+    ///
+    /// Review R1: ASCII-capable does not mean the key types the letter the key map means. TIS can
+    /// name Dvorak or AZERTY, where the key for R types P or another letter, and with key-label
+    /// assignments that is another command. So the layout must type the U.S. letter on this key,
+    /// read from its key map before anything is selected; when TIS's does not, ABC or U.S. is
+    /// tried, and when none does, nothing is selected or posted. Review R2: a candidate must also be
+    /// enabled, since only an enabled source can be selected; a disabled ABC is passed over for an
+    /// enabled U.S.
+    func switchToASCIICapableLayout(from source: InputSourceReading, keyCode: CGKeyCode) -> InputSourceSwitch {
+        guard let originalID = source.id else {
+            return .refused(failure: "source_id_unreadable", restore: nil)
+        }
+        guard let offered = runtime.asciiCapableLayoutID() else {
+            return .refused(failure: "no_ascii_capable_layout", restore: nil)
+        }
+        let candidates = [offered] + Self.usLetterLayoutIDs.filter { $0 != offered }
+        guard let letter = Shortcut.usLetters[keyCode],
+              let layoutID = candidates.first(where: {
+                  runtime.layoutIsEnabled($0) && runtime.layoutLetter($0, keyCode) == letter
+              }) else {
+            return .refused(failure: "layout_types_another_letter", restore: nil)
+        }
+        let selected = runtime.selectInputSource(layoutID)
+        let reading = runtime.currentInputSource()
+        if selected, let reading, reading.id == layoutID, reading.isASCIICapable {
+            return .switched(originalID: originalID, layoutID: layoutID)
+        }
+        let restore = reading?.id == originalID
+            ? InputSourceRestore(after: reading, originalID: originalID)
+            : restoreInputSource(originalID)
+        return .refused(failure: selected ? "switch_not_verified" : "select_failed", restore: restore)
+    }
+
+    /// #1039: select the user's source again and read whether it is current.
+    func restoreInputSource(_ originalID: String) -> InputSourceRestore {
+        _ = runtime.selectInputSource(originalID)
+        return InputSourceRestore(after: runtime.currentInputSource(), originalID: originalID)
+    }
+
+    /// The reply fields of a plain letter posted through a switch. A source left on the layout is
+    /// named in a hint as well as in `input_source_restored`, so the reply cannot read as clean.
+    static func switchedExtras(originalID: String, layoutID: String, restore: InputSourceRestore) -> [String: Any] {
+        var extras: [String: Any] = [
+            "input_source_switched": true,
+            "input_source_before": originalID,
+            "input_source_switched_to": layoutID,
+            "input_source_restored": restore.restored,
+            "input_source_after": restore.after?.id as Any? ?? NSNull(),
+        ]
+        if !restore.restored {
+            extras["hint"] = "The key went out under \(layoutID), selected in place of \(originalID) "
+                + "because \(originalID) is not ASCII-capable. Selecting \(originalID) again did not read "
+                + "back: the input source reads \(restore.after?.id ?? "unreadable"). Select \(originalID) again."
+        }
+        return extras
     }
 
     func healthCheck() async -> ChannelHealth {
@@ -466,10 +699,17 @@ actor CGEventChannel: Channel {
         return seen
     }
 
-    /// State C for a plain letter under an input source that is not ASCII-capable, or that did not
-    /// read (`source` nil). Not terminal, so the router tries the next rung, and when there is none
-    /// the caller gets this refusal rather than a send-only success for a key that could not act.
-    static func inputSourceRefusal(operation: String, source: InputSourceReading?) -> ChannelResult {
+    /// State C for a plain letter under an input source that is not ASCII-capable and could not be
+    /// switched away from for the key (`switchFailure`), or that did not read (`source` nil). Not
+    /// terminal, so the router tries the next rung, and when there is none the caller gets this
+    /// refusal rather than a send-only success for a key that could not act. `restore` is the
+    /// reading after a selection that did not read back was undone.
+    static func inputSourceRefusal(
+        operation: String,
+        source: InputSourceReading?,
+        switchFailure: String? = nil,
+        restore: InputSourceRestore? = nil
+    ) -> ChannelResult {
         var extras: [String: Any] = [
             "operation": operation,
             "method": "cgevent",
@@ -481,12 +721,44 @@ actor CGEventChannel: Channel {
         if let id = source?.id {
             extras["input_source_id"] = id
         }
+        if let switchFailure {
+            extras["input_source_switched"] = false
+            extras["input_source_switch_failure"] = switchFailure
+        }
+        if let restore {
+            extras["input_source_restored"] = restore.restored
+            extras["input_source_after"] = restore.after?.id as Any? ?? NSNull()
+        }
         let hint: String
         if let source {
-            hint = "The active input source (\(source.id ?? "unnamed")) is not ASCII-capable, so a plain "
-                + "letter key reaches Logic as that source's character and runs no key command "
-                + "(measured under 2-Set Korean: Q, N and X ran nothing). No event was posted. Switch "
-                + "to an ASCII-capable input source such as ABC and retry."
+            let name = source.id ?? "unnamed"
+            let why: String
+            switch switchFailure {
+            case "source_id_unreadable":
+                why = " Its id did not read, so it could not have been selected back after the key, and "
+                    + "no ASCII-capable layout was selected."
+            case "no_ascii_capable_layout":
+                why = " TIS named no ASCII-capable keyboard layout to select for the key."
+            case "layout_types_another_letter":
+                why = " Neither TIS's ASCII-capable layout nor an enabled ABC or U.S. reads as typing "
+                    + "this key's letter, so the key could run another command; no layout was selected."
+            case let failure?:
+                why = " Selecting TIS's ASCII-capable layout for the key did not read back as the current "
+                    + "source (\(failure))."
+            case nil:
+                why = ""
+            }
+            var restored = ""
+            if let restore {
+                restored = restore.restored
+                    ? " The input source reads \(restore.originalID) again."
+                    : " Selecting \(restore.originalID) back did not read back either: the input source reads "
+                        + "\(restore.after?.id ?? "unreadable"). Select \(restore.originalID) again."
+            }
+            hint = "The active input source (\(name)) is not ASCII-capable, so a plain letter key reaches "
+                + "Logic as that source's character and runs no key command (measured under 2-Set "
+                + "Korean: Q, N and X ran nothing).\(why) No event was posted.\(restored) Switch to an "
+                + "ASCII-capable input source such as ABC and retry."
         } else {
             hint = "The active input source did not read, so whether a plain letter key would reach "
                 + "Logic as a letter is unknown (under 2-Set Korean, Q, N and X ran nothing). No event "

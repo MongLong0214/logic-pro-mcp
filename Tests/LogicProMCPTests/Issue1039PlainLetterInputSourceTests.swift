@@ -6,9 +6,11 @@ import Testing
 // #1029 review R-03 and #1039: under an input source that is not ASCII-capable (2-Set Korean), a
 // plain letter key reaches Logic as that source's character and runs nothing; measured live for Q,
 // N and X, with and without the event's Unicode string set to the Latin letter. `CGEventChannel`
-// now refuses such a key and posts nothing. It reads the source after Logic is brought forward,
-// immediately before the post (round 3). These tests drive the channel through its input-source
-// probe. Each names the mutation it kills. Nothing here reads a clock.
+// refuses such a key and posts nothing unless it can switch to an ASCII-capable layout for it
+// (#1039, `Issue1039InputSourceSwitchTests`); the runtimes here offer no layout, so every
+// non-ASCII reading refuses. It reads the source after Logic is brought forward, immediately before
+// the post (round 3). These tests drive the channel through its input-source probe. Each names the
+// mutation it kills. Nothing here reads a clock.
 
 private let korean = CGEventChannel.InputSourceReading(
     id: "com.apple.inputmethod.Korean.2SetKorean", isASCIICapable: false
@@ -108,8 +110,8 @@ private let plainNonLetterOps = ["transport.play", "transport.pause", "transport
     }
 
     /// Kills: removing the input-source check from `execute` (the key is posted and a send-only
-    /// State B comes back).
-    @Test("a plain letter under a non-ASCII source is refused and nothing is posted", arguments: plainLetterOps)
+    /// State B comes back), and posting without a layout to switch to.
+    @Test("a plain letter under a non-ASCII source with no layout to switch to is refused and nothing is posted", arguments: plainLetterOps)
     func plainLetterRefusedUnderKorean(_ operation: String) async throws {
         let recorder = CGEventRecorder()
         let channel = CGEventChannel(runtime: runtime(recorder, source: korean))
@@ -125,6 +127,7 @@ private let plainNonLetterOps = ["transport.play", "transport.pause", "transport
         #expect(object["error"] as? String == "not_supported")
         #expect(object["reason"] as? String == "input_source_blocks_plain_letters")
         #expect(object["input_source_id"] as? String == korean.id)
+        #expect(object["input_source_switch_failure"] as? String == "no_ascii_capable_layout")
         #expect(object["events_posted"] as? Int == 0)
         let writeAttempted = try #require(object["write_attempted"] as? Bool)
         #expect(!writeAttempted)
@@ -267,8 +270,8 @@ private let plainNonLetterOps = ["transport.play", "transport.pause", "transport
     }
 
     /// Through the real router: `view.toggle_mixer` (chain `[.midiKeyCommands, .cgEvent]`) with
-    /// only CGEvent registered and a non-ASCII source fails with the refusal inside it, instead of
-    /// a send-only success for a key that ran nothing.
+    /// only CGEvent registered, a non-ASCII source and no layout to switch to fails with the
+    /// refusal inside it, instead of a send-only success for a key that ran nothing.
     /// Kills: removing the input-source check from `execute`.
     @Test func routerFailsHonestlyWhenCGEventIsTheOnlyRungLeft() async {
         let recorder = CGEventRecorder()

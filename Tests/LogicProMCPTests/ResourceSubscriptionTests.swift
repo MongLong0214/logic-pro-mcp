@@ -23,6 +23,13 @@ private func resourceResult(_ text: String, uri: String) -> ReadResource.Result 
     ReadResource.Result(contents: [.text(text, uri: uri, mimeType: "application/json")])
 }
 
+private final class ReadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func bump() async { lock.withLock { value += 1 } }
+    func countNow() -> Int { lock.withLock { value } }
+}
+
 @Suite("ResourceSubscription")
 struct ResourceSubscriptionTests {
     @Test("subscription_registry_add_remove_cleanup")
@@ -115,6 +122,112 @@ struct ResourceSubscriptionTests {
 
         #expect(try ResourceContentHasher.stableDataHash(fromResourceText: first) == ResourceContentHasher.stableDataHash(fromResourceText: second))
         #expect(try ResourceContentHasher.stableDataHash(fromResourceText: first) != ResourceContentHasher.stableDataHash(fromResourceText: changed))
+    }
+
+    /// #1079 review R3: publishing reads each subscribed resource back from Logic, and a background
+    /// cycle must not start such a read once the user is editing. The stop is asked before each
+    /// read; after the first read it answers true, so the second resource is not read and the
+    /// publication reports that it stopped. Mutation this kills: the stop not asked. The control is
+    /// the same publication with a stop that never answers true.
+    @Test("a publication stops before the next resource read once told to, and says so")
+    func aPublicationStopsBeforeTheNextRead() async throws {
+        for stopAfterFirst in [true, false] {
+            let registry = ResourceSubscriptionRegistry()
+            let notifier = ResourceUpdateNotifier(registry: registry)
+            try await registry.subscribe(uri: "logic://tracks")
+            try await registry.subscribe(uri: "logic://project/info")
+            let reads = ReadCounter()
+            let completed = await notifier.publishChangedResources(
+                cacheKeys: [.tracks, .project],
+                cache: StateCache(),
+                router: ChannelRouter(),
+                readResource: { uri, _, _ in
+                    await reads.bump()
+                    return resourceResult(#"{"data":{}}"#, uri: uri)
+                },
+                stopBeforeEachRead: { stopAfterFirst && reads.countNow() >= 1 }
+            ) { _ in }
+            if stopAfterFirst {
+                #expect(reads.countNow() == 1, "read \(reads.countNow()) resources after the stop")
+                #expect(!completed)
+            } else {
+                #expect(reads.countNow() == 2)
+                #expect(completed)
+            }
+        }
+    }
+
+    /// Supplementary review S-03: one witness per check. Editing already on before the first read:
+    /// nothing is read or notified (kills the pre-read check removed). Editing that begins during
+    /// a read: that resource is not notified, and its content is not remembered, so a later
+    /// publication notifies it (kills the post-read check removed). Editing that begins while a
+    /// notification is sent: the next resource is not read (kills the pre-read check removed,
+    /// since the post-read one alone lets the read happen).
+    @Test("each of the notifier's two stop checks has its own witness")
+    func eachStopCheckHasItsOwnWitness() async throws {
+        final class Flag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var on = false
+            func set() { lock.withLock { on = true } }
+            var value: Bool { lock.withLock { on } }
+        }
+        let payload = #"{"data":{}}"#
+        func setUp() async throws -> (ResourceSubscriptionRegistry, ResourceUpdateNotifier) {
+            let registry = ResourceSubscriptionRegistry()
+            try await registry.subscribe(uri: "logic://tracks")
+            try await registry.subscribe(uri: "logic://project/info")
+            return (registry, ResourceUpdateNotifier(registry: registry))
+        }
+
+        // Editing before the first read.
+        do {
+            let (_, notifier) = try await setUp()
+            let reads = ReadCounter()
+            let sink = ResourceNotificationSink()
+            let completed = await notifier.publishChangedResources(
+                cacheKeys: [.tracks], cache: StateCache(), router: ChannelRouter(),
+                readResource: { uri, _, _ in await reads.bump(); return resourceResult(payload, uri: uri) },
+                stopBeforeEachRead: { true }
+            ) { uri in await sink.send(uri: uri) }
+            #expect(reads.countNow() == 0, "read \(reads.countNow()) resources with editing already on")
+            #expect(!completed)
+            #expect(await sink.snapshot().isEmpty)
+        }
+
+        // Editing that begins during the first read.
+        do {
+            let (_, notifier) = try await setUp()
+            let editing = Flag()
+            let sink = ResourceNotificationSink()
+            let completed = await notifier.publishChangedResources(
+                cacheKeys: [.tracks], cache: StateCache(), router: ChannelRouter(),
+                readResource: { uri, _, _ in editing.set(); return resourceResult(payload, uri: uri) },
+                stopBeforeEachRead: { editing.value }
+            ) { uri in await sink.send(uri: uri) }
+            #expect(!completed)
+            #expect(await sink.snapshot().isEmpty, "a resource read while editing began was notified")
+            // Its content was not remembered: the same content is notified once nobody is editing.
+            _ = await notifier.publishChangedResources(
+                cacheKeys: [.tracks], cache: StateCache(), router: ChannelRouter(),
+                readResource: { uri, _, _ in resourceResult(payload, uri: uri) },
+                stopBeforeEachRead: { false }
+            ) { uri in await sink.send(uri: uri) }
+            #expect(await sink.snapshot().count == 2, "the cut-short read's content was remembered as published")
+        }
+
+        // Editing that begins while the first notification is sent.
+        do {
+            let (_, notifier) = try await setUp()
+            let editing = Flag()
+            let reads = ReadCounter()
+            let completed = await notifier.publishChangedResources(
+                cacheKeys: [.tracks], cache: StateCache(), router: ChannelRouter(),
+                readResource: { uri, _, _ in await reads.bump(); return resourceResult(payload, uri: uri) },
+                stopBeforeEachRead: { editing.value }
+            ) { _ in editing.set() }
+            #expect(reads.countNow() == 1, "read \(reads.countNow()) resources; the second began after editing did")
+            #expect(!completed)
+        }
     }
 
     @Test("unsubscribe_during_read_suppresses_notify_and_hash_update")

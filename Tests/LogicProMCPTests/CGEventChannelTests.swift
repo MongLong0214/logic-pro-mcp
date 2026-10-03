@@ -228,6 +228,9 @@ func testCGEventProductionRuntimeSmokeExecutesWithoutCrash() {
     _ = runtime.postKeyEvent(0, [], getpid())
     // #1039: the real TIS read runs to completion; its value depends on the host.
     _ = runtime.currentInputSource()
+    // #1039: so does the layout read. `selectInputSource` is not called: it would change the
+    // host's input source.
+    _ = runtime.asciiCapableLayoutID()
 }
 
 // MARK: - T1: project.new has no CGEvent keystroke (#1029)

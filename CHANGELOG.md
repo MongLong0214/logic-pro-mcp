@@ -33,6 +33,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **Under a keyboard input source that is not ASCII-capable, a CGEvent plain-letter key is sent
+  through a switch to an ASCII-capable layout and the user's source is selected back (#1039).**
+  Under 2-Set Korean a letter with no Command, Control or Option reaches Logic as a Hangul
+  character and runs nothing, so since #1045 the ten operations sent that way (`transport.record`,
+  `toggle_cycle`, `toggle_metronome`, `edit.quantize`, `view.toggle_mixer`, `toggle_piano_roll`,
+  `toggle_library`, `toggle_score_editor`, `nav.zoom_to_fit`, `automation.toggle_view`) were
+  refused. The channel now selects the ASCII-capable layout macOS names for the current source,
+  reads it back as current, waits 0.1 s, posts, waits 0.1 s, selects the user's source again and
+  reads that back. The State B reply names each step: `input_source_switched`,
+  `input_source_before`, `input_source_switched_to`, `input_source_restored` and
+  `input_source_after`, with a `hint` when the user's source did not read back. A switch that
+  cannot be made or does not read back posts nothing and refuses `input_source_blocks_plain_letters`
+  with `input_source_switch_failure`; a source that does not read is refused
+  `input_source_unreadable` as before. The layout must also type the key's U.S. letter, read from
+  its own key map: when TIS offers Dvorak or AZERTY, ABC or U.S. is selected instead, and when
+  none types the letter the failure is `layout_types_another_letter`. Driven against Logic 12.3 under 2-Set Korean in ten
+  languages, eight of the ten went out through CGEvent under ABC, changed Logic's state and back,
+  and left 2-Set Korean current. With Dvorak made TIS's ASCII-capable layout before every call, the
+  A key went out under Dvorak, which types a there, and the other seven under ABC, each acting; with
+  ABC also disabled and U.S. enabled, the seven went out under U.S.
+  `edit.quantize` and `view.toggle_score_editor` were not driven, and the two waits were not varied.
+- **The background state poll yields while a text field in Logic has keyboard focus (#1079).**
+  With the server connected and idle, an inline track rename lost focus partway through and the
+  rest of the keystrokes reached Logic as key commands; with the process killed it did not. Each 3 s
+  tick now reads Logic's focused element first and, when it is a text field, text area, combo box or
+  any element with a text insertion point, runs no AX walk and no `osascript` document-path read. A
+  cycle already running reads the focus again before each of its reads and stops at the first one
+  that finds text editing; a read already under way runs to its end. That is the same classifier the
+  mute, solo and arm keys use to refuse a synthetic key, now one function for both. A focus that
+  does not read still polls, since a failed read is not evidence of a text field and Logic not
+  running never reads; a modal dialog alone does not stop polling. `system.refresh_cache` is not
+  gated. Measured live: an idle server without the yield ended the rename, and one with it did not
+  (`docs/observations/2026-10-02-an-idle-poll-ends-an-inline-track-rename-in-ten-languages.json`).
 - **`track.set_automation` on MCU no longer leaves Logic's Write warning up behind its reply
   (#1077).** Logic answered the Write press with a one-button warning and left it up, and quitting
   Logic under it crashed Logic in 4 of 4 runs on a German Logic. Every poll after the mode press now

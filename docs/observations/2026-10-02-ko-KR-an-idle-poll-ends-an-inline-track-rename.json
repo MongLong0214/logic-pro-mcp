@@ -1,0 +1,168 @@
+{
+  "schema": 3,
+  "id": "2026-10-02-ko-KR-an-idle-poll-ends-an-inline-track-rename",
+  "date": "2026-10-02",
+  "subject": "an inline track rename in Logic while the server is connected and idle: whether the name field keeps the keyboard focus",
+  "question": "With Track > Rename Track open on the selected track and nothing typed, does the field keep the focus for 20 s with no server, with a server without the #1079 yield, and with one that has it?",
+  "verdict": "works",
+  "surface": "arrange.track_headers",
+  "issues": [
+    1079
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/probe_1079_rename_keeps_focus.py <control-binary> <candidate-binary> <out.json>",
+    "expected": "no server and the candidate keep the field for 20 s in every sample; the control loses it",
+    "cost": "needs LPM_LIVE_LOCK naming a held lock, Logic open on a project with a selected track, and two debug builds; about four minutes"
+  },
+  "depends": [
+    "Sources/LogicProMCP/State/StatePoller.swift:backgroundTickYields",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:readLogicKeyboardFocus",
+    "Scripts/livekit/probe_1079_rename_keeps_focus.py:sample",
+    "Scripts/livekit/ax_1079_rename_focus.swift:focus"
+  ],
+  "evidence": [
+    "evidence/2026-10-02-1079-rename-focus.json"
+  ],
+  "method": "One run of Scripts/livekit/probe_1079_rename_keeps_focus.py, three samples per condition, on the locale-campaign fixture in Korean. The control is a debug build of main 9dc6fea2; the candidate is a debug build of 4502bfd8, the commit that adds the yield. Each sample read Logic's focused element every 0.5 s for 20 s and typed nothing.",
+  "observations": [
+    {
+      "condition": "none",
+      "sample": 0,
+      "pressed": true,
+      "role_at_start": "AXTextField",
+      "focus_lost_after_s": null,
+      "reads": 37,
+      "role_after": "AXTextField",
+      "role_after_cancel": "AXWindow",
+      "locale": "ko-KR"
+    },
+    {
+      "condition": "none",
+      "sample": 1,
+      "pressed": true,
+      "role_at_start": "AXTextField",
+      "focus_lost_after_s": null,
+      "reads": 37,
+      "role_after": "AXTextField",
+      "role_after_cancel": "AXWindow",
+      "locale": "ko-KR"
+    },
+    {
+      "condition": "none",
+      "sample": 2,
+      "pressed": true,
+      "role_at_start": "AXTextField",
+      "focus_lost_after_s": null,
+      "reads": 37,
+      "role_after": "AXTextField",
+      "role_after_cancel": "AXWindow",
+      "locale": "ko-KR"
+    },
+    {
+      "condition": "control",
+      "sample": 0,
+      "pressed": true,
+      "role_at_start": "AXTextField",
+      "first_attempt_role": "AXSlider",
+      "focus_lost_after_s": 2.18,
+      "reads": 5,
+      "role_after": "AXSlider",
+      "role_after_cancel": "AXSlider",
+      "locale": "ko-KR"
+    },
+    {
+      "condition": "control",
+      "sample": 1,
+      "pressed": true,
+      "role_at_start": "AXTextField",
+      "first_attempt_role": "AXSlider",
+      "focus_lost_after_s": 1.66,
+      "reads": 4,
+      "role_after": "AXCheckBox",
+      "role_after_cancel": "AXSlider",
+      "locale": "ko-KR"
+    },
+    {
+      "condition": "control",
+      "sample": 2,
+      "pressed": true,
+      "role_at_start": "AXTextField",
+      "focus_lost_after_s": 0.55,
+      "reads": 2,
+      "role_after": "AXCheckBox",
+      "role_after_cancel": "AXCheckBox",
+      "locale": "ko-KR"
+    },
+    {
+      "condition": "candidate",
+      "sample": 0,
+      "pressed": true,
+      "role_at_start": "AXTextField",
+      "first_attempt_role": "AXCheckBox",
+      "focus_lost_after_s": null,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "role_after_cancel": "AXWindow",
+      "locale": "ko-KR"
+    },
+    {
+      "condition": "candidate",
+      "sample": 1,
+      "pressed": true,
+      "role_at_start": "AXTextField",
+      "first_attempt_role": "AXSlider",
+      "focus_lost_after_s": null,
+      "reads": 37,
+      "role_after": "AXTextField",
+      "role_after_cancel": "AXWindow",
+      "locale": "ko-KR"
+    },
+    {
+      "condition": "candidate",
+      "sample": 2,
+      "pressed": true,
+      "role_at_start": "AXTextField",
+      "first_attempt_role": "AXSlider",
+      "focus_lost_after_s": null,
+      "reads": 36,
+      "role_after": "AXTextField",
+      "role_after_cancel": "AXWindow",
+      "locale": "ko-KR"
+    },
+    {
+      "binaries": {
+        "control_sha256": "c8502e006ed8283baf313c05f3ad245c0472fd6ce03a17ba5f3880f7b35f3b32",
+        "candidate_sha256": "c4d52ff6e33eadca6b9ec6cbc484f0d3f818992130a45f7146a1c17e566d2260"
+      },
+      "hold_seconds": 20.0
+    },
+    {
+      "samples_per_condition": 3,
+      "none_kept": 3,
+      "none_lost": 0,
+      "control_kept": 0,
+      "control_lost": 3,
+      "candidate_kept": 3,
+      "candidate_lost": 0
+    }
+  ],
+  "conclusion": "With no server the field kept the focus in 3 of 3 samples for all 20.0 s. With the control connected and idle it lost the focus in 3 of 3, after 2.18, 1.66, 0.55 s, the focus moving to a slider or a checkbox. With the candidate it kept the focus in 3 of 3 for all 20.0 s.",
+  "limits": [
+    "One fixture, one Logic installation, Korean only; nothing was typed, so a focus loss that needs keystrokes is not covered.",
+    "The control is a build of main 9dc6fea2, not of 4502bfd8's parent e01122eb; the idle poll cycle is the same code in both.",
+    "Which read in the poll cycle takes the focus is not narrowed: the candidate yields the whole cycle.",
+    "The menu labels pressed are kept out of the record as a yes or no; the evidence file beside it holds them."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states which AX role holds Logic's keyboard focus over time while the server is idle -- roles and seconds -- not a string Logic ships."
+  }
+}
