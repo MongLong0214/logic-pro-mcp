@@ -399,11 +399,13 @@ def track_kind(audio):
     return check
 
 
-def carries_source_name(before, after, extra):
-    """Duplicate copies the selected track, name included: the new selected track's description holds
-    the unique name the setup gave its source. A new track named for its patch or its type (create)
-    does not (#1091 review R2, R1091-06)."""
-    name = (extra.get("renamed_track") or {}).get("name")
+def carries_source_settings(before, after, extra):
+    """Duplicate copies the selected track's channel strip, and the new track takes the strip's name: the
+    source's name as it read before the setup renamed it (measured in Korean on 2026-10-04: a renamed
+    Absolute Zero track duplicated as Absolute Zero). The setup selects the fixture's first track, an
+    Absolute Zero kit, whose name a new instrument track (Deluxe Classic) or audio track does not take
+    (#1091 review R2, R1091-06)."""
+    name = (extra.get("selected_track") or {}).get("name")
     described = extra.get("new_track_description")
     return bool(name) and isinstance(described, str) and name in described
 
@@ -460,7 +462,8 @@ def fixture_windows():
     """The names of the fixture's windows on screen (the arrange window and the Marker List the fixture
     opens), or None when the window list did not read."""
     try:
-        return [name for layer, name in logic_windows() if layer == 0 and name.startswith(L993.FIXTURE_NAME)]
+        # The Marker List is a floating window, at layer 3 (measured in Korean, 2026-10-04).
+        return [name for layer, name in logic_windows() if layer in (0, 3) and name.startswith(L993.FIXTURE_NAME)]
     except Exception:  # noqa: BLE001 - an unread list is not an empty one
         return None
 
@@ -567,6 +570,13 @@ def selected_track(ax):
     index, row = chosen[0]
     found = re.search(r"[\u2018'\u201c\"](.+?)[\u2019'\u201d\"]", ax.value(row, "AXDescription") or "")
     return index, (found.group(1) if found else None)
+
+
+def setup_duplicate(driver, ax, extra):
+    """The fixture's first track selected, then renamed as delete's source is."""
+    call(driver, ax, "logic_tracks", "select", {"index": 0})
+    time.sleep(0.5)
+    setup_selected_track(driver, ax, extra)
 
 
 def setup_selected_track(driver, ax, extra):
@@ -718,7 +728,7 @@ OPS = [
     ("track.delete", "logic_tracks", "delete", {}, None, names_operation("track.delete", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
     ("track.create_instrument", "logic_tracks", "create_instrument", {}, None, both(names_operation("track.create_instrument", tracks_by(+1)), track_kind(False)), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}),
     ("track.delete", "logic_tracks", "delete", {}, None, names_operation("track.delete", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}, setup_selected_track),
-    ("track.duplicate", "logic_tracks", "duplicate", {}, None, both(names_operation("track.duplicate", tracks_by(+1)), carries_source_name), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
+    ("track.duplicate", "logic_tracks", "duplicate", {}, None, both(names_operation("track.duplicate", tracks_by(+1)), carries_source_settings), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_duplicate),
     ("track.delete", "logic_tracks", "delete", {}, None, names_operation("track.delete", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
     # The project: save, then close. Close is last, since nothing reads after it.
     ("project.save", "logic_project", "save", {}, None, saved, {"windows", "undo_title"}, setup_mtime, post_mtime),

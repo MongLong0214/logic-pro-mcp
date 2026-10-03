@@ -319,12 +319,14 @@ class DuplicateAndCloseIdentity(unittest.TestCase):
     def setUp(self):
         use_words()
 
-    def test_duplicate_needs_the_source_tracks_name(self):
-        extra = {"renamed_track": {"name": "LPM1029 2 39060"}, "new_track_description": "Track 26 'LPM1029 2 39060'"}
-        self.assertTrue(H.carries_source_name({}, {}, extra))
-        created = dict(extra, new_track_description="Track 25 '<audio> 2'")
-        self.assertFalse(H.carries_source_name({}, {}, created), "a created track passed as a duplicate")
-        self.assertFalse(H.carries_source_name({}, {}, {"new_track_description": "x"}))
+    def test_duplicate_needs_the_source_tracks_strip_name(self):
+        extra = {"selected_track": {"name": "Absolute Zero"}, "renamed_track": {"name": "LPM1029 0 50374"},
+                 "new_track_description": "Track 25 'Absolute Zero'"}
+        self.assertTrue(H.carries_source_settings({}, {}, extra))
+        for described in ("Track 25 '<audio> 2'", "Track 25 'Deluxe Classic'"):
+            self.assertFalse(H.carries_source_settings({}, {}, dict(extra, new_track_description=described)),
+                             "a created track passed as a duplicate")
+        self.assertFalse(H.carries_source_settings({}, {}, {"new_track_description": "x"}))
 
     def test_close_needs_every_fixture_window_gone(self):
         two = ["fixture - Tracks", "fixture - Marker List"]
