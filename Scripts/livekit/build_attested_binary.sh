@@ -8,17 +8,25 @@
 # the binary names its own source, instead of the evidence naming the worktree's head when it is written
 # (#1095 review rounds 1-3).
 #
-# Refuses a dirty tree before and after the build. A local `swift build` can rewrite Package.resolved;
-# that file is put back first.
+# Refuses a tree that is not clean, read before anything is touched, and a status that does not
+# read: an edit to Package.resolved is the caller's, not the build's, and an empty answer from a
+# failed `git status` is not a clean tree (#1095 supplementary review, R1095-S01 and S02). After the
+# build, a change to Package.resolved alone is put back: the tree was clean before, so SwiftPM's
+# rewrite is the build's own. Any other change refuses.
 set -euo pipefail
 W=${1:?worktree}
 OUT=${2:?out-root}
 HERE=$(cd "$(dirname "$0")" && pwd)
 cd "$W"
-git checkout -- Package.resolved 2>/dev/null || true
-if [ -n "$(git status --porcelain)" ]; then
+tree_status() {
+    local status
+    status=$(git status --porcelain) || { echo "git status did not read; whether the tree is clean is unknown" >&2; return 1; }
+    printf '%s' "$status"
+}
+BEFORE=$(tree_status) || exit 1
+if [ -n "$BEFORE" ]; then
     echo "the tree is not clean; nothing was built" >&2
-    git status --porcelain | head >&2
+    printf '%s\n' "$BEFORE" | head >&2
     exit 1
 fi
 HEAD_SHA=$(git rev-parse HEAD)
@@ -27,9 +35,14 @@ printf '%s' "$HEAD_SHA" > "$STAMP"
 swift build --product LogicProMCP \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __lpm_commit -Xlinker "$STAMP" 2>&1 | tail -1
 rm -f "$STAMP"
-git checkout -- Package.resolved 2>/dev/null || true
-if [ -n "$(git status --porcelain)" ]; then
+AFTER=$(tree_status) || exit 1
+if [ "$AFTER" = " M Package.resolved" ]; then
+    git checkout -- Package.resolved
+    AFTER=$(tree_status) || exit 1
+fi
+if [ -n "$AFTER" ]; then
     echo "the tree changed during the build" >&2
+    printf '%s\n' "$AFTER" | head >&2
     exit 1
 fi
 DEST="$OUT/bin-${HEAD_SHA:0:8}"

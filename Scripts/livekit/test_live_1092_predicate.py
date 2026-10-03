@@ -100,6 +100,68 @@ class Provenance(unittest.TestCase):
             os.unlink(path)
 
 
+class MainRefusesBeforeDriving(unittest.TestCase):
+    """#1095 supplementary review, R1095-S03: the refusal is in `main()`, not only in the helper.
+    `main()` runs with Logic, the locale switch and the server replaced by functions that fail the
+    case if called; a binary whose stamp is missing, malformed or another commit's must stop it
+    first."""
+    HEAD = "0123456789abcdef0123456789abcdef01234567"
+
+    def drive(self, carried):
+        import tempfile
+        from argparse import Namespace
+        from unittest import mock
+        reached = []
+
+        def reach(name):
+            def called(*_args, **_kwargs):
+                reached.append(name)
+                raise AssertionError(f"{name} was reached")
+            return called
+
+        class Notes:
+            def __init__(self, *_args, **_kwargs):
+                self.notes = []
+
+            def note(self, tag, payload):
+                self.notes.append((tag, payload))
+
+        with tempfile.NamedTemporaryFile(delete=False) as handle:
+            handle.write(b"not a binary")
+            binary = handle.name
+        args = Namespace(worktree=os.path.dirname(os.path.dirname(HERE)), head=self.HEAD, binary=binary,
+                         lprojs=["ko"])
+        try:
+            with mock.patch.object(H, "arguments", return_value=args), \
+                    mock.patch.object(H, "embedded_commit", return_value=carried), \
+                    mock.patch.object(H.E, "Evidence", Notes), \
+                    mock.patch.object(H.E, "Driver", reach("Driver")), \
+                    mock.patch.object(H, "AX", reach("AX")), \
+                    mock.patch.object(H.L993, "switch_to", reach("switch_to")), \
+                    mock.patch.dict(os.environ, {"LPM_EVIDENCE_ROOT": tempfile.gettempdir()}) as environ:
+                environ.pop("LOGIC_MCP_DEBUG_ONLY_CHANNEL", None)
+                with self.assertRaises(SystemExit) as stopped:
+                    H.main()
+        finally:
+            os.unlink(binary)
+        return stopped.exception, reached
+
+    def test_an_unstamped_binary_stops_main_before_anything_is_driven(self):
+        stopped, reached = self.drive(None)
+        self.assertEqual(reached, [])
+        self.assertIsInstance(stopped.code, str)
+
+    def test_a_malformed_stamp_stops_main(self):
+        stopped, reached = self.drive("not-a-commit")
+        self.assertEqual(reached, [])
+        self.assertIsInstance(stopped.code, str)
+
+    def test_another_commits_binary_stops_main(self):
+        stopped, reached = self.drive("f" * 40)
+        self.assertEqual(reached, [])
+        self.assertIsInstance(stopped.code, str)
+
+
 class ReplySuccess(unittest.TestCase):
     def test_a_wrapped_write_result_is_read(self):
         self.assertTrue(H.reply_success({"success": True}))
