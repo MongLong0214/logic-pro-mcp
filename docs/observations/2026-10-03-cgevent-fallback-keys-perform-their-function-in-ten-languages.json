@@ -4,7 +4,7 @@
   "date": "2026-10-03",
   "subject": "whether each operation that keeps a CGEvent fallback performs its function, and no other command, when driven through CGEventChannel alone in ten languages",
   "question": "Driven through CGEventChannel alone, with the MIDI key-command approval withdrawn, does each fallback keystroke change the operation's own reading and leave every other reading the harness takes unchanged, in each of Logic's ten languages?",
-  "verdict": "partial",
+  "verdict": "works",
   "surface": "arrange.transport",
   "issues": [
     1029
@@ -30,23 +30,43 @@
     "Scripts/livekit/live_1029_cgevent_fallback_in_every_locale.py:snapshot"
   ],
   "evidence": [
-    "evidence/2026-10-03-1029-cgevent-fallback-isolated-run.json"
+    "evidence/2026-10-03-1029-cgevent-fallback-isolated-run-1.json"
   ],
-  "method": "One run of Scripts/livekit/live_1029_cgevent_fallback_in_every_locale.py at c819fb9fdbb58e8d13a4e72a5a7fe62d04049bc9 in isolated mode drove a debug build (sha256 fb2cd2f9e0d64755c089a7453264e5ca90a3c2d06f66fa038ed0be1feeccd818) started with LOGIC_MCP_DEBUG_ONLY_CHANNEL=CGEvent and LOGIC_MCP_DEBUG_ONLY_CHANNEL_PASS naming the reads and setups whose chains hold no CGEvent rung, under the 2-Set Korean input source, with the MIDI key-command approval withdrawn for the run and written back byte for byte. For each language Logic was quit, its AppleLanguages set, and the lpm-locale-campaign fixture, restored with ditto from a copy taken before the run, reopened. Each row ran its setup, read the control-bar checkboxes, track header rows, regions and their selection, the undo title, the playhead's bar, Logic's windows and the structure and sliders the view ops move, sent one command, and read them again. A row passes when the op's own reading moved, no other moved, and the reply came through cgevent.",
+  "method": "One run of Scripts/livekit/live_1029_cgevent_fallback_in_every_locale.py at 6f1d98d1d5dbd9c1079068e0d704ec88a3f4a9ff in isolated mode drove a debug build (sha256 74a2d77f2a1f51adc6737929ea190dd049a042cd2511750de562551ecc04a105) started with LOGIC_MCP_DEBUG_ONLY_CHANNEL=CGEvent and LOGIC_MCP_DEBUG_ONLY_CHANNEL_PASS naming the reads and setups whose chains hold no CGEvent rung, under the 2-Set Korean input source, with the MIDI key-command approval withdrawn for the run and written back byte for byte. For each language Logic was quit, its AppleLanguages set, and the lpm-locale-campaign fixture, restored with ditto from a copy taken before the run, reopened. Each row ran its setup, read the control-bar checkboxes, track header rows, regions and their selection, the undo title, the playhead's bar, Logic's windows and the structure and sliders the view ops move, sent one command, and read them again. A row passes when the op's own reading moved in the way that names it, no other moved, and the reply came through cgevent. Naming is by identity, not by change: an undo item must name the op's own command, with the nouns read from Logic.framework's Localizable.strings for the language; the score editor and the piano roll are told apart by the Editors area's tab bar, whose tab reading 1 carries Apple's tab label (StrTabBtnLabel) for the language; the bounce dialog is the focused window whose text field ends _bip; pause must leave Play on and the bar held; copy is credited only through the paste after it; a new track's name must carry the audio word or not. edit.quantize has no row: its keystroke is removed in this change (#1094).",
   "observations": [
     {
-      "checks": 460,
-      "passed": 457,
-      "failed": [
-        "1029/de/43/track.delete",
-        "1029/zh_TW/31/edit.quantize",
-        "1029/zh_TW/32/edit.undo"
+      "checks": 440,
+      "passed": 440,
+      "failed": [],
+      "restorations": [
+        {
+          "tag": "1029/operator-approvals-restored-byte-for-byte",
+          "ok": true
+        },
+        {
+          "tag": "1029/fixture-restored-byte-for-byte",
+          "ok": true
+        },
+        {
+          "tag": "1029/Logic-language-restored-to-Korean",
+          "ok": true
+        },
+        {
+          "tag": "1029/input-source-is-2-Set-Korean-at-the-end",
+          "ok": true
+        }
       ],
-      "restorations": {
-        "1029/operator-approvals-restored-byte-for-byte": true,
-        "1029/fixture-restored-byte-for-byte": true,
-        "1029/Logic-language-restored-to-Korean": true,
-        "1029/input-source-is-2-Set-Korean-at-the-end": true
+      "evidence_file_of_each_locale": {
+        "de-DE": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json",
+        "en-US": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json",
+        "es-ES": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json",
+        "fr-FR": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json",
+        "it-IT": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json",
+        "ja-JP": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json",
+        "ko-KR": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json",
+        "pt-BR": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json",
+        "zh-CN": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json",
+        "zh-TW": "2026-10-03-1029-cgevent-fallback-isolated-run-1.json"
       }
     },
     {
@@ -395,28 +415,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -427,7 +425,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -438,7 +436,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -449,7 +447,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -460,7 +458,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -471,8 +469,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -494,7 +514,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -516,29 +536,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": false,
-          "other_readings_moved": 0,
-          "method": null,
-          "letter": null,
-          "letter_unbound": false,
-          "success": false,
-          "state": "C",
-          "error": "index_binding_corroboration_required"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -549,7 +546,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -560,8 +557,8 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
-      "rows_with_function_and_nothing_else": 45
+      "rows_run": 44,
+      "rows_with_function_and_nothing_else": 44
     },
     {
       "locale": "en-US",
@@ -909,28 +906,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -941,7 +916,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -952,7 +927,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -963,7 +938,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -974,7 +949,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -985,8 +960,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -1008,7 +1005,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -1030,28 +1027,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -1062,7 +1037,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -1073,8 +1048,8 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
-      "rows_with_function_and_nothing_else": 46
+      "rows_run": 44,
+      "rows_with_function_and_nothing_else": 44
     },
     {
       "locale": "es-ES",
@@ -1422,28 +1397,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -1454,7 +1407,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -1465,7 +1418,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -1476,7 +1429,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -1487,7 +1440,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -1498,8 +1451,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -1521,7 +1496,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -1543,28 +1518,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -1575,7 +1528,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -1586,8 +1539,8 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
-      "rows_with_function_and_nothing_else": 46
+      "rows_run": 44,
+      "rows_with_function_and_nothing_else": 44
     },
     {
       "locale": "fr-FR",
@@ -1935,28 +1888,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -1967,7 +1898,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -1978,7 +1909,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -1989,7 +1920,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -2000,7 +1931,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -2011,8 +1942,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -2034,7 +1987,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -2056,28 +2009,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -2088,7 +2019,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -2099,8 +2030,8 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
-      "rows_with_function_and_nothing_else": 46
+      "rows_run": 44,
+      "rows_with_function_and_nothing_else": 44
     },
     {
       "locale": "it-IT",
@@ -2448,28 +2379,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -2480,7 +2389,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -2491,7 +2400,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -2502,7 +2411,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -2513,7 +2422,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -2524,8 +2433,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -2547,7 +2478,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -2569,28 +2500,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -2601,7 +2510,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -2612,8 +2521,8 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
-      "rows_with_function_and_nothing_else": 46
+      "rows_run": 44,
+      "rows_with_function_and_nothing_else": 44
     },
     {
       "locale": "ja-JP",
@@ -2961,28 +2870,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -2993,7 +2880,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -3004,7 +2891,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -3015,7 +2902,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -3026,7 +2913,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -3037,8 +2924,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -3060,7 +2969,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -3082,28 +2991,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -3114,7 +3001,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -3125,8 +3012,8 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
-      "rows_with_function_and_nothing_else": 46
+      "rows_run": 44,
+      "rows_with_function_and_nothing_else": 44
     },
     {
       "locale": "ko-KR",
@@ -3474,28 +3361,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -3506,7 +3371,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -3517,7 +3382,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -3528,7 +3393,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -3539,7 +3404,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -3550,8 +3415,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -3573,7 +3460,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -3595,28 +3482,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -3627,7 +3492,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -3638,8 +3503,8 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
-      "rows_with_function_and_nothing_else": 46
+      "rows_run": 44,
+      "rows_with_function_and_nothing_else": 44
     },
     {
       "locale": "pt-BR",
@@ -3987,28 +3852,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -4019,7 +3862,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -4030,7 +3873,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -4041,7 +3884,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -4052,7 +3895,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -4063,8 +3906,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -4086,7 +3951,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -4108,28 +3973,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -4140,7 +3983,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -4151,8 +3994,8 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
-      "rows_with_function_and_nothing_else": 46
+      "rows_run": 44,
+      "rows_with_function_and_nothing_else": 44
     },
     {
       "locale": "zh-CN",
@@ -4500,28 +4343,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -4532,7 +4353,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -4543,7 +4364,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -4554,7 +4375,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -4565,7 +4386,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -4576,8 +4397,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -4599,7 +4442,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -4621,28 +4464,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -4653,7 +4474,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -4664,8 +4485,8 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
-      "rows_with_function_and_nothing_else": 46
+      "rows_run": 44,
+      "rows_with_function_and_nothing_else": 44
     },
     {
       "locale": "zh-TW",
@@ -5013,28 +4834,6 @@
         },
         {
           "index": 31,
-          "op": "edit.quantize",
-          "function": false,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": "q",
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 32,
-          "op": "edit.undo",
-          "function": true,
-          "other_readings_moved": 2,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 33,
           "op": "edit.bounce_in_place",
           "function": true,
           "other_readings_moved": 0,
@@ -5045,7 +4844,7 @@
           "state": "B"
         },
         {
-          "index": 34,
+          "index": 32,
           "op": "transport.record",
           "function": true,
           "other_readings_moved": 0,
@@ -5056,7 +4855,7 @@
           "state": "A"
         },
         {
-          "index": 35,
+          "index": 33,
           "op": "transport.stop",
           "function": true,
           "other_readings_moved": 0,
@@ -5067,7 +4866,7 @@
           "state": "A"
         },
         {
-          "index": 36,
+          "index": 34,
           "op": "track.create_audio",
           "function": true,
           "other_readings_moved": 0,
@@ -5078,7 +4877,7 @@
           "state": "B"
         },
         {
-          "index": 37,
+          "index": 35,
           "op": "edit.undo",
           "function": true,
           "other_readings_moved": 0,
@@ -5089,8 +4888,30 @@
           "state": "B"
         },
         {
-          "index": 38,
+          "index": 36,
           "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 37,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "letter": null,
+          "letter_unbound": false,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 38,
+          "op": "track.create_instrument",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -5112,7 +4933,7 @@
         },
         {
           "index": 40,
-          "op": "track.create_instrument",
+          "op": "track.duplicate",
           "function": true,
           "other_readings_moved": 0,
           "method": "cgevent",
@@ -5134,28 +4955,6 @@
         },
         {
           "index": 42,
-          "op": "track.duplicate",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 43,
-          "op": "track.delete",
-          "function": true,
-          "other_readings_moved": 0,
-          "method": "cgevent",
-          "letter": null,
-          "letter_unbound": false,
-          "success": true,
-          "state": "B"
-        },
-        {
-          "index": 44,
           "op": "project.save",
           "function": true,
           "other_readings_moved": 0,
@@ -5166,7 +4965,7 @@
           "state": "B"
         },
         {
-          "index": 45,
+          "index": 43,
           "op": "project.close",
           "function": true,
           "other_readings_moved": 0,
@@ -5177,16 +4976,17 @@
           "state": "B"
         }
       ],
-      "rows_run": 46,
+      "rows_run": 44,
       "rows_with_function_and_nothing_else": 44
     }
   ],
-  "conclusion": "457 of 460 checks passed across ten languages. The failing checks are listed in observations[0].failed.",
+  "conclusion": "440 of 440 checks passed across ten languages.",
   "limits": [
     "One Logic installation (12.3, build 6674), one fixture, one keyboard input source (2-Set Korean).",
     "Each row was run once per language; rates were not measured.",
     "The readings are the ones the harness takes; a command that changed something outside them would not be seen.",
-    "The pass list widens only reads and setups whose chains hold no CGEvent rung; no operation under test was widened."
+    "The pass list widens only reads and setups whose chains hold no CGEvent rung; no operation under test was widened.",
+    "Identity is read from the elements and strings named in the method; an editor or dialog that carried the same markers would pass. The editor tab names the editor showing, not what it shows."
   ],
   "supersedes": null,
   "canon_not_applicable": {
