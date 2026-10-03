@@ -30,7 +30,7 @@
   "evidence": [
     "evidence/2026-10-03-965-audit-reads-the-inspections-observation.json"
   ],
-  "method": "One run of Scripts/livekit/live_965_audit_reads_the_inspections_observation.py at d850559d97261cff954a866e69fb111df569e01f drove a debug build of that head (sha256 bb63d56227549c1ae89477a254d458a3388ea2495dc1a14a9347f78d08c2ca33). For each language Logic was quit, its AppleLanguages set, and the lpm-locale-campaign fixture reopened; one server refreshed its cache, then logic_project inspect_session (domains tracks) was read, again up to three times while its reasons said the cache moved during the capture, and logic_project audit right after. A row passes when the inspection names an expected count and the audit's track_readback_gap finding is present exactly when the inspection's tracks reasons carry it, with the same file count. Each row's check was also run against the same row with the audit counting five more tracks, which it must reject.",
+  "method": "One run of Scripts/livekit/live_965_audit_reads_the_inspections_observation.py at 2634fbfe58c26e37fbeea215e113847f73cfba09 drove a debug build of that head (sha256 bb63d56227549c1ae89477a254d458a3388ea2495dc1a14a9347f78d08c2ca33). For each language Logic was quit, its AppleLanguages set, and the lpm-locale-campaign fixture reopened; one server refreshed its cache, then logic_project inspect_session (domains tracks) was read, again up to three times while its reasons said the cache moved during the capture, and logic_project audit right after. A row passes when the inspection names an expected count and the audit's track_readback_gap finding is present exactly when the inspection's tracks reasons carry it, with the same file count. Each row's check was also run against the same row with the audit counting five more tracks, which it must reject.",
   "observations": [
     {
       "checks": 10,
@@ -116,7 +116,7 @@
         },
         {
           "locale": "es-ES",
-          "inspection_attempts": 1,
+          "inspection_attempts": 2,
           "inspection_expected_count": 42,
           "inspection_rows": 19,
           "inspection_reasons": [
