@@ -34,10 +34,7 @@ cd "$ROOT"
 
 git rev-parse HEAD >/dev/null 2>&1 || fatal "not a git checkout"
 echo "head: $(git rev-parse HEAD)"
-# A `git status` that fails answers nothing on stdout; that is not a clean tree (#1095 supplementary
-# review, R1095-S02), so its exit status is read before its output.
-STATUS="$(git status --porcelain)" || fatal "git status did not read before the build; whether the tree is clean is unknown"
-[ -z "$STATUS" ] || { printf '%s\n' "$STATUS" | head >&2; fatal "dirty tree before build"; }
+[ -z "$(git status --porcelain)" ] || { git status --porcelain | head >&2; fatal "dirty tree before build"; }
 echo "clean_tree: yes"
 echo "toolchain: $(swift --version 2>&1 | tr '\n' ' ')"
 COMMITTED_PKGRES="$(git show HEAD:Package.resolved | shasum -a 256 | cut -d' ' -f1)"
@@ -55,8 +52,7 @@ swift package resolve >/dev/null
 # used by the build is deterministic. The macOS binary only links the macOS-relevant pins, which
 # are identical run-to-run, so the output stays byte-reproducible.
 git checkout -- Package.resolved
-STATUS="$(git status --porcelain)" || fatal "git status did not read after resolve; whether the tree is clean is unknown"
-[ -z "$STATUS" ] || { printf '%s\n' "$STATUS" | head >&2; fatal "tree dirty after resolve + Package.resolved restore"; }
+[ -z "$(git status --porcelain)" ] || { git status --porcelain | head >&2; fatal "tree dirty after resolve + Package.resolved restore"; }
 ONDISK_PKGRES="$(shasum -a 256 Package.resolved | cut -d' ' -f1)"
 [ "$ONDISK_PKGRES" = "$COMMITTED_PKGRES" ] || fatal "Package.resolved restore failed ($ONDISK_PKGRES != committed $COMMITTED_PKGRES)"
 

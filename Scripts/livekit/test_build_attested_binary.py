@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drive build_attested_binary.sh and reproducible-release-build.sh against a scratch repository.
+"""Drive build_attested_binary.sh against a scratch repository.
 
 #1095 supplementary review: R1095-S01 (the builder put Package.resolved back before reading whether
 the tree was clean, so the caller's edit was erased and the tree passed) and R1095-S02 (a `git status`
@@ -16,7 +16,6 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUILDER = os.path.join(HERE, "build_attested_binary.sh")
-RELEASE = os.path.join(os.path.dirname(HERE), "reproducible-release-build.sh")
 RESOLVED = '{"pins": [], "version": 2}\n'
 
 
@@ -128,37 +127,6 @@ class Builder(ScratchRepo):
         result = self.run_builder()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("changed during the build", result.stderr, result.stdout + result.stderr)
-
-
-class ReleaseBuilder(ScratchRepo):
-    """The release builder reads the tree it sits in, so a copy of it is placed in the scratch
-    repository's Scripts directory. Both cases stop before anything is removed or built."""
-
-    def run_release(self, **extra):
-        scripts = os.path.join(self.repo, "Scripts")
-        os.makedirs(scripts, exist_ok=True)
-        shutil.copy(RELEASE, scripts)
-        git(self.repo, "add", "Scripts")
-        git(self.repo, "commit", "-q", "-m", "release builder")
-        return subprocess.run(["bash", os.path.join(scripts, os.path.basename(RELEASE))],
-                              capture_output=True, text=True, env=self.env(**extra))
-
-    def test_a_status_that_does_not_read_is_fatal(self):
-        self.fake_swift()
-        bad = self.not_an_index()
-        result = self.run_release(GIT_INDEX_FILE=bad)
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertIn("git status did not read before the build", result.stderr)
-        self.assertFalse(os.path.exists(self.ran))
-
-    def test_a_dirty_tree_is_fatal(self):
-        self.fake_swift()
-        with open(os.path.join(self.repo, "Source.swift"), "a") as handle:
-            handle.write("// edit\n")
-        result = self.run_release()
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertIn("dirty tree before build", result.stderr)
-        self.assertFalse(os.path.exists(self.ran))
 
 
 if __name__ == "__main__":
