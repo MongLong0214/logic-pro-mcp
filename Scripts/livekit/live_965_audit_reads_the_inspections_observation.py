@@ -100,6 +100,10 @@ def sha256_of(path):
 
 def main():
     args = arguments()
+    # The evidence document's artifact block reads these: the binary's sha256, the worktree head it
+    # was built from, and whether the tree was clean and the binary newer than its sources.
+    E.REPO = args.worktree
+    E.BIN = args.binary
     sys.path.insert(0, os.path.join(args.worktree, "Scripts"))
     import logic_canon  # noqa: E402
     setattr(L993, "logic_canon", logic_canon)
