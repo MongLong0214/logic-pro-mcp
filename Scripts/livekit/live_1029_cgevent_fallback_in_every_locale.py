@@ -539,8 +539,13 @@ def nothing_happened(row):
 
 
 def tree_digest(path):
-    """One SHA-256 over every file under `path`, by relative name and content."""
+    """One SHA-256 over every file under `path`, by relative name and content, and over every
+    extended attribute in the tree. The attributes count: the package's Finder info hides its
+    extension, and a copy that lost it opened with `.logicx` in Logic's window title, which no
+    title match expected (2026-10-03)."""
     digest = hashlib.sha256()
+    listed = subprocess.run(["/usr/bin/xattr", "-r", "-l", path], capture_output=True, text=True).stdout
+    digest.update(listed.replace(path, "").encode())
     for root, dirs, files in os.walk(path):
         dirs.sort()
         for name in sorted(files):
@@ -557,7 +562,8 @@ def restore_fixture(backup):
     if L993.logic_running() and not L993.quit_logic():
         raise RuntimeError("Logic did not quit, so the fixture was not replaced under it")
     shutil.rmtree(L993.FIXTURE)
-    shutil.copytree(backup, L993.FIXTURE)
+    # ditto, not shutil.copytree: on macOS copytree drops extended attributes.
+    subprocess.run(["/usr/bin/ditto", backup, L993.FIXTURE], check=True)
 
 
 def main():
@@ -590,7 +596,7 @@ def main():
     backup = os.path.join(os.environ["LPM_EVIDENCE_ROOT"], "fixture-before-the-run.logicx")
     if os.path.exists(backup):
         shutil.rmtree(backup)
-    shutil.copytree(L993.FIXTURE, backup)
+    subprocess.run(["/usr/bin/ditto", L993.FIXTURE, backup], check=True)
     fixture_digest = tree_digest(backup)
     ev.note("1029/fixture", {"path": L993.FIXTURE, "sha256_of_tree": fixture_digest})
     try:
