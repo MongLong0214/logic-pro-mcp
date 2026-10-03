@@ -33,6 +33,12 @@ Every tool in `tools/list` advertises an `outputSchema`. Mixed command tools adv
 | `logic_audio` | read-only audio artifact analysis |
 | `logic_system` | health, permissions, command help, arm key-command auto-setup, trace list/read/clear, saga preflight/execute/status/cancel |
 
+### Rich tool schemas (opt-in, #957)
+
+By default every tool takes `{command, params}` with `params` an open object. A server started with `LOGIC_MCP_TOOL_SCHEMA=rich` lists a richer input schema for each tool instead. `command` gains an `enum` of the tool's commands. The schema gains a top-level `oneOf` with one branch per command: the branch fixes `command` with `const` and names that command's parameters under `params`. A branch sets `additionalProperties: false` only where the server refuses an unknown parameter, that is, with strict parameter checking on (the default; `LOGIC_MCP_ADR003_STRICT_PARAMS=0` turns it off) and for every operation except the saga commands. Each branch's `description` carries the registry's mutability, confirmation, target, verification, retry and availability words. Any other value of the variable, or none, lists the legacy shape.
+
+The schema is derived from the operation registry, the same source the generic parameter-key check reads; it adds no enforcement. It describes parameter keys only. Values, types and required keys are checked by each command's dispatcher and are not in the registry, so the schema admits requests the dispatcher refuses, such as `goto_position` with no `bar` or `position`. The keys a dispatcher always refuses with its own error (the eleven in `dispatcherRejectedParamsByOperation`) are not listed. Claude Code 2.1.283 listed every tool from the rich schema and called one with schema-conforming input (2026-10-03). Some clients refuse a top-level combinator; they are not measured, so keep them on the default. `docs/COMMAND-PARAMETERS.md` is a table generated from the same registry: `LPM_WRITE_GENERATED_DOCS=1 swift test --filter Issue957` rewrites it, and a test fails when it differs.
+
 ## Resources
 
 | Resource | Returns |

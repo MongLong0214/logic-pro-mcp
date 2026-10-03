@@ -514,7 +514,11 @@ actor LogicProServer {
 
         return LogicProServerHandlers(
             listTools: { _ in
-                ListTools.Result(tools: ServerCatalog.tools)
+                // #957: the legacy shape unless the server was started with LOGIC_MCP_TOOL_SCHEMA=rich.
+                ListTools.Result(tools: CommandSchemaProjection.listedTools(
+                    ServerCatalog.tools, mode: CommandSchemaProjection.launchMode,
+                    strictParams: FeatureFlags.adr003StrictParams
+                ))
             },
             callTool: { params in
                 let name = params.name
