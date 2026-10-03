@@ -1,0 +1,8 @@
+Limit: why the three Spanish modal reads did not answer in the 229c08f1 run was not measured; this run read every one
+Provenance: inherited c09018ab44b04153698c96484a8999a9863bac4c
+
+Limit: the builder's success path (a real build whose section reads back) is driven only by the live runs, not by these tests
+Provenance: inherited 6685d4599a9a5cda59cc636e2b967b060c74646c
+
+Limit: whether --force-resolved-versions keeps SwiftPM from rewriting the lock in a fresh .build was not measured; an incremental build rewrote nothing with or without it, and if it does rewrite, the builder now refuses rather than publishes
+Provenance: inherited fc45fd6eb2521fe31c402744d1e543a1fae2070f
