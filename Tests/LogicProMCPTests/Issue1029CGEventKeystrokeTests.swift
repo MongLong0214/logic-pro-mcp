@@ -104,6 +104,36 @@ struct Issue1029CGEventKeystrokeTests {
         #expect(recorder.snapshot().isEmpty, "\(entry.operation) posted a keystroke: \(entry.why)")
     }
 
+    /// Kills: dropping the flagsChanged that releases a chord's modifiers. Without it, after the
+    /// CGEvent rung's Option-Command-S, Logic added the next AX track selection to the one it had:
+    /// select index 0 read rows [0, 1], and a rename of track 0 renamed track 1 too (Korean,
+    /// 2026-10-04, lpm-evidence/1029/probe-kc-ko.json).
+    @Test("every keyMap chord with a modifier ends with a flagsChanged that carries none")
+    func everyChordReleasesItsModifiers() {
+        for (operation, shortcut) in CGEventChannel.keyMap {
+            let events = CGEventChannel.keyEventSequence(keyCode: shortcut.keyCode, flags: shortcut.flags)
+            let pressed = events.count >= 2
+                && events[0] == .init(kind: .keyDown, keyCode: shortcut.keyCode, flags: shortcut.flags)
+                && events[1] == .init(kind: .keyUp, keyCode: shortcut.keyCode, flags: shortcut.flags)
+            #expect(pressed, "\(operation): \(events)")
+            let holdsModifier = !shortcut.flags.intersection(CGEventChannel.chordModifiers).isEmpty
+            let released = events.count == 3 && events[2].kind == .flagsChanged && events[2].flags.isEmpty
+            let plain = events.count == 2
+            #expect(holdsModifier ? released : plain, "\(operation) flags \(shortcut.flags.rawValue): \(events)")
+        }
+    }
+
+    @Test("Option-Command-S is released, a keypad key and a plain letter post no flagsChanged")
+    func theMeasuredChordIsReleased() {
+        let create = CGEventChannel.keyEventSequence(keyCode: 1, flags: [.maskCommand, .maskAlternate])
+        #expect(create.last == .init(kind: .flagsChanged, keyCode: 0, flags: []), "\(create)")
+        let keypad = CGEventChannel.keyEventSequence(keyCode: 82, flags: .maskNumericPad)
+        let keypadReleased = keypad.contains { $0.kind == .flagsChanged }
+        #expect(!keypadReleased, "\(keypad)")
+        let letter = CGEventChannel.keyEventSequence(keyCode: 15, flags: [])
+        #expect(letter.count == 2, "\(letter)")
+    }
+
     /// Kills: a keyMap entry for an op whose routing chain never reaches `.cgEvent`, as
     /// project.new, project.save_as and nav.create_marker carried before #1029. Such an entry is
     /// dead unless someone later adds the channel to the chain, and then it fires unreviewed.
