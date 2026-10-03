@@ -1,0 +1,3 @@
+Warn: the agreement checks compute their Bool before #expect; #expect(a == !b) on two Bools recorded nothing when false under swift-testing 0.99.0 (#1088)
+Record-Id: r-3442c4649947
+Provenance: inherited a3a59abe1ce35df2af63555485e90aa70f011d72
