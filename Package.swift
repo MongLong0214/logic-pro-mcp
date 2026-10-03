@@ -26,12 +26,15 @@ let package = Package(
         // makes the bundled framework usable without the explicit package
         // dep. Pinned to 0.12.0 with the deprecation noise as a known
         // tradeoff until Apple closes the gap.
-        .package(url: "https://github.com/swiftlang/swift-testing.git", from: "0.12.0"),
+        // #1088: 0.99.0, which `from: "0.12.0"` resolved to, records no failure for a false
+        // `#expect(a == b)` over two Bools under Swift 6.2.4; 6.1.3 records it. Kept on the 6.1
+        // line, whose manifest is tools-version 6.0, for CI's Xcode 16.4.
+        .package(url: "https://github.com/swiftlang/swift-testing.git", .upToNextMinor(from: "6.1.3")),
         // Test-only: a Swift-syntax-aware call-site lint (MIDIReadbackCallSiteLintTests)
         // needs correct lexing to prove the dark MIDI-readback core has no
-        // production caller. Pinned to the same 600.x already resolved transitively
-        // via swift-testing, so this adds no new resolved version.
-        .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0"),
+        // production caller. Pinned to the same 601.x swift-testing 6.1 resolves
+        // transitively, so this adds no new resolved version.
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "601.0.0"),
     ],
     targets: [
         .target(
