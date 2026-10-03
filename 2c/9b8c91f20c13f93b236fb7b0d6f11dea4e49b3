@@ -1,0 +1,36 @@
+Limit: the variable is read once at launch, so no unit test reaches route with a restriction; that route walks the restricted chain rests on a live run
+Ruled-out: reading an invalid value as unset | the full chain would run while the caller believes it restricted, and Accessibility would act for record, cycle and metronome
+Record-Id: r-79886231c799
+Provenance: inherited 07d76426221b5bde83dd1df785da1bab378f72cc
+
+Limit: the 100 ms waits before and after the key are not measured; the drives so far passed at them
+Warn: for about 200 ms per plain letter the system input source is ABC; a key the user types in that window is typed under ABC
+Warn: TISSelectInputSource returning noErr is not the switch; keep posting only on a read-back that names the layout
+Warn: a source whose id did not read must not be switched away from; nothing could select it back after the key
+Record-Id: r-8c9103f9d860
+Provenance: inherited f179bbfc88b122ef25ab4cc6127a9106ef6f06d2
+
+Limit: on this machine K has no binding without a modifier, so the metronome's state change by its key cannot be shown here; only the switch around it is judged
+Limit: the piano roll, automation and zoom readings are structural and unnamed; the canon has no label for the editors' checkbox or the automation view
+Warn: AXMainWindow is the Marker List window right after a launch of the fixture; find the arrange window by its title
+Record-Id: r-b1cc7bfeed94
+Provenance: inherited d3754408bd69fc9bb68f7d89ce45f128985cac7c
+
+Limit: this host's key commands were changed for the run: command 474, Toggle Metronome Click, moved from Control-Shift-R to plain K; with the host's own set the metronome cannot change by K
+Limit: one Logic installation, one fixture, one input source (2-Set Korean); the piano roll, automation and zoom readings are structural and unnamed
+Record-Id: r-dbcb422fed0d
+Provenance: inherited 4259ed06a342e1826f4c721b561a9b20c029f709
+
+Limit: only TIS's offered layout, ABC and U.S. are tried; a host with none of them enabled refuses the key
+Warn: an ASCII-capable layout is not a layout that types the key's U.S. letter: TIS can offer Dvorak or AZERTY, where the key for R types p; the switch selects only a layout whose key map types the letter
+Warn: the harness credits an operation only when its key is bound and its reading moved and came back; a switch alone is not the operation acting
+Record-Id: r-c97217a7e262
+Provenance: inherited ae33818c80d1dde75e0de73112dc3d0a75aa0d05
+
+Warn: under a Dvorak history the expected layout is derived per call from what the tool read: Dvorak is kept for a key it types as the U.S. letter (A) and ABC is selected for any other; expecting ABC for every key failed the product's correct answer for A
+Record-Id: r-493e8362a622
+Provenance: inherited a72fece78e6adabdd0189fe3a7bf2702be1f9f35
+
+Warn: a layout's key map reads whether or not the layout is enabled, but only an enabled source can be selected; a candidate must be both enabled and typing the letter, or a disabled ABC is chosen, fails to select, and U.S. is never tried
+Record-Id: r-51bf1e70b228
+Provenance: inherited 0c9f1fa5beb703d5992eb1df76147be6a14b5ee4
