@@ -71,6 +71,35 @@ class Stepped(unittest.TestCase):
         self.assertFalse(H.stepped(row(-1, [8, 8, 8], success=None)))
 
 
+class Provenance(unittest.TestCase):
+    """#1095 review round 3, R1092-04: only a binary stamped with the head is driven."""
+    HEAD = "0123456789abcdef0123456789abcdef01234567"
+
+    def test_a_missing_malformed_or_other_stamp_is_refused(self):
+        self.assertIsNone(H.provenance_refusal(self.HEAD, self.HEAD))
+        self.assertIsNotNone(H.provenance_refusal(None, self.HEAD), "an unstamped binary was driven")
+        self.assertIsNotNone(H.provenance_refusal("f" * 40, self.HEAD), "another commit's binary was driven")
+
+    def test_the_reader_takes_the_section_bytes_at_their_file_offset(self):
+        import tempfile
+        from unittest import mock
+        with tempfile.NamedTemporaryFile(delete=False) as handle:
+            handle.write(b"\0" * 64 + self.HEAD.encode() + b"\0" * 8)
+            path = handle.name
+        listing = ("Section\n  sectname __lpm_commit\n   segname __TEXT\n      addr 0x0\n      size 0x0000000000000028\n"
+                   "    offset 64\n")
+        malformed = listing.replace("offset 64", "offset 60")
+        try:
+            with mock.patch.object(H.subprocess, "run", return_value=mock.Mock(stdout=listing)):
+                self.assertEqual(H.embedded_commit(path), self.HEAD)
+            with mock.patch.object(H.subprocess, "run", return_value=mock.Mock(stdout=malformed)):
+                self.assertIsNone(H.embedded_commit(path), "bytes that are not a commit read as one")
+            with mock.patch.object(H.subprocess, "run", return_value=mock.Mock(stdout="Section\n  sectname __text\n")):
+                self.assertIsNone(H.embedded_commit(path))
+        finally:
+            os.unlink(path)
+
+
 class ReplySuccess(unittest.TestCase):
     def test_a_wrapped_write_result_is_read(self):
         self.assertTrue(H.reply_success({"success": True}))

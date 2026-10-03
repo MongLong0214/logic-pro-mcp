@@ -210,6 +210,18 @@ def embedded_commit(binary):
     return None
 
 
+def provenance_refusal(carried, head):
+    """Why the binary may not be driven, or None. It must carry, in __TEXT,__lpm_commit, the full commit
+    it is being run as: a missing or malformed stamp is refused like a different one (#1095 review
+    round 3, R1092-04). Scripts/livekit/build_attested_binary.sh builds such a binary."""
+    if carried is None:
+        return (f"the binary carries no commit in __TEXT,__lpm_commit (or a malformed one); build it with "
+                f"Scripts/livekit/build_attested_binary.sh at {head}. Nothing was driven.")
+    if carried != head:
+        return f"the binary carries commit {carried}, not the head {head}. Nothing was driven."
+    return None
+
+
 def sha256_of(path):
     with open(path, "rb") as handle:
         return hashlib.sha256(handle.read()).hexdigest()
@@ -228,10 +240,11 @@ def main():
         sys.exit("LOGIC_MCP_DEBUG_ONLY_CHANNEL is set; this run measures the production route")
     ev = E.Evidence(args.head, os.environ["LPM_EVIDENCE_ROOT"], surface="ui")
     carried = embedded_commit(args.binary)
+    refusal = provenance_refusal(carried, args.head)
     ev.note("1092/binary", {"binary": args.binary, "sha256": sha256_of(args.binary),
-                            "embedded_commit": carried, "embedded_commit_is_head": carried == args.head})
-    if carried is not None and carried != args.head:
-        sys.exit(f"the binary carries commit {carried}, not the head {args.head}; nothing was driven")
+                            "embedded_commit": carried, "embedded_commit_is_head": refusal is None})
+    if refusal is not None:
+        sys.exit(refusal)
     ax = AX()
     rows, failures = [], []
     try:
