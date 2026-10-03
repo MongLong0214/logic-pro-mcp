@@ -238,7 +238,7 @@ No MIDI read-back command is shipped: `read_selection_notes` and `record_sequenc
 
 Common commands: `undo`, `redo`, `cut`, `copy`, `paste`, `delete`, `select_all`, `split`, `join`, `quantize`, `bounce_in_place`, `normalize`, `duplicate`, `toggle_step_input`.
 
-`quantize` requires `{ value: String }` or `{ grid: String }` and accepts the dispatcher grids `1/1`, `1/2`, `1/4`, `1/8`, `1/16`, `1/32`, `1/64`, `1/4T`, `1/8T`, and `1/16T`.
+`quantize` requires `{ value: String }` or `{ grid: String }` and accepts the dispatcher grids `1/1`, `1/2`, `1/4`, `1/8`, `1/16`, `1/32`, `1/64`, `1/4T`, `1/8T`, and `1/16T`. It routes to Accessibility alone (#1094): with at least one region selected and the inspector on screen, it chooses the grid in the Region inspector's Quantize value pop-up, which applies to every selected region, and returns State A only when the pop-up reads the grid back (`before`, `after`, `regions_selected`). It refuses before pressing anything when no region is selected or the selection does not read, when the Quantize row is not on screen or not single, and when the menu offers no single item for the grid. Apple's Q and the MIDI key command applied Logic's held value, not the requested grid, so neither is routed.
 
 ### `logic_navigate`
 

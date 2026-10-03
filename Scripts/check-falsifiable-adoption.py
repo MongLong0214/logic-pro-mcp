@@ -83,7 +83,9 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 33 -> 34 on 2026-10-04: live_1097_select_and_rename_need_the_target_alone, whose counterexamples are
 # the merge-base answers measured in Korean: select State A with rows [0, 1] selected, and a rename
 # that renamed the other selected track as well.
-FLOOR = 34
+# 34 -> 35 on 2026-10-04: live_1094_quantize_sets_the_grid_in_every_locale, whose counterexample for
+# each grid is the same row with the inspector's quantize value as it read before the call.
+FLOOR = 35
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

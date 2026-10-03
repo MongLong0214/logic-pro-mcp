@@ -2900,8 +2900,9 @@ private actor SelectiveFailChannel: Channel {
 }
 
 @Test func testEditDispatcherQuantizeRequiresExplicitGrid() async {
+    // #1094: quantize routes to the Accessibility rung alone.
     let explicitRouter = ChannelRouter()
-    let explicitKeyCmd = MockChannel(id: .midiKeyCommands)
+    let explicitKeyCmd = MockChannel(id: .accessibility)
     await explicitRouter.register(explicitKeyCmd)
     let explicitCache = StateCache()
 
@@ -2919,7 +2920,7 @@ private actor SelectiveFailChannel: Channel {
     #expect(explicitOps[0].1["value"] == "1/8")
 
     let missingRouter = ChannelRouter()
-    let missingKeyCmd = MockChannel(id: .midiKeyCommands)
+    let missingKeyCmd = MockChannel(id: .accessibility)
     await missingRouter.register(missingKeyCmd)
     let missingCache = StateCache()
 
@@ -2944,13 +2945,19 @@ private actor SelectiveFailChannel: Channel {
                 reason: .readbackUnavailable,
                 extras: ["method": "midi_key_command"]
             )),
-            "edit.quantize": .success(HonestContract.encodeStateB(
-                reason: .readbackUnavailable,
-                extras: ["method": "midi_key_command"]
-            )),
         ]
     )
     await router.register(keyCmd)
+    // #1094: quantize's one rung is Accessibility; an unverified answer from it is still an error.
+    await router.register(StaticResultChannel(
+        id: .accessibility,
+        results: [
+            "edit.quantize": .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: ["method": "region_inspector"]
+            )),
+        ]
+    ))
     let cache = StateCache()
 
     let selectAllResult = await EditDispatcher.handle(
