@@ -106,7 +106,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | `launch` | none | closed | mutating | l1 | none | readback_required | never_automatic | default_install |
 | `new` | none | closed | mutating | l1 | none | readback_required | never_automatic | default_install |
 | `open` | `confirmed`, `path` | closed | mutating | l2 | none | readback_required | never_automatic | default_install |
-| `plan_session_repair` | `digest`, `names`, `plan_id`, `policy`, `snapshot_id` | closed | read_only | none | none | none | never_automatic | default_install |
+| `plan_session_repair` | `allow_create_aux`, `allow_replace_send`, `allow_stack_membership_change`, `digest`, `names`, `on_ambiguity`, `plan_id`, `policy`, `snapshot_id` | closed | read_only | none | none | none | never_automatic | default_install |
 | `quit` | `confirmed` | closed | mutating | l3 | none | readback_required | never_automatic | default_install |
 | `save` | none | closed | mutating | l1 | none | readback_required | never_automatic | default_install |
 | `save_as` | `confirmed`, `path` | closed | mutating | l2 | none | readback_required | never_automatic | default_install |

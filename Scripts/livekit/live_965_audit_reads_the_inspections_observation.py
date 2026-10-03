@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""#965 O3: the session audit and the inspection report the same file-bound track count.
+
+`logic_project audit` and `logic_project inspect_session` both observe the session through
+`SessionPopulationObservation.observe`: one cache read, and the project bundle's MetaData.plist
+track count, kept only when the bundle Logic names is the cached project's. The unit tests drive
+the case where it is not. This run drives the real fixture, where it is: for each language one
+server refreshes its cache, then the inspection's `tracks.witnesses.expected_count` and the audit's
+`track_readback_gap` evidence are read back to back.
+
+A row passes when the inspection names an expected count and its tracks reasons carry
+`track_readback_gap` exactly when the audit raises that finding, with `file_track_count` equal to
+the inspection's expected count; or when neither names a gap and both counts agree.
+
+    LPM_LIVE_LOCK=<lock> LPM_EVIDENCE_ROOT=<dir> LPM_LOCALE_FIXTURE=<fixture> \\
+        python3 live_965_audit_reads_the_inspections_observation.py <worktree> <head> <binary> [--lprojs ...]
+
+Reads only: no Logic state changes beyond the language relaunch. Leaves Logic in Korean.
+"""
+import argparse
+import hashlib
+import json
+import os
+import sys
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import evidence as E  # noqa: E402
+import live_993_plugin_root_menu_in_every_locale as L993  # noqa: E402
+
+
+def arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("worktree")
+    parser.add_argument("head")
+    parser.add_argument("binary")
+    parser.add_argument("--lprojs", nargs="+", default=list(L993.DEFAULT_LPROJS))
+    return parser.parse_args()
+
+
+def gap_findings(audit):
+    """Every `track_readback_gap` finding the audit raised, whatever its evidence says."""
+    return [f for f in (audit or {}).get("findings") or [] if isinstance(f, dict) and f.get("id") == "track_readback_gap"]
+
+
+def gap_count(audit):
+    """The file count the audit's one `track_readback_gap` finding states, or None when it raised none,
+    raised more than one, or stated no parsable `file_track_count=` (#1096 review round 2, R965-2: a gap
+    finding with no count read as no gap)."""
+    found = gap_findings(audit)
+    if len(found) != 1:
+        return None
+    for value in (found[0].get("evidence") or {}).get("values") or []:
+        if isinstance(value, str) and value.startswith("file_track_count="):
+            try:
+                return int(value.split("=", 1)[1])
+            except ValueError:
+                return None
+    return None
+
+
+def audit_answered(audit):
+    """Whether the audit reply is an audit report: a status and a findings list. A transport error, an
+    empty reply or a State C error carries neither (#1096 review round 1, R965-2)."""
+    return isinstance(audit, dict) and isinstance(audit.get("status"), str) and bool(audit.get("status")) \
+        and isinstance(audit.get("findings"), list) and audit.get("state") != "C"
+
+
+def agree(row):
+    """The audit answered, the inspection names an expected count, and the audit raised a gap finding
+    exactly when the inspection's tracks reasons carry `track_readback_gap`. When both name it, the
+    audit's finding states a file count, the same one. Where neither names a gap only that much is
+    compared: the audit states its file count in the gap finding alone. A gap finding whose count does
+    not read is not agreement, whatever the inspection said (#1096 review round 2, R965-2)."""
+    if row.get("audit_answered") is not True:
+        return False
+    expected = row.get("inspection_expected_count")
+    if not isinstance(expected, int):
+        return False
+    # Exactly one gap finding when the inspection names the gap, exactly none when it does not; a
+    # count that did not read is None and equals no expected count.
+    findings = row.get("audit_gap_findings")
+    if bool(row.get("inspection_names_the_gap")) != (findings == 1):
+        return False
+    return findings == 0 or row.get("audit_gap_file_count") == expected
+
+
+def disagreeing(row):
+    """The counterexample: the audit counting a different bundle's tracks than the inspection kept."""
+    expected = row.get("inspection_expected_count")
+    return dict(row, audit_gap_file_count=(expected or 0) + 5, audit_gap_findings=1, inspection_names_the_gap=True)
+
+
+def read_language(driver):
+    """The inspection is read again, up to three times, while it says the cache moved during its
+    capture: an unstable capture states no reasons (ja, 2026-10-03, bc9a0a1c). The audit is read right
+    after the first stable one."""
+    driver.tool("logic_system", "refresh_cache")
+    time.sleep(1.0)
+    for attempt in range(1, 4):
+        report = driver.tool("logic_project", "inspect_session", {"domains": ["tracks"]}) or {}
+        tracks = report.get("tracks") or {}
+        if "cache_moved_during_capture" not in (tracks.get("reasons") or []):
+            break
+        time.sleep(1.0)
+    audit = driver.tool("logic_project", "audit") or {}
+    witnesses = tracks.get("witnesses") or {}
+    return {
+        "inspection_attempts": attempt,
+        "inspection_expected_count": witnesses.get("expected_count"),
+        "inspection_expected_count_source": witnesses.get("expected_count_source"),
+        "inspection_rows": witnesses.get("count"),
+        "inspection_reasons": tracks.get("reasons"),
+        "inspection_names_the_gap": "track_readback_gap" in (tracks.get("reasons") or []),
+        "audit_answered": audit_answered(audit),
+        "audit_gap_findings": len(gap_findings(audit)),
+        "audit_gap_file_count": gap_count(audit),
+        "audit_status": audit.get("status"),
+        "audit_finding_ids": [f.get("id") for f in audit.get("findings") or []],
+    }
+
+
+def sha256_of(path):
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+def main():
+    args = arguments()
+    # The evidence document's artifact block reads these: the binary's sha256, the worktree head it
+    # was built from, and whether the tree was clean and the binary newer than its sources.
+    E.REPO = args.worktree
+    E.BIN = args.binary
+    sys.path.insert(0, os.path.join(args.worktree, "Scripts"))
+    import logic_canon  # noqa: E402
+    setattr(L993, "logic_canon", logic_canon)
+    ev = E.Evidence(args.head, os.environ["LPM_EVIDENCE_ROOT"], surface="non_ui")
+    ev.note("965/binary", {"binary": args.binary, "sha256": sha256_of(args.binary)})
+    rows = []
+    try:
+        for lproj in args.lprojs:
+            launch = L993.switch_to(lproj, force=True)
+            ev.note(f"965/{lproj}/launch", launch)
+            if not launch.get("arrange_window"):
+                rows.append({"lproj": lproj, "error": "launch"})
+                continue
+            driver = E.Driver(binary=args.binary)
+            try:
+                time.sleep(8)
+                row = dict(read_language(driver), lproj=lproj)
+            finally:
+                driver.close()
+            rows.append(row)
+            ev.falsifiable(f"965/{lproj}/audit-and-inspection-agree", agree, row, disagreeing(row),
+                           expected="the audit's gap finding matches the inspection's file-bound count")
+            print(json.dumps(row, ensure_ascii=False), flush=True)
+    finally:
+        ev.note("965/restore", L993.switch_to(L993.RESTORE, force=True))
+    ev.note("965/rows", rows)
+    out = ev.write()
+    print("written", out)
+    failed = [r["lproj"] for r in rows if not agree(r)]
+    print(json.dumps({"rows": len(rows), "failed": failed}))
+    return 0 if rows and not failed and len(rows) == len(args.lprojs) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

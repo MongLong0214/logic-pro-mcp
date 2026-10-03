@@ -225,6 +225,40 @@ struct CleanupExecutionTests {
     #expect(Set(calls.map(\.name)) == ["Kick L", "Kick R"])
 }
 
+@Test func aDocumentThatClosesDuringTheAuditReadRoutesNoRename() async throws {
+    // #1096 review rounds 1 and 2 (R965-1): cleanup_apply re-derives the audit through the shared
+    // reading, which awaits Logic for the front document. A document that closes during that await is
+    // read closed, so the step does not apply and nothing is routed. Mutation killed: the cache read
+    // before the file read (the rename step from the open document goes out).
+    let cache = StateCache()
+    let stepID = await seedDuplicateTracks(cache)
+    let channel = FakeRenameChannel { stateARename(name: $0) }
+    let router = await routerWith(channel)
+    let closing = LogicProjectFileReader.Runtime(
+        currentDocumentPath: {
+            await cache.updateDocumentState(false)
+            return nil
+        },
+        now: Date.init,
+        readPlistData: { _ in nil },
+        mtime: { _ in nil },
+        sleep: { _ in }
+    )
+
+    let result = await ProjectDispatcher.handle(
+        command: "cleanup_apply",
+        params: ["step_id": .string(stepID), "confirmed": .bool(true), "names": .string("Kick L,Kick R")],
+        router: router,
+        cache: cache,
+        cleanupAuditFileReader: closing
+    )
+
+    let calls = await channel.calls()
+    #expect(calls.isEmpty, "a rename went out for a document that had closed: \(calls)")
+    let refused = try #require(result.isError)
+    #expect(refused, "\(sharedToolText(result))")
+}
+
 @Test func testCleanupApplyRefusesWhenNotConfirmed() async throws {
     let cache = StateCache()
     let stepID = await seedDuplicateTracks(cache)

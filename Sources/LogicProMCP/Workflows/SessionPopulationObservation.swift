@@ -171,6 +171,39 @@ enum SessionPopulationObservation {
     /// The sections whose movement during capture makes the report unstable.
     static let watchedSections: [CacheSectionID] = [.tracks, .mixer, .project]
 
+    /// One reading of the cache and of the bundle Logic names as its front document. The reader asks
+    /// Logic for that document on its own, so the bundle need not be the project the cache holds;
+    /// its track count is kept only when the two paths name the same bundle.
+    ///
+    /// The inspection (`capture`) and the session audit (`ProjectSessionAudit.buildAudit(cache:)`)
+    /// both read through this, so they observe the session the same way (#965 O3).
+    struct Reading: Sendable {
+        let state: StateCache.AuditState
+        /// `NumberOfTracks` of the cached project's bundle; nil when no bundle was read or the one
+        /// read is not the cached project's.
+        let fileTrackCount: Int?
+        /// A bundle was read, but its path is not the cached project's path (or the cache holds no
+        /// path).
+        let projectFileNotBound: Bool
+    }
+
+    static func observe(cache: StateCache, fileReader: LogicProjectFileReader.Runtime) async -> Reading {
+        // The file first, then the cache, as the audit read them before #965 O3. The reader awaits
+        // Logic, so a cache read taken before that await can be older than the bundle it is compared
+        // with: a rail that grew during the read was compared at its old count, a false
+        // track_readback_gap (#1096 review round 1, R965-1). Read after, the cache is the newer of the
+        // two, and a project that changed in between fails the bundle-path binding instead of lending
+        // its count to another rail. `capture`'s boundaries still bracket both reads.
+        let metadata = await LogicProjectFileReader.read(runtime: fileReader)
+        let state = await cache.auditSnapshot()
+        let fileBound = metadata.map { sameBundle($0.bundlePath, cachedPath: state.project.filePath) }
+        return Reading(
+            state: state,
+            fileTrackCount: fileBound == true ? metadata?.trackCount : nil,
+            projectFileNotBound: fileBound == false
+        )
+    }
+
     /// Reads the cache once. No AX call, no navigation, no cache write.
     ///
     /// References are issued through the same two issuers `logic://tracks` and `logic://mixer` use,
@@ -189,7 +222,8 @@ enum SessionPopulationObservation {
     ) async -> Capture {
         let beganAt = now()
         let before = await cache.captureBoundary(watching: watchedSections)
-        let snapshot = await cache.auditSnapshot()
+        let observed = await observe(cache: cache, fileReader: fileReader)
+        let snapshot = observed.state
 
         let targetSnapshot: TargetRegistrySnapshot?
         if FeatureFlags.adr002TargetRef, let targetRegistry {
@@ -197,13 +231,6 @@ enum SessionPopulationObservation {
         } else {
             targetSnapshot = nil
         }
-
-        // The reader asks Logic for its front document on its own, so the bundle it reads need
-        // not be the project the cache holds. Its count is evidence about the captured project
-        // only when the two paths name the same bundle.
-        let metadata = await LogicProjectFileReader.read(runtime: fileReader)
-        let fileBound = metadata.map { sameBundle($0.bundlePath, cachedPath: snapshot.project.filePath) }
-        let fileTrackCount = fileBound == true ? metadata?.trackCount : nil
 
         // The registry accepted the reference because it names the registry's current project,
         // but an external switch moves the cache without touching the registry until some reader
@@ -260,8 +287,8 @@ enum SessionPopulationObservation {
             tracksFetchedAt: snapshot.tracksFetchedAt,
             channelStrips: snapshot.channelStrips,
             mixerFetchedAt: snapshot.mixerFetchedAt,
-            fileTrackCount: fileTrackCount,
-            projectFileNotBound: fileBound == false,
+            fileTrackCount: observed.fileTrackCount,
+            projectFileNotBound: observed.projectFileNotBound,
             requestedProjectMatches: requestedProjectMatches,
             referencesEnabled: targetSnapshot != nil,
             targetSnapshot: targetSnapshot,

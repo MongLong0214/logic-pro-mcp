@@ -320,14 +320,9 @@ actor StateCache {
     /// via `updateBlockingDialogButtons`, mirroring `getAXOccluded`/`updateAXOccluded`.
     func getBlockingDialogButtons() -> [String]? { blockingDialogButtons }
 
-    /// Atomic, single-hop read of every field the project audit consumes.
-    /// `buildAudit` previously assembled its snapshot from ~13 separate `await`
-    /// calls; each was individually actor-serialized but the sequence was not a
-    /// single critical section, so a concurrent poller/dispatcher write could
-    /// interleave and yield a torn snapshot (e.g. `regions` from a newer track
-    /// set than `tracks`). This method runs synchronously inside the actor, so
-    /// all returned fields belong to one consistent cache state.
-    func auditSnapshot() -> (
+    /// One `auditSnapshot()` reading. Named so the session observation that both the inspection and
+    /// the audit read through (`SessionPopulationObservation.observe`, #965 O3) can carry it.
+    typealias AuditState = (
         hasDocument: Bool,
         axOccluded: Bool,
         projectEpoch: UInt64,
@@ -345,7 +340,16 @@ actor StateCache {
         markersFetchedAt: Date,
         channelStrips: [ChannelStripState],
         mixerFetchedAt: Date
-    ) {
+    )
+
+    /// Atomic, single-hop read of every field the project audit consumes.
+    /// `buildAudit` previously assembled its snapshot from ~13 separate `await`
+    /// calls; each was individually actor-serialized but the sequence was not a
+    /// single critical section, so a concurrent poller/dispatcher write could
+    /// interleave and yield a torn snapshot (e.g. `regions` from a newer track
+    /// set than `tracks`). This method runs synchronously inside the actor, so
+    /// all returned fields belong to one consistent cache state.
+    func auditSnapshot() -> AuditState {
         (
             hasDocument: hasDocument,
             axOccluded: axOccluded,
