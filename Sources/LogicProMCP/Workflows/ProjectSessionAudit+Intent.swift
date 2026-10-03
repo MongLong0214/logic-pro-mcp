@@ -92,18 +92,29 @@ extension ProjectSessionAudit {
         let targets: [IntentTarget]
         let roles: [IntentRole]
         let outputs: [IntentOutput]
+        /// The approved receiving-aux intent per bus (#1090 review R3, R1090-004): an output
+        /// approves only the bus a track feeds, not what reads that bus. `.new` approves planning a
+        /// new aux that reads it; `.noReceiver` (wire `none`) says nothing is meant to read it (a sidechain-only bus).
+        let receivers: [Int: IntentReceiver]
 
         fileprivate init(
             projectRef: TargetReference?,
             targets: [IntentTarget],
             roles: [IntentRole],
-            outputs: [IntentOutput]
+            outputs: [IntentOutput],
+            receivers: [Int: IntentReceiver] = [:]
         ) {
             self.projectRef = projectRef
             self.targets = targets
             self.roles = roles
             self.outputs = outputs
+            self.receivers = receivers
         }
+    }
+
+    enum IntentReceiver: String, Equatable, Sendable {
+        case new
+        case noReceiver = "none"
     }
 
     enum IntentPolicyRejection: Equatable, Sendable {
@@ -122,6 +133,7 @@ extension ProjectSessionAudit {
         case unsupportedOutput(path: String, value: String)
         case conflictingOutputs(subject: String, outputs: [IntentMainOutput])
         case busBelowOne(path: String, value: Int)
+        case duplicateReceiver(bus: Int)
 
         /// The deterministic form the rejection list is sorted by.
         var sortKey: String {
@@ -156,6 +168,8 @@ extension ProjectSessionAudit {
                 return "conflicting_outputs \(subject) \(outputs.map(\.token))"
             case .busBelowOne(let path, let value):
                 return "bus_below_one \(path) \(value)"
+            case .duplicateReceiver(let bus):
+                return "duplicate_receiver bus \(bus)"
             }
         }
     }
@@ -355,7 +369,7 @@ extension ProjectSessionAudit {
         var rejections: [IntentPolicyRejection] = []
         rejectUnknownKeys(
             object,
-            allowed: ["schema", "project_ref", "targets", "roles", "outputs"],
+            allowed: ["schema", "project_ref", "targets", "roles", "outputs", "receivers"],
             path: "policy",
             into: &rejections
         )
@@ -379,6 +393,7 @@ extension ProjectSessionAudit {
         let targets = parseTargets(object, into: &rejections)
         let roles = parseRoles(object, into: &rejections)
         let outputs = parseOutputs(object, into: &rejections)
+        let receivers = parseReceivers(object, into: &rejections)
         validate(targets: targets, roles: roles, outputs: outputs, into: &rejections)
 
         guard rejections.isEmpty else {
@@ -392,8 +407,47 @@ extension ProjectSessionAudit {
             projectRef: projectRef.map(TargetReference.init(rawValue:)),
             targets: targets,
             roles: roles,
-            outputs: outputs
+            outputs: outputs,
+            receivers: receivers
         ))
+    }
+
+    /// Optional `receivers`: `[{"bus": n >= 1, "aux": "new" | "none"}]`, at most one per bus.
+    private static func parseReceivers(
+        _ object: [String: Value],
+        into rejections: inout [IntentPolicyRejection]
+    ) -> [Int: IntentReceiver] {
+        guard let raw = object["receivers"] else { return [:] }
+        guard let array = raw.arrayValue else {
+            rejections.append(.wrongType(path: "policy.receivers", expected: "array"))
+            return [:]
+        }
+        var receivers: [Int: IntentReceiver] = [:]
+        for (index, element) in array.enumerated() {
+            let path = "policy.receivers[\(index)]"
+            guard let entry = element.objectValue else {
+                rejections.append(.wrongType(path: path, expected: "object"))
+                continue
+            }
+            rejectUnknownKeys(entry, allowed: ["bus", "aux"], path: path, into: &rejections)
+            let bus = requiredInt(entry, key: "bus", path: path, into: &rejections)
+            let word = requiredString(entry, key: "aux", path: path, into: &rejections)
+            guard let bus, let word else { continue }
+            guard bus >= 1 else {
+                rejections.append(.busBelowOne(path: "\(path).bus", value: bus))
+                continue
+            }
+            guard let receiver = IntentReceiver(rawValue: word) else {
+                rejections.append(.unsupportedOutput(path: "\(path).aux", value: word))
+                continue
+            }
+            if receivers[bus] != nil {
+                rejections.append(.duplicateReceiver(bus: bus))
+                continue
+            }
+            receivers[bus] = receiver
+        }
+        return receivers
     }
 
     private static func parseTargets(

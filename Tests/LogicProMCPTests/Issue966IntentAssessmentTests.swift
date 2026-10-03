@@ -1583,18 +1583,21 @@ private func receiverGraph(receiver: Bool, snapshotId: String = baselineSnapshot
                  nodes: [trackNode(0), trackNode(1), drumBus, reverbBus, aux], edges: edges)
 }
 
-private func twoTargetPolicy() throws -> (Audit.IntentPolicy, Value) {
-    let object = policyObject(
+private func twoTargetPolicy(receiver: String? = nil) throws -> (Audit.IntentPolicy, Value) {
+    var object = policyObject(
         targets: [targetEntry("kick", "trk_0"), targetEntry("snare", "trk_1")],
         outputs: [targetOutput("kick", bus: 3), targetOutput("snare", bus: 3)]
     )
+    if let receiver {
+        object["receivers"] = .array([.object(["bus": .int(3), "aux": .string(receiver)])])
+    }
     let policy = try #require(accepted(Audit.parseIntentPolicy(object)))
     return (policy, .object(object))
 }
 
 private func receiverPlan(receiver: Bool, allow: Bool, snapshotId: String = baselineSnapshotId,
-                          projectEpoch: UInt64 = 3) throws -> [String: Any] {
-    let (policy, value) = try twoTargetPolicy()
+                          projectEpoch: UInt64 = 3, intent: String? = "new") throws -> [String: Any] {
+    let (policy, value) = try twoTargetPolicy(receiver: intent)
     var options = Audit.PlanningOptions()
     options.allowCreateAux = allow
     let plan = try Audit.buildCanonicalRepairPlan(
@@ -1700,5 +1703,46 @@ struct Issue966ReceivingAuxBoundGraphTests {
         }
         let reasons = try #require(body["reasons"] as? [String])
         #expect(reasons.contains("graph_epoch_mismatch"))
+    }
+
+    /// R1090-004: an output approves the bus, not what reads it. With no `receivers` entry an
+    /// absent receiver plans no aux and blocks no output; it asks. Mutation this kills: an aux
+    /// planned, or the output blocked, from absence alone.
+    @Test func anAbsentReceiverWithoutApprovedIntentAsksAndPlansNothing() throws {
+        let body = try receiverPlan(receiver: false, allow: true, intent: nil)
+        let steps = try planSteps(body)
+        let kinds = steps.compactMap { $0["kind"] as? String }
+        #expect(kinds == ["main_output", "main_output"])
+        for output in steps {
+            let blocked = try #require(output["blocked_reasons"] as? [String])
+            let mentionsReceiver = blocked.contains { $0.contains("receiv") || $0.contains("aux") }
+            #expect(!mentionsReceiver, "\(blocked)")
+        }
+        let questions = try #require(body["receiver_questions"] as? [[String: Any]])
+        #expect(questions.count == 1)
+        #expect(questions.first?["observed"] as? String == "no_receiver")
+        let reasons = try #require(body["reasons"] as? [String])
+        #expect(reasons.contains("receiver_intent_unresolved"))
+        let inventory = try #require(body["new_object_inventory"] as? [Any])
+        #expect(inventory.isEmpty)
+    }
+
+    /// Control for the question: a sidechain-only bus approved as `none` is answered, and an
+    /// absent receiver there is correct.
+    @Test func aBusApprovedWithNoReceiverIsSettled() throws {
+        let body = try receiverPlan(receiver: false, allow: true, intent: "none")
+        let questions = try #require(body["receiver_questions"] as? [Any])
+        #expect(questions.isEmpty)
+        let reasons = try #require(body["reasons"] as? [String])
+        #expect(!reasons.contains("receiver_intent_unresolved"))
+        let createsAux = try planSteps(body).contains { $0["kind"] as? String == "create_aux" }
+        #expect(!createsAux)
+    }
+
+    /// An observed receiver contradicting an approved `none` is asked about, not overridden.
+    @Test func anObservedReceiverAgainstApprovedNoneAsks() throws {
+        let body = try receiverPlan(receiver: true, allow: true, intent: "none")
+        let questions = try #require(body["receiver_questions"] as? [[String: Any]])
+        #expect(questions.first?["observed"] as? String == "receiver_present")
     }
 }

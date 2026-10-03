@@ -70,6 +70,70 @@ struct Issue966PlanningOptionsTests {
         #expect(Audit.receivingAux(bus: 4, graph: busGraph(edges: [receiverEdge], busToAux: .complete)) == .absent)
     }
 
+    /// R1090-003: a receiver must be attributable. Mutations these kill: an edge from a bus id
+    /// another node shares counted as present; an edge into nothing, or into a track, counted.
+    @Test func anUnattributableReceiverIsUnverified() {
+        let shared = RoutingNode(id: "aux_drum_bus", kind: .bus, displayName: "Bus 7", busNumber: 7, targetRef: nil)
+        let complete = RoutingDomainCoverage(state: .complete, reasons: [])
+        let partial = RoutingDomainCoverage(state: .partial, reasons: ["fixture"])
+        func graph(_ nodes: [RoutingNode], _ edges: [RoutingEdge], _ busToAux: RoutingDomainCoverage) -> RoutingGraph {
+            let coverage = RoutingCoverage(population: complete, stripTrackAssociation: complete, mainOutput: complete,
+                                           physicalOutput: complete, busToAuxInput: busToAux, sends: partial)
+            return RoutingGraph(projectReference: nil, projectEpoch: 1, complete: false, partialReason: "fixture",
+                                nodes: nodes, edges: edges, provenance: [.axMixerStrip], snapshotId: "fixture",
+                                coverage: coverage)
+        }
+        let bus3 = RoutingNode(id: "aux_drum_bus", kind: .bus, displayName: "Bus 3", busNumber: 3, targetRef: nil)
+        let aux = RoutingNode(id: "aux_1", kind: .aux, displayName: "Aux 1", busNumber: nil, targetRef: nil)
+        let track = RoutingNode(id: "trk_0", kind: .track, displayName: "Kick", busNumber: nil, targetRef: nil)
+        func edge(to destination: String) -> RoutingEdge {
+            RoutingEdge(kind: .inputAssignment, source: "aux_drum_bus", destination: destination, send: nil,
+                        provenance: .axMixerStrip)
+        }
+        let ambiguous = Audit.receivingAux(bus: 3, graph: graph([bus3, shared, aux], [edge(to: "aux_1")], partial))
+        #expect(ambiguous == .unverified)
+        let dangling = Audit.receivingAux(bus: 3, graph: graph([bus3, aux], [edge(to: "aux_gone")], complete))
+        #expect(dangling == .unverified)
+        let intoTrack = Audit.receivingAux(bus: 3, graph: graph([bus3, aux, track], [edge(to: "trk_0")], complete))
+        #expect(intoTrack == .unverified)
+        let twoBusThrees = RoutingNode(id: "bus_3_again", kind: .bus, displayName: "Bus 3", busNumber: 3, targetRef: nil)
+        let doubled = Audit.receivingAux(bus: 3, graph: graph([bus3, twoBusThrees, aux], [edge(to: "aux_1")], complete))
+        #expect(doubled == .unverified)
+        // Control: the same edge into an aux on a partial graph is a present receiver.
+        let valid = Audit.receivingAux(bus: 3, graph: graph([bus3, aux], [edge(to: "aux_1")], partial))
+        #expect(valid == .present)
+    }
+
+    /// The policy's `receivers` entries parse strictly. Mutation this kills: a duplicate bus or an
+    /// unknown aux word accepted.
+    @Test func receiverIntentParsesStrictly() {
+        func parse(_ receivers: Value) -> Audit.IntentPolicyParse {
+            Audit.parseIntentPolicy([
+                "schema": .string(Audit.intentPolicySchema), "targets": .array([]),
+                "receivers": receivers,
+            ])
+        }
+        guard case .accepted(let policy) = parse(.array([
+            .object(["bus": .int(3), "aux": .string("new")]), .object(["bus": .int(5), "aux": .string("none")]),
+        ])) else {
+            Issue.record("a valid receivers list was rejected")
+            return
+        }
+        #expect(policy.receivers == [3: .new, 5: .noReceiver])
+        for bad: Value in [
+            .array([.object(["bus": .int(3), "aux": .string("reuse")])]),
+            .array([.object(["bus": .int(3), "aux": .string("new")]), .object(["bus": .int(3), "aux": .string("none")])]),
+            .array([.object(["bus": .int(0), "aux": .string("new")])]),
+            .array([.object(["bus": .int(3)])]),
+            .object([:]),
+        ] {
+            guard case .rejected = parse(bad) else {
+                Issue.record("accepted \(bad)")
+                continue
+            }
+        }
+    }
+
     // MARK: - Through the dispatcher
 
     private func fixture() async throws -> (StateCache, TargetRegistry, String, String) {

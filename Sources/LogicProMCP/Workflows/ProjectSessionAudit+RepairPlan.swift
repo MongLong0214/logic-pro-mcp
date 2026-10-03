@@ -114,6 +114,19 @@ extension ProjectSessionAudit {
         var auxSteps: [Value] = []
         var inventory: [Value] = []
         var auxStepForBus: [Int: String] = [:]
+        // A question per bus whose receiver the policy does not settle, or settles against what
+        // was observed; each makes the plan non-executable and plans nothing for that receiver.
+        var receiverQuestions: [Int: Value] = [:]
+        func receiverQuestion(_ bus: Int, observed: String) {
+            receiverQuestions[bus] = .object([
+                "id": .string("receiver_bus_\(bus)"), "bus": .int(bus), "observed": .string(observed),
+                "answers": .array([
+                    .object(["receivers": .array([.object(["bus": .int(bus), "aux": .string("new")])])]),
+                    .object(["receivers": .array([.object(["bus": .int(bus), "aux": .string("none")])])]),
+                ])
+            ])
+            reasons.insert("receiver_intent_unresolved")
+        }
         var steps: [Value] = []
         var unchanged: [Value] = []
         var routingIDs: [String] = []
@@ -137,12 +150,21 @@ extension ProjectSessionAudit {
                 // A graph the binding rejected (another capture, another project, another registry
                 // epoch, inconsistent) is not evidence about this session's receivers, so neither
                 // presence nor absence is read from it (#1090 review R1090-001, R1090-002).
-                switch graphBound ? receivingAux(bus: bus, graph: graph) : .unverified {
-                case .present:
-                    break
-                case .unverified:
+                // What reads the bus is approved intent of its own (#1090 review R3, R1090-004):
+                // an output approves only the bus. Without a `receivers` entry for this bus an
+                // observed absence or presence is a question, never a planned aux; `none` makes an
+                // absent receiver correct (a sidechain-only bus) and `.new` approves planning one.
+                let intent = policy.receivers[bus]
+                switch (graphBound ? receivingAux(bus: bus, graph: graph) : .unverified, intent) {
+                case (.unverified, _):
                     blocked.insert("bus_receiver_unverified")
-                case .absent where options.allowCreateAux:
+                case (.present, nil), (.absent, .some(.noReceiver)):
+                    break
+                case (.absent, nil):
+                    receiverQuestion(bus, observed: "no_receiver")
+                case (.present, .some(_)):
+                    receiverQuestion(bus, observed: "receiver_present")
+                case (.absent, .some(.new)) where options.allowCreateAux:
                     let auxID = auxStepForBus[bus] ?? "create_aux_bus_\(bus)"
                     if auxStepForBus[bus] == nil {
                         auxStepForBus[bus] = auxID
@@ -165,7 +187,7 @@ extension ProjectSessionAudit {
                         ]))
                     }
                     dependencies.append(auxID)
-                case .absent:
+                case (.absent, .some(.new)):
                     blocked.insert("receiving_aux_missing")
                     blocked.insert("create_aux_not_allowed")
                 }
@@ -240,6 +262,7 @@ extension ProjectSessionAudit {
             "approved_policy": policyValue, "approved_names": .array(approvedNames),
             "steps": .array(steps), "preview": .array(steps),
             "unchanged_tasks": .array(unchanged), "questions": try repairPlanValue(assessment.questions),
+            "receiver_questions": .array(receiverQuestions.keys.sorted().compactMap { receiverQuestions[$0] }),
             "findings": try repairPlanValue(assessment.findings),
             "new_object_inventory": .array(inventory),
             "planning_options": options.wire,
@@ -263,9 +286,24 @@ extension ProjectSessionAudit {
 
     /// Whether bus `bus` feeds an aux input in `graph`. Absence is concluded only from a complete
     /// bus-to-aux reading; anything less is unverified, never absent (ADR-021 section 4).
+    ///
+    /// Each endpoint must be attributable (#1090 review R3, R1090-003): the bus must be one node
+    /// whose id no other node carries, and every input edge leaving it must end at exactly one
+    /// node that is an aux. An ambiguous bus, a dangling edge or an edge into anything but an aux
+    /// makes the answer unverified, whatever the coverage says.
     static func receivingAux(bus: Int, graph: RoutingGraph) -> ReceivingAux {
-        let busIDs = Set(graph.nodes.filter { $0.kind == .bus && $0.busNumber == bus }.map(\.id))
+        let nodesByID = Dictionary(grouping: graph.nodes, by: \.id)
+        let busNodes = graph.nodes.filter { $0.kind == .bus && $0.busNumber == bus }
+        guard busNodes.count <= 1, busNodes.allSatisfy({ nodesByID[$0.id]?.count == 1 }) else {
+            return .unverified
+        }
+        let busIDs = Set(busNodes.map(\.id))
         let receivers = graph.edges.filter { $0.kind == .inputAssignment && busIDs.contains($0.source) }
+        for edge in receivers {
+            guard let ends = nodesByID[edge.destination], ends.count == 1, ends[0].kind == .aux else {
+                return .unverified
+            }
+        }
         if !receivers.isEmpty { return .present }
         return graph.coverage.busToAuxInput.state == .complete ? .absent : .unverified
     }
