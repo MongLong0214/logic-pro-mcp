@@ -49,7 +49,6 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
         "edit.bounce_in_place":         37,
 
         // Piano roll / MIDI editing (CC 40-44)
-        "edit.quantize":                40,
         "edit.join":                    43,
         "edit.toggle_step_input":       44,
 

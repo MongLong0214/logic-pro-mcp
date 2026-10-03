@@ -229,7 +229,10 @@ extension ChannelRouter {
         "edit.select_all":            [.midiKeyCommands, .cgEvent],
         "edit.split":                 [.midiKeyCommands, .cgEvent],
         "edit.join":                  [.midiKeyCommands, .cgEvent],
-        "edit.quantize":              [.midiKeyCommands, .cgEvent],
+        // #1094: Accessibility alone. The Region inspector's value pop-up carries the grid and reads it
+        // back; Q and the MIDI key command apply whatever quantize value Logic already holds, so they
+        // are not routed (a rung that cannot carry the grid must not run).
+        "edit.quantize":              [.accessibility],
         "edit.bounce_in_place":       [.midiKeyCommands, .cgEvent],
         "edit.normalize":             [.midiKeyCommands, .cgEvent],
         "edit.toggle_step_input":     [.accessibility, .midiKeyCommands, .cgEvent],
