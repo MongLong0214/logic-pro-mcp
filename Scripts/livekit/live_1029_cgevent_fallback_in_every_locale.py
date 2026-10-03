@@ -355,10 +355,26 @@ def selected_track(ax):
 
 
 def setup_selected_track(driver, ax, extra):
-    """delete and duplicate are corroborated: they take the index and the name expected there."""
+    """delete and duplicate are corroborated: they take the index and the name expected there. A
+    name another track also has is refused as ambiguous_target_name (the fixture already holds a
+    Deluxe Classic track, the name a new instrument track gets), so the selected track is renamed
+    to a name no other track has first, through the rename command."""
     index, name = selected_track(ax)
     extra["selected_track"] = {"index": index, "name": name}
+    if index is not None:
+        unique = f"LPM1029 {index} {int(time.time()) % 100000}"
+        reply, _, _ = call(driver, ax, "logic_tracks", "rename", {"index": index, "name": unique})
+        extra["rename"] = A.reply_summary(reply)
+        time.sleep(0.5)
+        index, name = selected_track(ax)
+        extra["renamed_track"] = {"index": index, "name": name}
     extra["params"] = {"index": index, "expected_name": name}
+
+
+def setup_select_all(driver, ax, extra):
+    """Every region selected. Q quantized notes in the 2026-09-27 run after Command-A selected every
+    region; with one region selected through AXSelected it changed nothing (Korean pilot)."""
+    extra["setup_selected"] = select_regions(ax, lambda ax, items: items)
 
 
 def setup_select_one(driver, ax, extra):
@@ -440,13 +456,13 @@ OPS = [
     # past them, so a paste lands on its own.
     ("edit.select_all", "logic_edit", "select_all", {}, None, all_regions_selected, {"regions_selected"}, setup_select_one),
     ("edit.copy", "logic_edit", "copy", {}, None, nothing_visible, set(), setup_select_one),
-    ("edit.paste", "logic_edit", "paste", {}, None, regions_by(+1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}),
+    ("edit.paste", "logic_edit", "paste", {}, None, regions_by(+1), {"regions", "regions_selected", "undo_title", "structure", "sliders", "bar"}),
     ("edit.undo", "logic_edit", "undo", {}, None, regions_by(-1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}),
     ("edit.cut", "logic_edit", "cut", {}, None, regions_by(-1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_select_one),
     ("edit.undo", "logic_edit", "undo", {}, None, regions_by(+1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}),
     ("edit.split", "logic_edit", "split", {}, None, regions_by(+1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_split),
     ("edit.join", "logic_edit", "join", {}, None, regions_by(-1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_join),
-    ("edit.quantize", "logic_edit", "quantize", {"value": "1/16"}, "q", undo_title_changed, {"undo_title", "structure", "sliders"}, setup_select_one),
+    ("edit.quantize", "logic_edit", "quantize", {"value": "1/16"}, "q", undo_title_changed, {"undo_title", "regions_selected", "structure", "sliders"}, setup_select_all),
     ("edit.undo", "logic_edit", "undo", {}, None, undo_title_changed, {"undo_title", "structure", "sliders"}),
     ("edit.bounce_in_place", "logic_edit", "bounce_in_place", {}, None, window_appeared, {"windows", "structure", "sliders", "boxes:*"}, setup_select_one, post_cancel_dialog),
     ("transport.record", "logic_transport", "record", {}, "r", set_to("transportRecordControl", 1), {"boxes:transportRecordControl", "boxes:transportPlayControl", "boxes:transportMetronomeControl", "bar", "regions", "regions_selected", "undo_title", "structure", "sliders"}),
@@ -553,6 +569,10 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode):
         if before is not None and after is not None:
             row["function"] = bool(expect(before, after, extra))
             row["others_moved"] = others_kept(before, after, allowed)
+        elif op == "project.close" and before is not None:
+            # Nothing reads once the arrange window is gone; the post-step read whether it went.
+            row["function"] = bool(expect(before, {}, extra))
+            row["others_moved"] = []
         rows.append(row)
         print(json.dumps({"lproj": lproj, "mode": mode, "op": op, "function": row.get("function"),
                           "others_moved": row.get("others_moved"), "method": summary.get("method"),
