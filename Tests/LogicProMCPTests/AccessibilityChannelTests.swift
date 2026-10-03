@@ -5452,3 +5452,141 @@ func semanticOracleAcceptsTheControlBarToggleReceipt(operation: String, title: S
     )
     #expect(!forgedVerdict)
 }
+
+// MARK: - #1097: a target selected alongside another row is not a verified selection
+
+/// Two track headers, each with a name field, and a selection model: selecting a header through
+/// `AXSelectedChildren` on the rail or `AXPress` on the header marks it selected and, unless
+/// `additive`, every other header unselected. `additive` is what Logic did after the CGEvent rung's
+/// Option-Command-S (lpm-evidence/1029/probe-kc-ko.json): the selection was added to.
+private struct Issue1097Rail {
+    let builder: FakeAXRuntimeBuilder
+    let app: AXUIElement
+    let headers: [AXUIElement]
+    let nameFields: [AXUIElement]
+    let runtime: AXLogicProElements.Runtime
+
+    init(selected: [Bool?], additive: Bool) {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(9700)
+        let window = builder.element(9701)
+        let rail = builder.element(9702)
+        let headers = selected.indices.map { builder.element(9710 + $0) }
+        let nameFields = selected.indices.map { builder.element(9720 + $0) }
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setChildren(window, [rail])
+        builder.setAttribute(rail, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(rail, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setChildren(rail, headers)
+        for (offset, header) in headers.enumerated() {
+            builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            builder.setAttribute(header, kAXTitleAttribute as String, "Track \(offset + 1)")
+            if let state = selected[offset] {
+                builder.setAttribute(header, kAXSelectedAttribute as String, state)
+            }
+            builder.setChildren(header, [nameFields[offset]])
+            builder.setAttribute(nameFields[offset], kAXRoleAttribute as String, kAXStaticTextRole as String)
+            builder.setAttribute(nameFields[offset], kAXValueAttribute as String, "Track \(offset + 1)")
+        }
+        let select: @Sendable ([AXUIElement]) -> Void = { chosen in
+            for header in headers {
+                if chosen.contains(where: { CFEqual($0, header) }) {
+                    builder.setAttribute(header, kAXSelectedAttribute as String, true)
+                } else if !additive {
+                    builder.setAttribute(header, kAXSelectedAttribute as String, false)
+                }
+            }
+        }
+        self.builder = builder
+        self.app = app
+        self.headers = headers
+        self.nameFields = nameFields
+        self.runtime = builder.makeLogicRuntime(
+            appElement: app,
+            setAttributeHandler: { element, attribute, value in
+                if CFEqual(element, rail), attribute == kAXSelectedChildrenAttribute as String {
+                    select(((value as? NSArray) as? [AnyObject] ?? []).map { $0 as! AXUIElement })
+                    return true
+                }
+                builder.setAttribute(element, attribute, value)
+                return true
+            },
+            performActionHandler: { element, action in
+                if action == kAXPressAction as String, headers.contains(where: { CFEqual($0, element) }) {
+                    select([element])
+                }
+                return true
+            }
+        )
+    }
+
+    func selected() -> [Bool?] {
+        headers.map { (builder.attributeValue($0, kAXSelectedAttribute as String) as? NSNumber)?.boolValue }
+    }
+
+    func name(_ index: Int) -> String? {
+        builder.attributeValue(nameFields[index], kAXValueAttribute as String) as? String
+    }
+}
+
+@Test func issue1097VerificationRequiresTheTargetAlone() async {
+    let together = Issue1097Rail(selected: [true, true], additive: true)
+    let both = await AccessibilityChannel.verifyTrackSelection(index: 0, runtime: together.runtime)
+    let bothRefused = both == .notExclusive(alsoSelected: [1], unreadable: [])
+    #expect(bothRefused, "\(both)")
+
+    let unread = Issue1097Rail(selected: [true, nil], additive: true)
+    let unknown = await AccessibilityChannel.verifyTrackSelection(index: 0, runtime: unread.runtime)
+    let unknownRefused = unknown == .notExclusive(alsoSelected: [], unreadable: [1])
+    #expect(unknownRefused, "\(unknown)")
+
+    let alone = Issue1097Rail(selected: [true, false], additive: true)
+    let verified = await AccessibilityChannel.verifyTrackSelection(index: 0, runtime: alone.runtime)
+    let aloneVerified = verified == .verified
+    #expect(aloneVerified, "\(verified)")
+}
+
+@Test func issue1097SelectAddedToAnotherRowIsNotStateA() async {
+    let rail = Issue1097Rail(selected: [false, true], additive: true)
+    let channel = makeAXBackedAccessibilityChannel(builder: rail.builder, app: rail.app, logicRuntime: rail.runtime)
+    let result = await channel.execute(operation: "track.select", params: ["index": "0"])
+    let states = rail.selected()
+    let added = states == [true, true]
+    #expect(added, "the fixture's additive selection did not happen: \(states)")
+    #expect(!result.message.contains("\"verified\":true"), "\(result.message)")
+    #expect(result.message.contains("\"also_selected\":[1]"), "\(result.message)")
+}
+
+@Test func issue1097SelectThatReplacesTheSelectionIsStateA() async {
+    let rail = Issue1097Rail(selected: [false, true], additive: false)
+    let channel = makeAXBackedAccessibilityChannel(builder: rail.builder, app: rail.app, logicRuntime: rail.runtime)
+    let result = await channel.execute(operation: "track.select", params: ["index": "0"])
+    let replaced = rail.selected() == [true, false]
+    #expect(replaced, "\(rail.selected())")
+    #expect(result.message.contains("\"verified\":true"), "\(result.message)")
+}
+
+@Test func issue1097RenameWritesNothingWhileAnotherTrackStaysSelected() async {
+    let rail = Issue1097Rail(selected: [true, true], additive: true)
+    let channel = makeAXBackedAccessibilityChannel(builder: rail.builder, app: rail.app, logicRuntime: rail.runtime)
+    let result = await channel.execute(operation: "track.rename", params: ["index": "0", "name": "Lead"])
+    #expect(!result.isSuccess, "\(result.message)")
+    #expect(result.message.contains("selection_not_exclusive"), "\(result.message)")
+    let untouched = rail.name(0) == "Track 1"
+    #expect(untouched, "the name field was written: \(String(describing: rail.name(0)))")
+    let confirmed = rail.builder.actionCalls.contains {
+        $0.elementID == rail.builder.elementID(rail.nameFields[0]) && $0.action == kAXConfirmAction as String
+    }
+    #expect(!confirmed)
+}
+
+@Test func issue1097RenameSelectsTheTargetAloneBeforeWriting() async {
+    let rail = Issue1097Rail(selected: [true, true], additive: false)
+    let channel = makeAXBackedAccessibilityChannel(builder: rail.builder, app: rail.app, logicRuntime: rail.runtime)
+    let result = await channel.execute(operation: "track.rename", params: ["index": "0", "name": "Lead"])
+    #expect(result.isSuccess, "\(result.message)")
+    let alone = rail.selected() == [true, false]
+    #expect(alone, "\(rail.selected())")
+    let renamed = rail.name(0) == "Lead"
+    #expect(renamed, "\(String(describing: rail.name(0)))")
+}

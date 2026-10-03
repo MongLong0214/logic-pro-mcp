@@ -774,6 +774,23 @@ extension AccessibilityChannel {
                         "target_track_selection_verify_source": "ax_selected"
                     ]) { _, new in new }
                 ))
+            case .notExclusive(let alsoSelected, let unreadable):
+                // #1097: a patch loaded with other tracks selected is not bound to this track alone.
+                return .error(HonestContract.encodeStateC(
+                    error: .trackSelectionFailed,
+                    hint: "Track \(index) was not the only selected track before instrument load "
+                        + "(also selected: \(alsoSelected); selection unreadable: \(unreadable))",
+                    extras: selectionBase.merging([
+                        "observed": NSNull(),
+                        "observed_patch_name": NSNull(),
+                        "target_track_selection_verified": false,
+                        "target_track_selection_reason": HonestContract.UncertainReason.readbackMismatch.rawValue,
+                        "target_track_selection_observed_index": index,
+                        "target_track_selection_also_selected": alsoSelected,
+                        "target_track_selection_unreadable": unreadable,
+                        "target_track_selection_verify_source": "ax_selected"
+                    ]) { _, new in new }
+                ))
             case .trackDisappeared:
                 return .error(HonestContract.encodeStateC(
                     error: .elementNotFound,
