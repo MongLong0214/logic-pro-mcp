@@ -135,6 +135,25 @@ def focus_tracks(ax):
 
 
 
+def focus_content(ax):
+    """As `focus_tracks`, but give the key focus to the track-content area (canon
+    `trackContentExplicit` / `trackContentGeneric`): region edits act on the area holding the key
+    focus, and with the header rail focused Command-A, C, V and X changed no region (Korean pilot,
+    2026-10-03)."""
+    window = arrange_window(ax)
+    if window is None:
+        return {"window": False}
+    raised = ax.perform(window, "AXRaise")
+    main = ax.set(window, "AXMain", True)
+    content = next((e for e, _ in ax.walk(window, 7)
+                    if ax.value(e, "AXRole") == "AXGroup"
+                    and (matches(ax.value(e, "AXDescription"), "trackContentExplicit")
+                         or matches(ax.value(e, "AXDescription"), "trackContentGeneric"))), None)
+    focused = ax.set(content, "AXFocused", True) if content is not None else None
+    time.sleep(0.3)
+    return {"window": True, "raised": raised, "main": main, "content": content is not None, "focused": focused}
+
+
 def plain_bindings():
     """The characters Logic's current key command set binds with no modifier, read from its
     preferences (`KeyCommands`: command id -> CharCode, Modifier), or None when they did not read.

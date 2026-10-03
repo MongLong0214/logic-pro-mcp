@@ -291,6 +291,17 @@ def unnamed_box_on(before, after, extra):
     return len(on) == 1
 
 
+def unnamed_box_off(before, after, extra):
+    named = {box_named(before, k)[0] for k in ("transportCycleControl", "transportMetronomeControl",
+                                               "libraryPanelLabel", "mixerNamedElement",
+                                               "transportRecordControl", "transportPlayControl")
+             if box_named(before, k) is not None}
+    b, a = before.get("boxes") or {}, after.get("boxes") or {}
+    off = [d for d, v in a.items() if d not in named and v == 0 and b.get(d) == 1]
+    extra["turned_off"] = off
+    return len(off) == 1
+
+
 def playhead_advancing(before, after, extra):
     """The bar read twice, 2.5 s apart, after the op: at the fixture's tempo the playhead moves."""
     return extra.get("bar_later") is not None and after.get("bar") is not None \
@@ -329,6 +340,25 @@ def first_row(ax, items):
         return []
     top = (ax.frame(items[0]) or (0, None))[1]
     return [item for item in items if (ax.frame(item) or (0, None))[1] == top]
+
+
+def selected_track(ax):
+    """(index, name) of the one selected track header, the name read from the quoted part of its
+    description; (None, None) when not exactly one is selected."""
+    rows = A.track_header_rows(ax) or []
+    chosen = [(i, row) for i, row in enumerate(rows) if ax.value(row, "AXSelected") is True]
+    if len(chosen) != 1:
+        return None, None
+    index, row = chosen[0]
+    found = re.search(r"[\u2018'\u201c\"](.+?)[\u2019'\u201d\"]", ax.value(row, "AXDescription") or "")
+    return index, (found.group(1) if found else None)
+
+
+def setup_selected_track(driver, ax, extra):
+    """delete and duplicate are corroborated: they take the index and the name expected there."""
+    index, name = selected_track(ax)
+    extra["selected_track"] = {"index": index, "name": name}
+    extra["params"] = {"index": index, "expected_name": name}
 
 
 def setup_select_one(driver, ax, extra):
@@ -381,7 +411,8 @@ OPS = [
     # Transport. Play and stop leave the playhead where it stops; the bar is allowed to move.
     ("transport.play", "logic_transport", "play", {}, None, set_to("transportPlayControl", 1), {"boxes:transportPlayControl", "bar"}),
     ("transport.pause", "logic_transport", "pause", {}, None, playhead_held, {"boxes:transportPlayControl", "bar"}),
-    ("transport.resume", "logic_transport", "resume", {}, None, playhead_advancing, {"boxes:transportPlayControl", "bar"}),
+    # Resume is reached through play while paused: the play command sends Logic's Play key then.
+    ("transport.resume", "logic_transport", "play", {}, None, playhead_advancing, {"boxes:transportPlayControl", "bar"}),
     ("transport.stop", "logic_transport", "stop", {}, None, set_to("transportPlayControl", 0), {"boxes:transportPlayControl", "bar"}),
     ("transport.goto_position", "logic_transport", "goto_position", {"bar": BAR_GOTO}, None, bar_is(BAR_GOTO), {"bar"}),
     ("transport.rewind", "logic_transport", "rewind", {}, None, bar_moved(-1), {"bar"}),
@@ -399,8 +430,12 @@ OPS = [
     ("view.toggle_library", "logic_navigate", "toggle_view", {"view": "library"}, "y", toggled("libraryPanelLabel"), {"boxes:libraryPanelLabel", "structure", "sliders"}),
     ("view.toggle_mixer", "logic_navigate", "toggle_view", {"view": "mixer"}, "x", toggled("mixerNamedElement"), {"boxes:mixerNamedElement", "structure", "sliders"}),
     ("view.toggle_mixer", "logic_navigate", "toggle_view", {"view": "mixer"}, "x", toggled("mixerNamedElement"), {"boxes:mixerNamedElement", "structure", "sliders"}),
+    # The score editor and the piano roll share the editors checkbox, so each is closed before the
+    # other opens: with the score editor open, P switches the editor and turns no checkbox on.
     ("view.toggle_score_editor", "logic_navigate", "toggle_view", {"view": "score"}, "n", unnamed_box_on, {"boxes:*", "structure", "sliders"}),
+    ("view.toggle_score_editor", "logic_navigate", "toggle_view", {"view": "score"}, "n", unnamed_box_off, {"boxes:*", "structure", "sliders"}),
     ("view.toggle_piano_roll", "logic_navigate", "toggle_view", {"view": "piano_roll"}, "p", unnamed_box_on, {"boxes:*", "structure", "sliders"}),
+    ("view.toggle_piano_roll", "logic_navigate", "toggle_view", {"view": "piano_roll"}, "p", unnamed_box_off, {"boxes:*", "structure", "sliders"}),
     # Regions. Each fixture track holds one MIDI region from bar 1 to bar 2, and the playhead sits
     # past them, so a paste lands on its own.
     ("edit.select_all", "logic_edit", "select_all", {}, None, all_regions_selected, {"regions_selected"}, setup_select_one),
@@ -414,20 +449,20 @@ OPS = [
     ("edit.quantize", "logic_edit", "quantize", {"value": "1/16"}, "q", undo_title_changed, {"undo_title", "structure", "sliders"}, setup_select_one),
     ("edit.undo", "logic_edit", "undo", {}, None, undo_title_changed, {"undo_title", "structure", "sliders"}),
     ("edit.bounce_in_place", "logic_edit", "bounce_in_place", {}, None, window_appeared, {"windows", "structure", "sliders", "boxes:*"}, setup_select_one, post_cancel_dialog),
-    ("transport.record", "logic_transport", "record", {}, "r", set_to("transportRecordControl", 1), {"boxes:transportRecordControl", "bar", "regions", "regions_selected", "undo_title", "structure", "sliders"}),
-    ("transport.stop", "logic_transport", "stop", {}, None, set_to("transportRecordControl", 0), {"boxes:transportRecordControl", "boxes:transportPlayControl", "bar", "regions", "regions_selected", "undo_title", "structure", "sliders"}),
+    ("transport.record", "logic_transport", "record", {}, "r", set_to("transportRecordControl", 1), {"boxes:transportRecordControl", "boxes:transportPlayControl", "boxes:transportMetronomeControl", "bar", "regions", "regions_selected", "undo_title", "structure", "sliders"}),
+    ("transport.stop", "logic_transport", "stop", {}, None, set_to("transportRecordControl", 0), {"boxes:transportRecordControl", "boxes:transportPlayControl", "boxes:transportMetronomeControl", "bar", "regions", "regions_selected", "undo_title", "structure", "sliders"}),
     # Tracks: create, undo, redo, delete; the other creators each followed by a delete.
-    ("track.create_audio", "logic_track", "create_audio", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
+    ("track.create_audio", "logic_tracks", "create_audio", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
     ("edit.undo", "logic_edit", "undo", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
     ("edit.redo", "logic_edit", "redo", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
-    ("track.delete", "logic_track", "delete", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
-    ("track.create_instrument", "logic_track", "create_instrument", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}),
-    ("track.delete", "logic_track", "delete", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}),
-    ("track.duplicate", "logic_track", "duplicate", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
-    ("track.delete", "logic_track", "delete", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
+    ("track.delete", "logic_tracks", "delete", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
+    ("track.create_instrument", "logic_tracks", "create_instrument", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}),
+    ("track.delete", "logic_tracks", "delete", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}, setup_selected_track),
+    ("track.duplicate", "logic_tracks", "duplicate", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
+    ("track.delete", "logic_tracks", "delete", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
     # The project: save, then close. Close is last, since nothing reads after it.
     ("project.save", "logic_project", "save", {}, None, saved, {"windows", "undo_title"}, setup_mtime, post_mtime),
-    ("project.close", "logic_project", "close", {}, None, project_closed, {"windows", "boxes:*", "tracks", "bar", "structure", "sliders", "regions", "regions_selected", "undo_title"}, None, post_closed),
+    ("project.close", "logic_project", "close", {"confirmed": True, "saving": "no"}, None, project_closed, {"windows", "boxes:*", "tracks", "bar", "structure", "sliders", "regions", "regions_selected", "undo_title"}, None, post_closed),
 ]
 
 
@@ -447,9 +482,13 @@ def others_kept(before, after, allowed):
     return moved
 
 
-def call(driver, ax, tool, command, params):
+REGION_OPS = ("edit.select_all", "edit.copy", "edit.paste", "edit.cut", "edit.split", "edit.join",
+              "edit.quantize", "edit.bounce_in_place")
+
+
+def call(driver, ax, tool, command, params, content=False):
     A.activate_logic()
-    focus = A.focus_tracks(ax)
+    focus = A.focus_content(ax) if content else A.focus_tracks(ax)
     started = time.monotonic()
     reply = driver.tool(tool, command, params)
     seconds = round(time.monotonic() - started, 2)
@@ -487,7 +526,8 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode):
         first_shot = box_shot(ev, ax, "transportPlayControl", f"1029/{lproj}/play-before") \
             if op == "transport.play" else None
         before = snapshot(ax)
-        reply, seconds, focus = call(driver, ax, tool, command, params)
+        reply, seconds, focus = call(driver, ax, tool, command, extra.get("params", params),
+                                     content=op in REGION_OPS)
         after = snapshot(ax)
         if first_shot is not None:
             second = box_shot(ev, ax, "transportPlayControl", f"1029/{lproj}/play-after", first_shot["region"])
