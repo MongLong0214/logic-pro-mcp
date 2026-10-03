@@ -1,10 +1,10 @@
 {
  "name": "live_965_audit_reads_the_inspections_observation",
- "head": "70132bccce5c310b99f3b76fa65a6b4228b4aad0",
+ "head": "995b8babc34ce3e3dc5f1cb45365ca89359887a2",
  "artifact": {
-  "path": "/Users/isaac/lpm-evidence/965/bin-70132bcc/LogicProMCP",
-  "sha256": "231bb482524cb83972e82815da8d7904d523b1efd37b004f6f321266ae19784d",
-  "built_from": "70132bccce5c310b99f3b76fa65a6b4228b4aad0",
+  "path": "/Users/isaac/lpm-evidence/965/bin-995b8bab/LogicProMCP",
+  "sha256": "04b4b700e8b2ea4276140342bd16615e0a7e3b337203b59e123dcf30732e079c",
+  "built_from": "995b8babc34ce3e3dc5f1cb45365ca89359887a2",
   "worktree_clean": true,
   "built_from_is_measured": false,
   "artifact_older_than_sources": false
@@ -18,8 +18,8 @@
    "kind": "observation",
    "tag": "965/binary",
    "payload": {
-    "binary": "/Users/isaac/lpm-evidence/965/bin-70132bcc/LogicProMCP",
-    "sha256": "231bb482524cb83972e82815da8d7904d523b1efd37b004f6f321266ae19784d"
+    "binary": "/Users/isaac/lpm-evidence/965/bin-995b8bab/LogicProMCP",
+    "sha256": "04b4b700e8b2ea4276140342bd16615e0a7e3b337203b59e123dcf30732e079c"
    }
   },
   {
@@ -89,9 +89,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -167,9 +167,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -245,9 +245,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -323,9 +323,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -401,9 +401,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -479,9 +479,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -557,9 +557,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -635,9 +635,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -713,9 +713,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -774,24 +774,6 @@
   {
    "kind": "operation",
    "tool": "logic_project",
-   "command": "inspect_session",
-   "params": {
-    "domains": [
-     "tracks"
-    ]
-   },
-   "response": {
-    "state": null,
-    "success": null,
-    "error": null,
-    "hint": null,
-    "verified": null,
-    "write_attempted": null
-   }
-  },
-  {
-   "kind": "operation",
-   "tool": "logic_project",
    "command": "audit",
    "params": {},
    "response": {
@@ -809,9 +791,9 @@
    "passed": true,
    "expected": "the audit's gap finding matches the inspection's file-bound count",
    "observed": {
-    "observation": "{'inspection_attempts': 2, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "observation": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 42, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "accepted_the_observation": true,
-    "counterexample": "{'inspection_attempts': 2, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-classic_2_3_4_5_6_7_8_9_10',",
+    "counterexample": "{'inspection_attempts': 1, 'inspection_expected_count': 42, 'inspection_expected_count_source': 'project_file', 'inspection_rows': 19, 'inspection_reasons': ['collapsed_track_stack', 'track_readback_gap'], 'inspection_names_the_gap': True, 'audit_answered': True, 'audit_gap_findings': 1, 'audit_gap_file_count': 47, 'audit_status': 'degraded', 'audit_finding_ids': ['duplicate_track_names_deluxe-cla",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -850,6 +832,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [
@@ -873,6 +856,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [
@@ -896,6 +880,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [
@@ -919,6 +904,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [
@@ -942,6 +928,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [
@@ -965,6 +952,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [
@@ -988,6 +976,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [
@@ -1011,6 +1000,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [
@@ -1034,6 +1024,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [
@@ -1047,7 +1038,7 @@
      "lproj": "zh_CN"
     },
     {
-     "inspection_attempts": 2,
+     "inspection_attempts": 1,
      "inspection_expected_count": 42,
      "inspection_expected_count_source": "project_file",
      "inspection_rows": 19,
@@ -1057,6 +1048,7 @@
      ],
      "inspection_names_the_gap": true,
      "audit_answered": true,
+     "audit_gap_findings": 1,
      "audit_gap_file_count": 42,
      "audit_status": "degraded",
      "audit_finding_ids": [

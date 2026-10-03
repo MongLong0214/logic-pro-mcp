@@ -30,7 +30,7 @@
   "evidence": [
     "evidence/2026-10-03-965-audit-reads-the-inspections-observation.json"
   ],
-  "method": "One run of Scripts/livekit/live_965_audit_reads_the_inspections_observation.py at 70132bccce5c310b99f3b76fa65a6b4228b4aad0 drove a debug build of that head (sha256 231bb482524cb83972e82815da8d7904d523b1efd37b004f6f321266ae19784d). For each language Logic was quit, its AppleLanguages set, and the lpm-locale-campaign fixture reopened; one server refreshed its cache, then logic_project inspect_session (domains tracks) was read, again up to three times while its reasons said the cache moved during the capture, and logic_project audit right after. A row passes when the audit answered (a status and a findings list, not State C), the inspection names an expected count, and the audit's track_readback_gap finding is present exactly when the inspection's tracks reasons carry it, with the same file count. Each row's check was also run against the same row with the audit counting five more tracks, which it must reject.",
+  "method": "One run of Scripts/livekit/live_965_audit_reads_the_inspections_observation.py at 995b8babc34ce3e3dc5f1cb45365ca89359887a2 drove a debug build of that head (sha256 04b4b700e8b2ea4276140342bd16615e0a7e3b337203b59e123dcf30732e079c). For each language Logic was quit, its AppleLanguages set, and the lpm-locale-campaign fixture reopened; one server refreshed its cache, then logic_project inspect_session (domains tracks) was read, again up to three times while its reasons said the cache moved during the capture, and logic_project audit right after. A row passes when the audit answered (a status and a findings list, not State C), the inspection names an expected count, and the audit raised exactly one track_readback_gap finding, stating that count, when the inspection's reasons name the gap, and none when they do not; that is, the finding is present exactly when the inspection's tracks reasons carry it, with the same file count. Each row's check was also run against the same row with the audit counting five more tracks, which it must reject.",
   "observations": [
     {
       "checks": 10,
@@ -211,7 +211,7 @@
         },
         {
           "locale": "zh-TW",
-          "inspection_attempts": 2,
+          "inspection_attempts": 1,
           "inspection_expected_count": 42,
           "inspection_rows": 19,
           "inspection_reasons": [
