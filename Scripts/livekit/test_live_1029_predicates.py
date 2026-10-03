@@ -143,8 +143,9 @@ class EditorKindFromTheTabBar(unittest.TestCase):
 
     def kind(self, *tabs):
         window = object()
-        elements = [(window, 0)] + [({"AXRole": role, "AXTitle": title, "AXValue": value}, 3)
-                                    for role, title, value in tabs]
+        # The tabs carry their label in AXDescription and no AXTitle, as probe-tabs-ko.json read them.
+        elements = [(window, 0)] + [({"AXRole": role, "AXDescription": label, "AXValue": value}, 3)
+                                    for role, label, value in tabs]
 
         class FakeAX:
             def walk(self, element, depth):
@@ -164,6 +165,21 @@ class EditorKindFromTheTabBar(unittest.TestCase):
         self.assertIsNone(self.kind())
         self.assertIsNone(self.kind(("AXRadioButton", self.piano, 0), ("AXRadioButton", self.score, 0)))
         self.assertIsNone(self.kind(("AXRadioButton", self.piano, 1), ("AXRadioButton", self.score, 1)))
+
+    def test_the_label_is_read_from_the_description(self):
+        window = object()
+        titled = [(window, 0), ({"AXRole": "AXRadioButton", "AXTitle": self.piano, "AXValue": 1}, 3),
+                  ({"AXRole": "AXRadioButton", "AXTitle": self.score, "AXValue": 0}, 3)]
+
+        class TitledAX:
+            def walk(self, element, depth):
+                return iter(titled)
+
+            def value(self, element, name):
+                return element.get(name) if isinstance(element, dict) else None
+
+        with mock.patch.object(H.A, "arrange_window", return_value=window):
+            self.assertIsNone(H.editor_kind(TitledAX()), "a title is not where Logic puts the tab's label")
 
     def test_a_lone_tab_or_another_role_is_not_the_tab_bar(self):
         self.assertIsNone(self.kind(("AXRadioButton", self.piano, 1)), "one tab is not the editors' tab bar")

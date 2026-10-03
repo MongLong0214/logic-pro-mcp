@@ -267,9 +267,9 @@ BARE_UNDO_KEYS = ("Undo", "Can\u2019t Undo")
 #: The default name of a new audio track is this word and a number ("Audio 2"); an instrument
 #: track takes its patch's name (measured in Korean, 2026-10-03, explore-identity-ko.json).
 AUDIO_TRACK_KEY = "Audio"
-#: The Editors area's tab labels. While an editor shows, both tabs are AXRadioButtons titled with these
-#: and the showing one reads 1; with the editors closed neither exists (Korean, 2026-10-03,
-#: lpm-evidence/1029/probe-tabs-ko.json).
+#: The Editors area's tab labels. While an editor shows, both tabs are AXRadioButtons whose
+#: AXDescription is one of these (their AXTitle is empty), and the showing one reads 1; with the editors
+#: closed neither exists (Korean, 2026-10-03, lpm-evidence/1029/probe-tabs-ko.json, field `attr`).
 EDITOR_TAB_KEYS = {"piano_roll": "StrTabBtnLabel|||Piano Roll", "score": "StrTabBtnLabel|||Score"}
 UNDO_UNIT_MARK = "Logic.framework"
 #: {key: {locale: value}} read from the installed Logic once per run; `CANON_LOCALE` names the
@@ -342,7 +342,7 @@ def editor_kind(ax):
     for element, _ in ax.walk(window, 8):
         if ax.value(element, "AXRole") != "AXRadioButton":
             continue
-        kind = labels.get(ax.value(element, "AXTitle"))
+        kind = labels.get(ax.value(element, "AXDescription"))
         if kind is None:
             continue
         seen.add(kind)
