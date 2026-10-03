@@ -163,9 +163,34 @@ private func stateCObject(_ result: ChannelResult) -> [String: Any]? {
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
 }
 
+@Test func aStepWithoutPostingAuthorizationIsRefusedEvenWithLogicInFront() async throws {
+    // The original failure (#1095 review round 1, R1092-01): Logic owns the keyboard, posting is not
+    // authorized, and the key went out to be discarded with a State B success. Mutation killed: the
+    // check removed from the keystroke path (the key is posted and the reply is a success).
+    for step in steps {
+        let recorder = CGEventRecorder()
+        let channel = CGEventChannel(runtime: CGEventChannel.Runtime(
+            isLogicProRunning: { true },
+            logicProPID: { 42 },
+            postKeyEvent: { keyCode, flags, pid in recorder.post(keyCode: keyCode, flags: flags, pid: pid) },
+            sleepMicros: { _ in },
+            isLogicFrontmost: { true },
+            canPostEvents: { false }
+        ))
+
+        let result = await channel.execute(operation: step.operation, params: [:])
+
+        #expect(!result.isSuccess, "\(step.operation): \(result.message)")
+        let object = try #require(stateCObject(result), "\(step.operation): \(result.message)")
+        #expect(object["error"] as? String == "permission_denied", "\(step.operation)")
+        #expect(recorder.postedEvents.isEmpty, "\(step.operation)")
+    }
+}
+
 @Test func aStepWithoutPostingAuthorizationIsRefusedAndWalksOntoNoShuttle() async throws {
-    // Mutation killed: the check removed from the keystroke path (the key is posted, Logic is
-    // activated, and the reply is a State B success).
+    // With Logic not in front as well: the refusal comes before Logic is brought forward, and no rung
+    // after CGEvent runs. Mutation killed: the check removed from the keystroke path (Logic is
+    // activated and the frontmost refusal answers instead of permission_denied).
     for step in steps {
         let recorder = CGEventRecorder()
         let activations = Activations()
@@ -187,15 +212,21 @@ private func stateCObject(_ result: ChannelResult) -> [String: Any]? {
 }
 
 @Test func goToPositionWithoutPostingAuthorizationTypesNothing() async throws {
-    // The goto sequence asks too. Mutation killed: the check removed from the goto path.
+    // The goto sequence asks too, with Logic in front, so only the authorization check stands between
+    // the call and the opener. Mutation killed: the check removed from the goto path (the opener is
+    // posted).
     let recorder = CGEventRecorder()
-    let activations = Activations()
-    let result = await unauthorizedChannel(recorder, activations)
-        .execute(operation: "transport.goto_position", params: ["position": "9.1.1.1"])
+    let result = await CGEventChannel(runtime: CGEventChannel.Runtime(
+        isLogicProRunning: { true },
+        logicProPID: { 42 },
+        postKeyEvent: { keyCode, flags, pid in recorder.post(keyCode: keyCode, flags: flags, pid: pid) },
+        sleepMicros: { _ in },
+        isLogicFrontmost: { true },
+        canPostEvents: { false }
+    )).execute(operation: "transport.goto_position", params: ["position": "9.1.1.1"])
 
     #expect(!result.isSuccess, "\(result.message)")
     let object = try #require(stateCObject(result), "\(result.message)")
     #expect(object["error"] as? String == "permission_denied")
     #expect(recorder.postedEvents.isEmpty)
-    #expect(activations.total == 0)
 }

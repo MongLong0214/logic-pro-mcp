@@ -193,6 +193,20 @@ def trial(driver, ax, title, command, direction):
             "trace_id": trace_id, "answered_by": ran}
 
 
+def embedded_commit(binary):
+    """The commit the build embedded in the Mach-O section __TEXT,__lpm_commit, or None when the binary
+    carries none. Read from the artifact itself, it ties the measured binary to its source commit
+    (#1095 review round 2: built_from was the worktree's head at writing time, not a measurement)."""
+    out = subprocess.run(["/usr/bin/otool", "-X", "-s", "__TEXT", "__lpm_commit", binary],
+                         capture_output=True, text=True).stdout
+    hexed = "".join(word for line in out.splitlines() for word in line.split()[1:])
+    try:
+        text = bytes.fromhex(hexed).decode("ascii")
+    except ValueError:
+        return None
+    return text if len(text) == 40 else None
+
+
 def sha256_of(path):
     with open(path, "rb") as handle:
         return hashlib.sha256(handle.read()).hexdigest()
@@ -210,7 +224,8 @@ def main():
     if os.environ.get("LOGIC_MCP_DEBUG_ONLY_CHANNEL"):
         sys.exit("LOGIC_MCP_DEBUG_ONLY_CHANNEL is set; this run measures the production route")
     ev = E.Evidence(args.head, os.environ["LPM_EVIDENCE_ROOT"], surface="ui")
-    ev.note("1092/binary", {"binary": args.binary, "sha256": sha256_of(args.binary)})
+    ev.note("1092/binary", {"binary": args.binary, "sha256": sha256_of(args.binary),
+                            "embedded_commit": embedded_commit(args.binary)})
     ax = AX()
     rows, failures = [], []
     try:
