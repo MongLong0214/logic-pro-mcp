@@ -55,14 +55,15 @@ import Testing
     }
 
     /// For every registered operation, under strict validation on and off, the branch titled with
-    /// its command admits a parameter exactly when the runtime gate does: each allowed parameter,
-    /// and an unknown one. Mutations this kills: branches always closed (opt-outs and strict-off
+    /// its command admits a parameter KEY exactly when the generic strict-parameter gate does: each
+    /// allowed parameter, and an unknown one. This is agreement on key sets only; values, types and
+    /// required keys are the dispatchers' and are not in the registry (see the goto_position case). Mutations this kills: branches always closed (opt-outs and strict-off
     /// refused by the schema but admitted by the server), always open (an unknown parameter admitted
     /// by the schema and refused by the server), or listing the wrong parameters.
     @Test(arguments: [true, false])
     func eachBranchAdmitsWhatTheRuntimeGateAdmits(strict: Bool) async throws {
         let tools = Projection.listedTools(ServerCatalog.tools, mode: .rich, strictParams: strict)
-        var closed = 0, open = 0
+        var closed = 0, open = 0, dispatcherRefused = 0
         for spec in OperationRegistry.specs {
             let tool = try #require(tools.first { $0.name == spec.tool.rawValue })
             let branch = try #require(try branches(tool)[spec.command], "\(spec.id.rawValue)")
@@ -70,6 +71,21 @@ import Testing
             var requests = spec.allowedParams.map { [$0: Value.string("x")] }
             requests.append(["zz_not_a_parameter": .string("x")])
             requests.append([:])
+            // #1093 review R1: the gate forwards these keys so the dispatcher can answer with its own
+            // error, and the dispatcher always refuses them. The schema refuses them too; it does
+            // not advertise a key no request may carry.
+            for key in (OperationRegistry.dispatcherRejectedParamsByOperation[spec.id] ?? []).sorted() {
+                let forwarded = await FeatureFlags.withAdr003StrictParamsForTests(true) {
+                    LogicProServer.strictParamValidationResult(
+                        tool: spec.tool.rawValue, command: spec.command, params: [key: .string("x")]) == nil
+                }
+                let schemaRefuses = try matchingBranches(tool, command: spec.command, params: [key: .string("x")]) == 0
+                #expect(forwarded, "\(spec.id.rawValue) \(key) is not forwarded by the gate")
+                if strict {
+                    #expect(schemaRefuses, "\(spec.id.rawValue) advertises the dispatcher-refused key \(key)")
+                    dispatcherRefused += 1
+                }
+            }
             for params in requests {
                 let refused = await FeatureFlags.withAdr003StrictParamsForTests(strict) {
                     LogicProServer.strictParamValidationResult(
@@ -86,13 +102,18 @@ import Testing
         // Control: both kinds of branch occur when strict is on, so neither half of the check is vacuous.
         if strict {
             #expect(closed > 0 && open > 0, "closed \(closed), open \(open)")
+            let everyForwardedKey = OperationRegistry.dispatcherRejectedParamsByOperation.values.map(\.count).reduce(0, +)
+            #expect(dispatcherRefused == everyForwardedKey && everyForwardedKey > 0, "\(dispatcherRefused) of \(everyForwardedKey)")
         } else {
             #expect(closed == 0)
         }
     }
 
     /// The issue's first deliverable: a valid request, a missing, wrong and unknown parameter on one
-    /// command, and a second command's parameter sent to it.
+    /// command, and a second command's parameter sent to it. Keys: the schema agrees with the gate.
+    /// Values and required keys: the dispatcher refuses `{}`, `{"bar": false}` and `{"bar": 0}`
+    /// before any channel is reached, and the untyped schema admits all three. That gap is pinned
+    /// here so it cannot be described as agreement (#1093 review R1).
     @Test func gotoPositionAgreesWithTheGateOnValidUnknownAndForeignParameters() async throws {
         let tools = Projection.listedTools(ServerCatalog.tools, mode: .rich, strictParams: true)
         let transport = try #require(tools.first { $0.name == ToolID.logicTransport.rawValue })
@@ -115,6 +136,14 @@ import Testing
             let schemaAgrees = (try matchingBranches(transport, command: "goto_position", params: params) == 1) == admitted
             #expect(runtimeAgrees, "runtime \(params.keys.sorted())")
             #expect(schemaAgrees, "schema \(params.keys.sorted())")
+        }
+        for params: [String: Value] in [[:], ["bar": .bool(false)], ["bar": .int(0)]] {
+            let reply = await TransportDispatcher.handle(
+                command: "goto_position", params: params, router: ChannelRouter(), cache: StateCache())
+            let dispatcherRefuses = reply.isError == true
+            let schemaAdmits = try matchingBranches(transport, command: "goto_position", params: params) == 1
+            #expect(dispatcherRefuses, "the dispatcher accepted \(params)")
+            #expect(schemaAdmits, "the schema now refuses \(params); update the limit this test pins")
         }
     }
 
