@@ -336,8 +336,10 @@ def capture(ev, tag, window):
 
 
 def run_binary(ev, role, binary, kinds, names, rotation, path, kb, worktree, appearances, tag):
-    """One server, held once per kind. The control's dialog is photographed after the reply and
-    1.5 s later, to be compared."""
+    """One server, held once per kind. The control's dialog is photographed twice once the hold has
+    returned, after its survival wait, the second after the window list is read again; the two are
+    compared. The window-list readings span the 1.5 s survival interval, the photographs do not
+    (supplementary review S-07 of #1083)."""
     folder = tempfile.mkdtemp(prefix=f"lpm942-{role}-")
     os.environ[HOLD_KEY] = folder
     phases, driver = {}, None
@@ -350,10 +352,10 @@ def run_binary(ev, role, binary, kinds, names, rotation, path, kb, worktree, app
             phase["appearance"] = name in appearances
             if role == "control" and kind == "dialog" and (phase.get("after_reply") or {}).get("dialogs"):
                 window = phase["after_reply"]["dialogs"][0]
-                first = capture(ev, f"{tag}/{role}/dialog-after-reply", window)
+                first = capture(ev, f"{tag}/{role}/dialog-after-hold-first", window)
                 later = P.logic_windows() or []
                 if any(w["id"] == window["id"] for w in later):
-                    second = capture(ev, f"{tag}/{role}/dialog-after-survival", window)
+                    second = capture(ev, f"{tag}/{role}/dialog-after-hold-second", window)
                     size = (first["window"]["w"], first["window"]["h"])
                     ev.visual(f"{tag}/{role}/dialog-unchanged", first["file"], second["file"],
                               inner_region(*size), expect_change=False,
@@ -401,6 +403,20 @@ def settlement(phase):
     return (reply or {}).get("post_leaf_settlement") if isinstance(reply, dict) else None
 
 
+DIALOG_REFUSAL = ": dialog cleanup was not observed"
+
+
+def expected_outcome(result):
+    """The `dialog_route_outcome` the server's classification gives a site's held result: the
+    result's prefix, lowercased up to an issuance stage, which keeps its case, then
+    `_cleanup_closed_false`. `DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed
+    (OPEN)` is `dialog_input_issued_SELECT_ALL_ARMED_cleanup_closed_false`. The suffix alone would
+    accept another site's classification (supplementary review S-06 of #1083)."""
+    prefix = (result or "").split(DIALOG_REFUSAL)[0]
+    head, _, stage = prefix.partition(": ")
+    return head.lower() + (f"_{stage}" if stage else "") + "_cleanup_closed_false"
+
+
 def reached_the_seam(phase):
     """The server wrote the result it answered, the reply came back, the release was consumed, and
     the refusal outside the settlement is the one the name stands for."""
@@ -408,7 +424,7 @@ def reached_the_seam(phase):
     reply = phase.get("reply") if isinstance(phase.get("reply"), dict) else {}
     outcome = reply.get("dialog_route_outcome") or ""
     outcome_ok = (outcome == phase.get("name") if phase.get("appearance") is True
-                  else phase.get("appearance") is False and outcome.endswith("_cleanup_closed_false"))
+                  else phase.get("appearance") is False and outcome == expected_outcome(phase.get("expected_result")))
     return (phase.get("entered") is not None and phase.get("entered") == phase.get("expected_result")
             and phase.get("reply_returned") is True and phase.get("release_left") is False
             and reply.get("fallback_unsafe") is True and reply.get("safe_to_retry") is False
