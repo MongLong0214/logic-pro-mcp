@@ -864,7 +864,7 @@ enum OperationRegistry {
             DeadlineClass.short,
             ["allow_ui_navigation", "domains", "project_ref", "scope", "snapshot_id"]
         ),
-        (.projectPlanSessionRepair, "plan_session_repair", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short, ["snapshot_id", "policy", "names", "plan_id", "digest"]),
+        (.projectPlanSessionRepair, "plan_session_repair", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short, ["snapshot_id", "policy", "names", "plan_id", "digest", "on_ambiguity", "allow_create_aux", "allow_stack_membership_change", "allow_replace_send"]),
         (
             .projectCleanupApply,
             "cleanup_apply",

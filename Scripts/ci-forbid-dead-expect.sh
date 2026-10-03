@@ -1,8 +1,11 @@
 #!/bin/bash
 # CI lint (#393): forbid DEAD swift-testing boolean expectations.
 #
-# On this toolchain every TOP-LEVEL `#expect(<Bool> == <Bool>)` or `!=` comparison passes
-# unconditionally (`#expect(true == false)` passes) — the assertion proves nothing. This includes
+# Under swift-testing 0.99.0 every TOP-LEVEL `#expect(<Bool> == <Bool>)` or `!=` comparison passed
+# unconditionally (`#expect(true == false)` passed) — the assertion proved nothing. #1088 moved the
+# pin to 6.1.3, where such a comparison records its failure, and Issue1088BoolExpectationRecordsTests
+# fails if a library brings the dead form back. This rule stays as the house spelling, and that one
+# file is exempt: its comparisons must keep the dead form to show that it records. This includes
 # `Bool?` comparisons such as `as? Bool != nil`. The existing literal, coalesce, `.some`, and
 # `#require` forms below are dead too. Load-bearing spellings: bare `#expect(x)` /
 # `#expect(!x)`; for Optional presence, `let v = try #require(x)` and then a bare `#expect(v)`
@@ -413,8 +416,13 @@ for swift_source in swift_sources:
         )
     )
 
+# #1088: the canary that the comparison records. Its `#expect(a == b)` calls are the measurement.
+CANARY = 'Tests/LogicProMCPTests/Issue1088BoolExpectationRecordsTests.swift'
+
 hits = []
 for f in sorted(glob.glob('Tests/**/*.swift', recursive=True)):
+    if f == CANARY:
+        continue
     lines = open(f, encoding='utf-8').read().split('\n')
     text = '\n'.join(lines)
     cleaned = strip_comments(blank_strings(text))
