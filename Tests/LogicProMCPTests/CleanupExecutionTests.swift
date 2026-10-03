@@ -255,7 +255,8 @@ struct CleanupExecutionTests {
 
     let calls = await channel.calls()
     #expect(calls.isEmpty, "a rename went out for a document that had closed: \(calls)")
-    #expect(result.isError ?? false, "\(sharedToolText(result))")
+    let refused = try #require(result.isError)
+    #expect(refused, "\(sharedToolText(result))")
 }
 
 @Test func testCleanupApplyRefusesWhenNotConfirmed() async throws {
