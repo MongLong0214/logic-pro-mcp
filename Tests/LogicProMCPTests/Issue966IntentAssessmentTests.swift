@@ -1575,11 +1575,11 @@ struct Issue966IntentAssessmentTests {
 
 /// Kick (trk_0) and Snare (trk_1) observed on the reverb bus (4), both approved onto the drum bus
 /// (3): two wrong-route findings over a graph published for this capture, with every domain read.
-private func receiverGraph(receiver: Bool, snapshotId: String = baselineSnapshotId) -> RoutingGraph {
+private func receiverGraph(receiver: Bool, snapshotId: String = baselineSnapshotId, projectEpoch: UInt64 = 3) -> RoutingGraph {
     let aux = auxNode("aux_drum_return")
     var edges = [mainOutput(from: 0, to: reverbBus.id), mainOutput(from: 1, to: reverbBus.id)]
     if receiver { edges.append(inputAssignment(from: drumBus, to: aux)) }
-    return graph(snapshotId: snapshotId,
+    return graph(projectEpoch: projectEpoch, snapshotId: snapshotId,
                  nodes: [trackNode(0), trackNode(1), drumBus, reverbBus, aux], edges: edges)
 }
 
@@ -1592,14 +1592,15 @@ private func twoTargetPolicy() throws -> (Audit.IntentPolicy, Value) {
     return (policy, .object(object))
 }
 
-private func receiverPlan(receiver: Bool, allow: Bool, snapshotId: String = baselineSnapshotId) throws -> [String: Any] {
+private func receiverPlan(receiver: Bool, allow: Bool, snapshotId: String = baselineSnapshotId,
+                          projectEpoch: UInt64 = 3) throws -> [String: Any] {
     let (policy, value) = try twoTargetPolicy()
     var options = Audit.PlanningOptions()
     options.allowCreateAux = allow
     let plan = try Audit.buildCanonicalRepairPlan(
         policy: policy, policyValue: value, names: [], capture: threeTrackCapture,
         request: Observation.Request(domains: [.tracks, .strips, .routing]), snapshotCurrent: true,
-        options: options, graphOverride: receiverGraph(receiver: receiver, snapshotId: snapshotId))
+        options: options, graphOverride: receiverGraph(receiver: receiver, snapshotId: snapshotId, projectEpoch: projectEpoch))
     return try #require(sharedJSONObject(plan.json))
 }
 
@@ -1680,5 +1681,24 @@ struct Issue966ReceivingAuxBoundGraphTests {
         }
         let reasons = try #require(body["reasons"] as? [String])
         #expect(reasons.contains("graph_not_from_capture"))
+    }
+
+    /// R1090-002: the gate passes a graph from another registry epoch, which the assessor rejects
+    /// per finding. Neither the absence nor the presence of a receiver is read from it. Mutation
+    /// this kills: receiver evidence read past an epoch mismatch.
+    @Test(arguments: [false, true])
+    func aGraphFromAnotherRegistryEpochDecidesNoReceiver(receiver: Bool) throws {
+        let body = try receiverPlan(receiver: receiver, allow: true, projectEpoch: 4)
+        let steps = try planSteps(body)
+        let createsAux = steps.contains { $0["kind"] as? String == "create_aux" }
+        #expect(!createsAux)
+        let inventory = try #require(body["new_object_inventory"] as? [Any])
+        #expect(inventory.isEmpty)
+        for output in steps where output["kind"] as? String == "main_output" {
+            let blocked = try #require(output["blocked_reasons"] as? [String])
+            #expect(blocked.contains("bus_receiver_unverified"))
+        }
+        let reasons = try #require(body["reasons"] as? [String])
+        #expect(reasons.contains("graph_epoch_mismatch"))
     }
 }

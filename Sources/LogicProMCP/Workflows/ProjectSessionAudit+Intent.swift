@@ -990,7 +990,7 @@ extension ProjectSessionAudit {
 
     /// The graph carries the epoch of the registry snapshot the capture issued under; any other
     /// epoch is `graph_epoch_mismatch`.
-    private static func graphEpochMismatch(
+    static func graphEpochMismatch(
         _ graph: RoutingGraph,
         capture: SessionPopulationObservation.Capture
     ) -> IntentReason? {

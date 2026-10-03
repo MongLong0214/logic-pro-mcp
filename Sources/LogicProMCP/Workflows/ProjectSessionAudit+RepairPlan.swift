@@ -103,6 +103,11 @@ extension ProjectSessionAudit {
         if request.scope != .wholeProject { reasons.insert("whole_project_scope_required") }
         let gate = assessmentGate(policy: policy, capture: capture, graph: graph)
         if let gate { reasons.insert(gate.reason.rawValue) }
+        // The whole binding the assessor applies: the gate, and the registry epoch it checks per
+        // finding (#1090 review R2, R1090-002). Receiver evidence is read only from a graph both pass.
+        let epochMismatch = graphEpochMismatch(graph, capture: capture)
+        if let epochMismatch { reasons.insert(epochMismatch.rawValue) }
+        let graphBound = gate == nil && epochMismatch == nil
         if options.onAmbiguity == .reportOnly { reasons.insert("report_only_requested") }
         // Steps that create a receiving aux come before the outputs that need one
         // (destination before source), and each bus gets at most one.
@@ -129,10 +134,10 @@ extension ProjectSessionAudit {
             }
             var dependencies: [String] = []
             if finding.expected.output == .bus, let bus = finding.expected.busNumber {
-                // A graph the gate rejected (another capture, another project, inconsistent) is not
-                // evidence about this session's receivers, so neither presence nor absence is read
-                // from it (#1090 review R1090-001).
-                switch gate == nil ? receivingAux(bus: bus, graph: graph) : .unverified {
+                // A graph the binding rejected (another capture, another project, another registry
+                // epoch, inconsistent) is not evidence about this session's receivers, so neither
+                // presence nor absence is read from it (#1090 review R1090-001, R1090-002).
+                switch graphBound ? receivingAux(bus: bus, graph: graph) : .unverified {
                 case .present:
                     break
                 case .unverified:
