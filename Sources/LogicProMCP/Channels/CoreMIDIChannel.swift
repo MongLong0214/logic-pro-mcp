@@ -191,24 +191,6 @@ actor CoreMIDIChannel: Channel {
                 extras: ["byte_count": bytes.count]
             )
 
-        case "transport.fast_forward":
-            let bytes = MMCCommands.fastForward()
-            try await engine.sendSysEx(bytes)
-            return Self.sendOnlySuccess(
-                operation: operation,
-                legacyMessage: "MMC fast forward sent",
-                extras: ["byte_count": bytes.count]
-            )
-
-        case "transport.rewind":
-            let bytes = MMCCommands.rewind()
-            try await engine.sendSysEx(bytes)
-            return Self.sendOnlySuccess(
-                operation: operation,
-                legacyMessage: "MMC rewind sent",
-                extras: ["byte_count": bytes.count]
-            )
-
         case "transport.locate":
             guard let h = params["hours"].flatMap(UInt8.init),
                   let m = params["minutes"].flatMap(UInt8.init),
