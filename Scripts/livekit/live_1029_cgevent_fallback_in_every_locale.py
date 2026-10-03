@@ -68,9 +68,10 @@ import shutil  # noqa: E402
 
 ONLY_CHANNEL_KEY = "LOGIC_MCP_DEBUG_ONLY_CHANNEL"
 PASS_KEY = "LOGIC_MCP_DEBUG_ONLY_CHANNEL_PASS"
-# Reads and setups whose chain holds no CGEvent rung. The router walks these as the table has them
+# Reads and setups whose chain holds no CGEvent rung. Pause reads the tempo as well as the state
+# before its key (the 2026-10-03 ten-language run refused pause in nine languages without it). The router walks these as the table has them
 # and still keeps CGEvent alone in any chain that holds it, so no op under test is widened.
-PASS_OPERATIONS = ("transport.get_state", "track.get_tracks", "track.get_selected", "track.select",
+PASS_OPERATIONS = ("transport.get_state", "transport.get_tempo", "track.get_tracks", "track.get_selected", "track.select",
                    "track.rename", "region.get_regions", "project.get_info")
 APPROVALS = os.path.expanduser("~/Library/Application Support/LogicProMCP/operator-approvals.json")
 STARTUP = 2.0
@@ -371,8 +372,14 @@ def setup_selected_track(driver, ax, extra):
         reply, _, _ = call(driver, ax, "logic_tracks", "rename", {"index": index, "name": unique})
         extra["rename"] = A.reply_summary(reply)
         time.sleep(0.5)
-        index, name = selected_track(ax)
-        extra["renamed_track"] = {"index": index, "name": name}
+        index, _ = selected_track(ax)
+        # The name is confirmed by finding the unique name in the row's description, not by
+        # parsing quotes: German writes „…“ and French « … », which the quote pattern missed and
+        # read as no name (2026-10-03, de and fr).
+        rows = A.track_header_rows(ax) or []
+        described = ax.value(rows[index], "AXDescription") or "" if index is not None and index < len(rows) else ""
+        name = unique if unique in described else None
+        extra["renamed_track"] = {"index": index, "name": name, "description": described[:120]}
     extra["params"] = {"index": index, "expected_name": name}
 
 
