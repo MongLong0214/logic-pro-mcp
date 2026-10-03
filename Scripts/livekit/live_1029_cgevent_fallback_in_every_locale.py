@@ -67,6 +67,11 @@ import probe_942_escape_over_goto_dialog as P  # noqa: E402
 import shutil  # noqa: E402
 
 ONLY_CHANNEL_KEY = "LOGIC_MCP_DEBUG_ONLY_CHANNEL"
+PASS_KEY = "LOGIC_MCP_DEBUG_ONLY_CHANNEL_PASS"
+# Reads and setups whose chain holds no CGEvent rung. The router walks these as the table has them
+# and still keeps CGEvent alone in any chain that holds it, so no op under test is widened.
+PASS_OPERATIONS = ("transport.get_state", "track.get_tracks", "track.get_selected", "track.select",
+                   "track.rename", "region.get_regions", "project.get_info")
 APPROVALS = os.path.expanduser("~/Library/Application Support/LogicProMCP/operator-approvals.json")
 STARTUP = 2.0
 STRUCTURE_ROLES = ("AXLayoutArea", "AXPopUpButton", "AXMenuButton", "AXGroup")
@@ -654,6 +659,8 @@ def main():
     recording = ev.record_screen(seconds=RECORDING_SECONDS_PER_LANGUAGE * len(args.lprojs) + 120)
     if args.mode == "isolated":
         os.environ[ONLY_CHANNEL_KEY] = "CGEvent"
+        os.environ[PASS_KEY] = ",".join(PASS_OPERATIONS)
+        ev.note("1029/pass-operations", {"operations": list(PASS_OPERATIONS)})
     backup = os.path.join(os.environ["LPM_EVIDENCE_ROOT"], "fixture-before-the-run.logicx")
     if os.path.exists(backup):
         shutil.rmtree(backup)
@@ -692,6 +699,7 @@ def main():
             ev.note(f"1029/{lproj}/rows", runs[lproj]["rows"])
     finally:
         os.environ.pop(ONLY_CHANNEL_KEY, None)
+        os.environ.pop(PASS_KEY, None)
         with open(APPROVALS, "wb") as handle:
             handle.write(approvals)
         with open(APPROVALS, "rb") as handle:
