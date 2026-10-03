@@ -74,13 +74,12 @@ private func envelope(_ raw: String) -> [String: Any]? {
 }
 
 /// Every op `keyMap` posts as a letter with no Command, Control or Option. #1039's list names
-/// R, C, K, X, P, Y, A, Z, Q, N and I; I (view.toggle_inspector) has no entry on this branch, so it
-/// posts nothing under any source.
+/// R, C, K, X, P, Y, A, Z, Q, N and I; I (view.toggle_inspector) and Q (edit.quantize, removed by
+/// #1029: a keystroke cannot carry the grid) have no entry, so they post nothing under any source.
 private let plainLetterOps = [
     "transport.record",            // R
     "transport.toggle_cycle",      // C
     "transport.toggle_metronome",  // K
-    "edit.quantize",               // Q
     "view.toggle_mixer",           // X
     "view.toggle_piano_roll",      // P
     "view.toggle_library",         // Y

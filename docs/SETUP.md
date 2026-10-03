@@ -131,6 +131,7 @@ Manual binding is only needed for remaining keycmd-only/channel-only paths:
 - `edit.delete`
 - `edit.duplicate`
 - `edit.normalize`
+- `edit.quantize`
 - `nav.goto_marker`
 - `transport.capture_recording`
 - `view.toggle_inspector`
@@ -138,6 +139,9 @@ Manual binding is only needed for remaining keycmd-only/channel-only paths:
 
 `edit.delete`, `view.toggle_inspector` and `view.toggle_step_editor` are here because Apple's U.S.
 key-command preset binds no key to their functions, so the CGEvent fallback does not guess one.
+`edit.quantize` is here because Apple's Q applies the quantize value Logic already holds, not the
+requested grid, so its keystroke is removed. The key command has the same limit: it quantizes to
+Logic's current value whatever `value` asks for (#1094 tracks a path that carries the grid).
 
 Most normal tool calls route through Accessibility, AppleScript, MCU, CoreMIDI, or CGEvent without manual MIDI Learn.
 

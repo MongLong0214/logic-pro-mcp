@@ -555,7 +555,7 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
     static let manualValidationDetailSuffix =
         "Manual MIDI Learn required — see docs/SETUP.md §4. " +
         "Effectively keycmd-only (no working non-keycmd fallback on Logic 12.2): " +
-        "edit.delete, edit.duplicate, edit.normalize, " +
+        "edit.delete, edit.duplicate, edit.normalize, edit.quantize, " +
         "nav.goto_marker, transport.capture_recording, view.toggle_inspector, view.toggle_step_editor. " +
         "Other preset ops have an AX/MCU/AppleScript/CGEvent fallback and do not require keycmd binding. " +
         "Orphans (in mappingTable + routingTable but no MCP tool exposes a call path): " +

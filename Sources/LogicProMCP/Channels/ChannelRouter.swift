@@ -175,16 +175,41 @@ actor ChannelRouter {
         return ChannelID(rawValue: raw).map(DebugOnlyChannel.only) ?? .invalid(raw)
     }
 
+    static let debugPassOperationsEnvironmentKey = "LOGIC_MCP_DEBUG_ONLY_CHANNEL_PASS"
+
+    /// #1029 drives each CGEvent fallback from a prepared state, and the dispatchers read state
+    /// through chains that hold no CGEvent rung: pause and resume read `transport.get_state`, and a
+    /// setup renames a track. A debug build started with `LOGIC_MCP_DEBUG_ONLY_CHANNEL_PASS` set to a
+    /// comma-separated list of operations walks those operations' chains as the table has them,
+    /// but only where the chain does not hold the restricted channel, so an operation under test
+    /// cannot be widened by naming it. Release builds never read the variable.
+    static let debugPassOperations: Set<String> = {
+        #if DEBUG
+        return debugPassOperations(from: ProcessInfo.processInfo.environment)
+        #else
+        return []
+        #endif
+    }()
+
+    static func debugPassOperations(from environment: [String: String]) -> Set<String> {
+        guard let raw = environment[debugPassOperationsEnvironmentKey] else { return [] }
+        return Set(raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+    }
+
     /// The chain `route` walks under `restriction`, or the refusal it answers instead. Pure, so the
     /// restriction is tested without the environment.
     static func effectiveChain(
-        _ chain: [ChannelID], operation: String, restriction: DebugOnlyChannel
+        _ chain: [ChannelID], operation: String, restriction: DebugOnlyChannel,
+        pass: Set<String> = []
     ) -> Result<[ChannelID], RoutingRefusal> {
         switch restriction {
         case .unrestricted:
             return .success(chain)
         case let .only(channel):
             let kept = chain.filter { $0 == channel }
+            if kept.isEmpty, pass.contains(operation) {
+                return .success(chain)
+            }
             guard !kept.isEmpty else {
                 return .failure(RoutingRefusal(message:
                     "This debug build routes only through \(channel.rawValue) "
@@ -225,7 +250,9 @@ actor ChannelRouter {
         }
 
         let chain: [ChannelID]
-        switch Self.effectiveChain(tableChain, operation: operation, restriction: Self.debugOnlyChannel) {
+        switch Self.effectiveChain(
+            tableChain, operation: operation, restriction: Self.debugOnlyChannel, pass: Self.debugPassOperations
+        ) {
         case let .success(kept):
             chain = kept
         case let .failure(refusal):
