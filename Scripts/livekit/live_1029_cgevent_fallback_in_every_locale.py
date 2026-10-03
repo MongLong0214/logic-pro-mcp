@@ -87,6 +87,8 @@ def arguments():
     parser.add_argument("binary")
     parser.add_argument("--lprojs", nargs="+", default=list(L993.DEFAULT_LPROJS), metavar="lproj")
     parser.add_argument("--mode", choices=("isolated", "production"), default="isolated")
+    parser.add_argument("--rows", nargs="+", type=int, default=None, metavar="index",
+                        help="run only these op rows, for a targeted re-measurement")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.head):
         parser.error("head must be a full lowercase 40-character SHA")
@@ -544,9 +546,11 @@ def box_shot(ev, ax, key, tag, region=None):
             "window_points": (int(frame[2]), int(frame[3])) if frame else None}
 
 
-def run_language(ev, driver, ax, source, lproj, bindings, mode):
+def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
     rows = []
     for index, (op, tool, command, params, letter, expect, allowed, *steps) in enumerate(OPS):
+        if only is not None and index not in only:
+            continue
         setup, post = (list(steps) + [None, None])[:2]
         extra = {}
         if setup is not None:
@@ -573,6 +577,12 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode):
             time.sleep(2.5)
             later = snapshot(ax)
             extra["bar_later"] = None if later is None else later.get("bar")
+        if op == "edit.quantize":
+            # Q changed nothing in six languages in the first ten-language run; a late reading
+            # tells a slow undo title from a key that did nothing.
+            time.sleep(2.0)
+            later = snapshot(ax)
+            extra["undo_title_later"] = None if later is None else later.get("undo_title")
         summary = A.reply_summary(reply)
         unbound = letter is not None and bindings is not None and letter not in bindings
         row = {"index": index, "op": op, "before": before, "after": after, "extra": extra,
@@ -697,7 +707,8 @@ def main():
             driver = E.Driver(binary=args.binary)
             try:
                 time.sleep(STARTUP)
-                runs[lproj]["rows"] = run_language(ev, driver, ax, source, lproj, bindings, args.mode)
+                runs[lproj]["rows"] = run_language(ev, driver, ax, source, lproj, bindings, args.mode,
+                                                   None if args.rows is None else set(args.rows))
             finally:
                 try:
                     driver.close()
