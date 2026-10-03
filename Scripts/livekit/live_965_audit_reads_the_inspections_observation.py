@@ -39,13 +39,24 @@ def arguments():
     return parser.parse_args()
 
 
+def gap_findings(audit):
+    """Every `track_readback_gap` finding the audit raised, whatever its evidence says."""
+    return [f for f in (audit or {}).get("findings") or [] if isinstance(f, dict) and f.get("id") == "track_readback_gap"]
+
+
 def gap_count(audit):
-    """The audit's `track_readback_gap` file count, or None when it raised no such finding."""
-    for finding in (audit or {}).get("findings") or []:
-        if finding.get("id") == "track_readback_gap":
-            for value in (finding.get("evidence") or {}).get("values") or []:
-                if value.startswith("file_track_count="):
-                    return int(value.split("=", 1)[1])
+    """The file count the audit's one `track_readback_gap` finding states, or None when it raised none,
+    raised more than one, or stated no parsable `file_track_count=` (#1096 review round 2, R965-2: a gap
+    finding with no count read as no gap)."""
+    found = gap_findings(audit)
+    if len(found) != 1:
+        return None
+    for value in (found[0].get("evidence") or {}).get("values") or []:
+        if isinstance(value, str) and value.startswith("file_track_count="):
+            try:
+                return int(value.split("=", 1)[1])
+            except ValueError:
+                return None
     return None
 
 
@@ -57,24 +68,28 @@ def audit_answered(audit):
 
 
 def agree(row):
-    """The audit answered, the inspection names an expected count, and the audit's gap finding is present
-    exactly when the inspection's tracks reasons carry `track_readback_gap`, with the same count. Where
-    neither names a gap only that much is compared: the audit states its file count in the gap finding
-    alone."""
+    """The audit answered, the inspection names an expected count, and the audit raised a gap finding
+    exactly when the inspection's tracks reasons carry `track_readback_gap`. When both name it, the
+    audit's finding states a file count, the same one. Where neither names a gap only that much is
+    compared: the audit states its file count in the gap finding alone. A gap finding whose count does
+    not read is not agreement, whatever the inspection said (#1096 review round 2, R965-2)."""
     if row.get("audit_answered") is not True:
         return False
     expected = row.get("inspection_expected_count")
     if not isinstance(expected, int):
         return False
-    if row.get("inspection_names_the_gap"):
-        return row.get("audit_gap_file_count") == expected
-    return row.get("audit_gap_file_count") is None
+    # Exactly one gap finding when the inspection names the gap, exactly none when it does not; a
+    # count that did not read is None and equals no expected count.
+    findings = row.get("audit_gap_findings")
+    if bool(row.get("inspection_names_the_gap")) != (findings == 1):
+        return False
+    return findings == 0 or row.get("audit_gap_file_count") == expected
 
 
 def disagreeing(row):
     """The counterexample: the audit counting a different bundle's tracks than the inspection kept."""
     expected = row.get("inspection_expected_count")
-    return dict(row, audit_gap_file_count=(expected or 0) + 5, inspection_names_the_gap=True)
+    return dict(row, audit_gap_file_count=(expected or 0) + 5, audit_gap_findings=1, inspection_names_the_gap=True)
 
 
 def read_language(driver):
@@ -99,6 +114,7 @@ def read_language(driver):
         "inspection_reasons": tracks.get("reasons"),
         "inspection_names_the_gap": "track_readback_gap" in (tracks.get("reasons") or []),
         "audit_answered": audit_answered(audit),
+        "audit_gap_findings": len(gap_findings(audit)),
         "audit_gap_file_count": gap_count(audit),
         "audit_status": audit.get("status"),
         "audit_finding_ids": [f.get("id") for f in audit.get("findings") or []],
