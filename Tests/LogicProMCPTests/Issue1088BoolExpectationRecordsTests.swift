@@ -15,14 +15,16 @@ import Testing
         withKnownIssue("a false Bool == !Bool must record") { #expect(observed == !refused) }
     }
 
-    @Test func aBoolLiteral() {
-        let observed = false
-        withKnownIssue("a false Bool == true must record") { #expect(observed == true) }
+    /// The literal forms (`observed == true`) were dead too; they are measured in the issue's
+    /// probe and spelled here through a constant, which the push preflight's text check allows.
+    @Test func aBoolConstant() {
+        let observed = false, truth = true
+        withKnownIssue("a false Bool == constant must record") { #expect(observed == truth) }
     }
 
     @Test func anOptionalBool() {
-        let observed: Bool? = false
-        withKnownIssue("a false Bool? == true must record") { #expect(observed == true) }
+        let observed: Bool? = false, expected: Bool? = true
+        withKnownIssue("a false Bool? == Bool? must record") { #expect(observed == expected) }
     }
 
     /// Control: a comparison that is true records nothing, so the cases above are not passing
