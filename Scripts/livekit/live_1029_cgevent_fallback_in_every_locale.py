@@ -587,14 +587,24 @@ def selected_track(ax):
     return index, (found.group(1) if found else None)
 
 
+def selected_indices(ax):
+    """Every track header row read as selected, and the row count: the reading behind
+    selected_track's None, which does not say whether none or several were selected."""
+    rows = A.track_header_rows(ax) or []
+    return {"rows": len(rows), "selected": [i for i, row in enumerate(rows) if ax.value(row, "AXSelected") is True]}
+
+
 def setup_duplicate(driver, ax, extra):
     """The fixture's first track selected, then renamed as delete's source is. select replaces the
     selection (measured in Korean, lpm-evidence/1029/probe-select-ko.json), but half a second after a
     delete it had not yet read back; the header is read for up to three seconds."""
-    call(driver, ax, "logic_tracks", "select", {"index": 0})
+    extra["selected_before_select"] = selected_indices(ax)
+    reply, _, _ = call(driver, ax, "logic_tracks", "select", {"index": 0})
+    extra["select"] = A.reply_summary(reply)
     deadline = time.time() + 3.0
     while selected_track(ax)[0] != 0 and time.time() < deadline:
         time.sleep(0.25)
+    extra["selected_after_select"] = selected_indices(ax)
     extra["first_track_selected"] = selected_track(ax)[0] == 0
     setup_selected_track(driver, ax, extra)
 
@@ -606,6 +616,8 @@ def setup_selected_track(driver, ax, extra):
     to a name no other track has first, through the rename command."""
     index, name = selected_track(ax)
     extra["selected_track"] = {"index": index, "name": name}
+    if index is None:
+        extra["selected_rows"] = selected_indices(ax)
     if index is not None:
         unique = f"LPM1029 {index} {int(time.time()) % 100000}"
         reply, _, _ = call(driver, ax, "logic_tracks", "rename", {"index": index, "name": unique})
