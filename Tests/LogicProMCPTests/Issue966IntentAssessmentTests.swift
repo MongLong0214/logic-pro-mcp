@@ -1655,9 +1655,15 @@ struct Issue966ReceivingAuxBoundGraphTests {
         }
     }
 
-    /// Control: an observed receiver adds no aux step and no receiver reason.
+    /// Control: an observed receiver with no `receivers` entry adds no aux step, no receiver reason
+    /// and no question. Supplementary review S002: the plan-level reasons are read too.
     @Test func anObservedReceiverAddsNothing() throws {
-        let steps = try planSteps(try receiverPlan(receiver: true, allow: true))
+        let body = try receiverPlan(receiver: true, allow: true, intent: nil)
+        let questions = try #require(body["receiver_questions"] as? [Any])
+        #expect(questions.isEmpty)
+        let reasons = try #require(body["reasons"] as? [String])
+        #expect(!reasons.contains("receiver_intent_unresolved"))
+        let steps = try planSteps(body)
         let kinds = steps.compactMap { $0["kind"] as? String }
         #expect(kinds == ["main_output", "main_output"])
         for output in steps {
@@ -1742,6 +1748,76 @@ struct Issue966ReceivingAuxBoundGraphTests {
     /// An observed receiver contradicting an approved `none` is asked about, not overridden.
     @Test func anObservedReceiverAgainstApprovedNoneAsks() throws {
         let body = try receiverPlan(receiver: true, allow: true, intent: "none")
+        let questions = try #require(body["receiver_questions"] as? [[String: Any]])
+        #expect(questions.first?["observed"] as? String == "receiver_present")
+    }
+
+    /// S002: every answer a question offers settles it when the plan is built again with it.
+    /// Mutation this kills: offering an answer the planner still asks about.
+    @Test(arguments: [(false, nil), (true, "new"), (true, "none"), (false, "keep")] as [(Bool, String?)])
+    func everyOfferedAnswerSettlesItsQuestion(receiver: Bool, intent: String?) throws {
+        let body = try receiverPlan(receiver: receiver, allow: true, intent: intent)
+        let questions = try #require(body["receiver_questions"] as? [[String: Any]])
+        try #require(questions.count == 1, "the fixture must ask")
+        let answers = try #require(questions[0]["answers"] as? [[String: Any]])
+        #expect(!answers.isEmpty)
+        for answer in answers {
+            let entries = try #require(answer["receivers"] as? [[String: Any]])
+            let word = try #require(entries.first?["aux"] as? String)
+            let again = try receiverPlan(receiver: receiver, allow: true, intent: word)
+            let left = try #require(again["receiver_questions"] as? [Any])
+            #expect(left.isEmpty, "answer \(word) left the question open")
+            let reasons = try #require(again["reasons"] as? [String])
+            #expect(!reasons.contains("receiver_intent_unresolved"), "answer \(word)")
+        }
+    }
+
+    /// S001: a receiver intent is a task even when no output needs changing. A receivers-only
+    /// policy over a bound graph with no aux on bus 3 plans the aux; over a graph that does not
+    /// read receivers it is unverified and the plan is not executable. Mutation this kills:
+    /// receiver intent assessed only inside the output loop.
+    @Test func aReceiverIntentWithNoOutputIsStillAssessed() throws {
+        var object = policyObject(targets: [], outputs: [])
+        object["receivers"] = .array([.object(["bus": .int(3), "aux": .string("new")])])
+        let policy = try #require(accepted(Audit.parseIntentPolicy(object)))
+        var options = Audit.PlanningOptions()
+        options.allowCreateAux = true
+        func build(_ graph: RoutingGraph) throws -> [String: Any] {
+            let plan = try Audit.buildCanonicalRepairPlan(
+                policy: policy, policyValue: .object(object), names: [], capture: threeTrackCapture,
+                request: Observation.Request(domains: [.tracks, .strips, .routing]), snapshotCurrent: true,
+                options: options, graphOverride: graph)
+            return try #require(sharedJSONObject(plan.json))
+        }
+        let planned = try build(receiverGraph(receiver: false))
+        let kinds = try planSteps(planned).compactMap { $0["kind"] as? String }
+        #expect(kinds == ["create_aux"])
+        let unreadCoverage = coverage(sends: completeDomain)
+        let unread = RoutingCoverage(population: unreadCoverage.population, stripTrackAssociation: unreadCoverage.stripTrackAssociation,
+                                     mainOutput: unreadCoverage.mainOutput, physicalOutput: unreadCoverage.physicalOutput,
+                                     busToAuxInput: RoutingDomainCoverage(state: .notObserved, reasons: ["not read"]),
+                                     sends: unreadCoverage.sends)
+        let unverified = try build(graph(coverage: unread, nodes: [trackNode(0), trackNode(1), drumBus, reverbBus], edges: []))
+        let reasons = try #require(unverified["reasons"] as? [String])
+        #expect(reasons.contains("bus_receiver_unverified"))
+        let executable = try #require(unverified["executable"] as? Bool)
+        #expect(!executable)
+    }
+
+    /// S001: an output already on bus 3 does not hide an approved `none` that an observed receiver
+    /// contradicts.
+    @Test func aCompliantOutputDoesNotHideAContradictedNone() throws {
+        var object = policyObject(targets: [targetEntry("kick", "trk_0")], outputs: [targetOutput("kick", bus: 3)])
+        object["receivers"] = .array([.object(["bus": .int(3), "aux": .string("none")])])
+        let policy = try #require(accepted(Audit.parseIntentPolicy(object)))
+        let aux = auxNode("aux_drum_return")
+        let compliant = graph(nodes: [trackNode(0), trackNode(1), drumBus, reverbBus, aux],
+                              edges: [mainOutput(from: 0, to: drumBus.id), inputAssignment(from: drumBus, to: aux)])
+        let plan = try Audit.buildCanonicalRepairPlan(
+            policy: policy, policyValue: .object(object), names: [], capture: threeTrackCapture,
+            request: Observation.Request(domains: [.tracks, .strips, .routing]), snapshotCurrent: true,
+            graphOverride: compliant)
+        let body = try #require(sharedJSONObject(plan.json))
         let questions = try #require(body["receiver_questions"] as? [[String: Any]])
         #expect(questions.first?["observed"] as? String == "receiver_present")
     }

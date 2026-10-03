@@ -115,17 +115,69 @@ extension ProjectSessionAudit {
         var inventory: [Value] = []
         var auxStepForBus: [Int: String] = [:]
         // A question per bus whose receiver the policy does not settle, or settles against what
-        // was observed; each makes the plan non-executable and plans nothing for that receiver.
+        // was observed. Each offers only answers that settle it on a rebuild (#1090 supplementary
+        // review S002): an absence is answered with `new` or `none`, a present receiver with `keep`.
         var receiverQuestions: [Int: Value] = [:]
-        func receiverQuestion(_ bus: Int, observed: String) {
+        func receiverQuestion(_ bus: Int, observed: ReceivingAux) {
+            let answers: [String] = observed == .present ? ["keep"] : ["new", "none"]
             receiverQuestions[bus] = .object([
-                "id": .string("receiver_bus_\(bus)"), "bus": .int(bus), "observed": .string(observed),
-                "answers": .array([
-                    .object(["receivers": .array([.object(["bus": .int(bus), "aux": .string("new")])])]),
-                    .object(["receivers": .array([.object(["bus": .int(bus), "aux": .string("none")])])]),
-                ])
+                "id": .string("receiver_bus_\(bus)"), "bus": .int(bus),
+                "observed": .string(observed == .present ? "receiver_present" : "no_receiver"),
+                "answers": .array(answers.map { word in
+                    .object(["receivers": .array([.object(["bus": .int(bus), "aux": .string(word)])])])
+                })
             ])
             reasons.insert("receiver_intent_unresolved")
+        }
+        // A graph the binding rejected (another capture, another project, another registry epoch,
+        // inconsistent) is not evidence about this session's receivers, so neither presence nor
+        // absence is read from it (#1090 review R1090-001, R1090-002).
+        func observedReceiver(_ bus: Int) -> ReceivingAux {
+            graphBound ? receivingAux(bus: bus, graph: graph) : .unverified
+        }
+        // Blocked reasons an output onto `bus` inherits from the receiver decision for that bus.
+        var receiverBlocks: [Int: Set<String>] = [:]
+        func planAux(_ bus: Int) {
+            guard auxStepForBus[bus] == nil else { return }
+            let auxID = "create_aux_bus_\(bus)"
+            auxStepForBus[bus] = auxID
+            let handle = "new:aux_bus_\(bus)"
+            let auxBlocked = ["aux_creation_adapter_unavailable"]
+            reasons.formUnion(auxBlocked)
+            auxSteps.append(.object([
+                "id": .string(auxID), "kind": .string("create_aux"),
+                "handle": .string(handle),
+                "before": .object([:]), "after": .object(["input_bus": .int(bus)]),
+                "blocked_reasons": .array(auxBlocked.map(Value.string)),
+                "dependencies": .array([]),
+                "required_invariants": .array([
+                    "bus_namespace_evidence", "existing_routing_preservation", "inverse_remove_created_aux"
+                ].map(Value.string))
+            ]))
+            inventory.append(.object([
+                "handle": .string(handle), "kind": .string("aux"),
+                "input_bus": .int(bus), "created_by": .string(auxID)
+            ]))
+        }
+        // Every approved receiver intent is a task of its own, assessed whether or not an output
+        // onto its bus needs changing (#1090 supplementary review S001).
+        for bus in policy.receivers.keys.sorted() {
+            guard let intent = policy.receivers[bus] else { continue }
+            let observed = observedReceiver(bus)
+            switch (observed, intent) {
+            case (.unverified, _):
+                reasons.insert("bus_receiver_unverified")
+                receiverBlocks[bus] = ["bus_receiver_unverified"]
+            case (.present, .keep), (.absent, .noReceiver):
+                break
+            case (.present, .new), (.present, .noReceiver), (.absent, .keep):
+                receiverQuestion(bus, observed: observed)
+            case (.absent, .new) where options.allowCreateAux:
+                planAux(bus)
+            case (.absent, .new):
+                reasons.formUnion(["receiving_aux_missing", "create_aux_not_allowed"])
+                receiverBlocks[bus] = ["receiving_aux_missing", "create_aux_not_allowed"]
+            }
         }
         var steps: [Value] = []
         var unchanged: [Value] = []
@@ -147,49 +199,18 @@ extension ProjectSessionAudit {
             }
             var dependencies: [String] = []
             if finding.expected.output == .bus, let bus = finding.expected.busNumber {
-                // A graph the binding rejected (another capture, another project, another registry
-                // epoch, inconsistent) is not evidence about this session's receivers, so neither
-                // presence nor absence is read from it (#1090 review R1090-001, R1090-002).
-                // What reads the bus is approved intent of its own (#1090 review R3, R1090-004):
-                // an output approves only the bus. Without a `receivers` entry for this bus an
-                // observed absence or presence is a question, never a planned aux; `none` makes an
-                // absent receiver correct (a sidechain-only bus) and `.new` approves planning one.
-                let intent = policy.receivers[bus]
-                switch (graphBound ? receivingAux(bus: bus, graph: graph) : .unverified, intent) {
-                case (.unverified, _):
-                    blocked.insert("bus_receiver_unverified")
-                case (.present, nil), (.absent, .some(.noReceiver)):
-                    break
-                case (.absent, nil):
-                    receiverQuestion(bus, observed: "no_receiver")
-                case (.present, .some(_)):
-                    receiverQuestion(bus, observed: "receiver_present")
-                case (.absent, .some(.new)) where options.allowCreateAux:
-                    let auxID = auxStepForBus[bus] ?? "create_aux_bus_\(bus)"
-                    if auxStepForBus[bus] == nil {
-                        auxStepForBus[bus] = auxID
-                        let handle = "new:aux_bus_\(bus)"
-                        let auxBlocked = ["aux_creation_adapter_unavailable"]
-                        reasons.formUnion(auxBlocked)
-                        auxSteps.append(.object([
-                            "id": .string(auxID), "kind": .string("create_aux"),
-                            "handle": .string(handle),
-                            "before": .object([:]), "after": .object(["input_bus": .int(bus)]),
-                            "blocked_reasons": .array(auxBlocked.map(Value.string)),
-                            "dependencies": .array([]),
-                            "required_invariants": .array([
-                                "bus_namespace_evidence", "existing_routing_preservation", "inverse_remove_created_aux"
-                            ].map(Value.string))
-                        ]))
-                        inventory.append(.object([
-                            "handle": .string(handle), "kind": .string("aux"),
-                            "input_bus": .int(bus), "created_by": .string(auxID)
-                        ]))
+                // An output approves only the bus (#1090 review R3, R1090-004). With a `receivers`
+                // entry the decision above applies; without one an observed absence is a question,
+                // never a planned aux, and an unverified receiver blocks the output.
+                if policy.receivers[bus] != nil {
+                    blocked.formUnion(receiverBlocks[bus] ?? [])
+                    if let auxID = auxStepForBus[bus] { dependencies.append(auxID) }
+                } else {
+                    switch observedReceiver(bus) {
+                    case .unverified: blocked.insert("bus_receiver_unverified")
+                    case .absent: receiverQuestion(bus, observed: .absent)
+                    case .present: break
                     }
-                    dependencies.append(auxID)
-                case (.absent, .some(.new)):
-                    blocked.insert("receiving_aux_missing")
-                    blocked.insert("create_aux_not_allowed")
                 }
             }
             reasons.formUnion(blocked)
@@ -287,10 +308,11 @@ extension ProjectSessionAudit {
     /// Whether bus `bus` feeds an aux input in `graph`. Absence is concluded only from a complete
     /// bus-to-aux reading; anything less is unverified, never absent (ADR-021 section 4).
     ///
-    /// Each endpoint must be attributable (#1090 review R3, R1090-003): the bus must be one node
-    /// whose id no other node carries, and every input edge leaving it must end at exactly one
-    /// node that is an aux. An ambiguous bus, a dangling edge or an edge into anything but an aux
-    /// makes the answer unverified, whatever the coverage says.
+    /// Each endpoint must be attributable (#1090 review R3, R1090-003): at most one node may carry
+    /// bus `bus`, and its id no other node. Only the input edges leaving that node are examined;
+    /// each must end at exactly one node, an aux, or the answer is unverified. A bus no node
+    /// carries has no edge leaving it, so a complete bus-to-aux reading reads it as absent: nothing
+    /// is observed reading it (#1090 supplementary review S003).
     static func receivingAux(bus: Int, graph: RoutingGraph) -> ReceivingAux {
         let nodesByID = Dictionary(grouping: graph.nodes, by: \.id)
         let busNodes = graph.nodes.filter { $0.kind == .bus && $0.busNumber == bus }

@@ -94,7 +94,7 @@ extension ProjectSessionAudit {
         let outputs: [IntentOutput]
         /// The approved receiving-aux intent per bus (#1090 review R3, R1090-004): an output
         /// approves only the bus a track feeds, not what reads that bus. `.new` approves planning a
-        /// new aux that reads it; `.noReceiver` (wire `none`) says nothing is meant to read it (a sidechain-only bus).
+        /// new aux that reads it; `.keep` approves the observed receivers; `.noReceiver` (wire `none`) says nothing is meant to read it (a sidechain-only bus).
         let receivers: [Int: IntentReceiver]
 
         fileprivate init(
@@ -115,6 +115,8 @@ extension ProjectSessionAudit {
     enum IntentReceiver: String, Equatable, Sendable {
         case new
         case noReceiver = "none"
+        /// The receivers observed reading the bus are the intended ones.
+        case keep
     }
 
     enum IntentPolicyRejection: Equatable, Sendable {
@@ -412,7 +414,7 @@ extension ProjectSessionAudit {
         ))
     }
 
-    /// Optional `receivers`: `[{"bus": n >= 1, "aux": "new" | "none"}]`, at most one per bus.
+    /// Optional `receivers`: `[{"bus": n >= 1, "aux": "new" | "keep" | "none"}]`, at most one per bus.
     private static func parseReceivers(
         _ object: [String: Value],
         into rejections: inout [IntentPolicyRejection]
