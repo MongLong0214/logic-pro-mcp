@@ -9,10 +9,12 @@
 # (#1095 review rounds 1-3).
 #
 # Refuses a tree that is not clean, read before anything is touched, and a status that does not
-# read: an edit to Package.resolved is the caller's, not the build's, and an empty answer from a
-# failed `git status` is not a clean tree (#1095 supplementary review, R1095-S01 and S02). After the
-# build, a change to Package.resolved alone is put back: the tree was clean before, so SwiftPM's
-# rewrite is the build's own. Any other change refuses.
+# read: an edit to Package.resolved is the caller's, and an empty answer from a failed `git status`
+# is not a clean tree (#1095 supplementary review, R1095-S01 and S02). The build is told to use the
+# committed Package.resolved as it is (--force-resolved-versions), and any change the build leaves,
+# Package.resolved included, refuses and is kept: a lock the build rewrote may name other
+# dependency versions than the commit does, and putting it back would hide that the binary was
+# built from them (second supplementary review, R1095-S01).
 set -euo pipefail
 W=${1:?worktree}
 OUT=${2:?out-root}
@@ -32,14 +34,10 @@ fi
 HEAD_SHA=$(git rev-parse HEAD)
 STAMP=$(mktemp)
 printf '%s' "$HEAD_SHA" > "$STAMP"
-swift build --product LogicProMCP \
+swift build --product LogicProMCP --force-resolved-versions \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __lpm_commit -Xlinker "$STAMP" 2>&1 | tail -1
 rm -f "$STAMP"
 AFTER=$(tree_status) || exit 1
-if [ "$AFTER" = " M Package.resolved" ]; then
-    git checkout -- Package.resolved
-    AFTER=$(tree_status) || exit 1
-fi
 if [ -n "$AFTER" ]; then
     echo "the tree changed during the build" >&2
     printf '%s\n' "$AFTER" | head >&2

@@ -46,10 +46,10 @@ class ScratchRepo(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def fake_swift(self, body=""):
-        """A `swift` that records it ran, then runs `body` in the repository."""
+        """A `swift` that records its arguments, then runs `body` in the repository."""
         path = os.path.join(self.bin, "swift")
         with open(path, "w") as handle:
-            handle.write(f"#!/bin/bash\ntouch {self.ran!r}\n{body}\nexit 0\n")
+            handle.write(f'#!/bin/bash\necho "$@" >> {self.ran!r}\n{body}\nexit 0\n')
         os.chmod(path, 0o755)
 
     def env(self, **extra):
@@ -94,18 +94,34 @@ class Builder(ScratchRepo):
         self.assertIn("did not read", result.stderr)
         self.assertFalse(os.path.exists(self.ran), "swift ran with cleanliness unknown")
 
-    def test_the_builds_own_package_resolved_rewrite_is_put_back(self):
-        # The build rewrites Package.resolved and leaves a binary with no commit section, so the
-        # script gets past both cleanliness reads and stops at the section read-back.
-        self.fake_swift('echo "{}" > Package.resolved; mkdir -p .build/debug; echo x > .build/debug/LogicProMCP')
+    def ignore_build_products(self):
         with open(os.path.join(self.repo, ".gitignore"), "w") as handle:
             handle.write(".build/\n")
         git(self.repo, "add", ".gitignore")
         git(self.repo, "commit", "-q", "-m", "ignore build")
+
+    def test_a_build_that_leaves_the_tree_clean_reaches_the_section_read(self):
+        # The fake build leaves a binary with no commit section, so the script passes both
+        # cleanliness reads and stops at the section read-back. The build was told to use the
+        # committed lock as it is.
+        self.ignore_build_products()
+        self.fake_swift("mkdir -p .build/debug; echo x > .build/debug/LogicProMCP")
         result = self.run_builder()
-        self.assertTrue(os.path.exists(self.ran))
         self.assertIn("does not read back as the head", result.stderr, result.stdout + result.stderr)
-        self.assertEqual(self.resolved(), RESOLVED)
+        with open(self.ran) as handle:
+            self.assertIn("--force-resolved-versions", handle.read())
+
+    def test_a_lock_the_build_rewrote_is_refused_and_kept(self):
+        # Second supplementary review, R1095-S01: a rewritten lock may name other dependency
+        # versions; it is neither put back nor accepted.
+        self.ignore_build_products()
+        rewritten = '{"pins": [{"identity": "other"}], "version": 2}'
+        self.fake_swift(f"printf '%s' {rewritten!r} > Package.resolved; mkdir -p .build/debug; echo x > .build/debug/LogicProMCP")
+        result = self.run_builder()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("changed during the build", result.stderr, result.stdout + result.stderr)
+        self.assertEqual(self.resolved(), rewritten, "the rewritten lock was put back")
+        self.assertFalse(os.path.isdir(os.path.join(self.root, "out")), "a binary was published")
 
     def test_any_other_change_during_the_build_is_refused(self):
         self.fake_swift('echo "// changed" >> Source.swift')
