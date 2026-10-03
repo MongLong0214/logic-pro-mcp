@@ -119,7 +119,7 @@ enum OperationCatalog {
         }
     }
 
-    private static func wire(_ value: AvailabilityPolicy) -> String {
+    static func wire(_ value: AvailabilityPolicy) -> String {
         switch value {
         case .defaultInstall: "default_install"
         case .requiresProfile: "requires_profile"
