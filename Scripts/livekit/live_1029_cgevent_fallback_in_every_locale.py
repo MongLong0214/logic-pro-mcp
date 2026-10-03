@@ -373,14 +373,22 @@ def setup_selected_track(driver, ax, extra):
         unique = f"LPM1029 {index} {int(time.time()) % 100000}"
         reply, _, _ = call(driver, ax, "logic_tracks", "rename", {"index": index, "name": unique})
         extra["rename"] = A.reply_summary(reply)
-        time.sleep(0.5)
-        index, _ = selected_track(ax)
         # The name is confirmed by finding the unique name in the row's description, not by
         # parsing quotes: German writes „…“ and French « … », which the quote pattern missed and
-        # read as no name (2026-10-03, de and fr).
-        rows = A.track_header_rows(ax) or []
-        described = ax.value(rows[index], "AXDescription") or "" if index is not None and index < len(rows) else ""
-        name = unique if unique in described else None
+        # read as no name (2026-10-03, de and fr). The read is repeated for up to three seconds:
+        # after a duplicate, German's description still held the copied name half a second after
+        # the rename replied (2026-10-03, de row 43, reply State B readback_mismatch).
+        name, described, deadline = None, "", time.time() + 3.0
+        while True:
+            time.sleep(0.25)
+            index, _ = selected_track(ax)
+            rows = A.track_header_rows(ax) or []
+            described = ax.value(rows[index], "AXDescription") or "" if index is not None and index < len(rows) else ""
+            if unique in described:
+                name = unique
+                break
+            if time.time() > deadline:
+                break
         extra["renamed_track"] = {"index": index, "name": name, "description": described[:120]}
     extra["params"] = {"index": index, "expected_name": name}
 
