@@ -34,6 +34,8 @@ WORDS = {key: f"<{key}>" for key in set(H.UNDO_NOUN_KEYS.values())}
 WORDS["Undo"] = "<bare-undo>"
 WORDS["Can’t Undo"] = "<bare-cant>"
 WORDS[H.AUDIO_TRACK_KEY] = "<audio>"
+for _key in H.EDITOR_TAB_KEYS.values():
+    WORDS[_key] = f"<{_key}>"
 
 
 def use_words():
@@ -131,11 +133,41 @@ class EditorAndDialogIdentity(unittest.TestCase):
         self.assertTrue(bounce(before, after, {"bounce_dialog": True}))
         self.assertFalse(bounce(before, after, {"bounce_dialog": False}), "another window passed as bounce")
 
-    def test_note_names_read_as_a_keyboard(self):
-        for title in ("C3", "A\u266f0", "G-1", "B7"):
-            self.assertTrue(H.NOTE_NAME.match(title), title)
-        for title in ("C", "clefsUnion", "Audio 1"):
-            self.assertFalse(H.NOTE_NAME.match(title), title)
+
+class EditorKindFromTheTabBar(unittest.TestCase):
+    """editor_kind over a fake window: the tab whose value is 1 names the editor."""
+
+    def setUp(self):
+        use_words()
+        self.piano, self.score = (WORDS[H.EDITOR_TAB_KEYS[k]] for k in ("piano_roll", "score"))
+
+    def kind(self, *tabs):
+        window = object()
+        elements = [(window, 0)] + [({"AXRole": role, "AXTitle": title, "AXValue": value}, 3)
+                                    for role, title, value in tabs]
+
+        class FakeAX:
+            def walk(self, element, depth):
+                return iter(elements)
+
+            def value(self, element, name):
+                return element.get(name) if isinstance(element, dict) else None
+
+        with mock.patch.object(H.A, "arrange_window", return_value=window):
+            return H.editor_kind(FakeAX())
+
+    def test_the_tab_that_reads_one_names_the_editor(self):
+        self.assertEqual(self.kind(("AXRadioButton", self.piano, 1), ("AXRadioButton", self.score, 0)), "piano_roll")
+        self.assertEqual(self.kind(("AXRadioButton", self.piano, 0), ("AXRadioButton", self.score, 1)), "score")
+
+    def test_no_tab_bar_or_no_tab_on_names_nothing(self):
+        self.assertIsNone(self.kind())
+        self.assertIsNone(self.kind(("AXRadioButton", self.piano, 0), ("AXRadioButton", self.score, 0)))
+        self.assertIsNone(self.kind(("AXRadioButton", self.piano, 1), ("AXRadioButton", self.score, 1)))
+
+    def test_a_lone_tab_or_another_role_is_not_the_tab_bar(self):
+        self.assertIsNone(self.kind(("AXRadioButton", self.piano, 1)), "one tab is not the editors' tab bar")
+        self.assertIsNone(self.kind(("AXGroup", self.piano, 1), ("AXRadioButton", self.score, 0)))
 
 
 class PauseIsNotStop(unittest.TestCase):

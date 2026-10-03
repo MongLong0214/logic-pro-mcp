@@ -267,6 +267,10 @@ BARE_UNDO_KEYS = ("Undo", "Can\u2019t Undo")
 #: The default name of a new audio track is this word and a number ("Audio 2"); an instrument
 #: track takes its patch's name (measured in Korean, 2026-10-03, explore-identity-ko.json).
 AUDIO_TRACK_KEY = "Audio"
+#: The Editors area's tab labels. While an editor shows, both tabs are AXRadioButtons titled with these
+#: and the showing one reads 1; with the editors closed neither exists (Korean, 2026-10-03,
+#: lpm-evidence/1029/probe-tabs-ko.json).
+EDITOR_TAB_KEYS = {"piano_roll": "StrTabBtnLabel|||Piano Roll", "score": "StrTabBtnLabel|||Score"}
 UNDO_UNIT_MARK = "Logic.framework"
 #: {key: {locale: value}} read from the installed Logic once per run; `CANON_LOCALE` names the
 #: language being driven, in the corpus's spelling (`zh_CN`), and is set by `run_language`.
@@ -277,7 +281,7 @@ CANON_LOCALE = {"value": None}
 def load_undo_table(logic_canon):
     """The undo nouns and bare titles in every locale, from the installed Logic's
     Logic.framework/Localizable.strings through the canon extractor."""
-    wanted = set(UNDO_NOUN_KEYS.values()) | set(BARE_UNDO_KEYS) | {AUDIO_TRACK_KEY}
+    wanted = set(UNDO_NOUN_KEYS.values()) | set(BARE_UNDO_KEYS) | {AUDIO_TRACK_KEY} | set(EDITOR_TAB_KEYS.values())
     table = {}
     for unit, locale, key, field, value in logic_canon.extract_strings(L993.APP):
         if field == "value" and key in wanted and UNDO_UNIT_MARK in unit and unit.endswith("Localizable.strings"):
@@ -318,34 +322,33 @@ def stops_naming(op, inner):
 # --- which editor, which dialog --------------------------------------------------------------
 #
 # #1091 review R1, R1091-02: the score editor and the piano roll turn the same Editors checkbox on,
-# and a window appearing is not the Bounce in Place dialog. Measured in Korean on 2026-10-03
-# (lpm-evidence/1029/explore-identity2-ko-cg.json): the score editor adds buttons whose
-# AXDescription is an untranslated identifier (clefsUnion, keySign, timeSign); the piano roll adds a
-# keyboard of buttons titled with note names; the bounce dialog is the focused window and holds a
-# text field whose value is the region's name with `_bip` after it.
-SCORE_MARKERS = {"clefsUnion", "keySign", "timeSign"}
-NOTE_NAME = re.compile(r"^[A-H][\u266f\u266d#b]?-?[0-9]{1,2}$")
+# and a window appearing is not the Bounce in Place dialog. The editor is named by the Editors area's
+# own tab bar: the tab whose value is 1, by Apple's tab label (`EDITOR_TAB_KEYS`). The first reading
+# used the editors' contents (clef, key and time-signature buttons; a keyboard of note-name buttons),
+# and the piano roll's keyboard names drums, not notes, when a drum kit track is selected: at 22960310
+# the fixture opened with one selected and the row failed in all ten languages. The bounce dialog is
+# the focused window and holds a text field whose value is the region's name with `_bip` after it
+# (Korean, 2026-10-03, lpm-evidence/1029/explore-identity2-ko-cg.json).
 
 
 def editor_kind(ax):
-    """"score", "piano_roll" or None, from the arrange window's elements."""
+    """"score", "piano_roll" or None: the kind whose tab reads 1, when both tabs are present and
+    exactly one reads 1."""
     window = A.arrange_window(ax)
     if window is None:
         return None
-    markers, notes = set(), 0
-    for element, _ in ax.walk(window, 10):
-        if ax.value(element, "AXRole") != "AXButton":
+    labels = {undo_word(key): kind for kind, key in EDITOR_TAB_KEYS.items() if undo_word(key)}
+    seen, on = set(), set()
+    for element, _ in ax.walk(window, 8):
+        if ax.value(element, "AXRole") != "AXRadioButton":
             continue
-        description, title = ax.value(element, "AXDescription"), ax.value(element, "AXTitle")
-        if description in SCORE_MARKERS:
-            markers.add(description)
-        if isinstance(title, str) and NOTE_NAME.match(title):
-            notes += 1
-    if markers == SCORE_MARKERS:
-        return "score"
-    if notes >= 24:
-        return "piano_roll"
-    return None
+        kind = labels.get(ax.value(element, "AXTitle"))
+        if kind is None:
+            continue
+        seen.add(kind)
+        if ax.value(element, "AXValue") == 1:
+            on.add(kind)
+    return next(iter(on)) if len(on) == 1 and seen == set(EDITOR_TAB_KEYS) else None
 
 
 def bounce_dialog_open(ax):
