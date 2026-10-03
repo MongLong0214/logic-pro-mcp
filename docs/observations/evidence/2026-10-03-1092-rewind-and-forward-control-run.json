@@ -1,0 +1,1289 @@
+{
+ "name": "live_1092_rewind_and_forward_step_one_bar",
+ "head": "45910dc28751e34054e39d1bcf909d7156d547c3",
+ "artifact": {
+  "path": "/Users/isaac/lpm-evidence/1092/bin-45910dc2/LogicProMCP",
+  "sha256": "4a05330ab93028328d1bf899e0606f26d233a6819efaf3fc19007ff539082032",
+  "built_from": "45910dc28751e34054e39d1bcf909d7156d547c3",
+  "worktree_clean": true,
+  "built_from_is_measured": false,
+  "artifact_older_than_sources": false
+ },
+ "records": [
+  {
+   "kind": "declaration",
+   "surface": "ui"
+  },
+  {
+   "kind": "observation",
+   "tag": "1092/binary",
+   "payload": {
+    "binary": "/Users/isaac/lpm-evidence/1092/bin-45910dc2/LogicProMCP",
+    "sha256": "4a05330ab93028328d1bf899e0606f26d233a6819efaf3fc19007ff539082032",
+    "embedded_commit": "45910dc28751e34054e39d1bcf909d7156d547c3",
+    "embedded_commit_is_head": true
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1092/ko/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \ud2b8\ub799",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d",
+     "lpm-locale-campaign - \ud2b8\ub799"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "rewind",
+   "params": {},
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "list_recent_traces",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "get_trace",
+   "params": {
+    "trace_id": "lpmcp_63580F4B-667D-4A3B-B5C4-79CD802C8481"
+   },
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1092/ko/0/transport.rewind",
+   "passed": false,
+   "expected": "bar 9 then 8 at every sample, answered by CGEvent",
+   "observed": {
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 7, 6], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'rewind', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_63580F4B-667D-4A3B-B5C4-79CD802C8481', 'verified': False}, 'trace_id': 'lpmcp_63580F4B-667D-4A3B-B5C4-79CD802C8481', '",
+    "accepted_the_observation": false,
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'rewind', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_63580F4B-667D-4A3B-B5C4-79CD802C8481', 'verified': False}, 'trace_id': 'lpmcp_63580F4B-667D-4A3B-B5C4-79CD802C8481', ",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "fast_forward",
+   "params": {},
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "list_recent_traces",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "get_trace",
+   "params": {
+    "trace_id": "lpmcp_6F53D6BD-AB6D-46FD-BAC4-A991F29D8F94"
+   },
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1092/ko/0/transport.fast_forward",
+   "passed": false,
+   "expected": "bar 9 then 10 at every sample, answered by CGEvent",
+   "observed": {
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [9, 10, 11], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'fastForward', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6F53D6BD-AB6D-46FD-BAC4-A991F29D8F94', 'verified': False}, 'trace_id': 'lpmcp_6F53D6BD-AB6D-46FD-BAC4-A991",
+    "accepted_the_observation": false,
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'fastForward', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6F53D6BD-AB6D-46FD-BAC4-A991F29D8F94', 'verified': False}, 'trace_id': 'lpmcp_6F53D6BD-AB6D-46FD-BAC4-A99",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "rewind",
+   "params": {},
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "list_recent_traces",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "get_trace",
+   "params": {
+    "trace_id": "lpmcp_EFB61815-E4BA-4184-B1BA-AE8173E1DB60"
+   },
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1092/ko/1/transport.rewind",
+   "passed": false,
+   "expected": "bar 9 then 8 at every sample, answered by CGEvent",
+   "observed": {
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 7, 6], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'rewind', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_EFB61815-E4BA-4184-B1BA-AE8173E1DB60', 'verified': False}, 'trace_id': 'lpmcp_EFB61815-E4BA-4184-B1BA-AE8173E1DB60', '",
+    "accepted_the_observation": false,
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'rewind', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_EFB61815-E4BA-4184-B1BA-AE8173E1DB60', 'verified': False}, 'trace_id': 'lpmcp_EFB61815-E4BA-4184-B1BA-AE8173E1DB60', ",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "fast_forward",
+   "params": {},
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "list_recent_traces",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "get_trace",
+   "params": {
+    "trace_id": "lpmcp_5181E6BA-D625-4CF8-B915-F19EAE3B069D"
+   },
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1092/ko/1/transport.fast_forward",
+   "passed": false,
+   "expected": "bar 9 then 10 at every sample, answered by CGEvent",
+   "observed": {
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [9, 10, 11], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'fastForward', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_5181E6BA-D625-4CF8-B915-F19EAE3B069D', 'verified': False}, 'trace_id': 'lpmcp_5181E6BA-D625-4CF8-B915-F19E",
+    "accepted_the_observation": false,
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'fastForward', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_5181E6BA-D625-4CF8-B915-F19EAE3B069D', 'verified': False}, 'trace_id': 'lpmcp_5181E6BA-D625-4CF8-B915-F19",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "observation",
+   "tag": "1092/en/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Tracks",
+    "language_setting": [
+     "en"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Marker List",
+     "lpm-locale-campaign - Tracks"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "rewind",
+   "params": {},
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "list_recent_traces",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "get_trace",
+   "params": {
+    "trace_id": "lpmcp_C550C213-DCAA-4C26-AA4B-FA437A3EC470"
+   },
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1092/en/0/transport.rewind",
+   "passed": false,
+   "expected": "bar 9 then 8 at every sample, answered by CGEvent",
+   "observed": {
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 7, 6], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'rewind', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_C550C213-DCAA-4C26-AA4B-FA437A3EC470', 'verified': False}, 'trace_id': 'lpmcp_C550C213-DCAA-4C26-AA4B-FA437A3EC470', '",
+    "accepted_the_observation": false,
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'rewind', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_C550C213-DCAA-4C26-AA4B-FA437A3EC470', 'verified': False}, 'trace_id': 'lpmcp_C550C213-DCAA-4C26-AA4B-FA437A3EC470', ",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "fast_forward",
+   "params": {},
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "list_recent_traces",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "get_trace",
+   "params": {
+    "trace_id": "lpmcp_F7BAB5C9-BF9B-46BA-8132-B374CF1A8258"
+   },
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1092/en/0/transport.fast_forward",
+   "passed": false,
+   "expected": "bar 9 then 10 at every sample, answered by CGEvent",
+   "observed": {
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [9, 10, 11], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'fastForward', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F7BAB5C9-BF9B-46BA-8132-B374CF1A8258', 'verified': False}, 'trace_id': 'lpmcp_F7BAB5C9-BF9B-46BA-8132-B374",
+    "accepted_the_observation": false,
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'fastForward', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F7BAB5C9-BF9B-46BA-8132-B374CF1A8258', 'verified': False}, 'trace_id': 'lpmcp_F7BAB5C9-BF9B-46BA-8132-B37",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "rewind",
+   "params": {},
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "list_recent_traces",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "get_trace",
+   "params": {
+    "trace_id": "lpmcp_A2448425-133F-42A8-8670-39498955681B"
+   },
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1092/en/1/transport.rewind",
+   "passed": false,
+   "expected": "bar 9 then 8 at every sample, answered by CGEvent",
+   "observed": {
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 7, 6], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'rewind', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_A2448425-133F-42A8-8670-39498955681B', 'verified': False}, 'trace_id': 'lpmcp_A2448425-133F-42A8-8670-39498955681B', '",
+    "accepted_the_observation": false,
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'rewind', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_A2448425-133F-42A8-8670-39498955681B', 'verified': False}, 'trace_id': 'lpmcp_A2448425-133F-42A8-8670-39498955681B', ",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "goto_position",
+   "params": {
+    "bar": 9
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "fast_forward",
+   "params": {},
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_transport",
+   "command": "stop",
+   "params": {},
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": false
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "list_recent_traces",
+   "params": {},
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_system",
+   "command": "get_trace",
+   "params": {
+    "trace_id": "lpmcp_A531415B-F591-4485-96CB-187C4DF2A206"
+   },
+   "response": {
+    "state": null,
+    "success": null,
+    "error": null,
+    "hint": null,
+    "verified": null,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1092/en/1/transport.fast_forward",
+   "passed": false,
+   "expected": "bar 9 then 10 at every sample, answered by CGEvent",
+   "observed": {
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [9, 10, 11], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'fastForward', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_A531415B-F591-4485-96CB-187C4DF2A206', 'verified': False}, 'trace_id': 'lpmcp_A531415B-F591-4485-96CB-187C",
+    "accepted_the_observation": false,
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'command': 'fastForward', 'function': 'transport', 'reason': 'readback_unavailable', 'state': 'B', 'success': True, 'trace_id': 'lpmcp_A531415B-F591-4485-96CB-187C4DF2A206', 'verified': False}, 'trace_id': 'lpmcp_A531415B-F591-4485-96CB-187",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": null
+  },
+  {
+   "kind": "observation",
+   "tag": "1092/restore",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \ud2b8\ub799",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d",
+     "lpm-locale-campaign - \ud2b8\ub799"
+    ]
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1092/rows",
+   "payload": [
+    {
+     "op": "transport.rewind",
+     "direction": -1,
+     "start": 9,
+     "readings": [
+      8,
+      7,
+      6
+     ],
+     "seconds_after_reply": [
+      0.5,
+      1.5,
+      3.0
+     ],
+     "reply_success": true,
+     "reply": {
+      "command": "rewind",
+      "function": "transport",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_63580F4B-667D-4A3B-B5C4-79CD802C8481",
+      "verified": false
+     },
+     "trace_id": "lpmcp_63580F4B-667D-4A3B-B5C4-79CD802C8481",
+     "answered_by": [
+      "MCU"
+     ],
+     "lproj": "ko",
+     "trial": 0
+    },
+    {
+     "op": "transport.fast_forward",
+     "direction": 1,
+     "start": 9,
+     "readings": [
+      9,
+      10,
+      11
+     ],
+     "seconds_after_reply": [
+      0.5,
+      1.5,
+      3.0
+     ],
+     "reply_success": true,
+     "reply": {
+      "command": "fastForward",
+      "function": "transport",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_6F53D6BD-AB6D-46FD-BAC4-A991F29D8F94",
+      "verified": false
+     },
+     "trace_id": "lpmcp_6F53D6BD-AB6D-46FD-BAC4-A991F29D8F94",
+     "answered_by": [
+      "MCU"
+     ],
+     "lproj": "ko",
+     "trial": 0
+    },
+    {
+     "op": "transport.rewind",
+     "direction": -1,
+     "start": 9,
+     "readings": [
+      8,
+      7,
+      6
+     ],
+     "seconds_after_reply": [
+      0.5,
+      1.5,
+      3.0
+     ],
+     "reply_success": true,
+     "reply": {
+      "command": "rewind",
+      "function": "transport",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_EFB61815-E4BA-4184-B1BA-AE8173E1DB60",
+      "verified": false
+     },
+     "trace_id": "lpmcp_EFB61815-E4BA-4184-B1BA-AE8173E1DB60",
+     "answered_by": [
+      "MCU"
+     ],
+     "lproj": "ko",
+     "trial": 1
+    },
+    {
+     "op": "transport.fast_forward",
+     "direction": 1,
+     "start": 9,
+     "readings": [
+      9,
+      10,
+      11
+     ],
+     "seconds_after_reply": [
+      0.5,
+      1.5,
+      3.0
+     ],
+     "reply_success": true,
+     "reply": {
+      "command": "fastForward",
+      "function": "transport",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_5181E6BA-D625-4CF8-B915-F19EAE3B069D",
+      "verified": false
+     },
+     "trace_id": "lpmcp_5181E6BA-D625-4CF8-B915-F19EAE3B069D",
+     "answered_by": [
+      "MCU"
+     ],
+     "lproj": "ko",
+     "trial": 1
+    },
+    {
+     "op": "transport.rewind",
+     "direction": -1,
+     "start": 9,
+     "readings": [
+      8,
+      7,
+      6
+     ],
+     "seconds_after_reply": [
+      0.5,
+      1.5,
+      3.0
+     ],
+     "reply_success": true,
+     "reply": {
+      "command": "rewind",
+      "function": "transport",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_C550C213-DCAA-4C26-AA4B-FA437A3EC470",
+      "verified": false
+     },
+     "trace_id": "lpmcp_C550C213-DCAA-4C26-AA4B-FA437A3EC470",
+     "answered_by": [
+      "MCU"
+     ],
+     "lproj": "en",
+     "trial": 0
+    },
+    {
+     "op": "transport.fast_forward",
+     "direction": 1,
+     "start": 9,
+     "readings": [
+      9,
+      10,
+      11
+     ],
+     "seconds_after_reply": [
+      0.5,
+      1.5,
+      3.0
+     ],
+     "reply_success": true,
+     "reply": {
+      "command": "fastForward",
+      "function": "transport",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_F7BAB5C9-BF9B-46BA-8132-B374CF1A8258",
+      "verified": false
+     },
+     "trace_id": "lpmcp_F7BAB5C9-BF9B-46BA-8132-B374CF1A8258",
+     "answered_by": [
+      "MCU"
+     ],
+     "lproj": "en",
+     "trial": 0
+    },
+    {
+     "op": "transport.rewind",
+     "direction": -1,
+     "start": 9,
+     "readings": [
+      8,
+      7,
+      6
+     ],
+     "seconds_after_reply": [
+      0.5,
+      1.5,
+      3.0
+     ],
+     "reply_success": true,
+     "reply": {
+      "command": "rewind",
+      "function": "transport",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_A2448425-133F-42A8-8670-39498955681B",
+      "verified": false
+     },
+     "trace_id": "lpmcp_A2448425-133F-42A8-8670-39498955681B",
+     "answered_by": [
+      "MCU"
+     ],
+     "lproj": "en",
+     "trial": 1
+    },
+    {
+     "op": "transport.fast_forward",
+     "direction": 1,
+     "start": 9,
+     "readings": [
+      9,
+      10,
+      11
+     ],
+     "seconds_after_reply": [
+      0.5,
+      1.5,
+      3.0
+     ],
+     "reply_success": true,
+     "reply": {
+      "command": "fastForward",
+      "function": "transport",
+      "reason": "readback_unavailable",
+      "state": "B",
+      "success": true,
+      "trace_id": "lpmcp_A531415B-F591-4485-96CB-187C4DF2A206",
+      "verified": false
+     },
+     "trace_id": "lpmcp_A531415B-F591-4485-96CB-187C4DF2A206",
+     "answered_by": [
+      "MCU"
+     ],
+     "lproj": "en",
+     "trial": 1
+    }
+   ]
+  },
+  {
+   "kind": "observation",
+   "tag": "1092/failures",
+   "payload": [
+    {
+     "lproj": "ko",
+     "trial": 0,
+     "op": "transport.rewind",
+     "start": 9,
+     "readings": [
+      8,
+      7,
+      6
+     ],
+     "answered_by": [
+      "MCU"
+     ]
+    },
+    {
+     "lproj": "ko",
+     "trial": 0,
+     "op": "transport.fast_forward",
+     "start": 9,
+     "readings": [
+      9,
+      10,
+      11
+     ],
+     "answered_by": [
+      "MCU"
+     ]
+    },
+    {
+     "lproj": "ko",
+     "trial": 1,
+     "op": "transport.rewind",
+     "start": 9,
+     "readings": [
+      8,
+      7,
+      6
+     ],
+     "answered_by": [
+      "MCU"
+     ]
+    },
+    {
+     "lproj": "ko",
+     "trial": 1,
+     "op": "transport.fast_forward",
+     "start": 9,
+     "readings": [
+      9,
+      10,
+      11
+     ],
+     "answered_by": [
+      "MCU"
+     ]
+    },
+    {
+     "lproj": "en",
+     "trial": 0,
+     "op": "transport.rewind",
+     "start": 9,
+     "readings": [
+      8,
+      7,
+      6
+     ],
+     "answered_by": [
+      "MCU"
+     ]
+    },
+    {
+     "lproj": "en",
+     "trial": 0,
+     "op": "transport.fast_forward",
+     "start": 9,
+     "readings": [
+      9,
+      10,
+      11
+     ],
+     "answered_by": [
+      "MCU"
+     ]
+    },
+    {
+     "lproj": "en",
+     "trial": 1,
+     "op": "transport.rewind",
+     "start": 9,
+     "readings": [
+      8,
+      7,
+      6
+     ],
+     "answered_by": [
+      "MCU"
+     ]
+    },
+    {
+     "lproj": "en",
+     "trial": 1,
+     "op": "transport.fast_forward",
+     "start": 9,
+     "readings": [
+      9,
+      10,
+      11
+     ],
+     "answered_by": [
+      "MCU"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "environment",
+   "screen_locked": false
+  }
+ ]
+}

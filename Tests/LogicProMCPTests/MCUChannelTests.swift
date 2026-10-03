@@ -180,8 +180,6 @@ private func makeBankingChannel(
         ("transport.play", .play),
         ("transport.stop", .stop),
         ("transport.record", .record),
-        ("transport.rewind", .rewind),
-        ("transport.fast_forward", .fastForward),
         ("transport.toggle_cycle", .cycle),
     ]
 
@@ -464,8 +462,7 @@ private func decodeMCUJSON(_ s: String) -> [String: Any] {
     let channel = MCUChannel(transport: MockMCUTransport(), cache: StateCache())
 
     for op in [
-        "transport.play", "transport.stop", "transport.record",
-        "transport.rewind", "transport.fast_forward", "transport.toggle_cycle"
+        "transport.play", "transport.stop", "transport.record", "transport.toggle_cycle"
     ] {
         let result = await channel.execute(operation: op, params: [:])
         #expect(result.isSuccess, "\(op) should produce State B envelope")

@@ -356,12 +356,12 @@ enum SemanticOracleTable {
         // channels and their handlers can never reach State A. Kept explicit so
         // their absence from the B2 increment is a reviewed decision, not a gap.
         .transportRewind:
-            "send-only — routes to [.mcu, .coreMIDI, .cgEvent]; MCUChannel.sendTransport "
-            + "and the keystroke channels emit only State B readback_unavailable, so a "
-            + "rewind press has no read-back and no State A to verify",
+            "send-only — routes to [.cgEvent] alone (#1092); Apple's Rewind key is posted "
+            + "and the channel emits only State B readback_unavailable, so a rewind press "
+            + "has no read-back and no State A to verify",
         .transportFastForward:
-            "send-only — routes to [.mcu, .coreMIDI, .cgEvent] exactly like rewind; the "
-            + "MCU/CoreMIDI/CGEvent transport presses are echo-less, so no State A exists",
+            "send-only — routes to [.cgEvent] alone exactly like rewind (#1092); the "
+            + "Forward keystroke is echo-less, so no State A exists",
         .navigateZoomToFit:
             "send-only — routes to [.midiKeyCommands, .cgEvent]; both fire a blind key "
             + "command (CC 46 / key Z) with no arrange-zoom read-back, so the op is honestly "

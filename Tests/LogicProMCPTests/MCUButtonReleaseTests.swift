@@ -197,11 +197,11 @@ struct MCUButtonReleaseTests {
         let transport = MockMCUTransport()
         let channel = MCUChannel(transport: transport, cache: StateCache())
 
-        let result = await channel.execute(operation: "transport.rewind", params: [:])
+        let result = await channel.execute(operation: "transport.play", params: [:])
 
         #expect(result.isSuccess)
         let sent = await transport.sentBytes
-        #expect(sent == press(.rewind))
+        #expect(sent == press(.play))
         #expect(unreleasedPresses(sent).isEmpty)
     }
 }

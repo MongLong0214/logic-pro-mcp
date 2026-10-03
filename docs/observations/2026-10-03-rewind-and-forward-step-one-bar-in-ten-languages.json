@@ -1,0 +1,1446 @@
+{
+  "schema": 3,
+  "id": "2026-10-03-rewind-and-forward-step-one-bar-in-ten-languages",
+  "date": "2026-10-03",
+  "subject": "whether transport.rewind and transport.fast_forward move the playhead one bar and stop, through the route a server with no route restriction takes, in ten languages",
+  "question": "From a stopped transport at bar 9, does each call leave the playhead one bar away in its own direction at 0.5, 1.5 and 3.0 s after the reply, and which channel answered it, in each of Logic's ten languages; and what did the merge-base binary do from the same start?",
+  "verdict": "works",
+  "surface": "arrange.transport",
+  "issues": [
+    1092
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_1092_rewind_and_forward_step_one_bar.py <worktree> <full-40-char-head> <debug binary>",
+    "expected": "every row reads bar 9 before the call, the bar one away at all three samples, and CGEvent as the only channel that ran; with --lprojs ko en and the merge-base binary, no row passes",
+    "cost": "run as /usr/bin/python3 with LPM_LIVE_LOCK naming a held lock, LPM_EVIDENCE_ROOT an absolute path outside the repository and LPM_LOCALE_FIXTURE the locale fixture; relaunches Logic once per language, about two minutes per language"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/RoutingTable.swift:v2RoutingTable",
+    "Sources/LogicProMCP/Channels/CGEventChannel.swift:CGEventChannel",
+    "Scripts/livekit/live_1092_rewind_and_forward_step_one_bar.py:stepped",
+    "Scripts/livekit/live_1092_rewind_and_forward_step_one_bar.py:trial"
+  ],
+  "evidence": [
+    "evidence/2026-10-03-1092-rewind-and-forward-fixed-run.json",
+    "evidence/2026-10-03-1092-rewind-and-forward-control-run.json"
+  ],
+  "method": "Two runs of Scripts/livekit/live_1092_rewind_and_forward_step_one_bar.py at 229c08f1f4629a52bb9704d6c755460beb967c65, with no LOGIC_MCP_DEBUG_ONLY_CHANNEL. The first drove a debug build of that head (sha256 e190e924ecaf4f41949005ee2930c1ebd51bf35ab5fd395aaac2952b2762caf2) in ten languages, three trials each; the second drove a debug build of the merge-base 45910dc28751e34054e39d1bcf909d7156d547c3 (sha256 4a05330ab93028328d1bf899e0606f26d233a6819efaf3fc19007ff539082032) in ko and en, two trials each, as the control. For each language Logic was quit, its AppleLanguages set, and the lpm-locale-campaign fixture reopened. Each trial stopped the transport, moved the playhead to bar 9 through transport.goto_position and read it back, made the call, and read the bar 0.5, 1.5 and 3.0 s after the reply. The bar was read by the harness process from Logic's control bar (the playhead group's bar slider), not from the server. The channels that ran were read from the call's operation trace (channel.started events), not from the reply. Each binary was built at a clean checkout of its commit with that commit embedded in the Mach-O section __TEXT,__lpm_commit; the harness read the section from the measured file and refused to drive a binary whose commit was not the head it was given (observations[0].artifacts). A row passes when the bar read 9 before, the reply succeeded, CGEvent was the only channel that ran, and all three readings were the bar one away in the call's direction. Each row's check was run against its own observation and against the same row with the shuttle readings the MCU rung gave in ko earlier that day, which it must reject.",
+  "observations": [
+    {
+      "fixed": {
+        "checks": 60,
+        "passed": 60,
+        "languages": 10
+      },
+      "control": {
+        "checks": 8,
+        "passed": 0,
+        "channels_that_answered": [
+          "MCU"
+        ]
+      },
+      "artifacts": {
+        "fixed": {
+          "path": "/Users/isaac/lpm-evidence/1092/bin-229c08f1/LogicProMCP",
+          "sha256": "e190e924ecaf4f41949005ee2930c1ebd51bf35ab5fd395aaac2952b2762caf2",
+          "built_from": "229c08f1f4629a52bb9704d6c755460beb967c65",
+          "worktree_clean": true,
+          "built_from_is_measured": false,
+          "artifact_older_than_sources": false,
+          "embedded_commit": "229c08f1f4629a52bb9704d6c755460beb967c65",
+          "embedded_commit_is_head": true
+        },
+        "control": {
+          "path": "/Users/isaac/lpm-evidence/1092/bin-45910dc2/LogicProMCP",
+          "sha256": "4a05330ab93028328d1bf899e0606f26d233a6819efaf3fc19007ff539082032",
+          "built_from": "45910dc28751e34054e39d1bcf909d7156d547c3",
+          "worktree_clean": true,
+          "built_from_is_measured": false,
+          "artifact_older_than_sources": false,
+          "embedded_commit": "45910dc28751e34054e39d1bcf909d7156d547c3",
+          "embedded_commit_is_head": true
+        }
+      }
+    },
+    {
+      "run": "fixed",
+      "per_locale": [
+        {
+          "locale": "de-DE",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "en-US",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "es-ES",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "fr-FR",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "it-IT",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "ja-JP",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "ko-KR",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "pt-BR",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "zh-CN",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "zh-TW",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                8,
+                8
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 2,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                10,
+                10,
+                10
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "CGEvent"
+              ],
+              "reply_success": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "run": "control",
+      "per_locale": [
+        {
+          "locale": "en-US",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                7,
+                6
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "MCU"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                9,
+                10,
+                11
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "MCU"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                7,
+                6
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "MCU"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                9,
+                10,
+                11
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "MCU"
+              ],
+              "reply_success": true
+            }
+          ]
+        },
+        {
+          "locale": "ko-KR",
+          "rows": [
+            {
+              "trial": 0,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                7,
+                6
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "MCU"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 0,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                9,
+                10,
+                11
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "MCU"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.rewind",
+              "bar_before": 9,
+              "bars_after": [
+                8,
+                7,
+                6
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "MCU"
+              ],
+              "reply_success": true
+            },
+            {
+              "trial": 1,
+              "op": "transport.fast_forward",
+              "bar_before": 9,
+              "bars_after": [
+                9,
+                10,
+                11
+              ],
+              "seconds_after_reply": [
+                0.5,
+                1.5,
+                3.0
+              ],
+              "answered_by": [
+                "MCU"
+              ],
+              "reply_success": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "conclusion": "At 229c08f1, 60 of 60 checks passed: in each language the call moved the playhead one bar in its direction and it stayed there, answered by CGEvent alone. The merge-base binary passed 0 of 8: observations[2] holds its readings and the channel that answered.",
+  "limits": [
+    "One Logic installation (12.3, build 6674), one fixture, one host; every call was made from a stopped transport at bar 9. A call during playback was not driven.",
+    "The bar is the only reading taken: a call that also moved the beat or another control would not be seen.",
+    "CGEvent needs Logic to own the keyboard; a refused keystroke now returns its refusal, which these runs did not drive live (the unit tests do)."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states bars, counts, op names and channel ids; it quotes no string Logic ships."
+  }
+}
