@@ -4,8 +4,10 @@ import Testing
 @testable import LogicProMCP
 
 private actor StructuredContentJSONChannel: Channel {
-    nonisolated let id: ChannelID = .mcu
+    // #1092: rewind routes to CGEvent alone, so the stub answers as CGEvent.
+    nonisolated let id: ChannelID = .cgEvent
     private let response: String
+    private(set) var executed: [String] = []
 
     init(response: String) {
         self.response = response
@@ -16,6 +18,7 @@ private actor StructuredContentJSONChannel: Channel {
     func healthCheck() async -> ChannelHealth { .healthy(detail: "structured-content-stub") }
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        executed.append(operation)
         guard operation == "transport.rewind" else {
             return .error("unexpected operation: \(operation)")
         }
@@ -119,7 +122,8 @@ struct StructuredContentTests {
     func channelResultPathDispatcherResponseIncludesStructuredContent() async throws {
         let json = #"{"success":true,"verified":false,"state":"B","operation":"transport.rewind"}"#
         let router = ChannelRouter()
-        await router.register(StructuredContentJSONChannel(response: json))
+        let channel = StructuredContentJSONChannel(response: json)
+        await router.register(channel)
 
         let result = await TransportDispatcher.handle(
             command: "rewind",
@@ -133,5 +137,12 @@ struct StructuredContentTests {
         let structuredObject = try #require(JSONSerialization.jsonObject(with: structuredData) as? [String: Any])
 
         #expect(try canonicalJSONObjectData(structuredObject) == canonicalJSONObjectData(textObject))
+        // The supplied State B came back, not a routing error with the same text in both places.
+        #expect(await channel.executed == ["transport.rewind"])
+        let supplied = try #require(sharedJSONObject(json))
+        for (key, value) in supplied {
+            let kept = try #require(textObject[key], "the reply lost \(key)")
+            #expect(try canonicalJSONObjectData(["v": kept]) == canonicalJSONObjectData(["v": value]), "\(key)")
+        }
     }
 }
