@@ -53,15 +53,15 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: MongLong0214/commitlore
-          ref: 5f9a957173d825e36e1f39b895f3dea5384ad75d # v1.2.13
+          ref: fa9909a41e864a17d649df8c0e15dd03ca5a59ef # v1.7.2
           path: .commitlore-cli
           persist-credentials: false
 
       # Pinning by tag, as the README recipe does, was rejected here. A tag can be moved, and this job runs on
       # pull_request_target with `contents: write`, so a moved tag would be code execution with a
       # write token on every squash merge. Same-owner is not a control: that repository can have
-      # different tag protection or collaborators. 5f9a9571 is what v1.2.13 peels to.
-      - uses: MongLong0214/commitlore/action/preserve@5f9a957173d825e36e1f39b895f3dea5384ad75d # v1.2.13
+      # different tag protection or collaborators. fa9909a4 is what v1.7.2 peels to.
+      - uses: MongLong0214/commitlore/action/preserve@fa9909a41e864a17d649df8c0e15dd03ca5a59ef # v1.7.2
         with:
           cli-path: .commitlore-cli/dist/commitlore.mjs
 
