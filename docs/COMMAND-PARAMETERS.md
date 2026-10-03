@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by CommandSchemaProjection.parameterTable. Do not edit; run `LPM_WRITE_GENERATED_DOCS=1 swift test --filter Issue957` to regenerate. -->
 
-Each command's accepted parameters and the registry's policy words for it. "Closed" means the server's generic strict-parameter gate refuses a key the row does not list; "open" means that gate does not run for the row, and the command's dispatcher still validates its parameters. The table assumes strict parameter checking, the default; `LOGIC_MCP_ADR003_STRICT_PARAMS=0` turns the gate off and opens every row. Neither word covers values, types or required keys: the dispatchers check those and the registry does not record them. This is a projection of `OperationRegistry`, not a second source, and not qualification evidence.
+Each command's accepted parameters and the registry's policy words for it. "Closed" means a key the row does not list is refused: by the server's generic strict-parameter gate, or, for the keys a dispatcher answers with its own error (such as `port` on `logic_midi` `list_ports`), which that gate forwards, by the dispatcher; "open" means that gate does not run for the row, and the command's dispatcher still validates its parameters. The table assumes strict parameter checking, the default; `LOGIC_MCP_ADR003_STRICT_PARAMS=0` turns the gate off and opens every row. Neither word covers values, types or required keys: the dispatchers check those and the registry does not record them. This is a projection of `OperationRegistry`, not a second source, and not qualification evidence.
 
 ## `logic_audio`
 

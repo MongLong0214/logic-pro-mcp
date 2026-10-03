@@ -168,6 +168,33 @@ import Testing
         }
     }
 
+    /// R3 of #1093's review: the committed table must not depend on the process's tracing flag.
+    /// The trace commands are rendered as experimental (tracing off) and as default_install (on);
+    /// the documentation entries are the same either way. Mutation this kills: the table rendered
+    /// from the live catalog, which a server started with tracing off would rewrite.
+    @Test func theTableDoesNotDependOnTheTracingFlag() throws {
+        let live = OperationCatalog.snapshot().operations
+        let tracedIDs = Set(OperationRegistry.traceOperationIDs.map(\.rawValue))
+        #expect(tracedIDs.count == 3)
+        func withTrace(_ availability: String) -> [OperationCatalogEntry] {
+            live.map { entry in
+                guard tracedIDs.contains(entry.id) else { return entry }
+                return OperationCatalogEntry(
+                    id: entry.id, tool: entry.tool, command: entry.command, mutability: entry.mutability,
+                    target: entry.target, confirmation: entry.confirmation, verification: entry.verification,
+                    retry: entry.retry, deadline: entry.deadline, availability: availability,
+                    allowedParams: entry.allowedParams, capability: entry.capability,
+                    dirtySections: entry.dirtySections, indexBinding: entry.indexBinding)
+            }
+        }
+        let off = Projection.parameterTable(entries: Projection.documentationEntries(withTrace("experimental")))
+        let on = Projection.parameterTable(entries: Projection.documentationEntries(withTrace("default_install")))
+        let same = off == on
+        #expect(same, "the rendered table changes with the tracing flag")
+        let differs = Projection.parameterTable(entries: withTrace("experimental")) != on
+        #expect(differs, "control: the raw catalog with tracing off renders differently")
+    }
+
     // MARK: - Reading the projected JSON
 
     private func commandEnum(_ tool: Tool) throws -> [String] {

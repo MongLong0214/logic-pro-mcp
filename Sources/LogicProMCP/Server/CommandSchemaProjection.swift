@@ -111,8 +111,30 @@ enum CommandSchemaProjection {
     /// The parameter table `docs/COMMAND-PARAMETERS.md` holds, rendered from the same entries the
     /// rich schema reads. It is a view of the registry, not another source: a test compares the
     /// committed file with this rendering.
+    /// The catalog the committed table is rendered from: the live catalog with every
+    /// process-dependent policy set to its default. Only the trace commands' availability depends on
+    /// the process today (`LOGIC_MCP_ADR005_OPERATION_TRACE`, read when the registry is built), and
+    /// the table states it as tracing's default, on (#1093 review R2, R3). The rich schema a running
+    /// server lists keeps the process's own value.
+    static func documentationEntries(
+        _ entries: [OperationCatalogEntry] = OperationCatalog.snapshot().operations
+    ) -> [OperationCatalogEntry] {
+        let traced = OperationCatalog.wire(OperationRegistry.traceAvailability(traceEnabled: true))
+        return entries.map { entry in
+            guard let id = OperationID(rawValue: entry.id), OperationRegistry.traceOperationIDs.contains(id) else {
+                return entry
+            }
+            return OperationCatalogEntry(
+                id: entry.id, tool: entry.tool, command: entry.command, mutability: entry.mutability,
+                target: entry.target, confirmation: entry.confirmation, verification: entry.verification,
+                retry: entry.retry, deadline: entry.deadline, availability: traced,
+                allowedParams: entry.allowedParams, capability: entry.capability,
+                dirtySections: entry.dirtySections, indexBinding: entry.indexBinding)
+        }
+    }
+
     static func parameterTable(
-        entries: [OperationCatalogEntry] = OperationCatalog.snapshot().operations, strictParams: Bool = true
+        entries: [OperationCatalogEntry] = documentationEntries(), strictParams: Bool = true
     ) -> String {
         var lines = [
             "# Command parameters",
@@ -121,7 +143,9 @@ enum CommandSchemaProjection {
                 + "Do not edit; run `LPM_WRITE_GENERATED_DOCS=1 swift test --filter Issue957` to regenerate. -->",
             "",
             "Each command's accepted parameters and the registry's policy words for it. "
-                + "\"Closed\" means the server's generic strict-parameter gate refuses a key the row does not list; "
+                + "\"Closed\" means a key the row does not list is refused: by the server's generic strict-parameter "
+                + "gate, or, for the keys a dispatcher answers with its own error (such as `port` on `logic_midi` "
+                + "`list_ports`), which that gate forwards, by the dispatcher; "
                 + "\"open\" means that gate does not run for the row, and the command's dispatcher still validates "
                 + "its parameters. The table assumes strict parameter checking, the default; "
                 + "`LOGIC_MCP_ADR003_STRICT_PARAMS=0` turns the gate off and opens every row. Neither word covers "
