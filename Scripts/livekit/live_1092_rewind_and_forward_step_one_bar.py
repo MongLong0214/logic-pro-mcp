@@ -202,7 +202,7 @@ def main():
     args = arguments()
     sys.path.insert(0, os.path.join(args.worktree, "Scripts"))
     import logic_canon  # noqa: E402
-    L993.logic_canon = logic_canon
+    setattr(L993, "logic_canon", logic_canon)
     if os.environ.get("LOGIC_MCP_DEBUG_ONLY_CHANNEL"):
         sys.exit("LOGIC_MCP_DEBUG_ONLY_CHANNEL is set; this run measures the production route")
     ev = E.Evidence(args.head, os.environ["LPM_EVIDENCE_ROOT"], surface="ui")
