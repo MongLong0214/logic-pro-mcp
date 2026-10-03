@@ -1,0 +1,4384 @@
+{
+  "schema": 3,
+  "id": "2026-10-03-cgevent-fallback-reachability-without-midi-key-commands",
+  "date": "2026-10-03",
+  "subject": "which channel answers each operation that keeps a CGEvent fallback when the server runs unrestricted and the MIDI key-command approval is withdrawn",
+  "question": "With no route restriction and the MIDI key-command channel unapproved, which channel does each fallback operation reach in each of Logic's ten languages, and does its function happen?",
+  "verdict": "partial",
+  "surface": "arrange.transport",
+  "issues": [
+    1029
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_1029_cgevent_fallback_in_every_locale.py <worktree> <full-40-char-head> <debug binary> --mode production",
+    "expected": "each row records the method the reply names; the restorations read back",
+    "cost": "as for the isolated run"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/RoutingTable.swift:v2RoutingTable",
+    "Sources/LogicProMCP/Channels/ChannelRouter.swift:route",
+    "Scripts/livekit/live_1029_cgevent_fallback_in_every_locale.py:run_language"
+  ],
+  "evidence": [
+    "evidence/2026-10-03-1029-cgevent-fallback-production-run.json"
+  ],
+  "method": "The same harness and binary at c819fb9fdbb58e8d13a4e72a5a7fe62d04049bc9 in production mode: no LOGIC_MCP_DEBUG_ONLY_CHANNEL, the MIDI key-command approval withdrawn as in the isolated run, the same setups, readings and ten languages. The reply's method names the channel that answered.",
+  "observations": [
+    {
+      "methods_by_op": {
+        "automation.toggle_view": [
+          "cgevent"
+        ],
+        "edit.bounce_in_place": [
+          "cgevent"
+        ],
+        "edit.copy": [
+          "cgevent"
+        ],
+        "edit.cut": [
+          "cgevent"
+        ],
+        "edit.join": [
+          "cgevent"
+        ],
+        "edit.paste": [
+          "cgevent"
+        ],
+        "edit.quantize": [
+          "cgevent"
+        ],
+        "edit.redo": [
+          null
+        ],
+        "edit.select_all": [
+          "cgevent"
+        ],
+        "edit.split": [
+          "cgevent"
+        ],
+        "edit.undo": [
+          null
+        ],
+        "nav.zoom_to_fit": [
+          "cgevent"
+        ],
+        "project.close": [
+          "applescript"
+        ],
+        "project.save": [
+          "applescript"
+        ],
+        "track.create_audio": [
+          null
+        ],
+        "track.create_instrument": [
+          null
+        ],
+        "track.delete": [
+          null
+        ],
+        "track.duplicate": [
+          "cgevent"
+        ],
+        "transport.fast_forward": [
+          null
+        ],
+        "transport.goto_position": [
+          null
+        ],
+        "transport.pause": [
+          "cgevent"
+        ],
+        "transport.play": [
+          null
+        ],
+        "transport.record": [
+          null
+        ],
+        "transport.resume": [
+          "cgevent"
+        ],
+        "transport.rewind": [
+          null
+        ],
+        "transport.stop": [
+          "cgevent"
+        ],
+        "transport.toggle_cycle": [
+          null
+        ],
+        "transport.toggle_metronome": [
+          "cgevent"
+        ],
+        "view.toggle_library": [
+          "cgevent"
+        ],
+        "view.toggle_mixer": [
+          "cgevent"
+        ],
+        "view.toggle_piano_roll": [
+          "cgevent"
+        ],
+        "view.toggle_score_editor": [
+          "cgevent"
+        ]
+      },
+      "ops_answered_by_cgevent": [
+        "automation.toggle_view",
+        "edit.bounce_in_place",
+        "edit.copy",
+        "edit.cut",
+        "edit.join",
+        "edit.paste",
+        "edit.quantize",
+        "edit.select_all",
+        "edit.split",
+        "nav.zoom_to_fit",
+        "track.duplicate",
+        "transport.pause",
+        "transport.resume",
+        "transport.stop",
+        "transport.toggle_metronome",
+        "view.toggle_library",
+        "view.toggle_mixer",
+        "view.toggle_piano_roll",
+        "view.toggle_score_editor"
+      ],
+      "rows_without_function_or_with_another_reading_moved_by_op": {
+        "edit.quantize": 1,
+        "edit.undo": 1,
+        "transport.fast_forward": 10,
+        "view.toggle_library": 1
+      },
+      "method_null_means": "the reply named no method; a rung before CGEvent answered (MCU, CoreMIDI, Accessibility or AppleScript by the routing table)"
+    },
+    {
+      "locale": "de-DE",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 45
+    },
+    {
+      "locale": "en-US",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 45
+    },
+    {
+      "locale": "es-ES",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 45
+    },
+    {
+      "locale": "fr-FR",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 2,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 43
+    },
+    {
+      "locale": "it-IT",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 44
+    },
+    {
+      "locale": "ja-JP",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 45
+    },
+    {
+      "locale": "ko-KR",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 45
+    },
+    {
+      "locale": "pt-BR",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 45
+    },
+    {
+      "locale": "zh-CN",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 45
+    },
+    {
+      "locale": "zh-TW",
+      "rows": [
+        {
+          "index": 0,
+          "op": "transport.play",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 1,
+          "op": "transport.pause",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 2,
+          "op": "transport.resume",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 3,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 4,
+          "op": "transport.goto_position",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 5,
+          "op": "transport.rewind",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 6,
+          "op": "transport.fast_forward",
+          "function": false,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 7,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 8,
+          "op": "transport.toggle_cycle",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 9,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 10,
+          "op": "transport.toggle_metronome",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 11,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 12,
+          "op": "automation.toggle_view",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 13,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 14,
+          "op": "nav.zoom_to_fit",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 15,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 16,
+          "op": "view.toggle_library",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 17,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 18,
+          "op": "view.toggle_mixer",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 19,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 20,
+          "op": "view.toggle_score_editor",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 21,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 22,
+          "op": "view.toggle_piano_roll",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 23,
+          "op": "edit.select_all",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 24,
+          "op": "edit.copy",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 25,
+          "op": "edit.paste",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 26,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 27,
+          "op": "edit.cut",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 28,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 29,
+          "op": "edit.split",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 30,
+          "op": "edit.join",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 31,
+          "op": "edit.quantize",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 32,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 33,
+          "op": "edit.bounce_in_place",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 34,
+          "op": "transport.record",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 35,
+          "op": "transport.stop",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 36,
+          "op": "track.create_audio",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 37,
+          "op": "edit.undo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 38,
+          "op": "edit.redo",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 39,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 40,
+          "op": "track.create_instrument",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 41,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 42,
+          "op": "track.duplicate",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "cgevent",
+          "success": true,
+          "state": "B"
+        },
+        {
+          "index": 43,
+          "op": "track.delete",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": null,
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 44,
+          "op": "project.save",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "A"
+        },
+        {
+          "index": 45,
+          "op": "project.close",
+          "function": true,
+          "other_readings_moved": 0,
+          "method": "applescript",
+          "success": true,
+          "state": "B"
+        }
+      ],
+      "rows_run": 46,
+      "rows_with_function_and_nothing_else": 45
+    }
+  ],
+  "conclusion": "With the MIDI key-command channel unapproved, 19 operations were answered through cgevent in at least one language; observations[0] lists the channels each operation reached. transport.fast_forward, answered before CGEvent, did not move the playhead forward in 10 of 10 languages: the bar the playhead read went down across transport.rewind and down again across transport.fast_forward; the readings are in the evidence rows.",
+  "limits": [
+    "One Logic installation, one fixture, one input source; the MIDI key-command channel was unapproved, not unavailable for another reason.",
+    "A channel that answered first hides whether the CGEvent rung behind it would have worked.",
+    "Where a rung before CGEvent answered, the reply does not name it; the routing table says which rungs come first."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states booleans, counts, op names, channel ids and the key letters the harness posted; it quotes no string Logic ships. The localized readings it compared are in the evidence file."
+  }
+}
