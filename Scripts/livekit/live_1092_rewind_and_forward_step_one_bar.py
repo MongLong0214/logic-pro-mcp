@@ -195,16 +195,19 @@ def trial(driver, ax, title, command, direction):
 
 def embedded_commit(binary):
     """The commit the build embedded in the Mach-O section __TEXT,__lpm_commit, or None when the binary
-    carries none. Read from the artifact itself, it ties the measured binary to its source commit
-    (#1095 review round 2: built_from was the worktree's head at writing time, not a measurement)."""
-    out = subprocess.run(["/usr/bin/otool", "-X", "-s", "__TEXT", "__lpm_commit", binary],
-                         capture_output=True, text=True).stdout
-    hexed = "".join(word for line in out.splitlines() for word in line.split()[1:])
-    try:
-        text = bytes.fromhex(hexed).decode("ascii")
-    except ValueError:
-        return None
-    return text if len(text) == 40 else None
+    carries none. Read from the artifact itself, at the file offset `otool -l` gives for the section,
+    it ties the measured binary to its source commit (#1095 review round 2: built_from was the
+    worktree's head at writing time, not a measurement)."""
+    listing = subprocess.run(["/usr/bin/otool", "-l", binary], capture_output=True, text=True).stdout
+    for block in listing.split("Section\n")[1:]:
+        if re.search(r"sectname __lpm_commit\b", block) and re.search(r"segname __TEXT\b", block):
+            size = int(re.search(r"\bsize 0x([0-9a-f]+)", block).group(1), 16)
+            offset = int(re.search(r"\boffset (\d+)", block).group(1))
+            with open(binary, "rb") as handle:
+                handle.seek(offset)
+                text = handle.read(size).decode("ascii", "replace")
+            return text if re.fullmatch(r"[0-9a-f]{40}", text) else None
+    return None
 
 
 def sha256_of(path):
@@ -224,8 +227,11 @@ def main():
     if os.environ.get("LOGIC_MCP_DEBUG_ONLY_CHANNEL"):
         sys.exit("LOGIC_MCP_DEBUG_ONLY_CHANNEL is set; this run measures the production route")
     ev = E.Evidence(args.head, os.environ["LPM_EVIDENCE_ROOT"], surface="ui")
+    carried = embedded_commit(args.binary)
     ev.note("1092/binary", {"binary": args.binary, "sha256": sha256_of(args.binary),
-                            "embedded_commit": embedded_commit(args.binary)})
+                            "embedded_commit": carried, "embedded_commit_is_head": carried == args.head})
+    if carried is not None and carried != args.head:
+        sys.exit(f"the binary carries commit {carried}, not the head {args.head}; nothing was driven")
     ax = AX()
     rows, failures = [], []
     try:
