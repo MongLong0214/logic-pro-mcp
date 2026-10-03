@@ -1,10 +1,10 @@
 {
  "name": "live_1092_rewind_and_forward_step_one_bar",
- "head": "86aaeb95a00a4b2109ff6ffe5a702b68c889b9c4",
+ "head": "229c08f1f4629a52bb9704d6c755460beb967c65",
  "artifact": {
-  "path": "/Users/isaac/lpm-evidence/1092/bin-86aaeb95/LogicProMCP",
-  "sha256": "e1c51e1b4f95811ab693fa0d4885c4203567bd6f673401bef746887a2b2a9371",
-  "built_from": "86aaeb95a00a4b2109ff6ffe5a702b68c889b9c4",
+  "path": "/Users/isaac/lpm-evidence/1092/bin-229c08f1/LogicProMCP",
+  "sha256": "e190e924ecaf4f41949005ee2930c1ebd51bf35ab5fd395aaac2952b2762caf2",
+  "built_from": "229c08f1f4629a52bb9704d6c755460beb967c65",
   "worktree_clean": true,
   "built_from_is_measured": false,
   "artifact_older_than_sources": false
@@ -18,8 +18,10 @@
    "kind": "observation",
    "tag": "1092/binary",
    "payload": {
-    "binary": "/Users/isaac/lpm-evidence/1092/bin-86aaeb95/LogicProMCP",
-    "sha256": "e1c51e1b4f95811ab693fa0d4885c4203567bd6f673401bef746887a2b2a9371"
+    "binary": "/Users/isaac/lpm-evidence/1092/bin-229c08f1/LogicProMCP",
+    "sha256": "e190e924ecaf4f41949005ee2930c1ebd51bf35ab5fd395aaac2952b2762caf2",
+    "embedded_commit": "229c08f1f4629a52bb9704d6c755460beb967c65",
+    "embedded_commit_is_head": true
    }
   },
   {
@@ -114,7 +116,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_E6D2F816-1DF0-41D4-8013-EA217EA7FC55"
+    "trace_id": "lpmcp_BB48B054-0172-4869-BCA0-344DB169CD02"
    },
    "response": {
     "state": null,
@@ -131,9 +133,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E6D2F816-1DF0-41D4-8013-EA217EA7FC55', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BB48B054-0172-4869-BCA0-344DB169CD02', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E6D2F816-1DF0-41D4-8013-EA217EA7FC55', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BB48B054-0172-4869-BCA0-344DB169CD02', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -219,7 +221,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_CAF0803A-D671-42C0-908E-810A011611E8"
+    "trace_id": "lpmcp_F8848E97-A4B3-40D4-A868-F1C401394B04"
    },
    "response": {
     "state": null,
@@ -236,9 +238,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_CAF0803A-D671-42C0-908E-810A011611E8",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F8848E97-A4B3-40D4-A868-F1C401394B04",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_CAF0803A-D671-42C0-908E-810A011611E8",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F8848E97-A4B3-40D4-A868-F1C401394B04",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -324,7 +326,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_1C9E913B-976B-4EF3-9796-899B0641F5BD"
+    "trace_id": "lpmcp_0BCCC898-D2A3-456A-B6BD-4C64F90793B3"
    },
    "response": {
     "state": null,
@@ -341,9 +343,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_1C9E913B-976B-4EF3-9796-899B0641F5BD', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0BCCC898-D2A3-456A-B6BD-4C64F90793B3', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_1C9E913B-976B-4EF3-9796-899B0641F5BD', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0BCCC898-D2A3-456A-B6BD-4C64F90793B3', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -429,7 +431,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_9D178E19-14E9-4CD4-A1FF-62DEF4F136B5"
+    "trace_id": "lpmcp_9609B3E5-E4D8-40A3-A329-6DF0FD409047"
    },
    "response": {
     "state": null,
@@ -446,9 +448,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9D178E19-14E9-4CD4-A1FF-62DEF4F136B5",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9609B3E5-E4D8-40A3-A329-6DF0FD409047",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9D178E19-14E9-4CD4-A1FF-62DEF4F136B5",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9609B3E5-E4D8-40A3-A329-6DF0FD409047",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -534,7 +536,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_0DECECB2-D4C1-4261-9C70-D338B44837E2"
+    "trace_id": "lpmcp_B4DB30A9-2E29-4EDC-A7D0-1943969A3D39"
    },
    "response": {
     "state": null,
@@ -551,9 +553,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0DECECB2-D4C1-4261-9C70-D338B44837E2', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_B4DB30A9-2E29-4EDC-A7D0-1943969A3D39', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0DECECB2-D4C1-4261-9C70-D338B44837E2', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_B4DB30A9-2E29-4EDC-A7D0-1943969A3D39', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -639,7 +641,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_7734E9F3-2140-476A-9116-D7C1053A2D40"
+    "trace_id": "lpmcp_637CBEEC-5B76-4645-96F0-74B65BEAF869"
    },
    "response": {
     "state": null,
@@ -656,9 +658,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_7734E9F3-2140-476A-9116-D7C1053A2D40",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_637CBEEC-5B76-4645-96F0-74B65BEAF869",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_7734E9F3-2140-476A-9116-D7C1053A2D40",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_637CBEEC-5B76-4645-96F0-74B65BEAF869",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -759,7 +761,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_BCB8A481-8487-4724-A47D-D242C82458C2"
+    "trace_id": "lpmcp_4696A205-897C-4C9F-85A6-12DDF7B95279"
    },
    "response": {
     "state": null,
@@ -776,9 +778,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BCB8A481-8487-4724-A47D-D242C82458C2', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4696A205-897C-4C9F-85A6-12DDF7B95279', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BCB8A481-8487-4724-A47D-D242C82458C2', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4696A205-897C-4C9F-85A6-12DDF7B95279', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -864,7 +866,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_749B069C-977E-4BB8-8AB7-31490E42D432"
+    "trace_id": "lpmcp_3047E301-3C86-4C0B-94CF-D534197D2E2B"
    },
    "response": {
     "state": null,
@@ -881,9 +883,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_749B069C-977E-4BB8-8AB7-31490E42D432",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3047E301-3C86-4C0B-94CF-D534197D2E2B",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_749B069C-977E-4BB8-8AB7-31490E42D432",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3047E301-3C86-4C0B-94CF-D534197D2E2B",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -969,7 +971,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_304597C2-C27E-4D6A-AA7D-5927E9869DC7"
+    "trace_id": "lpmcp_FC0DC8A1-4837-4865-AD10-2EF7E70DA13F"
    },
    "response": {
     "state": null,
@@ -986,9 +988,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_304597C2-C27E-4D6A-AA7D-5927E9869DC7', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_FC0DC8A1-4837-4865-AD10-2EF7E70DA13F', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_304597C2-C27E-4D6A-AA7D-5927E9869DC7', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_FC0DC8A1-4837-4865-AD10-2EF7E70DA13F', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -1074,7 +1076,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_CB82D0AC-9A4B-41C2-92F3-9286C41DCB18"
+    "trace_id": "lpmcp_5D96A2E1-650B-46EC-9A5C-47C2C842A50A"
    },
    "response": {
     "state": null,
@@ -1091,9 +1093,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_CB82D0AC-9A4B-41C2-92F3-9286C41DCB18",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_5D96A2E1-650B-46EC-9A5C-47C2C842A50A",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_CB82D0AC-9A4B-41C2-92F3-9286C41DCB18",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_5D96A2E1-650B-46EC-9A5C-47C2C842A50A",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -1179,7 +1181,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_ABCD7107-8AC1-4F6B-A5E9-2D7A189F062C"
+    "trace_id": "lpmcp_C4068FC6-531F-4667-B2BE-0D0700C48A41"
    },
    "response": {
     "state": null,
@@ -1196,9 +1198,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_ABCD7107-8AC1-4F6B-A5E9-2D7A189F062C', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_C4068FC6-531F-4667-B2BE-0D0700C48A41', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_ABCD7107-8AC1-4F6B-A5E9-2D7A189F062C', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_C4068FC6-531F-4667-B2BE-0D0700C48A41', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -1284,7 +1286,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_01EC47DC-B35A-4471-9648-A6306ADE5D9C"
+    "trace_id": "lpmcp_AA221E44-2ADE-4E45-8F81-62FE6B155E6A"
    },
    "response": {
     "state": null,
@@ -1301,9 +1303,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_01EC47DC-B35A-4471-9648-A6306ADE5D9C",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_AA221E44-2ADE-4E45-8F81-62FE6B155E6A",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_01EC47DC-B35A-4471-9648-A6306ADE5D9C",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_AA221E44-2ADE-4E45-8F81-62FE6B155E6A",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -1404,7 +1406,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_9B903BFD-1674-4B87-BD7C-BDB4FB4E8B9F"
+    "trace_id": "lpmcp_BF28826A-2345-4412-88A7-40B70D948CE5"
    },
    "response": {
     "state": null,
@@ -1421,9 +1423,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9B903BFD-1674-4B87-BD7C-BDB4FB4E8B9F', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BF28826A-2345-4412-88A7-40B70D948CE5', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9B903BFD-1674-4B87-BD7C-BDB4FB4E8B9F', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BF28826A-2345-4412-88A7-40B70D948CE5', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -1509,7 +1511,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_97055378-184D-45B7-9530-BF713AC4AA64"
+    "trace_id": "lpmcp_ADF22124-28BB-43A6-9C73-4B17A64C0EAA"
    },
    "response": {
     "state": null,
@@ -1526,9 +1528,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_97055378-184D-45B7-9530-BF713AC4AA64",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_ADF22124-28BB-43A6-9C73-4B17A64C0EAA",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_97055378-184D-45B7-9530-BF713AC4AA64",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_ADF22124-28BB-43A6-9C73-4B17A64C0EAA",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -1614,7 +1616,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_0ECF58F5-A041-4F68-9510-607DDF36FA2E"
+    "trace_id": "lpmcp_2868EDF1-57ED-453A-B74B-D0EA9B899DC7"
    },
    "response": {
     "state": null,
@@ -1631,9 +1633,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0ECF58F5-A041-4F68-9510-607DDF36FA2E', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_2868EDF1-57ED-453A-B74B-D0EA9B899DC7', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0ECF58F5-A041-4F68-9510-607DDF36FA2E', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_2868EDF1-57ED-453A-B74B-D0EA9B899DC7', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -1719,7 +1721,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_A05155B2-36FE-482A-80F9-8CF4566CDF4D"
+    "trace_id": "lpmcp_8A40471B-BC68-42AB-9C80-D6433FB6C9B3"
    },
    "response": {
     "state": null,
@@ -1736,9 +1738,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_A05155B2-36FE-482A-80F9-8CF4566CDF4D",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8A40471B-BC68-42AB-9C80-D6433FB6C9B3",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_A05155B2-36FE-482A-80F9-8CF4566CDF4D",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8A40471B-BC68-42AB-9C80-D6433FB6C9B3",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -1824,7 +1826,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_DBAE9513-09EC-4B20-9E3A-0F3F156F464F"
+    "trace_id": "lpmcp_DC5C5BF6-8164-4DFA-9596-5E1A9CBB582C"
    },
    "response": {
     "state": null,
@@ -1841,9 +1843,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_DBAE9513-09EC-4B20-9E3A-0F3F156F464F', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_DC5C5BF6-8164-4DFA-9596-5E1A9CBB582C', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_DBAE9513-09EC-4B20-9E3A-0F3F156F464F', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_DC5C5BF6-8164-4DFA-9596-5E1A9CBB582C', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -1929,7 +1931,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_2FC400AF-8E59-42AE-AC05-929178314F7B"
+    "trace_id": "lpmcp_AF71ED25-86F3-4436-B0EF-82BD79CB3AA0"
    },
    "response": {
     "state": null,
@@ -1946,9 +1948,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_2FC400AF-8E59-42AE-AC05-929178314F7B",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_AF71ED25-86F3-4436-B0EF-82BD79CB3AA0",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_2FC400AF-8E59-42AE-AC05-929178314F7B",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_AF71ED25-86F3-4436-B0EF-82BD79CB3AA0",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -2049,7 +2051,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_8F4E39AD-0EE5-40C9-95FC-6D79D2E352C5"
+    "trace_id": "lpmcp_79D0F8BF-35CB-43C4-977C-3E48C46B59DD"
    },
    "response": {
     "state": null,
@@ -2066,9 +2068,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8F4E39AD-0EE5-40C9-95FC-6D79D2E352C5', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_79D0F8BF-35CB-43C4-977C-3E48C46B59DD', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8F4E39AD-0EE5-40C9-95FC-6D79D2E352C5', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_79D0F8BF-35CB-43C4-977C-3E48C46B59DD', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -2154,7 +2156,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_1CA6C775-1EA0-461E-9E4D-D2AC731A8E7C"
+    "trace_id": "lpmcp_CBB75F01-33FA-4A38-B491-751031EB75CE"
    },
    "response": {
     "state": null,
@@ -2171,9 +2173,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_1CA6C775-1EA0-461E-9E4D-D2AC731A8E7C",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_CBB75F01-33FA-4A38-B491-751031EB75CE",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_1CA6C775-1EA0-461E-9E4D-D2AC731A8E7C",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_CBB75F01-33FA-4A38-B491-751031EB75CE",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -2259,7 +2261,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_0C8F3EAC-CDFC-42CE-93A9-60AE1432C010"
+    "trace_id": "lpmcp_C69F2AE8-1966-47A1-B033-AE5FC21B7DEC"
    },
    "response": {
     "state": null,
@@ -2276,9 +2278,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0C8F3EAC-CDFC-42CE-93A9-60AE1432C010', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_C69F2AE8-1966-47A1-B033-AE5FC21B7DEC', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0C8F3EAC-CDFC-42CE-93A9-60AE1432C010', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_C69F2AE8-1966-47A1-B033-AE5FC21B7DEC', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -2364,7 +2366,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_3BC8234E-EF20-4DC3-B473-BE6EF6004FC6"
+    "trace_id": "lpmcp_05B73F50-25D2-484F-8BFC-76308C6A2FC3"
    },
    "response": {
     "state": null,
@@ -2381,9 +2383,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3BC8234E-EF20-4DC3-B473-BE6EF6004FC6",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_05B73F50-25D2-484F-8BFC-76308C6A2FC3",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3BC8234E-EF20-4DC3-B473-BE6EF6004FC6",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_05B73F50-25D2-484F-8BFC-76308C6A2FC3",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -2469,7 +2471,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_78C9356A-B46F-464B-82E2-D8705B1454E8"
+    "trace_id": "lpmcp_625C2EAE-3831-40EA-8BF2-D029987134F8"
    },
    "response": {
     "state": null,
@@ -2486,9 +2488,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_78C9356A-B46F-464B-82E2-D8705B1454E8', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_625C2EAE-3831-40EA-8BF2-D029987134F8', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_78C9356A-B46F-464B-82E2-D8705B1454E8', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_625C2EAE-3831-40EA-8BF2-D029987134F8', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -2574,7 +2576,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_6D79BF00-1CF7-4847-ABCD-8D6AC0B1D80F"
+    "trace_id": "lpmcp_80FA325C-8326-492F-A7E1-17C8169B48B5"
    },
    "response": {
     "state": null,
@@ -2591,9 +2593,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6D79BF00-1CF7-4847-ABCD-8D6AC0B1D80F",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_80FA325C-8326-492F-A7E1-17C8169B48B5",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6D79BF00-1CF7-4847-ABCD-8D6AC0B1D80F",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_80FA325C-8326-492F-A7E1-17C8169B48B5",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -2694,7 +2696,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_6A5BDB74-31DE-4D60-B598-55C8F1DABF69"
+    "trace_id": "lpmcp_3D6DB7D8-F3E0-4906-9BCD-5751FE71B1B9"
    },
    "response": {
     "state": null,
@@ -2711,9 +2713,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6A5BDB74-31DE-4D60-B598-55C8F1DABF69', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3D6DB7D8-F3E0-4906-9BCD-5751FE71B1B9', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6A5BDB74-31DE-4D60-B598-55C8F1DABF69', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3D6DB7D8-F3E0-4906-9BCD-5751FE71B1B9', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -2799,7 +2801,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_0773ACEB-7587-4CBD-BA78-E3E513108750"
+    "trace_id": "lpmcp_4825E8A6-704C-4ED5-A571-281952D56BFE"
    },
    "response": {
     "state": null,
@@ -2816,9 +2818,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0773ACEB-7587-4CBD-BA78-E3E513108750",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4825E8A6-704C-4ED5-A571-281952D56BFE",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0773ACEB-7587-4CBD-BA78-E3E513108750",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4825E8A6-704C-4ED5-A571-281952D56BFE",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -2904,7 +2906,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_45DEE261-FCF1-4B04-BBAB-47D8E8235C2E"
+    "trace_id": "lpmcp_2FE38D37-B6D6-4ACE-B8A7-C9EE76E869C0"
    },
    "response": {
     "state": null,
@@ -2921,9 +2923,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_45DEE261-FCF1-4B04-BBAB-47D8E8235C2E', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_2FE38D37-B6D6-4ACE-B8A7-C9EE76E869C0', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_45DEE261-FCF1-4B04-BBAB-47D8E8235C2E', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_2FE38D37-B6D6-4ACE-B8A7-C9EE76E869C0', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -3009,7 +3011,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_61BF13F3-8B8A-4D4B-8CC7-2890375369C3"
+    "trace_id": "lpmcp_532B9684-8B5C-4C45-95C5-5BC9BEEF4101"
    },
    "response": {
     "state": null,
@@ -3026,16 +3028,21 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_61BF13F3-8B8A-4D4B-8CC7-2890375369C3",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_532B9684-8B5C-4C45-95C5-5BC9BEEF4101",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_61BF13F3-8B8A-4D4B-8CC7-2890375369C3",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_532B9684-8B5C-4C45-95C5-5BC9BEEF4101",
     "rejected_the_counterexample": true
    },
    "mutation": null,
    "mutation_claimed": false,
    "has_counterexample": true,
    "counterexample_rejected": true,
-   "blocking_modal": null
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
   },
   {
    "kind": "operation",
@@ -3114,7 +3121,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_AA4A8468-32AE-4DCF-8A01-831677A4C8BD"
+    "trace_id": "lpmcp_C796B973-0018-42AC-A125-0AE007B16996"
    },
    "response": {
     "state": null,
@@ -3131,16 +3138,21 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_AA4A8468-32AE-4DCF-8A01-831677A4C8BD', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_C796B973-0018-42AC-A125-0AE007B16996', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_AA4A8468-32AE-4DCF-8A01-831677A4C8BD', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_C796B973-0018-42AC-A125-0AE007B16996', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
    "mutation_claimed": false,
    "has_counterexample": true,
    "counterexample_rejected": true,
-   "blocking_modal": null
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
   },
   {
    "kind": "operation",
@@ -3219,7 +3231,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_FCB80025-F86A-4F81-BE69-7912298284B4"
+    "trace_id": "lpmcp_0BF61158-9A4A-4A4D-A545-40F37F485D96"
    },
    "response": {
     "state": null,
@@ -3236,16 +3248,21 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_FCB80025-F86A-4F81-BE69-7912298284B4",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0BF61158-9A4A-4A4D-A545-40F37F485D96",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_FCB80025-F86A-4F81-BE69-7912298284B4",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_0BF61158-9A4A-4A4D-A545-40F37F485D96",
     "rejected_the_counterexample": true
    },
    "mutation": null,
    "mutation_claimed": false,
    "has_counterexample": true,
    "counterexample_rejected": true,
-   "blocking_modal": null
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
   },
   {
    "kind": "observation",
@@ -3339,7 +3356,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_4CA24F28-6038-4E8F-AF07-807B2F7C91C0"
+    "trace_id": "lpmcp_466BDE65-C18C-4304-8481-1F4FE213B9B6"
    },
    "response": {
     "state": null,
@@ -3356,9 +3373,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4CA24F28-6038-4E8F-AF07-807B2F7C91C0', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_466BDE65-C18C-4304-8481-1F4FE213B9B6', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4CA24F28-6038-4E8F-AF07-807B2F7C91C0', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_466BDE65-C18C-4304-8481-1F4FE213B9B6', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -3444,7 +3461,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_D79A3DD3-F1D2-49D7-B88D-6D400177368A"
+    "trace_id": "lpmcp_4DE2C146-1399-4F37-B0F4-6BFC6F23F62A"
    },
    "response": {
     "state": null,
@@ -3461,9 +3478,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_D79A3DD3-F1D2-49D7-B88D-6D400177368A",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4DE2C146-1399-4F37-B0F4-6BFC6F23F62A",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_D79A3DD3-F1D2-49D7-B88D-6D400177368A",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4DE2C146-1399-4F37-B0F4-6BFC6F23F62A",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -3549,7 +3566,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_4F03B824-6720-4D3A-BDF5-21663E7649E7"
+    "trace_id": "lpmcp_9A1DD320-F671-47AF-8134-80C0B17DE0F0"
    },
    "response": {
     "state": null,
@@ -3566,9 +3583,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4F03B824-6720-4D3A-BDF5-21663E7649E7', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9A1DD320-F671-47AF-8134-80C0B17DE0F0', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4F03B824-6720-4D3A-BDF5-21663E7649E7', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9A1DD320-F671-47AF-8134-80C0B17DE0F0', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -3654,7 +3671,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_5DB8F913-F4E7-4377-8CD0-164A06D00BE8"
+    "trace_id": "lpmcp_4623EB73-9019-46D5-8360-3B7E2C60965B"
    },
    "response": {
     "state": null,
@@ -3671,9 +3688,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_5DB8F913-F4E7-4377-8CD0-164A06D00BE8",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4623EB73-9019-46D5-8360-3B7E2C60965B",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_5DB8F913-F4E7-4377-8CD0-164A06D00BE8",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4623EB73-9019-46D5-8360-3B7E2C60965B",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -3759,7 +3776,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_41116201-2628-4E4D-A915-B32C4B42A50D"
+    "trace_id": "lpmcp_E112A9E1-71BF-439F-9591-B7855C93214B"
    },
    "response": {
     "state": null,
@@ -3776,9 +3793,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_41116201-2628-4E4D-A915-B32C4B42A50D', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E112A9E1-71BF-439F-9591-B7855C93214B', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_41116201-2628-4E4D-A915-B32C4B42A50D', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E112A9E1-71BF-439F-9591-B7855C93214B', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -3864,7 +3881,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_AD589442-8C76-4C48-ACEA-F8331C3599D1"
+    "trace_id": "lpmcp_792FC853-ABDE-431D-92FF-830C69AABF34"
    },
    "response": {
     "state": null,
@@ -3881,9 +3898,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_AD589442-8C76-4C48-ACEA-F8331C3599D1",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_792FC853-ABDE-431D-92FF-830C69AABF34",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_AD589442-8C76-4C48-ACEA-F8331C3599D1",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_792FC853-ABDE-431D-92FF-830C69AABF34",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -3984,7 +4001,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_6C80EED4-EA8C-4E44-BEC2-AA61903D5E63"
+    "trace_id": "lpmcp_6072FA12-C7C9-461B-94BA-9823B6EEAEE4"
    },
    "response": {
     "state": null,
@@ -4001,9 +4018,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6C80EED4-EA8C-4E44-BEC2-AA61903D5E63', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6072FA12-C7C9-461B-94BA-9823B6EEAEE4', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6C80EED4-EA8C-4E44-BEC2-AA61903D5E63', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_6072FA12-C7C9-461B-94BA-9823B6EEAEE4', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -4089,7 +4106,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_8DB7FD5A-8F4B-4C4B-AE07-BD02628688D2"
+    "trace_id": "lpmcp_319FB41F-F86F-40FE-BD4F-B3950DB7634E"
    },
    "response": {
     "state": null,
@@ -4106,9 +4123,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8DB7FD5A-8F4B-4C4B-AE07-BD02628688D2",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_319FB41F-F86F-40FE-BD4F-B3950DB7634E",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8DB7FD5A-8F4B-4C4B-AE07-BD02628688D2",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_319FB41F-F86F-40FE-BD4F-B3950DB7634E",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -4194,7 +4211,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_8974D883-D178-49F5-BB71-FBEDD756B2DE"
+    "trace_id": "lpmcp_F7AF3366-8FF7-42E7-987B-394161A18B95"
    },
    "response": {
     "state": null,
@@ -4211,9 +4228,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8974D883-D178-49F5-BB71-FBEDD756B2DE', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F7AF3366-8FF7-42E7-987B-394161A18B95', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8974D883-D178-49F5-BB71-FBEDD756B2DE', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F7AF3366-8FF7-42E7-987B-394161A18B95', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -4299,7 +4316,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_3F234A87-3B6F-4F36-8E37-3EA07A93328E"
+    "trace_id": "lpmcp_D4E3B651-28B3-4708-BC3A-FD13A889483B"
    },
    "response": {
     "state": null,
@@ -4316,9 +4333,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3F234A87-3B6F-4F36-8E37-3EA07A93328E",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_D4E3B651-28B3-4708-BC3A-FD13A889483B",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3F234A87-3B6F-4F36-8E37-3EA07A93328E",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_D4E3B651-28B3-4708-BC3A-FD13A889483B",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -4404,7 +4421,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_F0282B7C-8682-449C-9081-4CE2BD9E25FF"
+    "trace_id": "lpmcp_E9B7EEDE-54F6-42C3-AB89-106CF1267ECB"
    },
    "response": {
     "state": null,
@@ -4421,9 +4438,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F0282B7C-8682-449C-9081-4CE2BD9E25FF', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E9B7EEDE-54F6-42C3-AB89-106CF1267ECB', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F0282B7C-8682-449C-9081-4CE2BD9E25FF', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E9B7EEDE-54F6-42C3-AB89-106CF1267ECB', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -4509,7 +4526,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_B6DDB788-96CA-482A-B50A-DD898D824884"
+    "trace_id": "lpmcp_E8891449-0F1B-40AD-8A25-CA49A0E42D08"
    },
    "response": {
     "state": null,
@@ -4526,9 +4543,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_B6DDB788-96CA-482A-B50A-DD898D824884",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E8891449-0F1B-40AD-8A25-CA49A0E42D08",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_B6DDB788-96CA-482A-B50A-DD898D824884",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E8891449-0F1B-40AD-8A25-CA49A0E42D08",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -4629,7 +4646,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_B8E2A23F-AAAE-441A-BF1B-D38296182785"
+    "trace_id": "lpmcp_B14F79F6-88EE-4E88-8B9F-1B811049EFB4"
    },
    "response": {
     "state": null,
@@ -4646,9 +4663,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_B8E2A23F-AAAE-441A-BF1B-D38296182785', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_B14F79F6-88EE-4E88-8B9F-1B811049EFB4', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_B8E2A23F-AAAE-441A-BF1B-D38296182785', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_B14F79F6-88EE-4E88-8B9F-1B811049EFB4', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -4734,7 +4751,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_96888BCA-F416-4D03-8BBF-562884E695D7"
+    "trace_id": "lpmcp_3520BACD-8350-41C4-B301-2B83253712A6"
    },
    "response": {
     "state": null,
@@ -4751,9 +4768,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_96888BCA-F416-4D03-8BBF-562884E695D7",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3520BACD-8350-41C4-B301-2B83253712A6",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_96888BCA-F416-4D03-8BBF-562884E695D7",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_3520BACD-8350-41C4-B301-2B83253712A6",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -4839,7 +4856,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_34B93DED-B181-481C-95D5-37D27BFF56EC"
+    "trace_id": "lpmcp_871DF543-CC58-4D8C-92CC-4B28D9150110"
    },
    "response": {
     "state": null,
@@ -4856,9 +4873,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_34B93DED-B181-481C-95D5-37D27BFF56EC', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_871DF543-CC58-4D8C-92CC-4B28D9150110', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_34B93DED-B181-481C-95D5-37D27BFF56EC', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_871DF543-CC58-4D8C-92CC-4B28D9150110', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -4944,7 +4961,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_EDF99BC0-8E87-4C70-AA35-1178DF5BBCA8"
+    "trace_id": "lpmcp_D5094CBB-561D-41C1-8497-AEBBD047E9A4"
    },
    "response": {
     "state": null,
@@ -4961,9 +4978,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_EDF99BC0-8E87-4C70-AA35-1178DF5BBCA8",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_D5094CBB-561D-41C1-8497-AEBBD047E9A4",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_EDF99BC0-8E87-4C70-AA35-1178DF5BBCA8",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_D5094CBB-561D-41C1-8497-AEBBD047E9A4",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -5049,7 +5066,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_849BC8CD-5537-4B30-B4FA-1CA3527F4F41"
+    "trace_id": "lpmcp_15863500-A0AE-420D-9A1A-C4BB5E4411D1"
    },
    "response": {
     "state": null,
@@ -5066,9 +5083,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_849BC8CD-5537-4B30-B4FA-1CA3527F4F41', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_15863500-A0AE-420D-9A1A-C4BB5E4411D1', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_849BC8CD-5537-4B30-B4FA-1CA3527F4F41', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_15863500-A0AE-420D-9A1A-C4BB5E4411D1', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -5154,7 +5171,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_EADABE39-D3E9-416A-8242-E89718C31BE9"
+    "trace_id": "lpmcp_232FD94F-473C-44C0-BE4B-5C4602218782"
    },
    "response": {
     "state": null,
@@ -5171,9 +5188,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_EADABE39-D3E9-416A-8242-E89718C31BE9",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_232FD94F-473C-44C0-BE4B-5C4602218782",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_EADABE39-D3E9-416A-8242-E89718C31BE9",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_232FD94F-473C-44C0-BE4B-5C4602218782",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -5274,7 +5291,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_D0F264D3-CCF7-4AFE-8D3A-4F672CEAFE38"
+    "trace_id": "lpmcp_F5B13755-FBE2-4F8F-BC66-9DB5720FFA69"
    },
    "response": {
     "state": null,
@@ -5291,9 +5308,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_D0F264D3-CCF7-4AFE-8D3A-4F672CEAFE38', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F5B13755-FBE2-4F8F-BC66-9DB5720FFA69', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_D0F264D3-CCF7-4AFE-8D3A-4F672CEAFE38', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_F5B13755-FBE2-4F8F-BC66-9DB5720FFA69', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -5379,7 +5396,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_9358A86A-BA61-4AA8-B2E5-4203ED69DDAB"
+    "trace_id": "lpmcp_BF3B545E-0821-4598-8AF9-164E64FF1F1E"
    },
    "response": {
     "state": null,
@@ -5396,9 +5413,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9358A86A-BA61-4AA8-B2E5-4203ED69DDAB",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BF3B545E-0821-4598-8AF9-164E64FF1F1E",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_9358A86A-BA61-4AA8-B2E5-4203ED69DDAB",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BF3B545E-0821-4598-8AF9-164E64FF1F1E",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -5484,7 +5501,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_58BC113E-FB6A-41A8-909A-48705FF221AA"
+    "trace_id": "lpmcp_89FCF9AC-C393-4430-8F2C-6D6FB678A289"
    },
    "response": {
     "state": null,
@@ -5501,9 +5518,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_58BC113E-FB6A-41A8-909A-48705FF221AA', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_89FCF9AC-C393-4430-8F2C-6D6FB678A289', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_58BC113E-FB6A-41A8-909A-48705FF221AA', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_89FCF9AC-C393-4430-8F2C-6D6FB678A289', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -5589,7 +5606,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_BE7A04E5-96BF-4465-85AB-803DFFD42820"
+    "trace_id": "lpmcp_392CACBE-6827-42FC-A9A5-829B5251F4AC"
    },
    "response": {
     "state": null,
@@ -5606,9 +5623,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BE7A04E5-96BF-4465-85AB-803DFFD42820",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_392CACBE-6827-42FC-A9A5-829B5251F4AC",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BE7A04E5-96BF-4465-85AB-803DFFD42820",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_392CACBE-6827-42FC-A9A5-829B5251F4AC",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -5694,7 +5711,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_280609BD-F754-4E2D-8E58-95B516D51976"
+    "trace_id": "lpmcp_59206A8A-6FFA-4BEC-876A-B76B59EB511B"
    },
    "response": {
     "state": null,
@@ -5711,9 +5728,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_280609BD-F754-4E2D-8E58-95B516D51976', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_59206A8A-6FFA-4BEC-876A-B76B59EB511B', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_280609BD-F754-4E2D-8E58-95B516D51976', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_59206A8A-6FFA-4BEC-876A-B76B59EB511B', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -5799,7 +5816,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_DC277D47-D63B-4700-AB13-17F4396EA7AF"
+    "trace_id": "lpmcp_ED8CBDAC-1734-4B5B-B4C4-D5237D9B295A"
    },
    "response": {
     "state": null,
@@ -5816,9 +5833,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_DC277D47-D63B-4700-AB13-17F4396EA7AF",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_ED8CBDAC-1734-4B5B-B4C4-D5237D9B295A",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_DC277D47-D63B-4700-AB13-17F4396EA7AF",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_ED8CBDAC-1734-4B5B-B4C4-D5237D9B295A",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -5919,7 +5936,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_CDC0ADC4-6993-43D4-82CE-1668BAB50F16"
+    "trace_id": "lpmcp_BB1A0DAE-8A47-4C63-A859-FFCAA2FB51B7"
    },
    "response": {
     "state": null,
@@ -5936,9 +5953,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_CDC0ADC4-6993-43D4-82CE-1668BAB50F16', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BB1A0DAE-8A47-4C63-A859-FFCAA2FB51B7', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_CDC0ADC4-6993-43D4-82CE-1668BAB50F16', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_BB1A0DAE-8A47-4C63-A859-FFCAA2FB51B7', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -6024,7 +6041,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_A7467D77-FAE0-4634-B894-98EDE8224CD8"
+    "trace_id": "lpmcp_4B28850A-0771-4BA5-93C9-2F908A045DA6"
    },
    "response": {
     "state": null,
@@ -6041,9 +6058,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_A7467D77-FAE0-4634-B894-98EDE8224CD8",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4B28850A-0771-4BA5-93C9-2F908A045DA6",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_A7467D77-FAE0-4634-B894-98EDE8224CD8",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_4B28850A-0771-4BA5-93C9-2F908A045DA6",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -6129,7 +6146,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_E136B20D-8A3B-4E2D-8A3B-477E74B30DCB"
+    "trace_id": "lpmcp_01F8384C-CCD2-4311-94B6-47565B37FF5C"
    },
    "response": {
     "state": null,
@@ -6146,9 +6163,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E136B20D-8A3B-4E2D-8A3B-477E74B30DCB', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_01F8384C-CCD2-4311-94B6-47565B37FF5C', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E136B20D-8A3B-4E2D-8A3B-477E74B30DCB', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_01F8384C-CCD2-4311-94B6-47565B37FF5C', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -6234,7 +6251,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_43EA05D2-F5C9-47F3-BB0A-2AADC84D2C4B"
+    "trace_id": "lpmcp_E8CCD581-F045-46D8-8D18-649AE28D9F97"
    },
    "response": {
     "state": null,
@@ -6251,9 +6268,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_43EA05D2-F5C9-47F3-BB0A-2AADC84D2C4B",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E8CCD581-F045-46D8-8D18-649AE28D9F97",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_43EA05D2-F5C9-47F3-BB0A-2AADC84D2C4B",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_E8CCD581-F045-46D8-8D18-649AE28D9F97",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -6339,7 +6356,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_5151E5FE-DE7B-4ACB-90FE-3E7F23C402BC"
+    "trace_id": "lpmcp_8052E03C-CCD5-4313-BAD4-D4E10839E597"
    },
    "response": {
     "state": null,
@@ -6356,9 +6373,9 @@
    "passed": true,
    "expected": "bar 9 then 8 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_5151E5FE-DE7B-4ACB-90FE-3E7F23C402BC', 'verified':",
+    "observation": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [8, 8, 8], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8052E03C-CCD5-4313-BAD4-D4E10839E597', 'verified':",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_5151E5FE-DE7B-4ACB-90FE-3E7F23C402BC', 'verified'",
+    "counterexample": "{'op': 'transport.rewind', 'direction': -1, 'start': 9, 'readings': [5, 2, -3], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.rewind', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_8052E03C-CCD5-4313-BAD4-D4E10839E597', 'verified'",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -6444,7 +6461,7 @@
    "tool": "logic_system",
    "command": "get_trace",
    "params": {
-    "trace_id": "lpmcp_81F23465-DFBE-415E-AC4F-0022B304CDD4"
+    "trace_id": "lpmcp_16A71ADD-0411-4C14-A826-D22F35E3FBDF"
    },
    "response": {
     "state": null,
@@ -6461,9 +6478,9 @@
    "passed": true,
    "expected": "bar 9 then 10 at every sample, answered by CGEvent",
    "observed": {
-    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_81F23465-DFBE-415E-AC4F-0022B304CDD4",
+    "observation": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [10, 10, 10], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_16A71ADD-0411-4C14-A826-D22F35E3FBDF",
     "accepted_the_observation": true,
-    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_81F23465-DFBE-415E-AC4F-0022B304CDD4",
+    "counterexample": "{'op': 'transport.fast_forward', 'direction': 1, 'start': 9, 'readings': [13, 16, 19], 'seconds_after_reply': [0.5, 1.5, 3.0], 'reply_success': True, 'reply': {'frontmost_preparation': 'already_frontmost', 'method': 'cgevent', 'operation': 'transport.fast_forward', 'reason': 'readback_unavailable', 'sent': True, 'state': 'B', 'success': True, 'trace_id': 'lpmcp_16A71ADD-0411-4C14-A826-D22F35E3FBDF",
     "rejected_the_counterexample": true
    },
    "mutation": null,
@@ -6514,10 +6531,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_E6D2F816-1DF0-41D4-8013-EA217EA7FC55",
+      "trace_id": "lpmcp_BB48B054-0172-4869-BCA0-344DB169CD02",
       "verified": false
      },
-     "trace_id": "lpmcp_E6D2F816-1DF0-41D4-8013-EA217EA7FC55",
+     "trace_id": "lpmcp_BB48B054-0172-4869-BCA0-344DB169CD02",
      "answered_by": [
       "CGEvent"
      ],
@@ -6547,10 +6564,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_CAF0803A-D671-42C0-908E-810A011611E8",
+      "trace_id": "lpmcp_F8848E97-A4B3-40D4-A868-F1C401394B04",
       "verified": false
      },
-     "trace_id": "lpmcp_CAF0803A-D671-42C0-908E-810A011611E8",
+     "trace_id": "lpmcp_F8848E97-A4B3-40D4-A868-F1C401394B04",
      "answered_by": [
       "CGEvent"
      ],
@@ -6580,10 +6597,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_1C9E913B-976B-4EF3-9796-899B0641F5BD",
+      "trace_id": "lpmcp_0BCCC898-D2A3-456A-B6BD-4C64F90793B3",
       "verified": false
      },
-     "trace_id": "lpmcp_1C9E913B-976B-4EF3-9796-899B0641F5BD",
+     "trace_id": "lpmcp_0BCCC898-D2A3-456A-B6BD-4C64F90793B3",
      "answered_by": [
       "CGEvent"
      ],
@@ -6613,10 +6630,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_9D178E19-14E9-4CD4-A1FF-62DEF4F136B5",
+      "trace_id": "lpmcp_9609B3E5-E4D8-40A3-A329-6DF0FD409047",
       "verified": false
      },
-     "trace_id": "lpmcp_9D178E19-14E9-4CD4-A1FF-62DEF4F136B5",
+     "trace_id": "lpmcp_9609B3E5-E4D8-40A3-A329-6DF0FD409047",
      "answered_by": [
       "CGEvent"
      ],
@@ -6646,10 +6663,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_0DECECB2-D4C1-4261-9C70-D338B44837E2",
+      "trace_id": "lpmcp_B4DB30A9-2E29-4EDC-A7D0-1943969A3D39",
       "verified": false
      },
-     "trace_id": "lpmcp_0DECECB2-D4C1-4261-9C70-D338B44837E2",
+     "trace_id": "lpmcp_B4DB30A9-2E29-4EDC-A7D0-1943969A3D39",
      "answered_by": [
       "CGEvent"
      ],
@@ -6679,10 +6696,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_7734E9F3-2140-476A-9116-D7C1053A2D40",
+      "trace_id": "lpmcp_637CBEEC-5B76-4645-96F0-74B65BEAF869",
       "verified": false
      },
-     "trace_id": "lpmcp_7734E9F3-2140-476A-9116-D7C1053A2D40",
+     "trace_id": "lpmcp_637CBEEC-5B76-4645-96F0-74B65BEAF869",
      "answered_by": [
       "CGEvent"
      ],
@@ -6712,10 +6729,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_BCB8A481-8487-4724-A47D-D242C82458C2",
+      "trace_id": "lpmcp_4696A205-897C-4C9F-85A6-12DDF7B95279",
       "verified": false
      },
-     "trace_id": "lpmcp_BCB8A481-8487-4724-A47D-D242C82458C2",
+     "trace_id": "lpmcp_4696A205-897C-4C9F-85A6-12DDF7B95279",
      "answered_by": [
       "CGEvent"
      ],
@@ -6745,10 +6762,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_749B069C-977E-4BB8-8AB7-31490E42D432",
+      "trace_id": "lpmcp_3047E301-3C86-4C0B-94CF-D534197D2E2B",
       "verified": false
      },
-     "trace_id": "lpmcp_749B069C-977E-4BB8-8AB7-31490E42D432",
+     "trace_id": "lpmcp_3047E301-3C86-4C0B-94CF-D534197D2E2B",
      "answered_by": [
       "CGEvent"
      ],
@@ -6778,10 +6795,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_304597C2-C27E-4D6A-AA7D-5927E9869DC7",
+      "trace_id": "lpmcp_FC0DC8A1-4837-4865-AD10-2EF7E70DA13F",
       "verified": false
      },
-     "trace_id": "lpmcp_304597C2-C27E-4D6A-AA7D-5927E9869DC7",
+     "trace_id": "lpmcp_FC0DC8A1-4837-4865-AD10-2EF7E70DA13F",
      "answered_by": [
       "CGEvent"
      ],
@@ -6811,10 +6828,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_CB82D0AC-9A4B-41C2-92F3-9286C41DCB18",
+      "trace_id": "lpmcp_5D96A2E1-650B-46EC-9A5C-47C2C842A50A",
       "verified": false
      },
-     "trace_id": "lpmcp_CB82D0AC-9A4B-41C2-92F3-9286C41DCB18",
+     "trace_id": "lpmcp_5D96A2E1-650B-46EC-9A5C-47C2C842A50A",
      "answered_by": [
       "CGEvent"
      ],
@@ -6844,10 +6861,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_ABCD7107-8AC1-4F6B-A5E9-2D7A189F062C",
+      "trace_id": "lpmcp_C4068FC6-531F-4667-B2BE-0D0700C48A41",
       "verified": false
      },
-     "trace_id": "lpmcp_ABCD7107-8AC1-4F6B-A5E9-2D7A189F062C",
+     "trace_id": "lpmcp_C4068FC6-531F-4667-B2BE-0D0700C48A41",
      "answered_by": [
       "CGEvent"
      ],
@@ -6877,10 +6894,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_01EC47DC-B35A-4471-9648-A6306ADE5D9C",
+      "trace_id": "lpmcp_AA221E44-2ADE-4E45-8F81-62FE6B155E6A",
       "verified": false
      },
-     "trace_id": "lpmcp_01EC47DC-B35A-4471-9648-A6306ADE5D9C",
+     "trace_id": "lpmcp_AA221E44-2ADE-4E45-8F81-62FE6B155E6A",
      "answered_by": [
       "CGEvent"
      ],
@@ -6910,10 +6927,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_9B903BFD-1674-4B87-BD7C-BDB4FB4E8B9F",
+      "trace_id": "lpmcp_BF28826A-2345-4412-88A7-40B70D948CE5",
       "verified": false
      },
-     "trace_id": "lpmcp_9B903BFD-1674-4B87-BD7C-BDB4FB4E8B9F",
+     "trace_id": "lpmcp_BF28826A-2345-4412-88A7-40B70D948CE5",
      "answered_by": [
       "CGEvent"
      ],
@@ -6943,10 +6960,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_97055378-184D-45B7-9530-BF713AC4AA64",
+      "trace_id": "lpmcp_ADF22124-28BB-43A6-9C73-4B17A64C0EAA",
       "verified": false
      },
-     "trace_id": "lpmcp_97055378-184D-45B7-9530-BF713AC4AA64",
+     "trace_id": "lpmcp_ADF22124-28BB-43A6-9C73-4B17A64C0EAA",
      "answered_by": [
       "CGEvent"
      ],
@@ -6976,10 +6993,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_0ECF58F5-A041-4F68-9510-607DDF36FA2E",
+      "trace_id": "lpmcp_2868EDF1-57ED-453A-B74B-D0EA9B899DC7",
       "verified": false
      },
-     "trace_id": "lpmcp_0ECF58F5-A041-4F68-9510-607DDF36FA2E",
+     "trace_id": "lpmcp_2868EDF1-57ED-453A-B74B-D0EA9B899DC7",
      "answered_by": [
       "CGEvent"
      ],
@@ -7009,10 +7026,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_A05155B2-36FE-482A-80F9-8CF4566CDF4D",
+      "trace_id": "lpmcp_8A40471B-BC68-42AB-9C80-D6433FB6C9B3",
       "verified": false
      },
-     "trace_id": "lpmcp_A05155B2-36FE-482A-80F9-8CF4566CDF4D",
+     "trace_id": "lpmcp_8A40471B-BC68-42AB-9C80-D6433FB6C9B3",
      "answered_by": [
       "CGEvent"
      ],
@@ -7042,10 +7059,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_DBAE9513-09EC-4B20-9E3A-0F3F156F464F",
+      "trace_id": "lpmcp_DC5C5BF6-8164-4DFA-9596-5E1A9CBB582C",
       "verified": false
      },
-     "trace_id": "lpmcp_DBAE9513-09EC-4B20-9E3A-0F3F156F464F",
+     "trace_id": "lpmcp_DC5C5BF6-8164-4DFA-9596-5E1A9CBB582C",
      "answered_by": [
       "CGEvent"
      ],
@@ -7075,10 +7092,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_2FC400AF-8E59-42AE-AC05-929178314F7B",
+      "trace_id": "lpmcp_AF71ED25-86F3-4436-B0EF-82BD79CB3AA0",
       "verified": false
      },
-     "trace_id": "lpmcp_2FC400AF-8E59-42AE-AC05-929178314F7B",
+     "trace_id": "lpmcp_AF71ED25-86F3-4436-B0EF-82BD79CB3AA0",
      "answered_by": [
       "CGEvent"
      ],
@@ -7108,10 +7125,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_8F4E39AD-0EE5-40C9-95FC-6D79D2E352C5",
+      "trace_id": "lpmcp_79D0F8BF-35CB-43C4-977C-3E48C46B59DD",
       "verified": false
      },
-     "trace_id": "lpmcp_8F4E39AD-0EE5-40C9-95FC-6D79D2E352C5",
+     "trace_id": "lpmcp_79D0F8BF-35CB-43C4-977C-3E48C46B59DD",
      "answered_by": [
       "CGEvent"
      ],
@@ -7141,10 +7158,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_1CA6C775-1EA0-461E-9E4D-D2AC731A8E7C",
+      "trace_id": "lpmcp_CBB75F01-33FA-4A38-B491-751031EB75CE",
       "verified": false
      },
-     "trace_id": "lpmcp_1CA6C775-1EA0-461E-9E4D-D2AC731A8E7C",
+     "trace_id": "lpmcp_CBB75F01-33FA-4A38-B491-751031EB75CE",
      "answered_by": [
       "CGEvent"
      ],
@@ -7174,10 +7191,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_0C8F3EAC-CDFC-42CE-93A9-60AE1432C010",
+      "trace_id": "lpmcp_C69F2AE8-1966-47A1-B033-AE5FC21B7DEC",
       "verified": false
      },
-     "trace_id": "lpmcp_0C8F3EAC-CDFC-42CE-93A9-60AE1432C010",
+     "trace_id": "lpmcp_C69F2AE8-1966-47A1-B033-AE5FC21B7DEC",
      "answered_by": [
       "CGEvent"
      ],
@@ -7207,10 +7224,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_3BC8234E-EF20-4DC3-B473-BE6EF6004FC6",
+      "trace_id": "lpmcp_05B73F50-25D2-484F-8BFC-76308C6A2FC3",
       "verified": false
      },
-     "trace_id": "lpmcp_3BC8234E-EF20-4DC3-B473-BE6EF6004FC6",
+     "trace_id": "lpmcp_05B73F50-25D2-484F-8BFC-76308C6A2FC3",
      "answered_by": [
       "CGEvent"
      ],
@@ -7240,10 +7257,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_78C9356A-B46F-464B-82E2-D8705B1454E8",
+      "trace_id": "lpmcp_625C2EAE-3831-40EA-8BF2-D029987134F8",
       "verified": false
      },
-     "trace_id": "lpmcp_78C9356A-B46F-464B-82E2-D8705B1454E8",
+     "trace_id": "lpmcp_625C2EAE-3831-40EA-8BF2-D029987134F8",
      "answered_by": [
       "CGEvent"
      ],
@@ -7273,10 +7290,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_6D79BF00-1CF7-4847-ABCD-8D6AC0B1D80F",
+      "trace_id": "lpmcp_80FA325C-8326-492F-A7E1-17C8169B48B5",
       "verified": false
      },
-     "trace_id": "lpmcp_6D79BF00-1CF7-4847-ABCD-8D6AC0B1D80F",
+     "trace_id": "lpmcp_80FA325C-8326-492F-A7E1-17C8169B48B5",
      "answered_by": [
       "CGEvent"
      ],
@@ -7306,10 +7323,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_6A5BDB74-31DE-4D60-B598-55C8F1DABF69",
+      "trace_id": "lpmcp_3D6DB7D8-F3E0-4906-9BCD-5751FE71B1B9",
       "verified": false
      },
-     "trace_id": "lpmcp_6A5BDB74-31DE-4D60-B598-55C8F1DABF69",
+     "trace_id": "lpmcp_3D6DB7D8-F3E0-4906-9BCD-5751FE71B1B9",
      "answered_by": [
       "CGEvent"
      ],
@@ -7339,10 +7356,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_0773ACEB-7587-4CBD-BA78-E3E513108750",
+      "trace_id": "lpmcp_4825E8A6-704C-4ED5-A571-281952D56BFE",
       "verified": false
      },
-     "trace_id": "lpmcp_0773ACEB-7587-4CBD-BA78-E3E513108750",
+     "trace_id": "lpmcp_4825E8A6-704C-4ED5-A571-281952D56BFE",
      "answered_by": [
       "CGEvent"
      ],
@@ -7372,10 +7389,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_45DEE261-FCF1-4B04-BBAB-47D8E8235C2E",
+      "trace_id": "lpmcp_2FE38D37-B6D6-4ACE-B8A7-C9EE76E869C0",
       "verified": false
      },
-     "trace_id": "lpmcp_45DEE261-FCF1-4B04-BBAB-47D8E8235C2E",
+     "trace_id": "lpmcp_2FE38D37-B6D6-4ACE-B8A7-C9EE76E869C0",
      "answered_by": [
       "CGEvent"
      ],
@@ -7405,10 +7422,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_61BF13F3-8B8A-4D4B-8CC7-2890375369C3",
+      "trace_id": "lpmcp_532B9684-8B5C-4C45-95C5-5BC9BEEF4101",
       "verified": false
      },
-     "trace_id": "lpmcp_61BF13F3-8B8A-4D4B-8CC7-2890375369C3",
+     "trace_id": "lpmcp_532B9684-8B5C-4C45-95C5-5BC9BEEF4101",
      "answered_by": [
       "CGEvent"
      ],
@@ -7438,10 +7455,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_AA4A8468-32AE-4DCF-8A01-831677A4C8BD",
+      "trace_id": "lpmcp_C796B973-0018-42AC-A125-0AE007B16996",
       "verified": false
      },
-     "trace_id": "lpmcp_AA4A8468-32AE-4DCF-8A01-831677A4C8BD",
+     "trace_id": "lpmcp_C796B973-0018-42AC-A125-0AE007B16996",
      "answered_by": [
       "CGEvent"
      ],
@@ -7471,10 +7488,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_FCB80025-F86A-4F81-BE69-7912298284B4",
+      "trace_id": "lpmcp_0BF61158-9A4A-4A4D-A545-40F37F485D96",
       "verified": false
      },
-     "trace_id": "lpmcp_FCB80025-F86A-4F81-BE69-7912298284B4",
+     "trace_id": "lpmcp_0BF61158-9A4A-4A4D-A545-40F37F485D96",
      "answered_by": [
       "CGEvent"
      ],
@@ -7504,10 +7521,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_4CA24F28-6038-4E8F-AF07-807B2F7C91C0",
+      "trace_id": "lpmcp_466BDE65-C18C-4304-8481-1F4FE213B9B6",
       "verified": false
      },
-     "trace_id": "lpmcp_4CA24F28-6038-4E8F-AF07-807B2F7C91C0",
+     "trace_id": "lpmcp_466BDE65-C18C-4304-8481-1F4FE213B9B6",
      "answered_by": [
       "CGEvent"
      ],
@@ -7537,10 +7554,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_D79A3DD3-F1D2-49D7-B88D-6D400177368A",
+      "trace_id": "lpmcp_4DE2C146-1399-4F37-B0F4-6BFC6F23F62A",
       "verified": false
      },
-     "trace_id": "lpmcp_D79A3DD3-F1D2-49D7-B88D-6D400177368A",
+     "trace_id": "lpmcp_4DE2C146-1399-4F37-B0F4-6BFC6F23F62A",
      "answered_by": [
       "CGEvent"
      ],
@@ -7570,10 +7587,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_4F03B824-6720-4D3A-BDF5-21663E7649E7",
+      "trace_id": "lpmcp_9A1DD320-F671-47AF-8134-80C0B17DE0F0",
       "verified": false
      },
-     "trace_id": "lpmcp_4F03B824-6720-4D3A-BDF5-21663E7649E7",
+     "trace_id": "lpmcp_9A1DD320-F671-47AF-8134-80C0B17DE0F0",
      "answered_by": [
       "CGEvent"
      ],
@@ -7603,10 +7620,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_5DB8F913-F4E7-4377-8CD0-164A06D00BE8",
+      "trace_id": "lpmcp_4623EB73-9019-46D5-8360-3B7E2C60965B",
       "verified": false
      },
-     "trace_id": "lpmcp_5DB8F913-F4E7-4377-8CD0-164A06D00BE8",
+     "trace_id": "lpmcp_4623EB73-9019-46D5-8360-3B7E2C60965B",
      "answered_by": [
       "CGEvent"
      ],
@@ -7636,10 +7653,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_41116201-2628-4E4D-A915-B32C4B42A50D",
+      "trace_id": "lpmcp_E112A9E1-71BF-439F-9591-B7855C93214B",
       "verified": false
      },
-     "trace_id": "lpmcp_41116201-2628-4E4D-A915-B32C4B42A50D",
+     "trace_id": "lpmcp_E112A9E1-71BF-439F-9591-B7855C93214B",
      "answered_by": [
       "CGEvent"
      ],
@@ -7669,10 +7686,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_AD589442-8C76-4C48-ACEA-F8331C3599D1",
+      "trace_id": "lpmcp_792FC853-ABDE-431D-92FF-830C69AABF34",
       "verified": false
      },
-     "trace_id": "lpmcp_AD589442-8C76-4C48-ACEA-F8331C3599D1",
+     "trace_id": "lpmcp_792FC853-ABDE-431D-92FF-830C69AABF34",
      "answered_by": [
       "CGEvent"
      ],
@@ -7702,10 +7719,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_6C80EED4-EA8C-4E44-BEC2-AA61903D5E63",
+      "trace_id": "lpmcp_6072FA12-C7C9-461B-94BA-9823B6EEAEE4",
       "verified": false
      },
-     "trace_id": "lpmcp_6C80EED4-EA8C-4E44-BEC2-AA61903D5E63",
+     "trace_id": "lpmcp_6072FA12-C7C9-461B-94BA-9823B6EEAEE4",
      "answered_by": [
       "CGEvent"
      ],
@@ -7735,10 +7752,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_8DB7FD5A-8F4B-4C4B-AE07-BD02628688D2",
+      "trace_id": "lpmcp_319FB41F-F86F-40FE-BD4F-B3950DB7634E",
       "verified": false
      },
-     "trace_id": "lpmcp_8DB7FD5A-8F4B-4C4B-AE07-BD02628688D2",
+     "trace_id": "lpmcp_319FB41F-F86F-40FE-BD4F-B3950DB7634E",
      "answered_by": [
       "CGEvent"
      ],
@@ -7768,10 +7785,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_8974D883-D178-49F5-BB71-FBEDD756B2DE",
+      "trace_id": "lpmcp_F7AF3366-8FF7-42E7-987B-394161A18B95",
       "verified": false
      },
-     "trace_id": "lpmcp_8974D883-D178-49F5-BB71-FBEDD756B2DE",
+     "trace_id": "lpmcp_F7AF3366-8FF7-42E7-987B-394161A18B95",
      "answered_by": [
       "CGEvent"
      ],
@@ -7801,10 +7818,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_3F234A87-3B6F-4F36-8E37-3EA07A93328E",
+      "trace_id": "lpmcp_D4E3B651-28B3-4708-BC3A-FD13A889483B",
       "verified": false
      },
-     "trace_id": "lpmcp_3F234A87-3B6F-4F36-8E37-3EA07A93328E",
+     "trace_id": "lpmcp_D4E3B651-28B3-4708-BC3A-FD13A889483B",
      "answered_by": [
       "CGEvent"
      ],
@@ -7834,10 +7851,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_F0282B7C-8682-449C-9081-4CE2BD9E25FF",
+      "trace_id": "lpmcp_E9B7EEDE-54F6-42C3-AB89-106CF1267ECB",
       "verified": false
      },
-     "trace_id": "lpmcp_F0282B7C-8682-449C-9081-4CE2BD9E25FF",
+     "trace_id": "lpmcp_E9B7EEDE-54F6-42C3-AB89-106CF1267ECB",
      "answered_by": [
       "CGEvent"
      ],
@@ -7867,10 +7884,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_B6DDB788-96CA-482A-B50A-DD898D824884",
+      "trace_id": "lpmcp_E8891449-0F1B-40AD-8A25-CA49A0E42D08",
       "verified": false
      },
-     "trace_id": "lpmcp_B6DDB788-96CA-482A-B50A-DD898D824884",
+     "trace_id": "lpmcp_E8891449-0F1B-40AD-8A25-CA49A0E42D08",
      "answered_by": [
       "CGEvent"
      ],
@@ -7900,10 +7917,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_B8E2A23F-AAAE-441A-BF1B-D38296182785",
+      "trace_id": "lpmcp_B14F79F6-88EE-4E88-8B9F-1B811049EFB4",
       "verified": false
      },
-     "trace_id": "lpmcp_B8E2A23F-AAAE-441A-BF1B-D38296182785",
+     "trace_id": "lpmcp_B14F79F6-88EE-4E88-8B9F-1B811049EFB4",
      "answered_by": [
       "CGEvent"
      ],
@@ -7933,10 +7950,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_96888BCA-F416-4D03-8BBF-562884E695D7",
+      "trace_id": "lpmcp_3520BACD-8350-41C4-B301-2B83253712A6",
       "verified": false
      },
-     "trace_id": "lpmcp_96888BCA-F416-4D03-8BBF-562884E695D7",
+     "trace_id": "lpmcp_3520BACD-8350-41C4-B301-2B83253712A6",
      "answered_by": [
       "CGEvent"
      ],
@@ -7966,10 +7983,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_34B93DED-B181-481C-95D5-37D27BFF56EC",
+      "trace_id": "lpmcp_871DF543-CC58-4D8C-92CC-4B28D9150110",
       "verified": false
      },
-     "trace_id": "lpmcp_34B93DED-B181-481C-95D5-37D27BFF56EC",
+     "trace_id": "lpmcp_871DF543-CC58-4D8C-92CC-4B28D9150110",
      "answered_by": [
       "CGEvent"
      ],
@@ -7999,10 +8016,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_EDF99BC0-8E87-4C70-AA35-1178DF5BBCA8",
+      "trace_id": "lpmcp_D5094CBB-561D-41C1-8497-AEBBD047E9A4",
       "verified": false
      },
-     "trace_id": "lpmcp_EDF99BC0-8E87-4C70-AA35-1178DF5BBCA8",
+     "trace_id": "lpmcp_D5094CBB-561D-41C1-8497-AEBBD047E9A4",
      "answered_by": [
       "CGEvent"
      ],
@@ -8032,10 +8049,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_849BC8CD-5537-4B30-B4FA-1CA3527F4F41",
+      "trace_id": "lpmcp_15863500-A0AE-420D-9A1A-C4BB5E4411D1",
       "verified": false
      },
-     "trace_id": "lpmcp_849BC8CD-5537-4B30-B4FA-1CA3527F4F41",
+     "trace_id": "lpmcp_15863500-A0AE-420D-9A1A-C4BB5E4411D1",
      "answered_by": [
       "CGEvent"
      ],
@@ -8065,10 +8082,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_EADABE39-D3E9-416A-8242-E89718C31BE9",
+      "trace_id": "lpmcp_232FD94F-473C-44C0-BE4B-5C4602218782",
       "verified": false
      },
-     "trace_id": "lpmcp_EADABE39-D3E9-416A-8242-E89718C31BE9",
+     "trace_id": "lpmcp_232FD94F-473C-44C0-BE4B-5C4602218782",
      "answered_by": [
       "CGEvent"
      ],
@@ -8098,10 +8115,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_D0F264D3-CCF7-4AFE-8D3A-4F672CEAFE38",
+      "trace_id": "lpmcp_F5B13755-FBE2-4F8F-BC66-9DB5720FFA69",
       "verified": false
      },
-     "trace_id": "lpmcp_D0F264D3-CCF7-4AFE-8D3A-4F672CEAFE38",
+     "trace_id": "lpmcp_F5B13755-FBE2-4F8F-BC66-9DB5720FFA69",
      "answered_by": [
       "CGEvent"
      ],
@@ -8131,10 +8148,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_9358A86A-BA61-4AA8-B2E5-4203ED69DDAB",
+      "trace_id": "lpmcp_BF3B545E-0821-4598-8AF9-164E64FF1F1E",
       "verified": false
      },
-     "trace_id": "lpmcp_9358A86A-BA61-4AA8-B2E5-4203ED69DDAB",
+     "trace_id": "lpmcp_BF3B545E-0821-4598-8AF9-164E64FF1F1E",
      "answered_by": [
       "CGEvent"
      ],
@@ -8164,10 +8181,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_58BC113E-FB6A-41A8-909A-48705FF221AA",
+      "trace_id": "lpmcp_89FCF9AC-C393-4430-8F2C-6D6FB678A289",
       "verified": false
      },
-     "trace_id": "lpmcp_58BC113E-FB6A-41A8-909A-48705FF221AA",
+     "trace_id": "lpmcp_89FCF9AC-C393-4430-8F2C-6D6FB678A289",
      "answered_by": [
       "CGEvent"
      ],
@@ -8197,10 +8214,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_BE7A04E5-96BF-4465-85AB-803DFFD42820",
+      "trace_id": "lpmcp_392CACBE-6827-42FC-A9A5-829B5251F4AC",
       "verified": false
      },
-     "trace_id": "lpmcp_BE7A04E5-96BF-4465-85AB-803DFFD42820",
+     "trace_id": "lpmcp_392CACBE-6827-42FC-A9A5-829B5251F4AC",
      "answered_by": [
       "CGEvent"
      ],
@@ -8230,10 +8247,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_280609BD-F754-4E2D-8E58-95B516D51976",
+      "trace_id": "lpmcp_59206A8A-6FFA-4BEC-876A-B76B59EB511B",
       "verified": false
      },
-     "trace_id": "lpmcp_280609BD-F754-4E2D-8E58-95B516D51976",
+     "trace_id": "lpmcp_59206A8A-6FFA-4BEC-876A-B76B59EB511B",
      "answered_by": [
       "CGEvent"
      ],
@@ -8263,10 +8280,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_DC277D47-D63B-4700-AB13-17F4396EA7AF",
+      "trace_id": "lpmcp_ED8CBDAC-1734-4B5B-B4C4-D5237D9B295A",
       "verified": false
      },
-     "trace_id": "lpmcp_DC277D47-D63B-4700-AB13-17F4396EA7AF",
+     "trace_id": "lpmcp_ED8CBDAC-1734-4B5B-B4C4-D5237D9B295A",
      "answered_by": [
       "CGEvent"
      ],
@@ -8296,10 +8313,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_CDC0ADC4-6993-43D4-82CE-1668BAB50F16",
+      "trace_id": "lpmcp_BB1A0DAE-8A47-4C63-A859-FFCAA2FB51B7",
       "verified": false
      },
-     "trace_id": "lpmcp_CDC0ADC4-6993-43D4-82CE-1668BAB50F16",
+     "trace_id": "lpmcp_BB1A0DAE-8A47-4C63-A859-FFCAA2FB51B7",
      "answered_by": [
       "CGEvent"
      ],
@@ -8329,10 +8346,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_A7467D77-FAE0-4634-B894-98EDE8224CD8",
+      "trace_id": "lpmcp_4B28850A-0771-4BA5-93C9-2F908A045DA6",
       "verified": false
      },
-     "trace_id": "lpmcp_A7467D77-FAE0-4634-B894-98EDE8224CD8",
+     "trace_id": "lpmcp_4B28850A-0771-4BA5-93C9-2F908A045DA6",
      "answered_by": [
       "CGEvent"
      ],
@@ -8362,10 +8379,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_E136B20D-8A3B-4E2D-8A3B-477E74B30DCB",
+      "trace_id": "lpmcp_01F8384C-CCD2-4311-94B6-47565B37FF5C",
       "verified": false
      },
-     "trace_id": "lpmcp_E136B20D-8A3B-4E2D-8A3B-477E74B30DCB",
+     "trace_id": "lpmcp_01F8384C-CCD2-4311-94B6-47565B37FF5C",
      "answered_by": [
       "CGEvent"
      ],
@@ -8395,10 +8412,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_43EA05D2-F5C9-47F3-BB0A-2AADC84D2C4B",
+      "trace_id": "lpmcp_E8CCD581-F045-46D8-8D18-649AE28D9F97",
       "verified": false
      },
-     "trace_id": "lpmcp_43EA05D2-F5C9-47F3-BB0A-2AADC84D2C4B",
+     "trace_id": "lpmcp_E8CCD581-F045-46D8-8D18-649AE28D9F97",
      "answered_by": [
       "CGEvent"
      ],
@@ -8428,10 +8445,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_5151E5FE-DE7B-4ACB-90FE-3E7F23C402BC",
+      "trace_id": "lpmcp_8052E03C-CCD5-4313-BAD4-D4E10839E597",
       "verified": false
      },
-     "trace_id": "lpmcp_5151E5FE-DE7B-4ACB-90FE-3E7F23C402BC",
+     "trace_id": "lpmcp_8052E03C-CCD5-4313-BAD4-D4E10839E597",
      "answered_by": [
       "CGEvent"
      ],
@@ -8461,10 +8478,10 @@
       "sent": true,
       "state": "B",
       "success": true,
-      "trace_id": "lpmcp_81F23465-DFBE-415E-AC4F-0022B304CDD4",
+      "trace_id": "lpmcp_16A71ADD-0411-4C14-A826-D22F35E3FBDF",
       "verified": false
      },
-     "trace_id": "lpmcp_81F23465-DFBE-415E-AC4F-0022B304CDD4",
+     "trace_id": "lpmcp_16A71ADD-0411-4C14-A826-D22F35E3FBDF",
      "answered_by": [
       "CGEvent"
      ],
