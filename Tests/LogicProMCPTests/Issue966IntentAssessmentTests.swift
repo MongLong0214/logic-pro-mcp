@@ -1583,7 +1583,7 @@ private func receiverGraph(receiver: Bool, snapshotId: String = baselineSnapshot
                  nodes: [trackNode(0), trackNode(1), drumBus, reverbBus, aux], edges: edges)
 }
 
-private func twoTargetPolicy(receiver: String? = nil) throws -> (Audit.IntentPolicy, Value) {
+private func twoTargetPolicy(receiver: String? = nil, receivers: Value? = nil) throws -> (Audit.IntentPolicy, Value) {
     var object = policyObject(
         targets: [targetEntry("kick", "trk_0"), targetEntry("snare", "trk_1")],
         outputs: [targetOutput("kick", bus: 3), targetOutput("snare", bus: 3)]
@@ -1591,13 +1591,14 @@ private func twoTargetPolicy(receiver: String? = nil) throws -> (Audit.IntentPol
     if let receiver {
         object["receivers"] = .array([.object(["bus": .int(3), "aux": .string(receiver)])])
     }
+    if let receivers { object["receivers"] = receivers }
     let policy = try #require(accepted(Audit.parseIntentPolicy(object)))
     return (policy, .object(object))
 }
 
 private func receiverPlan(receiver: Bool, allow: Bool, snapshotId: String = baselineSnapshotId,
-                          projectEpoch: UInt64 = 3, intent: String? = "new") throws -> [String: Any] {
-    let (policy, value) = try twoTargetPolicy(receiver: intent)
+                          projectEpoch: UInt64 = 3, intent: String? = "new", receivers: Value? = nil) throws -> [String: Any] {
+    let (policy, value) = try twoTargetPolicy(receiver: receivers == nil ? intent : nil, receivers: receivers)
     var options = Audit.PlanningOptions()
     options.allowCreateAux = allow
     let plan = try Audit.buildCanonicalRepairPlan(
@@ -1662,7 +1663,8 @@ struct Issue966ReceivingAuxBoundGraphTests {
         let questions = try #require(body["receiver_questions"] as? [Any])
         #expect(questions.isEmpty)
         let reasons = try #require(body["reasons"] as? [String])
-        #expect(!reasons.contains("receiver_intent_unresolved"))
+        let planMentionsReceiver = reasons.contains { $0.contains("receiv") || $0.contains("aux") }
+        #expect(!planMentionsReceiver, "\(reasons)")
         let steps = try planSteps(body)
         let kinds = steps.compactMap { $0["kind"] as? String }
         #expect(kinds == ["main_output", "main_output"])
@@ -1762,13 +1764,15 @@ struct Issue966ReceivingAuxBoundGraphTests {
         let answers = try #require(questions[0]["answers"] as? [[String: Any]])
         #expect(!answers.isEmpty)
         for answer in answers {
-            let entries = try #require(answer["receivers"] as? [[String: Any]])
-            let word = try #require(entries.first?["aux"] as? String)
-            let again = try receiverPlan(receiver: receiver, allow: true, intent: word)
+            // The emitted answer is applied whole, as a client would send it (supplementary review
+            // S004): its receivers array becomes the policy's, bus and all.
+            let data = try JSONSerialization.data(withJSONObject: try #require(answer["receivers"]))
+            let receivers = try JSONDecoder().decode(Value.self, from: data)
+            let again = try receiverPlan(receiver: receiver, allow: true, receivers: receivers)
             let left = try #require(again["receiver_questions"] as? [Any])
-            #expect(left.isEmpty, "answer \(word) left the question open")
+            #expect(left.isEmpty, "answer \(answer) left the question open")
             let reasons = try #require(again["reasons"] as? [String])
-            #expect(!reasons.contains("receiver_intent_unresolved"), "answer \(word)")
+            #expect(!reasons.contains("receiver_intent_unresolved"), "answer \(answer)")
         }
     }
 
