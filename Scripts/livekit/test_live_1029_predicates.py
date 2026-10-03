@@ -196,34 +196,6 @@ class PauseIsNotStop(unittest.TestCase):
             self.assertFalse(expect({"play": 1}, {"play": 1, "bar": 15}, {"bar_later": 16}))
 
 
-class CopyNeedsItsPaste(unittest.TestCase):
-    def rows(self, paste_function):
-        return [{"op": "edit.copy", "function": True, "others_moved": []},
-                {"op": "edit.paste", "function": paste_function, "others_moved": []}]
-
-    def test_copy_is_credited_only_through_the_paste_after_it(self):
-        rows = self.rows(True)
-        H.witness_copy_by_paste(rows)
-        self.assertTrue(rows[0]["function"])
-        rows = self.rows(False)
-        H.witness_copy_by_paste(rows)
-        self.assertFalse(rows[0]["function"], "identical readings passed copy with no paste behind it")
-        alone = [{"op": "edit.copy", "function": True, "others_moved": []}]
-        H.witness_copy_by_paste(alone)
-        self.assertFalse(alone[0]["function"])
-
-
-class IsolatedRowsNeedCGEvent(unittest.TestCase):
-    def row(self, method):
-        return {"function": True, "others_moved": [], "letter_unbound": False,
-                "source_after": H.A.KOREAN_2SET, "reply": {"state": "A", "method": method}}
-
-    def test_another_channel_is_not_the_fallback(self):
-        self.assertTrue(H.performed(self.row("cgevent")))
-        self.assertFalse(H.performed(self.row("accessibility")))
-        self.assertFalse(H.performed(self.row(None)))
-
-
 class UndoTitleFocus(unittest.TestCase):
     def setUp(self):
         use_words()
@@ -266,15 +238,174 @@ class FixtureRestorationNeedsAZeroCount(unittest.TestCase):
         self.assertTrue(removed and copied)
 
 
+def usable_snap(**overrides):
+    snap = {"boxes": {"Play": 0, "Cycle": 0}, "tracks": 19, "bar": 9, "undo_title": WORDS["Can\u2019t Undo"],
+            "regions": 8, "regions_selected": 0, "windows": [[0, "fixture - Tracks"]], "structure": {"1:AXGroup": 3},
+            "sliders": [120.0, 0.5, 0.2]}
+    snap.update(overrides)
+    return snap
+
+
+def judged_row(op, before, after, extra=None, extra_before=None, method="cgevent", nth=0):
+    return {"index": index_of(op, nth), "op": op, "before": before, "after": after, "extra": extra or {},
+            "extra_before": extra_before or {}, "reply": {"state": "B", "method": method},
+            "letter_unbound": False, "source_after": H.A.KOREAN_2SET}
+
+
+class JudgeReadsTheRawReadings(unittest.TestCase):
+    """#1091 review R2, R1091-07: the counterexample must reach the op's own predicate."""
+
+    def setUp(self):
+        use_words()
+
+    def test_a_join_that_happened_passes_and_the_unchanged_row_does_not(self):
+        before = usable_snap(undo_title=titled(WORDS["Split Regions#und"]), regions=9, regions_selected=2)
+        after = usable_snap(undo_title=titled(WORDS["Join Regions#und"]), regions=8, regions_selected=1)
+        row = judged_row("edit.join", before, after)
+        self.assertTrue(H.judge(row))
+        self.assertFalse(H.judge(H.unchanged(row)))
+
+    def test_a_predicate_that_always_passes_is_caught_by_the_unchanged_row(self):
+        # The mutation the review ran: an op's predicate replaced by `return True`. The unchanged row
+        # still differs from nothing, so only others_kept and the predicate stand between it and a
+        # pass; with the predicate gone it passes, and this test fails.
+        row = judged_row("edit.join", usable_snap(), usable_snap())
+        self.assertFalse(H.judge(row), "an op whose readings did not move passed")
+
+    def test_a_join_that_also_moved_another_reading_fails(self):
+        before = usable_snap(undo_title=titled(WORDS["Split Regions#und"]), regions=9)
+        after = usable_snap(undo_title=titled(WORDS["Join Regions#und"]), regions=8, tracks=20)
+        self.assertFalse(H.judge(judged_row("edit.join", before, after)), "a join that also added a track passed")
+
+    def test_another_channel_is_not_the_fallback(self):
+        before = usable_snap(undo_title=titled(WORDS["Split Regions#und"]), regions=9)
+        after = usable_snap(undo_title=titled(WORDS["Join Regions#und"]), regions=8)
+        self.assertTrue(H.judge(judged_row("edit.join", before, after)))
+        self.assertFalse(H.judge(judged_row("edit.join", before, after, method="accessibility")))
+        self.assertFalse(H.judge(judged_row("edit.join", before, after, method=None)))
+
+    def test_pause_is_judged_on_the_bar_pair_from_before_the_call(self):
+        with mock.patch.object(H, "box_named", side_effect=lambda snap, key: ("Play", snap["boxes"]["Play"])):
+            before = usable_snap(boxes={"Play": 1}, bar=12)
+            after = usable_snap(boxes={"Play": 1}, bar=15)
+            row = judged_row("transport.pause", before, after, extra={"bar_later": 15},
+                             extra_before={"after_bar": 9, "bar_later": 12})
+            self.assertTrue(H.judge(row))
+            self.assertFalse(H.judge(H.unchanged(row)), "a transport still playing passed as paused")
+
+    def test_an_editor_counterexample_uses_the_reading_before_the_call(self):
+        with mock.patch.object(H, "unnamed_box_on", return_value=True):
+            row = judged_row("view.toggle_piano_roll", usable_snap(), usable_snap(),
+                             extra={"editor_kind": "piano_roll"}, extra_before={"editor_kind": None})
+            self.assertTrue(H.judge(row))
+            self.assertFalse(H.judge(H.unchanged(row)))
+
+
+class UnreadReadingsFail(unittest.TestCase):
+    """#1091 review R2, R1091-06: two readings that did not read are not one unchanged reading."""
+
+    def test_equal_missing_readings_are_unread_not_kept(self):
+        base = usable_snap()
+        moved = H.others_kept(dict(base, tracks=None), dict(base, tracks=None), set())
+        self.assertIn("unread:tracks", moved)
+
+    def test_a_window_shell_is_not_a_reading(self):
+        self.assertFalse(H.usable({"boxes": {}, "tracks": None, "bar": None, "undo_title": None}))
+        self.assertFalse(H.usable(None))
+        self.assertTrue(H.usable(usable_snap()))
+
+
+class DuplicateAndCloseIdentity(unittest.TestCase):
+    def setUp(self):
+        use_words()
+
+    def test_duplicate_needs_the_source_tracks_name(self):
+        extra = {"renamed_track": {"name": "LPM1029 2 39060"}, "new_track_description": "Track 26 'LPM1029 2 39060'"}
+        self.assertTrue(H.carries_source_name({}, {}, extra))
+        created = dict(extra, new_track_description="Track 25 '<audio> 2'")
+        self.assertFalse(H.carries_source_name({}, {}, created), "a created track passed as a duplicate")
+        self.assertFalse(H.carries_source_name({}, {}, {"new_track_description": "x"}))
+
+    def test_close_needs_every_fixture_window_gone(self):
+        two = ["fixture - Tracks", "fixture - Marker List"]
+        self.assertTrue(H.project_closed({}, {}, {"arrange_after": False, "fixture_windows_before": two,
+                                                  "fixture_windows_after": []}))
+        self.assertFalse(H.project_closed({}, {}, {"arrange_after": False, "fixture_windows_before": two,
+                                                   "fixture_windows_after": ["fixture - Marker List"]}),
+                         "closing the front window passed as closing the project")
+        self.assertFalse(H.project_closed({}, {}, {"arrange_after": False, "fixture_windows_before": two[:1],
+                                                   "fixture_windows_after": []}),
+                         "with one window open, Close Window and Close Project cannot be told apart")
+        self.assertFalse(H.project_closed({}, {}, {"arrange_after": False, "fixture_windows_before": two,
+                                                   "fixture_windows_after": None}))
+
+
+class NamedZoomAutomationAndCopy(unittest.TestCase):
+    """#1091 review R2, R1091-06: zoom, automation and copy named by their own controls."""
+
+    def setUp(self):
+        use_words()
+
+    def test_zoom_needs_its_named_sliders_to_move(self):
+        before = usable_snap(zoom={"vertical": 0.684, "horizontal": 0.213}, sliders=[120.0, 0.684, 0.213])
+        after = usable_snap(zoom={"vertical": 0.0, "horizontal": 0.585}, sliders=[120.0, 0.0, 0.585])
+        row = judged_row("nav.zoom_to_fit", before, after)
+        self.assertTrue(H.judge(row))
+        self.assertFalse(H.judge(H.unchanged(row)))
+        other = usable_snap(zoom={"vertical": 0.684, "horizontal": 0.213}, sliders=[121.0, 0.684, 0.213])
+        self.assertFalse(H.judge(judged_row("nav.zoom_to_fit", before, other)), "another slider passed as zoom")
+        unread = usable_snap(zoom={"vertical": None, "horizontal": None})
+        self.assertFalse(H.judge(judged_row("nav.zoom_to_fit", before, unread)))
+
+    def test_automation_needs_its_checkbox_and_mode_popups(self):
+        hidden = usable_snap(automation={"box": 0, "mode_popups": 0})
+        shown = usable_snap(automation={"box": 1, "mode_popups": 19}, structure={"1:AXGroup": 3, "8:AXPopUpButton": 38})
+        row = judged_row("automation.toggle_view", hidden, shown)
+        self.assertTrue(H.judge(row))
+        self.assertFalse(H.judge(H.unchanged(row)))
+        group_only = usable_snap(automation={"box": 0, "mode_popups": 0}, structure={"1:AXGroup": 4})
+        self.assertFalse(H.judge(judged_row("automation.toggle_view", hidden, group_only)),
+                         "an unrelated group passed as automation")
+        box_only = usable_snap(automation={"box": 1, "mode_popups": 0})
+        self.assertFalse(H.judge(judged_row("automation.toggle_view", hidden, box_only)))
+        self.assertTrue(H.judge(judged_row("automation.toggle_view", shown, hidden, nth=1)))
+
+    def test_copy_needs_a_seeded_clipboard_and_the_paste_after_it(self):
+        paste = judged_row("edit.paste", usable_snap(regions=8),
+                           usable_snap(regions=9, undo_title=titled(WORDS["Paste#und"])))
+        copy = judged_row("edit.copy", usable_snap(), usable_snap(),
+                          extra={"clipboard_seeded": True, "paste_row": paste})
+        self.assertTrue(H.judge(copy))
+        self.assertFalse(H.judge(H.unchanged(copy)), "a copy whose paste added nothing passed")
+        unseeded = dict(copy, extra={"clipboard_seeded": False, "paste_row": paste})
+        self.assertFalse(H.judge(unseeded), "a clipboard left from earlier passed copy")
+        self.assertFalse(H.judge(dict(copy, extra={"clipboard_seeded": True})), "a copy with no paste passed")
+
+
+class RouteEnvironment(unittest.TestCase):
+    """#1091 review R2, R1091-08: production must not inherit the debug route."""
+
+    def test_production_clears_and_isolated_sets(self):
+        env = {H.ONLY_CHANNEL_KEY: "CGEvent", H.PASS_KEY: "transport.get_state"}
+        self.assertEqual(H.apply_route_environment("production", env), {H.ONLY_CHANNEL_KEY: None, H.PASS_KEY: None})
+        self.assertNotIn(H.ONLY_CHANNEL_KEY, env)
+        got = H.apply_route_environment("isolated", env)
+        self.assertEqual(got[H.ONLY_CHANNEL_KEY], "CGEvent")
+        self.assertEqual(got[H.PASS_KEY], ",".join(H.PASS_OPERATIONS))
+
+
 class ProductionCompletion(unittest.TestCase):
-    def test_every_row_must_read_and_reply_and_restorations_hold(self):
-        row = {"op": "transport.play", "before": {}, "after": {}, "reply": {"state": "A"}}
+    def test_every_row_must_read_usably_and_reply_and_restorations_hold(self):
+        row = {"op": "transport.play", "before": usable_snap(), "after": usable_snap(), "reply": {"state": "A"}}
         runs = {"en": {"rows": [row, dict(row)]}}
         self.assertTrue(H.production_complete(runs, ["en"], 2, {"restorations_failed": 0}))
         self.assertFalse(H.production_complete(runs, ["en"], 3, {"restorations_failed": 0}))
         self.assertFalse(H.production_complete(runs, ["en"], 2, {"restorations_failed": 1}))
         broken = {"en": {"rows": [row, dict(row, reply={})]}}
         self.assertFalse(H.production_complete(broken, ["en"], 2, {"restorations_failed": 0}))
+        shell = {"en": {"rows": [row, dict(row, after={"boxes": {}, "tracks": None})]}}
+        self.assertFalse(H.production_complete(shell, ["en"], 2, {"restorations_failed": 0}),
+                         "an AX window shell with nothing read passed")
 
 
 if __name__ == "__main__":

@@ -175,10 +175,25 @@ def snapshot(ax):
     boxes = A.control_bar_boxes(ax, window) or []
     rows = A.track_header_rows(ax)
     counts = {}
+    names = {key: undo_word(row) for key, row in IDENTITY_KEYS.items()}
+    zoom = {"vertical": None, "horizontal": None}
+    automation = {"box": None, "mode_popups": 0}
     for element, depth in ax.walk(window, 9):
         role = ax.value(element, "AXRole")
         if role in STRUCTURE_ROLES:
             counts[f"{depth}:{role}"] = counts.get(f"{depth}:{role}", 0) + 1
+        if role in ("AXSlider", "AXCheckBox", "AXPopUpButton"):
+            description = ax.value(element, "AXDescription")
+            if role == "AXSlider" and description is not None and depth <= 4:
+                for axis in ("vertical", "horizontal"):
+                    if names[f"zoom_{axis}"] and description == names[f"zoom_{axis}"]:
+                        value = ax.value(element, "AXValue")
+                        zoom[axis] = float(value) if isinstance(value, (int, float)) else None
+            elif role == "AXCheckBox" and names["automation_box"] and description == names["automation_box"]:
+                value = ax.value(element, "AXValue")
+                automation["box"] = int(value) if isinstance(value, (int, float)) else None
+            elif role == "AXPopUpButton" and names["automation_mode"] and description == names["automation_mode"]:
+                automation["mode_popups"] += 1
     sliders = [float(v) for v in (ax.value(e, "AXValue") for e, _ in ax.walk(window, 3)
                                   if ax.value(e, "AXRole") == "AXSlider") if isinstance(v, (int, float))]
     regions = region_items(ax, window)
@@ -190,7 +205,9 @@ def snapshot(ax):
             "bar": playhead_bar(ax, window),
             "windows": logic_windows(),
             "structure": counts,
-            "sliders": sliders}
+            "sliders": sliders,
+            "zoom": zoom,
+            "automation": automation}
 
 
 def box_named(snap, key):
@@ -271,6 +288,12 @@ AUDIO_TRACK_KEY = "Audio"
 #: AXDescription is one of these (their AXTitle is empty), and the showing one reads 1; with the editors
 #: closed neither exists (Korean, 2026-10-03, lpm-evidence/1029/probe-tabs-ko.json, field `attr`).
 EDITOR_TAB_KEYS = {"piano_roll": "StrTabBtnLabel|||Piano Roll", "score": "StrTabBtnLabel|||Score"}
+#: The controls zoom and automation are named by (#1091 review R2, R1091-06: any slider or any new group
+#: passed). Read in Korean on 2026-10-03 (lpm-evidence/1029/probe-identity3-ko.json): zoom to fit moves
+#: the two sliders described with the zoom rows; showing automation turns on the checkbox described with
+#: the Show/Hide row and adds one pop-up described with the Automation Mode row per track.
+IDENTITY_KEYS = {"zoom_vertical": "Vertical Zoom", "zoom_horizontal": "Horizontal Zoom",
+                 "automation_box": "Show/Hide Automation", "automation_mode": "Automation Mode"}
 UNDO_UNIT_MARK = "Logic.framework"
 #: {key: {locale: value}} read from the installed Logic once per run; `CANON_LOCALE` names the
 #: language being driven, in the corpus's spelling (`zh_CN`), and is set by `run_language`.
@@ -281,7 +304,8 @@ CANON_LOCALE = {"value": None}
 def load_undo_table(logic_canon):
     """The undo nouns and bare titles in every locale, from the installed Logic's
     Logic.framework/Localizable.strings through the canon extractor."""
-    wanted = set(UNDO_NOUN_KEYS.values()) | set(BARE_UNDO_KEYS) | {AUDIO_TRACK_KEY} | set(EDITOR_TAB_KEYS.values())
+    wanted = set(UNDO_NOUN_KEYS.values()) | set(BARE_UNDO_KEYS) | {AUDIO_TRACK_KEY} | set(EDITOR_TAB_KEYS.values()) \
+        | set(IDENTITY_KEYS.values())
     table = {}
     for unit, locale, key, field, value in logic_canon.extract_strings(L993.APP):
         if field == "value" and key in wanted and UNDO_UNIT_MARK in unit and unit.endswith("Localizable.strings"):
@@ -375,6 +399,15 @@ def track_kind(audio):
     return check
 
 
+def carries_source_name(before, after, extra):
+    """Duplicate copies the selected track, name included: the new selected track's description holds
+    the unique name the setup gave its source. A new track named for its patch or its type (create)
+    does not (#1091 review R2, R1091-06)."""
+    name = (extra.get("renamed_track") or {}).get("name")
+    described = extra.get("new_track_description")
+    return bool(name) and isinstance(described, str) and name in described
+
+
 def both(first, second):
     def check(before, after, extra):
         return first(before, after, extra) and second(before, after, extra)
@@ -415,17 +448,47 @@ def saved(before, after, extra):
         and extra["mtime_after"] > extra["mtime_before"]
 
 
+def usable(snap):
+    """A snapshot whose readings the predicates compare: the control bar's boxes, the track count, the
+    playhead's bar and the undo title all read. An AX window shell with nothing read is not a reading
+    (#1091 review R2, R1091-06)."""
+    return isinstance(snap, dict) and bool(snap.get("boxes")) and isinstance(snap.get("tracks"), int) \
+        and snap.get("bar") is not None and snap.get("undo_title") is not None
+
+
+def fixture_windows():
+    """The names of the fixture's windows on screen (the arrange window and the Marker List the fixture
+    opens), or None when the window list did not read."""
+    try:
+        return [name for layer, name in logic_windows() if layer == 0 and name.startswith(L993.FIXTURE_NAME)]
+    except Exception:  # noqa: BLE001 - an unread list is not an empty one
+        return None
+
+
 def project_closed(before, after, extra):
-    return extra.get("arrange_after") is False
+    """Close Project, not Close Window: every fixture window is gone, and more than one was open before
+    (the arrange window and the Marker List), so closing the front window alone cannot pass (#1091
+    review R2, R1091-06)."""
+    return extra.get("arrange_after") is False and len(extra.get("fixture_windows_before") or []) >= 2 \
+        and extra.get("fixture_windows_after") == []
 
 
-def structure_changed(before, after, extra):
-    return before.get("structure") != after.get("structure")
+def zoom_moved(before, after, extra):
+    """The two zoom sliders, named by Logic's zoom rows, both read before and after, and at least one
+    moved. Another slider moving does not count (#1091 review R2, R1091-06)."""
+    b, a = before.get("zoom") or {}, after.get("zoom") or {}
+    read = all(isinstance(z.get(axis), float) for z in (b, a) for axis in ("vertical", "horizontal"))
+    return read and any(abs(a[axis] - b[axis]) > 0.01 for axis in ("vertical", "horizontal"))
 
 
-def sliders_moved(before, after, extra):
-    b, a = before.get("sliders") or [], after.get("sliders") or []
-    return len(a) == len(b) and bool(b) and max(abs(x - y) for x, y in zip(a, b)) > 0.01
+def automation_toggled(before, after, extra):
+    """The Show/Hide Automation checkbox flipped, and the per-track Automation Mode pop-ups are there
+    exactly when it reads on, before and after. A new group of another kind does not count (#1091
+    review R2, R1091-06)."""
+    b, a = before.get("automation") or {}, after.get("automation") or {}
+    if b.get("box") not in (0, 1) or a.get("box") != 1 - b["box"]:
+        return False
+    return all((z.get("mode_popups", 0) > 0) == (z["box"] == 1) for z in (b, a))
 
 
 def unnamed_box_on(before, after, extra):
@@ -537,6 +600,24 @@ def setup_selected_track(driver, ax, extra):
     extra["params"] = {"index": index, "expected_name": name}
 
 
+def setup_copy(driver, ax, extra):
+    """The clipboard holds text, read back, before copy: Logic's region clipboard is the system
+    pasteboard, and with text on it a paste adds no region (measured in Korean on 2026-10-03,
+    lpm-evidence/1029/probe-identity3-ko.json: 8 regions before and after, against 8 to 9 with the
+    region left on it). So a region the paste after copy adds was put there by this copy (#1091 review
+    R2, R1091-06: a clipboard left from earlier passed)."""
+    marker = f"lpm-1029-clipboard-{int(time.time())}"
+    subprocess.run(["/usr/bin/osascript", "-e", f'set the clipboard to "{marker}"'], capture_output=True, timeout=10)
+    read = subprocess.run(["/usr/bin/pbpaste"], capture_output=True, text=True, timeout=10).stdout
+    extra["clipboard_seeded"] = read == marker
+    setup_select_one(driver, ax, extra)
+
+
+def copy_identity(copy_row, paste_row):
+    """The clipboard held text when this copy ran, so the region the paste after it adds came from it."""
+    return (copy_row.get("extra") or {}).get("clipboard_seeded") is True
+
+
 def setup_select_one(driver, ax, extra):
     extra["setup_selected"] = select_regions(ax, first_region)
 
@@ -578,9 +659,14 @@ def post_mtime(driver, ax, extra):
     extra["mtime_after"] = project_data_mtime()
 
 
+def setup_close(driver, ax, extra):
+    extra["fixture_windows_before"] = fixture_windows()
+
+
 def post_closed(driver, ax, extra):
     time.sleep(1.5)
     extra["arrange_after"] = A.arrange_window(ax) is not None
+    extra["fixture_windows_after"] = fixture_windows()
 
 
 OPS = [
@@ -598,10 +684,10 @@ OPS = [
     ("transport.toggle_metronome", "logic_transport", "toggle_metronome", {}, "k", toggled("transportMetronomeControl"), {"boxes:transportMetronomeControl"}),
     ("transport.toggle_metronome", "logic_transport", "toggle_metronome", {}, "k", toggled("transportMetronomeControl"), {"boxes:transportMetronomeControl"}),
     # Views, each twice so the state comes back.
-    ("automation.toggle_view", "logic_navigate", "toggle_view", {"view": "automation"}, "a", structure_changed, {"structure", "sliders"}),
-    ("automation.toggle_view", "logic_navigate", "toggle_view", {"view": "automation"}, "a", structure_changed, {"structure", "sliders"}),
-    ("nav.zoom_to_fit", "logic_navigate", "zoom_to_fit", {}, "z", sliders_moved, {"sliders", "structure"}),
-    ("nav.zoom_to_fit", "logic_navigate", "zoom_to_fit", {}, "z", sliders_moved, {"sliders", "structure"}),
+    ("automation.toggle_view", "logic_navigate", "toggle_view", {"view": "automation"}, "a", automation_toggled, {"structure", "sliders"}),
+    ("automation.toggle_view", "logic_navigate", "toggle_view", {"view": "automation"}, "a", automation_toggled, {"structure", "sliders"}),
+    ("nav.zoom_to_fit", "logic_navigate", "zoom_to_fit", {}, "z", zoom_moved, {"sliders", "structure"}),
+    ("nav.zoom_to_fit", "logic_navigate", "zoom_to_fit", {}, "z", zoom_moved, {"sliders", "structure"}),
     ("view.toggle_library", "logic_navigate", "toggle_view", {"view": "library"}, "y", toggled("libraryPanelLabel"), {"boxes:libraryPanelLabel", "structure", "sliders"}),
     ("view.toggle_library", "logic_navigate", "toggle_view", {"view": "library"}, "y", toggled("libraryPanelLabel"), {"boxes:libraryPanelLabel", "structure", "sliders"}),
     ("view.toggle_mixer", "logic_navigate", "toggle_view", {"view": "mixer"}, "x", toggled("mixerNamedElement"), {"boxes:mixerNamedElement", "structure", "sliders"}),
@@ -615,7 +701,7 @@ OPS = [
     # Regions. Each fixture track holds one MIDI region from bar 1 to bar 2, and the playhead sits
     # past them, so a paste lands on its own.
     ("edit.select_all", "logic_edit", "select_all", {}, None, all_regions_selected, {"regions_selected"}, setup_select_one),
-    ("edit.copy", "logic_edit", "copy", {}, None, nothing_visible, set(), setup_select_one),
+    ("edit.copy", "logic_edit", "copy", {}, None, nothing_visible, set(), setup_copy),
     ("edit.paste", "logic_edit", "paste", {}, None, names_operation("edit.paste", regions_by(+1)), {"regions", "regions_selected", "undo_title", "structure", "sliders", "bar"}),
     ("edit.undo", "logic_edit", "undo", {}, None, stops_naming("edit.paste", regions_by(-1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}),
     ("edit.cut", "logic_edit", "cut", {}, None, names_operation("edit.cut", regions_by(-1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_select_one),
@@ -632,11 +718,11 @@ OPS = [
     ("track.delete", "logic_tracks", "delete", {}, None, names_operation("track.delete", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
     ("track.create_instrument", "logic_tracks", "create_instrument", {}, None, both(names_operation("track.create_instrument", tracks_by(+1)), track_kind(False)), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}),
     ("track.delete", "logic_tracks", "delete", {}, None, names_operation("track.delete", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}, setup_selected_track),
-    ("track.duplicate", "logic_tracks", "duplicate", {}, None, names_operation("track.duplicate", tracks_by(+1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
+    ("track.duplicate", "logic_tracks", "duplicate", {}, None, both(names_operation("track.duplicate", tracks_by(+1)), carries_source_name), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
     ("track.delete", "logic_tracks", "delete", {}, None, names_operation("track.delete", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
     # The project: save, then close. Close is last, since nothing reads after it.
     ("project.save", "logic_project", "save", {}, None, saved, {"windows", "undo_title"}, setup_mtime, post_mtime),
-    ("project.close", "logic_project", "close", {"confirmed": True, "saving": "no"}, None, project_closed, {"windows", "boxes:*", "tracks", "bar", "structure", "sliders", "regions", "regions_selected", "undo_title"}, None, post_closed),
+    ("project.close", "logic_project", "close", {"confirmed": True, "saving": "no"}, None, project_closed, {"windows", "boxes:*", "tracks", "bar", "structure", "sliders", "regions", "regions_selected", "undo_title"}, setup_close, post_closed),
 ]
 
 
@@ -646,7 +732,13 @@ def others_kept(before, after, allowed):
     moved = []
     for key in ("tracks", "bar", "windows", "structure", "sliders", "regions", "regions_selected",
                 "undo_title"):
-        if key not in allowed and before.get(key) != after.get(key):
+        if key in allowed:
+            continue
+        if before.get(key) is None or after.get(key) is None:
+            # Two readings that did not read are not one unchanged reading (#1091 review R2, R1091-06).
+            moved.append(f"unread:{key}")
+            continue
+        if before.get(key) != after.get(key):
             # The Undo item drops its operation name while another window has the focus (Library
             # closing, a dialog opening); a change to or from a bare title is focus, not history.
             if key == "undo_title" and (is_bare_undo(before.get(key)) or is_bare_undo(after.get(key))):
@@ -661,6 +753,7 @@ def others_kept(before, after, allowed):
     return moved
 
 
+TRACK_CREATORS = ("track.create_audio", "track.create_instrument", "track.duplicate")
 REGION_OPS = ("edit.select_all", "edit.copy", "edit.paste", "edit.cut", "edit.split", "edit.join",
               "edit.bounce_in_place")
 
@@ -709,7 +802,28 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
             setup(driver, ax, extra)
         first_shot = box_shot(ev, ax, "transportPlayControl", f"1029/{lproj}/play-before") \
             if op == "transport.play" else None
+        # The extra readings as they stood before the call: the counterexample each row is checked
+        # against is the row with these in place of the readings after it (#1091 review R2, R1091-07).
+        extra_before = {}
+        if op in ("view.toggle_score_editor", "view.toggle_piano_roll"):
+            extra_before["editor_kind"] = editor_kind(ax)
+        if op == "edit.bounce_in_place":
+            extra_before["bounce_dialog"] = bounce_dialog_open(ax)
+        if op in TRACK_CREATORS:
+            extra_before["new_track_description"] = selected_description(ax)
+        if op in ("transport.pause", "transport.resume"):
+            # A bar pair 2.5 s apart before the call: unchanged, the transport goes on as it was.
+            pre = snapshot(ax)
+            time.sleep(2.5)
+            extra_before["after_bar"] = None if pre is None else pre.get("bar")
+        if op == "project.close":
+            extra_before["arrange_after"] = True
+            extra_before["fixture_windows_after"] = extra.get("fixture_windows_before")
+        if op == "project.save":
+            extra_before["mtime_after"] = extra.get("mtime_before")
         before = snapshot(ax)
+        if op in ("transport.pause", "transport.resume") and before is not None:
+            extra_before["bar_later"] = before.get("bar")
         reply, seconds, focus = call(driver, ax, tool, command, extra.get("params", params),
                                      content=op in REGION_OPS)
         after = snapshot(ax)
@@ -717,7 +831,7 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
             extra["editor_kind"] = editor_kind(ax)
         if op == "edit.bounce_in_place":
             extra["bounce_dialog"] = bounce_dialog_open(ax)
-        if op in ("track.create_audio", "track.create_instrument"):
+        if op in TRACK_CREATORS:
             extra["new_track_description"] = selected_description(ax)
         if first_shot is not None:
             second = box_shot(ev, ax, "transportPlayControl", f"1029/{lproj}/play-after", first_shot["region"])
@@ -738,6 +852,7 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
         summary = A.reply_summary(reply)
         unbound = letter is not None and bindings is not None and letter not in bindings
         row = {"index": index, "op": op, "before": before, "after": after, "extra": extra,
+               "extra_before": extra_before,
                "reply": summary, "seconds": seconds, "focus": focus, "letter": letter,
                "letter_unbound": unbound, "source_after": source.current()}
         if before is not None and after is not None:
@@ -759,34 +874,59 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
 
 
 def witness_copy_by_paste(rows):
-    """Copy moves no reading of its own, so it acts only if the paste after it, which needs what
-    copy put on the clipboard, did (#1091 review R1, R1091-02: identical readings passed copy).
-    A copy with no paste row after it in this run is not credited."""
+    """Copy moves no reading of its own, so it is judged through the paste after it, which needs what
+    copy put on the clipboard: the copy row carries that paste row, and `judge` reads it (#1091 review
+    R1, R1091-02; R2, R1091-07). A copy with no paste row after it in this run is not credited."""
     for position, row in enumerate(rows):
         if row.get("op") != "edit.copy":
             continue
         paste = next((r for r in rows[position + 1:] if r.get("op") == "edit.paste"), None)
-        witnessed = paste is not None and paste.get("function") is True and paste.get("others_moved") == []
-        row.setdefault("extra", {})["witnessed_by_paste"] = witnessed
-        row["function"] = bool(row.get("function")) and witnessed
+        row.setdefault("extra", {})["paste_row"] = paste
+        row["function"] = judge(row)
 
 
-def performed(row):
-    """The op's reading moved, no other did, and 2-Set Korean read back. A letter Logic leaves
-    unbound cannot move its reading, and fails: a reply alone is not the op acting (the same
-    correction as review R1 of #1085, R-1039-02)."""
-    if row.get("letter_unbound"):
+def judge(row):
+    """The row's verdict, computed from its raw readings every time it is asked (#1091 review R2,
+    R1091-07: the verdict was a flag set before the counterexample was built, so a predicate that
+    returned True passed both). The op's predicate holds over before, after and the extra readings;
+    no other reading moved or went unread; both snapshots read; the reply came through cgevent; 2-Set
+    Korean read back; and a letter Logic leaves unbound fails. Copy is judged by the paste row it
+    carries."""
+    if row.get("letter_unbound") or row.get("source_after") != A.KOREAN_2SET:
         return False
-    # #1091 review R1, R1091-04: the reply must name cgevent. A binary that ignores the debug
-    # route (a release build) answers through an earlier rung, and its effect is not the fallback.
-    method = (row.get("reply") or {}).get("method") if isinstance(row.get("reply"), dict) else None
-    return row.get("function") is True and row.get("others_moved") == [] \
-        and row.get("source_after") == A.KOREAN_2SET and method == "cgevent"
+    reply = row.get("reply") if isinstance(row.get("reply"), dict) else {}
+    if reply.get("method") != "cgevent":
+        return False
+    op, expect, allowed = OPS[row["index"]][0], OPS[row["index"]][5], OPS[row["index"]][6]
+    before, after, extra = row.get("before"), row.get("after"), row.get("extra") or {}
+    if not usable(before):
+        return False
+    if op == "project.close":
+        # Nothing reads once the arrange window is gone; the post-step read whether it went.
+        if not expect(before, {}, extra):
+            return False
+    elif not usable(after) or not expect(before, after, extra) or others_kept(before, after, allowed):
+        return False
+    if op == "edit.copy":
+        paste = extra.get("paste_row")
+        return isinstance(paste, dict) and copy_identity(row, paste) and judge(paste)
+    return True
 
 
-def nothing_happened(row):
-    """The counterexample for each op: the same row with the after reading equal to the before."""
-    return dict(row, after=row.get("before"), function=False, others_moved=[])
+def unchanged(row):
+    """The counterexample: the same row as if the keystroke did nothing. The after snapshot is the
+    before snapshot and each extra reading is the one taken before the call; for pause and resume the
+    bar pair is the one read 2.5 s apart before it. Copy's paste row is unchanged with it."""
+    extra = dict(row.get("extra") or {})
+    extra_before = dict(row.get("extra_before") or {})
+    after_bar = extra_before.pop("after_bar", None)
+    extra.update(extra_before)
+    after = row.get("before")
+    if row.get("op") in ("transport.pause", "transport.resume") and isinstance(after, dict):
+        after = dict(after, bar=after_bar)
+    if row.get("op") == "edit.copy" and isinstance(extra.get("paste_row"), dict):
+        extra["paste_row"] = unchanged(extra["paste_row"])
+    return dict(row, after=after, extra=extra)
 
 
 def tree_digest(path):
@@ -860,9 +1000,8 @@ def main():
                             "lprojs": args.lprojs})
     runs, failures, restored = {}, {}, {}
     recording = ev.record_screen(seconds=RECORDING_SECONDS_PER_LANGUAGE * len(args.lprojs) + 120)
+    ev.note("1029/route-environment", apply_route_environment(args.mode))
     if args.mode == "isolated":
-        os.environ[ONLY_CHANNEL_KEY] = "CGEvent"
-        os.environ[PASS_KEY] = ",".join(PASS_OPERATIONS)
         ev.note("1029/pass-operations", {"operations": list(PASS_OPERATIONS)})
     backup = os.path.join(os.environ["LPM_EVIDENCE_ROOT"], "fixture-before-the-run.logicx")
     if os.path.exists(backup):
@@ -926,7 +1065,7 @@ def main():
     if args.mode == "isolated":
         for lproj in args.lprojs:
             for row in (runs.get(lproj) or {}).get("rows") or []:
-                ev.falsifiable(f"1029/{lproj}/{row['index']:02d}/{row['op']}", performed, row, nothing_happened(row),
+                ev.falsifiable(f"1029/{lproj}/{row['index']:02d}/{row['op']}", judge, row, unchanged(row),
                                "through CGEvent alone the keystroke changed the op's reading and no other",
                                mutation="a keystroke bound to another command, or none: the op's reading "
                                         "does not move, or another one does")
@@ -945,6 +1084,19 @@ def main():
     return 0 if clean and not failures else 1
 
 
+def apply_route_environment(mode, environ=os.environ):
+    """Isolated: the debug route restricted to CGEvent, with the pass list. Production: neither, whatever
+    the shell that started the harness exported, since the servers inherit this environment (#1091
+    review R2, R1091-08). Returns the two values the servers will see."""
+    if mode == "isolated":
+        environ[ONLY_CHANNEL_KEY] = "CGEvent"
+        environ[PASS_KEY] = ",".join(PASS_OPERATIONS)
+    else:
+        environ.pop(ONLY_CHANNEL_KEY, None)
+        environ.pop(PASS_KEY, None)
+    return {ONLY_CHANNEL_KEY: environ.get(ONLY_CHANNEL_KEY), PASS_KEY: environ.get(PASS_KEY)}
+
+
 def production_complete(runs, lprojs, expected_rows, written):
     """True when every language in `lprojs` has `expected_rows` rows, each with a before and an
     after reading (project.close excepted: nothing reads after it) and a reply carrying a state,
@@ -957,7 +1109,7 @@ def production_complete(runs, lprojs, expected_rows, written):
             return False
         for row in rows:
             reply = row.get("reply") if isinstance(row.get("reply"), dict) else {}
-            read = row.get("before") is not None and (row.get("after") is not None or row.get("op") == "project.close")
+            read = usable(row.get("before")) and (usable(row.get("after")) or row.get("op") == "project.close")
             if not read or not reply.get("state"):
                 return False
     return True
