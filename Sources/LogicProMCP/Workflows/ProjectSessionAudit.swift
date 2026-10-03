@@ -269,8 +269,9 @@ enum ProjectSessionAudit {
         let channelStrips: [ChannelStripState]
         let mixerFetchedAt: Date
         /// File-derived track count (MetaData.plist `NumberOfTracks`), read via
-        /// `LogicProjectFileReader` the same way `logic://tracks` synthesises
-        /// placeholder rows. `nil` when no `.logicx` is resolvable. Used only to
+        /// `SessionPopulationObservation.observe`, as the inspection reads it. `nil`
+        /// when no `.logicx` is resolvable or the one Logic names is not the cached
+        /// project's bundle (#965 O3). Used only to
         /// cross-check against the AX-derived `tracks.count` and emit
         /// `track_readback_gap` when the file says there are more tracks than AX
         /// surfaced — keeping the audit honest against `logic://tracks`.
@@ -291,13 +292,14 @@ enum ProjectSessionAudit {
         fileReader: LogicProjectFileReader.Runtime = .production,
         blockingDialogButtons: [String]? = nil
     ) async -> AuditReport {
-        // Read-only cross-check source: the same MetaData.plist track count the
-        // `logic://tracks` resource uses to synthesise placeholder rows. This is
-        // a read; it never mutates the cache or the project.
-        let fileTrackCount = await LogicProjectFileReader.read(runtime: fileReader)?.trackCount
-        // Single atomic hop so the cross-field read cannot tear against a
-        // concurrent poller/dispatcher write.
-        let s = await cache.auditSnapshot()
+        // #965 O3: the audit observes the session through the inspection's producer: one atomic
+        // cache read (it cannot tear against a concurrent poller/dispatcher write) and the
+        // MetaData.plist track count, kept only when the bundle Logic names is the cached project's.
+        // The audit used to take any front document's count, so another project's count could raise
+        // `track_readback_gap` against this project's rail. Both are reads; neither mutates the
+        // cache or the project.
+        let observed = await SessionPopulationObservation.observe(cache: cache, fileReader: fileReader)
+        let s = observed.state
         let snapshot = Snapshot(
             now: now,
             hasDocument: s.hasDocument,
@@ -314,7 +316,7 @@ enum ProjectSessionAudit {
             markersFetchedAt: s.markersFetchedAt,
             channelStrips: s.channelStrips,
             mixerFetchedAt: s.mixerFetchedAt,
-            fileTrackCount: fileTrackCount,
+            fileTrackCount: observed.fileTrackCount,
             blockingDialogButtons: blockingDialogButtons
         )
         return buildAudit(snapshot: snapshot)
