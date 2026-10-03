@@ -29,7 +29,7 @@ private let settle: useconds_t = 7_777
 
 /// Every op `keyMap` posts as a letter with no Command, Control or Option.
 private let plainLetterOps = [
-    "transport.record", "transport.toggle_cycle", "transport.toggle_metronome", "edit.quantize",
+    "transport.record", "transport.toggle_cycle", "transport.toggle_metronome",
     "view.toggle_mixer", "view.toggle_piano_roll", "view.toggle_library", "view.toggle_score_editor",
     "nav.zoom_to_fit", "automation.toggle_view",
 ]
@@ -380,7 +380,7 @@ enum FailedRestore: String, CaseIterable, Sendable {
         let originalID = tis.source?.id
         let channel = CGEventChannel(runtime: tis.runtime())
 
-        let result = await channel.execute(operation: "edit.quantize", params: [:])
+        let result = await channel.execute(operation: "transport.record", params: [:])
 
         #expect(!result.isSuccess, "\(scenario): \(result.message)")
         #expect(tis.posts.isEmpty, "\(scenario) posted \(tis.posts.map(\.keyCode))")
@@ -489,10 +489,10 @@ enum FailedRestore: String, CaseIterable, Sendable {
         let tis = FakeTIS(current: korean, postSucceeds: false)
         let channel = CGEventChannel(runtime: tis.runtime())
 
-        let result = await channel.execute(operation: "edit.quantize", params: [:])
+        let result = await channel.execute(operation: "transport.record", params: [:])
 
         #expect(!result.isSuccess)
-        #expect(result.message.contains("Failed to post CGEvent for edit.quantize"), "\(result.message)")
+        #expect(result.message.contains("Failed to post CGEvent for transport.record"), "\(result.message)")
         #expect(result.message.contains("reads \(koreanID) again"), "\(result.message)")
         #expect(tis.source == korean)
         #expect(Array(tis.log.suffix(2)) == ["select:\(koreanID)", "read:\(koreanID)"], "\(tis.log)")

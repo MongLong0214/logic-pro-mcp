@@ -346,7 +346,10 @@ actor CGEventChannel: Channel {
         "edit.select_all":            .cmd(0),          // Select All: Command-A
         "edit.split":                 .cmd(17),         // Split Regions/Events at Playhead Position: Command-T
         "edit.join":                  .cmd(38),         // Join Regions/Notes: Command-J
-        "edit.quantize":              .key(12),         // Quantize Selected Regions/Cells/Events: Q
+        // edit.quantize posts nothing: its `value` names a grid, and Apple's Q (Quantize Selected
+        // Regions/Cells/Events) applies whatever quantize value Logic holds, which no key can set.
+        // Measured 2026-10-03: Q changed the region's quantize parameter on one press in German
+        // and on no press after an undo, in either selection mode (#1029).
         "edit.bounce_in_place":       .control(11),     // Bounce Regions/Cells in Place: Control-B
 
         // Views

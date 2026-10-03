@@ -37,7 +37,7 @@ The fixture's tracks each hold one MIDI region from bar 1 to bar 2. Region selec
 AXSelected before each region op and read back; the region count, the selected count and the Edit
 menu's first item (the last undoable edit) are read before and after. Select all selects every
 region; copy moves nothing and the paste after it adds one; cut removes one; split at 1.3.1.1 adds
-one and join removes it; quantize changes the undo item; bounce in place opens a dialog, which one
+one and join removes it; bounce in place opens a dialog, which one
 Escape cancels while Logic holds the keyboard; record turns the record checkbox on and stop off.
 Save must advance ProjectData's modification time, and close must take the arrange window away.
 The fixture is copied before the run and put back, with Logic quit, before every launch and at the
@@ -259,7 +259,7 @@ def regions_by(delta):
 # titles with no operation, which the menu shows when another window has the focus.
 UNDO_NOUN_KEYS = {
     "edit.paste": "Paste#und", "edit.cut": "Cut#und", "edit.split": "Split Regions#und",
-    "edit.join": "Join Regions#und", "edit.quantize": "Quantize",
+    "edit.join": "Join Regions#und",
     "track.create_audio": "Create Track#und", "track.create_instrument": "Create Track#und",
     "track.duplicate": "Create Track#und", "track.delete": "Delete Tracks#und",
 }
@@ -403,11 +403,6 @@ def nothing_visible(before, after, extra):
     return True
 
 
-def undo_title_changed(before, after, extra):
-    return before.get("undo_title") is not None and after.get("undo_title") is not None \
-        and after["undo_title"] != before["undo_title"]
-
-
 def window_appeared(before, after, extra):
     return len(after.get("windows") or []) > len(before.get("windows") or [])
 
@@ -539,12 +534,6 @@ def setup_selected_track(driver, ax, extra):
     extra["params"] = {"index": index, "expected_name": name}
 
 
-def setup_select_all(driver, ax, extra):
-    """Every region selected. Q quantized notes in the 2026-09-27 run after Command-A selected every
-    region; with one region selected through AXSelected it changed nothing (Korean pilot)."""
-    extra["setup_selected"] = select_regions(ax, lambda ax, items: items)
-
-
 def setup_select_one(driver, ax, extra):
     extra["setup_selected"] = select_regions(ax, first_region)
 
@@ -630,8 +619,6 @@ OPS = [
     ("edit.undo", "logic_edit", "undo", {}, None, stops_naming("edit.cut", regions_by(+1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}),
     ("edit.split", "logic_edit", "split", {}, None, names_operation("edit.split", regions_by(+1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_split),
     ("edit.join", "logic_edit", "join", {}, None, names_operation("edit.join", regions_by(-1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_join),
-    ("edit.quantize", "logic_edit", "quantize", {"value": "1/16"}, "q", names_operation("edit.quantize", undo_title_changed), {"undo_title", "regions_selected", "structure", "sliders"}, setup_select_all),
-    ("edit.undo", "logic_edit", "undo", {}, None, stops_naming("edit.quantize", undo_title_changed), {"undo_title", "structure", "sliders"}),
     ("edit.bounce_in_place", "logic_edit", "bounce_in_place", {}, None, bounce_dialog_appeared, {"windows", "structure", "sliders", "boxes:*"}, setup_select_one, post_cancel_dialog),
     ("transport.record", "logic_transport", "record", {}, "r", set_to("transportRecordControl", 1), {"boxes:transportRecordControl", "boxes:transportPlayControl", "boxes:transportMetronomeControl", "bar", "regions", "regions_selected", "undo_title", "structure", "sliders"}),
     ("transport.stop", "logic_transport", "stop", {}, None, set_to("transportRecordControl", 0), {"boxes:transportRecordControl", "boxes:transportPlayControl", "boxes:transportMetronomeControl", "bar", "regions", "regions_selected", "undo_title", "structure", "sliders"}),
@@ -672,7 +659,7 @@ def others_kept(before, after, allowed):
 
 
 REGION_OPS = ("edit.select_all", "edit.copy", "edit.paste", "edit.cut", "edit.split", "edit.join",
-              "edit.quantize", "edit.bounce_in_place")
+              "edit.bounce_in_place")
 
 
 def call(driver, ax, tool, command, params, content=False):
@@ -745,12 +732,6 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
             time.sleep(2.5)
             later = snapshot(ax)
             extra["bar_later"] = None if later is None else later.get("bar")
-        if op == "edit.quantize":
-            # Q changed nothing in six languages in the first ten-language run; a late reading
-            # tells a slow undo title from a key that did nothing.
-            time.sleep(2.0)
-            later = snapshot(ax)
-            extra["undo_title_later"] = None if later is None else later.get("undo_title")
         summary = A.reply_summary(reply)
         unbound = letter is not None and bindings is not None and letter not in bindings
         row = {"index": index, "op": op, "before": before, "after": after, "extra": extra,

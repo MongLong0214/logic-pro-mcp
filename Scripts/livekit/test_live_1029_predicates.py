@@ -58,14 +58,18 @@ class UndoNounPredicates(unittest.TestCase):
     def setUp(self):
         use_words()
 
-    def test_quantize_needs_its_own_noun(self):
-        expect, _ = predicate(index_of("edit.quantize"))
-        before = {"undo_title": titled(WORDS["Join Regions#und"]), "regions_selected": 8}
-        named = dict(before, undo_title=titled(WORDS["Quantize"]))
-        unrelated = dict(before, undo_title="Undo Renaming")
+    def test_join_needs_its_own_noun(self):
+        expect, _ = predicate(index_of("edit.join"))
+        before = {"undo_title": titled(WORDS["Split Regions#und"]), "regions": 9}
+        named = {"undo_title": titled(WORDS["Join Regions#und"]), "regions": 8}
+        unrelated = {"undo_title": "Undo Renaming", "regions": 8}
         self.assertTrue(expect(before, named, {}))
-        self.assertFalse(expect(before, unrelated, {}), "an unrelated command passed as quantize")
-        self.assertFalse(expect(before, dict(before), {}), "a no-op passed as quantize")
+        self.assertFalse(expect(before, unrelated, {}), "an unrelated command passed as join")
+        self.assertFalse(expect(before, dict(before), {}), "a no-op passed as join")
+
+    def test_quantize_is_not_driven(self):
+        self.assertNotIn("edit.quantize", [row[0] for row in H.OPS],
+                         "quantize posts no keystroke since #1029; a row for it measures nothing")
 
     def test_paste_needs_the_paste_noun_and_a_new_region(self):
         expect, _ = predicate(index_of("edit.paste"))

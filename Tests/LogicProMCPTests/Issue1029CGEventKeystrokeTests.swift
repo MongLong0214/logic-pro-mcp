@@ -58,8 +58,6 @@ struct Issue1029CGEventKeystrokeTests {
               killsRestoring: ".cmdOption(35) Option-Command-P = New Session Player SI Track"),
         .init(operation: "project.close", keyCode: 13, flags: [.maskCommand, .maskAlternate],
               appleRow: "Close Project | Option-Command-W", killsRestoring: ".cmd(13) Command-W = Close Window"),
-        .init(operation: "edit.quantize", keyCode: 12, flags: [],
-              appleRow: "Quantize Selected Regions/Cells/Events | Q", killsRestoring: ".key(44) Slash = Go to Position"),
         .init(operation: "edit.bounce_in_place", keyCode: 11, flags: .maskControl,
               appleRow: "Bounce Regions/Cells in Place | Control-B",
               killsRestoring: ".cmdOption(11) Option-Command-B = Time Stretch Region Length to Nearest Bar"),
@@ -78,6 +76,8 @@ struct Issue1029CGEventKeystrokeTests {
               killsRestoring: "\"project.new\": .cmd(45)"),
         .init(operation: "project.save_as", why: "its chain is [.accessibility]; a keystroke cannot carry the path",
               killsRestoring: "\"project.save_as\": .cmdShift(1)"),
+        .init(operation: "edit.quantize", why: "Q applies the quantize value Logic holds; a keystroke cannot carry the requested grid",
+              killsRestoring: "\"edit.quantize\": .key(12)"),
         .init(operation: "nav.create_marker", why: "its chain is [.accessibility]; Create Marker is Option-Apostrophe",
               killsRestoring: "\"nav.create_marker\": .cmdOption(39)"),
     ]

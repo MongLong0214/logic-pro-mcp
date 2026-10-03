@@ -68,9 +68,6 @@ Corrected: the op now posts the key Apple's row gives this command (JOIN above).
     transport.fast_forward, Period
         logic-canon://quickhelp/QuickHelp/en/KCE_040_Forward#Title
         value: Forward
-    edit.quantize, Q
-        logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Quantize%20Selected%20Regions%2FCells%2FEvents#value
-        value: Quantize Selected Regions/Cells/Events
     edit.bounce_in_place, Control-B
         logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrToolbTooltip%7C%7C%7CBounce%20Regions%2FCells%20in%20Place#value
         value: Bounce Regions/Cells in Place
@@ -85,7 +82,9 @@ Removed: the op posts nothing now. For edit.delete, view.toggle_inspector and
 view.toggle_step_editor the row is the op's own command, which Apple's tables give no default
 key. For project.save_as and nav.create_marker it is the op's own command, which no routing chain
 hands to CGEvent. For track.create_drummer and project.new no row names the op's own command, so
-the row is the command Apple binds the removed keystroke to.
+the row is the command Apple binds the removed keystroke to. For edit.quantize the row is the
+command Apple binds Q to, which quantizes to whatever value Logic holds: the op names a grid, and
+no keystroke can carry one.
 
     edit.delete, was Delete
         logic-canon://quickhelp/QuickHelp/en/KCE_476_Delete#Title
@@ -108,6 +107,9 @@ the row is the command Apple binds the removed keystroke to.
     project.new, was Command-N
         logic-canon://quickhelp/QuickHelp/en/GMF_001_NewProject#Title
         value: New from Template
+    edit.quantize, was Q
+        logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Quantize%20Selected%20Regions%2FCells%2FEvents#value
+        value: Quantize Selected Regions/Cells/Events
 
 Exit: 0 = every keystroke is Apple's - 1 = one is not, or something could not be read
 """
@@ -148,7 +150,6 @@ JOIN = {
     "edit.select_all": ("various-windows", "Select All"),
     "edit.split": ("main-window-tracks-and-various-editors", "Split Regions/Events at Playhead Position"),
     "edit.join": ("main-window-tracks-and-various-editors", "Join Regions/Notes"),
-    "edit.quantize": ("main-window-tracks-and-various-editors", "Quantize Selected Regions/Cells/Events"),
     # The op acts on the selection; `Bounce Tracks in Place | Control-Command-B` is the track form.
     "edit.bounce_in_place": ("main-window-tracks", "Bounce Regions/Cells in Place"),
     "view.toggle_mixer": ("global-commands", "Show/Hide Mixer"),
