@@ -1,0 +1,8 @@
+Limit: today's routing graph publishes bus-to-aux inputs as not observed, so the create_aux and receiving_aux_missing branches are reached only through the graphOverride test seam; over a real capture every bus destination is bus_receiver_unverified
+Warn: a missing receiver is concluded only from a complete bus-to-aux reading; a partial or unread domain stays unverified and must not plan an aux
+Record-Id: r-5fbc9a8afadb
+Provenance: inherited fec66a2dbf542e27c20ad6d7e80d4c80091f7bcc
+
+Warn: an approved main output approves only the bus; a receiving aux is planned only from a policy receivers entry of new, and absence without one is a question, never a planned aux
+Record-Id: r-2534badbf456
+Provenance: inherited 783a995c01d714f08e0aa3d851d4d0861ee599e9
