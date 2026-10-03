@@ -524,15 +524,17 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 toolStateCResult(stale ? .staleSnapshot : .invalidParams,
                     hint: hint, extras: ["write_attempted": false])
             }
-            guard Set(params.keys).isSubset(of: ["snapshot_id", "policy", "names", "plan_id", "digest"]),
+            guard Set(params.keys).isSubset(of: Set(["snapshot_id", "policy", "names", "plan_id", "digest"])
+                    .union(ProjectSessionAudit.PlanningOptions.parameterKeys)),
                   let encoded = try? encodeJSONStrict(Value.object(params), compact: true),
                   encoded.utf8.count <= StateCache.sessionCaptureByteLimit else {
                 return refused("unknown parameter or input exceeds the 2 MiB draft limit")
             }
             if let value = params["plan_id"] {
                 guard case .string(let id) = value, !id.isEmpty,
-                      params["snapshot_id"] == nil, params["policy"] == nil, params["names"] == nil else {
-                    return refused("plan_id lookup cannot reinterpret snapshot, policy or names")
+                      params["snapshot_id"] == nil, params["policy"] == nil, params["names"] == nil,
+                      ProjectSessionAudit.PlanningOptions.parameterKeys.isDisjoint(with: params.keys) else {
+                    return refused("plan_id lookup cannot reinterpret snapshot, policy, names or planning options")
                 }
                 var digest: String?
                 if let raw = params["digest"] {
@@ -567,11 +569,15 @@ struct ProjectDispatcher: OperationTraceDispatching {
             guard let names = ProjectSessionAudit.parseApprovedNames(params["names"], policy: policy) else {
                 return refused("names must be at most 32 unique declared target/name objects with valid scalar names; no partial plan was created")
             }
+            guard let options = ProjectSessionAudit.PlanningOptions.parse(params) else {
+                return refused("on_ambiguity must be ask or report_only, and allow_create_aux, allow_stack_membership_change and allow_replace_send must be booleans; no plan was created")
+            }
             do {
                 let plan = try ProjectSessionAudit.buildCanonicalRepairPlan(
                     policy: policy, policyValue: .object(object), names: names,
                     capture: inspection.capture, request: inspection.request,
-                    snapshotCurrent: await cache.inspectionIsCurrent(inspection.capture))
+                    snapshotCurrent: await cache.inspectionIsCurrent(inspection.capture),
+                    options: options)
                 guard await cache.retainRepairPlan(plan, snapshotID: snapshot) else {
                     return refused("plan source expired or storage limit exceeded; no reusable plan was issued", stale: true)
                 }

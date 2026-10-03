@@ -189,7 +189,7 @@ struct OperationCatalogTests {
             "outputRoot", "output_root", "path", "project", "projects",
         ],
         .projectCleanupApply: ["confirmed", "name", "names", "new_name", "stepId", "step_id"],
-        .projectPlanSessionRepair: ["digest", "names", "plan_id", "policy", "snapshot_id"],
+        .projectPlanSessionRepair: ["allow_create_aux", "allow_replace_send", "allow_stack_membership_change", "digest", "names", "on_ambiguity", "plan_id", "policy", "snapshot_id"],
         .projectInspectSession: ["allow_ui_navigation", "domains", "scope", "snapshot_id"],
         .midiSendNote: ["channel", "duration_ms", "note", "port", "velocity"],
         .midiSendChord: ["channel", "duration_ms", "notes", "port", "velocity"],
