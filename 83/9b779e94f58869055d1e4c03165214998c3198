@@ -1,0 +1,4 @@
+Limit: the workflow runs from the base branch on pull_request_target, so this pin takes effect only on squashes after it merges; the first one is its test
+Warn: v1.2.13's preserve decided already-carried by searching the squash message for Record-Id, and lpm-merge's squash messages hold every trailer block in the body, where git's reader does not look; three merges in a row (#1080, #1082, #1083) published no note and needed a manual squash-preserve
+Record-Id: r-0c6523a4c96d
+Provenance: inherited e67f11ebcad3e6c8910f5651774db34d5e41afbb
