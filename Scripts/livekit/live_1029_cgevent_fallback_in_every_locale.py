@@ -544,8 +544,9 @@ def tree_digest(path):
     extension, and a copy that lost it opened with `.logicx` in Logic's window title, which no
     title match expected (2026-10-03)."""
     digest = hashlib.sha256()
-    listed = subprocess.run(["/usr/bin/xattr", "-r", "-l", path], capture_output=True, text=True).stdout
-    digest.update(listed.replace(path, "").encode())
+    # -x prints values as hex: some are binary (the Finder info), and the output is read as bytes.
+    listed = subprocess.run(["/usr/bin/xattr", "-r", "-l", "-x", path], capture_output=True).stdout
+    digest.update(listed.replace(path.encode(), b""))
     for root, dirs, files in os.walk(path):
         dirs.sort()
         for name in sorted(files):
