@@ -384,6 +384,26 @@ class NamedZoomAutomationAndCopy(unittest.TestCase):
         self.assertFalse(H.judge(dict(copy, extra={"clipboard_seeded": True})), "a copy with no paste passed")
 
 
+class EmbeddedCommit(unittest.TestCase):
+    HEAD = "0123456789abcdef0123456789abcdef01234567"
+
+    def test_the_section_is_read_at_its_file_offset(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as handle:
+            handle.write(b"\0" * 64 + self.HEAD.encode() + b"\0" * 8)
+            path = handle.name
+        listing = "Section\n  sectname __lpm_commit\n   segname __TEXT\n      size 0x0000000000000028\n    offset 64\n"
+        try:
+            with mock.patch.object(H.subprocess, "run", return_value=mock.Mock(stdout=listing)):
+                self.assertEqual(H.embedded_commit(path), self.HEAD)
+            with mock.patch.object(H.subprocess, "run", return_value=mock.Mock(stdout=listing.replace("offset 64", "offset 60"))):
+                self.assertIsNone(H.embedded_commit(path))
+            with mock.patch.object(H.subprocess, "run", return_value=mock.Mock(stdout="")):
+                self.assertIsNone(H.embedded_commit(path), "a binary with no section read as stamped")
+        finally:
+            os.unlink(path)
+
+
 class RouteEnvironment(unittest.TestCase):
     """#1091 review R2, R1091-08: production must not inherit the debug route."""
 

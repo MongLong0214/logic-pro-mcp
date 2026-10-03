@@ -105,6 +105,21 @@ def arguments():
     return args
 
 
+def embedded_commit(binary):
+    """The commit the build embedded in the Mach-O section __TEXT,__lpm_commit (see
+    build_attested_binary.sh on #1095), read at the file offset `otool -l` gives, or None."""
+    listing = subprocess.run(["/usr/bin/otool", "-l", binary], capture_output=True, text=True).stdout
+    for block in listing.split("Section\n")[1:]:
+        if re.search(r"sectname __lpm_commit\b", block) and re.search(r"segname __TEXT\b", block):
+            size = int(re.search(r"\bsize 0x([0-9a-f]+)", block).group(1), 16)
+            offset = int(re.search(r"\boffset (\d+)", block).group(1))
+            with open(binary, "rb") as handle:
+                handle.seek(offset)
+                text = handle.read(size).decode("ascii", "replace")
+            return text if re.fullmatch(r"[0-9a-f]{40}", text) else None
+    return None
+
+
 def sha256_of(path):
     with open(path, "rb") as handle:
         return hashlib.sha256(handle.read()).hexdigest()
@@ -573,9 +588,14 @@ def selected_track(ax):
 
 
 def setup_duplicate(driver, ax, extra):
-    """The fixture's first track selected, then renamed as delete's source is."""
+    """The fixture's first track selected, then renamed as delete's source is. select replaces the
+    selection (measured in Korean, lpm-evidence/1029/probe-select-ko.json), but half a second after a
+    delete it had not yet read back; the header is read for up to three seconds."""
     call(driver, ax, "logic_tracks", "select", {"index": 0})
-    time.sleep(0.5)
+    deadline = time.time() + 3.0
+    while selected_track(ax)[0] != 0 and time.time() < deadline:
+        time.sleep(0.25)
+    extra["first_track_selected"] = selected_track(ax)[0] == 0
     setup_selected_track(driver, ax, extra)
 
 
@@ -1006,7 +1026,12 @@ def main():
                                 "values": undo_table, "missing": missing_nouns})
     if missing_nouns:
         sys.exit(f"cannot run: Logic's Localizable.strings lacks {missing_nouns} in a language this run drives")
+    carried = embedded_commit(args.binary)
+    if carried != args.head:
+        # The binary must carry the commit it is run as; an unstamped one is refused too.
+        sys.exit(f"the binary carries {carried!r} in __TEXT,__lpm_commit, not the head {args.head}; nothing was driven")
     ev.note("1029/binary", {"binary": args.binary, "sha256": sha256_of(args.binary), "mode": args.mode,
+                            "embedded_commit": carried,
                             "lprojs": args.lprojs})
     runs, failures, restored = {}, {}, {}
     recording = ev.record_screen(seconds=RECORDING_SECONDS_PER_LANGUAGE * len(args.lprojs) + 120)
