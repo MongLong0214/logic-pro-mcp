@@ -10,6 +10,7 @@ nothing is built.
 
     python3 test_reproducible_release_build.py
 """
+import json
 import os
 import shutil
 import subprocess
@@ -19,8 +20,28 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 RELEASE = os.path.join(HERE, "reproducible-release-build.sh")
 PATCHER = os.path.join(HERE, "reproducible-build-uuid-patch.py")
-RESOLVED = '{"pins": [], "version": 3}'
-REWRITTEN = '{"pins": [{"identity": "other"}], "version": 3}'
+PIN_LOG = {"identity": "swift-log", "kind": "remoteSourceControl", "location": "https://github.com/apple/swift-log.git",
+           "state": {"revision": "aaaa000000000000000000000000000000000000", "version": "1.6.0"}}
+PIN_NIO = {"identity": "swift-nio", "kind": "remoteSourceControl", "location": "https://github.com/apple/swift-nio.git",
+           "state": {"revision": "bbbb000000000000000000000000000000000000", "version": "2.97.1"}}
+PIN_CRYPTO = {"identity": "swift-crypto", "kind": "remoteSourceControl", "location": "https://github.com/apple/swift-crypto.git",
+              "state": {"revision": "cccc000000000000000000000000000000000000", "version": "4.5.1"}}
+
+
+def lock(pins):
+    return json.dumps({"originHash": "0957", "pins": pins, "version": 3}, indent=2) + "\n"
+
+
+RESOLVED = lock([PIN_LOG, PIN_NIO])
+#: The four ways #1098 names a lock can change: a platform pin pruned, a retained pin moved, a pin
+#: added, and a file that does not parse. None of them may be put back or built from.
+CHANGES = {
+    "pruned": lock([PIN_LOG]),
+    "retained pin moved": lock([dict(PIN_LOG, state={"revision": "dddd000000000000000000000000000000000000",
+                                                      "version": "1.6.1"}), PIN_NIO]),
+    "pin added": lock([PIN_LOG, PIN_NIO, PIN_CRYPTO]),
+    "malformed": '{"pins": [ {"identity": "swift-log", ',
+}
 
 
 def git(repo, *args, env=None):
@@ -46,6 +67,13 @@ class ReleaseBuilder(unittest.TestCase):
         self.bin = os.path.join(self.root, "bin")
         os.makedirs(self.bin)
         self.ran = os.path.join(self.root, "swift-ran")
+
+    def reset(self):
+        """Put the scratch tree back to its commit and forget the swift calls, between sub-cases."""
+        git(self.repo, "checkout", "--", ".")
+        git(self.repo, "clean", "-fdq")
+        if os.path.exists(self.ran):
+            os.remove(self.ran)
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
@@ -101,23 +129,45 @@ exit 0
         self.assertIn("dirty tree before build", result.stderr)
         self.assertEqual(self.swift_calls(), [])
 
-    def test_a_lock_resolve_rewrote_is_fatal_and_kept(self):
-        self.fake_swift(on_resolve=f"printf '%s' '{REWRITTEN}' > Package.resolved")
-        result = self.run_release()
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertIn("resolve changed the tree", result.stderr)
-        self.assertEqual(self.resolved(), REWRITTEN, "the rewritten lock was put back")
-        self.assertIn("package resolve --force-resolved-versions", self.swift_calls())
-        self.assertFalse(any(call.startswith("build") for call in self.swift_calls()), "it built after the lock moved")
+    def rewrite(self, text):
+        """A shell command that writes `text` to Package.resolved exactly."""
+        path = os.path.join(self.root, "rewrite.txt")
+        with open(path, "w") as handle:
+            handle.write(text)
+        return f"cp {path!r} Package.resolved"
 
-    def test_a_lock_the_build_rewrote_is_fatal_and_kept(self):
-        self.fake_swift(on_build=f"printf '%s' '{REWRITTEN}' > Package.resolved")
+    def test_every_lock_change_at_resolve_is_fatal_kept_and_not_built(self):
+        for shape, text in CHANGES.items():
+            with self.subTest(shape=shape):
+                self.reset()
+                self.fake_swift(on_resolve=self.rewrite(text))
+                result = self.run_release()
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("resolve changed the tree", result.stderr)
+                self.assertEqual(self.resolved(), text, "the changed lock was not kept byte for byte")
+                self.assertIn("package resolve --force-resolved-versions", self.swift_calls())
+                self.assertFalse(any(call.startswith("build") for call in self.swift_calls()), "it built after the lock moved")
+
+    def test_every_lock_change_at_build_is_fatal_and_kept(self):
+        for shape, text in CHANGES.items():
+            with self.subTest(shape=shape):
+                self.reset()
+                self.fake_swift(on_build=self.rewrite(text))
+                result = self.run_release()
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("the build changed the tree", result.stderr)
+                self.assertEqual(self.resolved(), text, "the changed lock was not kept byte for byte")
+                builds = [call for call in self.swift_calls() if call.startswith("build")]
+                self.assertTrue(builds and all("--force-resolved-versions" in call for call in builds), builds)
+
+    def test_an_unchanged_lock_passes_both_reads(self):
+        # The control: with nothing rewritten the builder gets past both lock reads and goes on to
+        # the post-build steps, which this scratch binary cannot satisfy.
+        self.fake_swift()
         result = self.run_release()
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertIn("the build changed the tree", result.stderr)
-        self.assertEqual(self.resolved(), REWRITTEN, "the rewritten lock was put back")
-        builds = [call for call in self.swift_calls() if call.startswith("build")]
-        self.assertTrue(builds and all("--force-resolved-versions" in call for call in builds), builds)
+        self.assertNotIn("changed the tree", result.stderr, result.stdout + result.stderr)
+        self.assertIn("build_exit: 0", result.stdout)
+        self.assertEqual(self.resolved(), RESOLVED)
 
 
 if __name__ == "__main__":
