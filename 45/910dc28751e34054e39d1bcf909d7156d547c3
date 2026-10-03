@@ -1,0 +1,4 @@
+Limit: Package.resolved was edited by hand to keep the 25 pins Xcode 16.4 writes; local Swift 6.2.4 resolution drops 16 of them, and whether CI's resolution reproduces this file is shown only by CI's Package.resolved check
+Warn: the canary file is exempt from ci-forbid-dead-expect.sh because its comparisons must keep the dead form; any other file still follows the bare #expect(x) spelling
+Record-Id: r-02dd2ccf1399
+Provenance: inherited 4c36b680015e1691d394da949f819e687d23b694
