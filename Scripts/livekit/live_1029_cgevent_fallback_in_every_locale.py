@@ -250,6 +250,148 @@ def regions_by(delta):
     return check
 
 
+# --- what Logic's Edit menu names the last operation -------------------------------------------
+#
+# #1091 review R1, R1091-02: a count that moved does not say WHICH command moved it. Logic's Undo
+# item names the operation it would undo, from Logic.framework's Localizable.strings: these keys'
+# values appeared in every language's title after the op in the 2026-10-03 run, and the plain keys
+# did not (es writes Paste and Cut differently in the undo noun). `Undo` and `Can’t Undo` are the
+# titles with no operation, which the menu shows when another window has the focus.
+UNDO_NOUN_KEYS = {
+    "edit.paste": "Paste#und", "edit.cut": "Cut#und", "edit.split": "Split Regions#und",
+    "edit.join": "Join Regions#und", "edit.quantize": "Quantize",
+    "track.create_audio": "Create Track#und", "track.create_instrument": "Create Track#und",
+    "track.duplicate": "Create Track#und", "track.delete": "Delete Tracks#und",
+}
+BARE_UNDO_KEYS = ("Undo", "Can\u2019t Undo")
+#: The default name of a new audio track is this word and a number ("Audio 2"); an instrument
+#: track takes its patch's name (measured in Korean, 2026-10-03, explore-identity-ko.json).
+AUDIO_TRACK_KEY = "Audio"
+UNDO_UNIT_MARK = "Logic.framework"
+#: {key: {locale: value}} read from the installed Logic once per run; `CANON_LOCALE` names the
+#: language being driven, in the corpus's spelling (`zh_CN`), and is set by `run_language`.
+UNDO_TABLE = {}
+CANON_LOCALE = {"value": None}
+
+
+def load_undo_table(logic_canon):
+    """The undo nouns and bare titles in every locale, from the installed Logic's
+    Logic.framework/Localizable.strings through the canon extractor."""
+    wanted = set(UNDO_NOUN_KEYS.values()) | set(BARE_UNDO_KEYS) | {AUDIO_TRACK_KEY}
+    table = {}
+    for unit, locale, key, field, value in logic_canon.extract_strings(L993.APP):
+        if field == "value" and key in wanted and UNDO_UNIT_MARK in unit and unit.endswith("Localizable.strings"):
+            table.setdefault(key, {})[locale] = value
+    UNDO_TABLE.clear()
+    UNDO_TABLE.update(table)
+    return table
+
+
+def undo_word(key):
+    return (UNDO_TABLE.get(key) or {}).get(CANON_LOCALE["value"])
+
+
+def is_bare_undo(title):
+    return title is not None and title in {undo_word(k) for k in BARE_UNDO_KEYS} - {None}
+
+
+def names_operation(op, inner):
+    """`inner` held AND the Undo item now names this op's operation, which it did not before."""
+    def check(before, after, extra):
+        word = undo_word(UNDO_NOUN_KEYS[op])
+        b, a = before.get("undo_title") or "", after.get("undo_title") or ""
+        extra["undo_noun"] = word
+        return bool(word) and word in a and a != b and inner(before, after, extra)
+    return check
+
+
+def stops_naming(op, inner):
+    """For an undo of `op`: `inner` held AND the Undo item no longer names `op`'s operation."""
+    def check(before, after, extra):
+        word = undo_word(UNDO_NOUN_KEYS[op])
+        b, a = before.get("undo_title") or "", after.get("undo_title") or ""
+        extra["undo_noun"] = word
+        return bool(word) and word in b and word not in a and inner(before, after, extra)
+    return check
+
+
+# --- which editor, which dialog --------------------------------------------------------------
+#
+# #1091 review R1, R1091-02: the score editor and the piano roll turn the same Editors checkbox on,
+# and a window appearing is not the Bounce in Place dialog. Measured in Korean on 2026-10-03
+# (lpm-evidence/1029/explore-identity2-ko-cg.json): the score editor adds buttons whose
+# AXDescription is an untranslated identifier (clefsUnion, keySign, timeSign); the piano roll adds a
+# keyboard of buttons titled with note names; the bounce dialog is the focused window and holds a
+# text field whose value is the region's name with `_bip` after it.
+SCORE_MARKERS = {"clefsUnion", "keySign", "timeSign"}
+NOTE_NAME = re.compile(r"^[A-H][\u266f\u266d#b]?-?[0-9]{1,2}$")
+
+
+def editor_kind(ax):
+    """"score", "piano_roll" or None, from the arrange window's elements."""
+    window = A.arrange_window(ax)
+    if window is None:
+        return None
+    markers, notes = set(), 0
+    for element, _ in ax.walk(window, 10):
+        if ax.value(element, "AXRole") != "AXButton":
+            continue
+        description, title = ax.value(element, "AXDescription"), ax.value(element, "AXTitle")
+        if description in SCORE_MARKERS:
+            markers.add(description)
+        if isinstance(title, str) and NOTE_NAME.match(title):
+            notes += 1
+    if markers == SCORE_MARKERS:
+        return "score"
+    if notes >= 24:
+        return "piano_roll"
+    return None
+
+
+def bounce_dialog_open(ax):
+    """True when Logic's focused window holds a text field ending `_bip`."""
+    app = ax.f["AXUIElementCreateApplication"](A.logic_pid())
+    focused = ax.value(app, "AXFocusedWindow")
+    if focused is None:
+        return False
+    return any(ax.value(e, "AXRole") == "AXTextField" and str(ax.value(e, "AXValue") or "").endswith("_bip")
+               for e, _ in ax.walk(focused, 6))
+
+
+def selected_description(ax):
+    rows = A.track_header_rows(ax) or []
+    chosen = [r for r in rows if ax.value(r, "AXSelected") is True]
+    return str(ax.value(chosen[0], "AXDescription") or "") if len(chosen) == 1 else None
+
+
+def track_kind(audio):
+    """The new selected track's description names it with the audio word (audio) or not."""
+    def check(before, after, extra):
+        word, described = undo_word(AUDIO_TRACK_KEY), extra.get("new_track_description")
+        return bool(word) and described is not None and (word in described) == audio
+    return check
+
+
+def both(first, second):
+    def check(before, after, extra):
+        return first(before, after, extra) and second(before, after, extra)
+    return check
+
+
+def editor_opened(kind):
+    def check(before, after, extra):
+        return unnamed_box_on(before, after, extra) and extra.get("editor_kind") == kind
+    return check
+
+
+def editor_closed(before, after, extra):
+    return unnamed_box_off(before, after, extra) and extra.get("editor_kind") is None
+
+
+def bounce_dialog_appeared(before, after, extra):
+    return window_appeared(before, after, extra) and extra.get("bounce_dialog") is True
+
+
 def all_regions_selected(before, after, extra):
     return (before.get("regions") or 0) > 1 and before.get("regions_selected") == 1 \
         and after.get("regions_selected") == after.get("regions")
@@ -317,7 +459,11 @@ def playhead_advancing(before, after, extra):
 
 
 def playhead_held(before, after, extra):
-    return extra.get("bar_later") is not None and extra["bar_later"] == after.get("bar")
+    """Paused: the bar did not move in 2.5 s AND Play still reads on. Stop also holds the bar, and
+    turns Play off (#1091 review R1, R1091-02)."""
+    play = box_named(after, "transportPlayControl")
+    return extra.get("bar_later") is not None and extra["bar_later"] == after.get("bar") \
+        and play is not None and play[1] == 1
 
 
 # --- setups and post-steps for the region and project ops ----------------------------------------
@@ -470,34 +616,34 @@ OPS = [
     ("view.toggle_mixer", "logic_navigate", "toggle_view", {"view": "mixer"}, "x", toggled("mixerNamedElement"), {"boxes:mixerNamedElement", "structure", "sliders"}),
     # The score editor and the piano roll share the editors checkbox, so each is closed before the
     # other opens: with the score editor open, P switches the editor and turns no checkbox on.
-    ("view.toggle_score_editor", "logic_navigate", "toggle_view", {"view": "score"}, "n", unnamed_box_on, {"boxes:*", "structure", "sliders"}),
-    ("view.toggle_score_editor", "logic_navigate", "toggle_view", {"view": "score"}, "n", unnamed_box_off, {"boxes:*", "structure", "sliders"}),
-    ("view.toggle_piano_roll", "logic_navigate", "toggle_view", {"view": "piano_roll"}, "p", unnamed_box_on, {"boxes:*", "structure", "sliders"}),
-    ("view.toggle_piano_roll", "logic_navigate", "toggle_view", {"view": "piano_roll"}, "p", unnamed_box_off, {"boxes:*", "structure", "sliders"}),
+    ("view.toggle_score_editor", "logic_navigate", "toggle_view", {"view": "score"}, "n", editor_opened("score"), {"boxes:*", "structure", "sliders"}),
+    ("view.toggle_score_editor", "logic_navigate", "toggle_view", {"view": "score"}, "n", editor_closed, {"boxes:*", "structure", "sliders"}),
+    ("view.toggle_piano_roll", "logic_navigate", "toggle_view", {"view": "piano_roll"}, "p", editor_opened("piano_roll"), {"boxes:*", "structure", "sliders"}),
+    ("view.toggle_piano_roll", "logic_navigate", "toggle_view", {"view": "piano_roll"}, "p", editor_closed, {"boxes:*", "structure", "sliders"}),
     # Regions. Each fixture track holds one MIDI region from bar 1 to bar 2, and the playhead sits
     # past them, so a paste lands on its own.
     ("edit.select_all", "logic_edit", "select_all", {}, None, all_regions_selected, {"regions_selected"}, setup_select_one),
     ("edit.copy", "logic_edit", "copy", {}, None, nothing_visible, set(), setup_select_one),
-    ("edit.paste", "logic_edit", "paste", {}, None, regions_by(+1), {"regions", "regions_selected", "undo_title", "structure", "sliders", "bar"}),
-    ("edit.undo", "logic_edit", "undo", {}, None, regions_by(-1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}),
-    ("edit.cut", "logic_edit", "cut", {}, None, regions_by(-1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_select_one),
-    ("edit.undo", "logic_edit", "undo", {}, None, regions_by(+1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}),
-    ("edit.split", "logic_edit", "split", {}, None, regions_by(+1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_split),
-    ("edit.join", "logic_edit", "join", {}, None, regions_by(-1), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_join),
-    ("edit.quantize", "logic_edit", "quantize", {"value": "1/16"}, "q", undo_title_changed, {"undo_title", "regions_selected", "structure", "sliders"}, setup_select_all),
-    ("edit.undo", "logic_edit", "undo", {}, None, undo_title_changed, {"undo_title", "structure", "sliders"}),
-    ("edit.bounce_in_place", "logic_edit", "bounce_in_place", {}, None, window_appeared, {"windows", "structure", "sliders", "boxes:*"}, setup_select_one, post_cancel_dialog),
+    ("edit.paste", "logic_edit", "paste", {}, None, names_operation("edit.paste", regions_by(+1)), {"regions", "regions_selected", "undo_title", "structure", "sliders", "bar"}),
+    ("edit.undo", "logic_edit", "undo", {}, None, stops_naming("edit.paste", regions_by(-1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}),
+    ("edit.cut", "logic_edit", "cut", {}, None, names_operation("edit.cut", regions_by(-1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_select_one),
+    ("edit.undo", "logic_edit", "undo", {}, None, stops_naming("edit.cut", regions_by(+1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}),
+    ("edit.split", "logic_edit", "split", {}, None, names_operation("edit.split", regions_by(+1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_split),
+    ("edit.join", "logic_edit", "join", {}, None, names_operation("edit.join", regions_by(-1)), {"regions", "regions_selected", "undo_title", "structure", "sliders"}, setup_join),
+    ("edit.quantize", "logic_edit", "quantize", {"value": "1/16"}, "q", names_operation("edit.quantize", undo_title_changed), {"undo_title", "regions_selected", "structure", "sliders"}, setup_select_all),
+    ("edit.undo", "logic_edit", "undo", {}, None, stops_naming("edit.quantize", undo_title_changed), {"undo_title", "structure", "sliders"}),
+    ("edit.bounce_in_place", "logic_edit", "bounce_in_place", {}, None, bounce_dialog_appeared, {"windows", "structure", "sliders", "boxes:*"}, setup_select_one, post_cancel_dialog),
     ("transport.record", "logic_transport", "record", {}, "r", set_to("transportRecordControl", 1), {"boxes:transportRecordControl", "boxes:transportPlayControl", "boxes:transportMetronomeControl", "bar", "regions", "regions_selected", "undo_title", "structure", "sliders"}),
     ("transport.stop", "logic_transport", "stop", {}, None, set_to("transportRecordControl", 0), {"boxes:transportRecordControl", "boxes:transportPlayControl", "boxes:transportMetronomeControl", "bar", "regions", "regions_selected", "undo_title", "structure", "sliders"}),
     # Tracks: create, undo, redo, delete; the other creators each followed by a delete.
-    ("track.create_audio", "logic_tracks", "create_audio", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
-    ("edit.undo", "logic_edit", "undo", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
-    ("edit.redo", "logic_edit", "redo", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
-    ("track.delete", "logic_tracks", "delete", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
-    ("track.create_instrument", "logic_tracks", "create_instrument", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}),
-    ("track.delete", "logic_tracks", "delete", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}, setup_selected_track),
-    ("track.duplicate", "logic_tracks", "duplicate", {}, None, tracks_by(+1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
-    ("track.delete", "logic_tracks", "delete", {}, None, tracks_by(-1), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
+    ("track.create_audio", "logic_tracks", "create_audio", {}, None, both(names_operation("track.create_audio", tracks_by(+1)), track_kind(True)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
+    ("edit.undo", "logic_edit", "undo", {}, None, stops_naming("track.create_audio", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
+    ("edit.redo", "logic_edit", "redo", {}, None, names_operation("track.create_audio", tracks_by(+1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}),
+    ("track.delete", "logic_tracks", "delete", {}, None, names_operation("track.delete", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
+    ("track.create_instrument", "logic_tracks", "create_instrument", {}, None, both(names_operation("track.create_instrument", tracks_by(+1)), track_kind(False)), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}),
+    ("track.delete", "logic_tracks", "delete", {}, None, names_operation("track.delete", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "windows", "regions_selected", "undo_title"}, setup_selected_track),
+    ("track.duplicate", "logic_tracks", "duplicate", {}, None, names_operation("track.duplicate", tracks_by(+1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
+    ("track.delete", "logic_tracks", "delete", {}, None, names_operation("track.delete", tracks_by(-1)), {"tracks", "structure", "sliders", "boxes:*", "regions_selected", "undo_title"}, setup_selected_track),
     # The project: save, then close. Close is last, since nothing reads after it.
     ("project.save", "logic_project", "save", {}, None, saved, {"windows", "undo_title"}, setup_mtime, post_mtime),
     ("project.close", "logic_project", "close", {"confirmed": True, "saving": "no"}, None, project_closed, {"windows", "boxes:*", "tracks", "bar", "structure", "sliders", "regions", "regions_selected", "undo_title"}, None, post_closed),
@@ -508,8 +654,13 @@ def others_kept(before, after, allowed):
     """The snapshot keys the op was not allowed to change, each compared whole; boxes compared
     one by one unless all boxes are allowed."""
     moved = []
-    for key in ("tracks", "bar", "windows", "structure", "sliders", "regions", "regions_selected"):
+    for key in ("tracks", "bar", "windows", "structure", "sliders", "regions", "regions_selected",
+                "undo_title"):
         if key not in allowed and before.get(key) != after.get(key):
+            # The Undo item drops its operation name while another window has the focus (Library
+            # closing, a dialog opening); a change to or from a bare title is focus, not history.
+            if key == "undo_title" and (is_bare_undo(before.get(key)) or is_bare_undo(after.get(key))):
+                continue
             moved.append(key)
     if "boxes:*" not in allowed:
         free = {box_named(before, k[6:])[0] for k in allowed if k.startswith("boxes:") and box_named(before, k[6:])}
@@ -549,13 +700,16 @@ def box_shot(ev, ax, key, tag, region=None):
         if box is None:
             return None
         region = (int(box[0] - frame[0]), int(box[1] - frame[1]), int(box[2]), int(box[3]))
-    shot = ev.shot(tag, settle_region=region)
+    # The recorder's default title lookup knows four languages; the arrange window's title as
+    # this run resolved it is passed instead (#1091 review R1, R1091-03).
+    shot = ev.shot(tag, settle_region=region, window_title=A.ARRANGE.get("title"))
     return {"file": shot["file"], "region": region, "description": description,
             "window_points": (int(frame[2]), int(frame[3])) if frame else None}
 
 
 def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
     rows = []
+    CANON_LOCALE["value"] = lproj
     for index, (op, tool, command, params, letter, expect, allowed, *steps) in enumerate(OPS):
         if only is not None and index not in only:
             continue
@@ -569,6 +723,12 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
         reply, seconds, focus = call(driver, ax, tool, command, extra.get("params", params),
                                      content=op in REGION_OPS)
         after = snapshot(ax)
+        if op in ("view.toggle_score_editor", "view.toggle_piano_roll"):
+            extra["editor_kind"] = editor_kind(ax)
+        if op == "edit.bounce_in_place":
+            extra["bounce_dialog"] = bounce_dialog_open(ax)
+        if op in ("track.create_audio", "track.create_instrument"):
+            extra["new_track_description"] = selected_description(ax)
         if first_shot is not None:
             second = box_shot(ev, ax, "transportPlayControl", f"1029/{lproj}/play-after", first_shot["region"])
             if second is not None:
@@ -607,10 +767,24 @@ def run_language(ev, driver, ax, source, lproj, bindings, mode, only=None):
         print(json.dumps({"lproj": lproj, "mode": mode, "op": op, "function": row.get("function"),
                           "others_moved": row.get("others_moved"), "method": summary.get("method"),
                           "success": summary.get("success")}, ensure_ascii=False), flush=True)
+    witness_copy_by_paste(rows)
     # Leave the transport stopped whatever happened above, unless the project was closed.
     if A.arrange_window(ax) is not None:
         call(driver, ax, "logic_transport", "stop", {})
     return rows
+
+
+def witness_copy_by_paste(rows):
+    """Copy moves no reading of its own, so it acts only if the paste after it, which needs what
+    copy put on the clipboard, did (#1091 review R1, R1091-02: identical readings passed copy).
+    A copy with no paste row after it in this run is not credited."""
+    for position, row in enumerate(rows):
+        if row.get("op") != "edit.copy":
+            continue
+        paste = next((r for r in rows[position + 1:] if r.get("op") == "edit.paste"), None)
+        witnessed = paste is not None and paste.get("function") is True and paste.get("others_moved") == []
+        row.setdefault("extra", {})["witnessed_by_paste"] = witnessed
+        row["function"] = bool(row.get("function")) and witnessed
 
 
 def performed(row):
@@ -619,8 +793,11 @@ def performed(row):
     correction as review R1 of #1085, R-1039-02)."""
     if row.get("letter_unbound"):
         return False
+    # #1091 review R1, R1091-04: the reply must name cgevent. A binary that ignores the debug
+    # route (a release build) answers through an earlier rung, and its effect is not the fallback.
+    method = (row.get("reply") or {}).get("method") if isinstance(row.get("reply"), dict) else None
     return row.get("function") is True and row.get("others_moved") == [] \
-        and row.get("source_after") == A.KOREAN_2SET
+        and row.get("source_after") == A.KOREAN_2SET and method == "cgevent"
 
 
 def nothing_happened(row):
@@ -649,9 +826,19 @@ def tree_digest(path):
 
 def restore_fixture(backup):
     """project.save writes the fixture, so it is put back from the copy taken before the run, with
-    Logic quit first: files under an open project are not replaced."""
-    if L993.logic_running() and not L993.quit_logic():
-        raise RuntimeError("Logic did not quit, so the fixture was not replaced under it")
+    Logic quit first: files under an open project are not replaced.
+
+    The replacement waits on a census that READ a count of zero immediately before it. A count
+    that did not read, or any count other than zero, stops the restoration (#1091 review R1,
+    R1091-01: `logic_running` reads "unreadable" and "2" as not running, and the fixture was
+    replaced under them in an offline replay)."""
+    census = L993.logic_census()
+    if census["status"] != "gone":
+        L993.quit_logic()
+        census = L993.logic_census()
+    if census["status"] != "gone":
+        raise RuntimeError(f"Logic's process count read {census['raw']!r}, not 0, so the fixture "
+                           "was not replaced")
     shutil.rmtree(L993.FIXTURE)
     # ditto, not shutil.copytree: on macOS copytree drops extended attributes.
     subprocess.run(["/usr/bin/ditto", backup, L993.FIXTURE], check=True)
@@ -678,6 +865,13 @@ def main():
         approvals = handle.read()
     ax = A.AX()
     ev = E.Evidence(args.head, os.environ["LPM_EVIDENCE_ROOT"], surface="ui")
+    undo_table = load_undo_table(logic_canon)
+    missing_nouns = sorted(k for k in set(UNDO_NOUN_KEYS.values()) | set(BARE_UNDO_KEYS) | {AUDIO_TRACK_KEY}
+                           if any(L993.CODES.get(l) and l not in (undo_table.get(k) or {}) for l in args.lprojs))
+    ev.note("1029/undo-nouns", {"unit": "Contents/Frameworks/Logic.framework/Versions/A/Resources/Localizable.strings",
+                                "values": undo_table, "missing": missing_nouns})
+    if missing_nouns:
+        sys.exit(f"cannot run: Logic's Localizable.strings lacks {missing_nouns} in a language this run drives")
     ev.note("1029/binary", {"binary": args.binary, "sha256": sha256_of(args.binary), "mode": args.mode,
                             "lprojs": args.lprojs})
     runs, failures, restored = {}, {}, {}
@@ -753,10 +947,36 @@ def main():
                                mutation="a keystroke bound to another command, or none: the op's reading "
                                         "does not move, or another one does")
     out = ev.write()
-    clean = E.is_clean(out)
+    if args.mode == "isolated":
+        clean = E.is_clean(out)
+    else:
+        # Criterion 4 records which channel answered; it has no pass/fail check per row, so
+        # `is_clean`, which needs at least one check, cannot be its completion (#1091 review R1,
+        # R1091-05). Production is complete when every driven language ran every selected row,
+        # each row read before and after and got a reply with a state, and every restoration held.
+        expected_rows = len(OPS) if args.rows is None else len(set(args.rows))
+        clean = production_complete(runs, args.lprojs, expected_rows, out)
     print(json.dumps({"written": out, "is_clean": clean, "failures": failures,
                       "korean_restored": restored.get("ok")}, ensure_ascii=False))
     return 0 if clean and not failures else 1
+
+
+def production_complete(runs, lprojs, expected_rows, written):
+    """True when every language in `lprojs` has `expected_rows` rows, each with a before and an
+    after reading (project.close excepted: nothing reads after it) and a reply carrying a state,
+    and the written evidence reports no failed restoration."""
+    if not isinstance(written, dict) or written.get("restorations_failed") != 0:
+        return False
+    for lproj in lprojs:
+        rows = (runs.get(lproj) or {}).get("rows") or []
+        if len(rows) != expected_rows:
+            return False
+        for row in rows:
+            reply = row.get("reply") if isinstance(row.get("reply"), dict) else {}
+            read = row.get("before") is not None and (row.get("after") is not None or row.get("op") == "project.close")
+            if not read or not reply.get("state"):
+                return False
+    return True
 
 
 if __name__ == "__main__":
