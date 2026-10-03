@@ -157,6 +157,7 @@ actor ResourceUpdateNotifier {
         self.registry = registry
     }
 
+    @discardableResult
     func publishChangedResources(
         cacheKeys: [ResourceCacheKey],
         cache: StateCache,
@@ -164,18 +165,26 @@ actor ResourceUpdateNotifier {
         readResource: @Sendable (String, StateCache, ChannelRouter) async throws -> ReadResource.Result = { uri, cache, router in
             try await ResourceHandlers.read(uri: uri, cache: cache, router: router)
         },
+        stopBeforeEachRead: @Sendable () -> Bool = { false },
         notify: @Sendable (String) async throws -> Void
-    ) async {
+    ) async -> Bool {
         let subscribed = await registry.subscribedURIs()
-        guard !subscribed.isEmpty else { return }
+        guard !subscribed.isEmpty else { return true }
 
         let uris = ResourceSubscriptionCatalog.affectedSubscribedURIs(
             cacheKeys: cacheKeys,
             subscribedURIs: subscribed
         )
         for uri in uris {
+            // #1079 review R3: a resource read is a fresh read of Logic, and the poller's background
+            // cycle must not start one once the user is editing text. It reports the stop so the
+            // poller can publish these sections later.
+            if stopBeforeEachRead() { return false }
             do {
                 let result = try await readResource(uri, cache, router)
+                // Editing that began during the read may have cut it short (the help-read guard
+                // refuses help reads once it has), so its content is not published.
+                if stopBeforeEachRead() { return false }
                 let hash = try ResourceContentHasher.stableDataHash(
                     fromResourceText: sharedResourceTextForProduction(result)
                 )
@@ -191,6 +200,7 @@ actor ResourceUpdateNotifier {
                 Log.warn("Resource update diff failed for \(uri): \(error)", subsystem: "server")
             }
         }
+        return true
     }
 
     func reset() {

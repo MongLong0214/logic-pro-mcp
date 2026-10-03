@@ -93,6 +93,14 @@ actor AccessibilityChannel: Channel {
         let setCycleRange: @Sendable ([String: String]) -> ChannelResult
         let tracks: @Sendable () -> ChannelResult
         let trackStates: @Sendable () -> [TrackState]?
+        /// #1079: the track-state read the background poll makes. It asks `stop` before each
+        /// header and, once `stop` says so, gives up the rest of the walk (`yielded`, no states).
+        /// Measured 2026-10-02: reading AXHelp of a track header's elements, as `inferTrackType`
+        /// does for every header, ended an inline track rename at once, so a walk already under
+        /// way when the user starts typing must stop at the next header, not at the next read of
+        /// the cycle. The default, for a runtime that does not set it, reads `trackStates` and never
+        /// stops.
+        let trackStatesStopping: @Sendable (@escaping @Sendable () -> Bool) -> (states: [TrackState]?, yielded: Bool)
         let selectedTrack: @Sendable () -> ChannelResult
         let selectTrack: @Sendable ([String: String]) async -> ChannelResult
         let setTrackToggle: @Sendable ([String: String], String) -> ChannelResult
@@ -129,6 +137,7 @@ actor AccessibilityChannel: Channel {
             setCycleRange: @escaping @Sendable ([String: String]) -> ChannelResult,
             tracks: @escaping @Sendable () -> ChannelResult,
             trackStates: @escaping @Sendable () -> [TrackState]? = { nil },
+            trackStatesStopping: (@Sendable (@escaping @Sendable () -> Bool) -> (states: [TrackState]?, yielded: Bool))? = nil,
             selectedTrack: @escaping @Sendable () -> ChannelResult,
             selectTrack: @escaping @Sendable ([String: String]) async -> ChannelResult,
             setTrackToggle: @escaping @Sendable ([String: String], String) -> ChannelResult,
@@ -163,6 +172,7 @@ actor AccessibilityChannel: Channel {
             self.setCycleRange = setCycleRange
             self.tracks = tracks
             self.trackStates = trackStates
+            self.trackStatesStopping = trackStatesStopping ?? { _ in (trackStates(), false) }
             self.selectedTrack = selectedTrack
             self.selectTrack = selectTrack
             self.setTrackToggle = setTrackToggle
@@ -229,6 +239,10 @@ actor AccessibilityChannel: Channel {
                 setCycleRange: { AccessibilityChannel.defaultSetCycleRange(params: $0, runtime: logicRuntime) },
                 tracks: { AccessibilityChannel.defaultGetTracks(runtime: logicRuntime) },
                 trackStates: { AccessibilityChannel.defaultGetTrackStates(runtime: logicRuntime) },
+                trackStatesStopping: { stop in
+                    let read = AccessibilityChannel.defaultGetTrackStates(runtime: logicRuntime, stoppingWhen: stop)
+                    return (read.states, read.yielded)
+                },
                 selectedTrack: { AccessibilityChannel.defaultGetSelectedTrack(runtime: logicRuntime) },
                 selectTrack: { await AccessibilityChannel.defaultSelectTrack(params: $0, runtime: logicRuntime) },
                 setTrackToggle: {
@@ -289,6 +303,14 @@ actor AccessibilityChannel: Channel {
 
     func readTrackStates() -> [TrackState]? {
         runtime.trackStates()
+    }
+
+    /// #1079: `readTrackStates` for the background poll, which stops before the next header once
+    /// `stop` answers true (`AccessibilityChannel.Runtime.trackStatesStopping`).
+    func readTrackStates(
+        stoppingWhen stop: @escaping @Sendable () -> Bool
+    ) -> (states: [TrackState]?, yielded: Bool) {
+        runtime.trackStatesStopping(stop)
     }
 
     func start() async throws {

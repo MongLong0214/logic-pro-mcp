@@ -50,9 +50,10 @@ struct Issue289PostPollCouplingTests {
             axChannel: AccessibilityChannel(),
             cache: StateCache(),
             runtime: .init(hasVisibleWindow: { true }),
-            postPoll: { _ in
+            postPoll: { _, _ in
                 entered.open()
                 await release.wait()
+                return true
             }
         )
 

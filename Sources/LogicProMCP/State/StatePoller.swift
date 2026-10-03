@@ -46,6 +46,13 @@ actor StatePoller {
         /// Defaults to "no mutation in flight", which is the pre-existing behaviour.
         var mutationInFlight: @Sendable () -> Bool = { false }
 
+        /// #1079 — what Logic's keyboard focus is right now, read through the same rule that keeps
+        /// a synthetic key out of a text field (`AccessibilityChannel.readLogicKeyboardFocus`).
+        /// The background loop yields its tick while this answers `.textEditing`; see
+        /// `backgroundTickYields(to:)`. Defaults to "no text editing", the pre-existing behaviour,
+        /// so a test runtime never reaches the live AX API by omission.
+        let keyboardFocus: @Sendable () -> AccessibilityChannel.LogicKeyboardFocus
+
         /// Source-compatible init: if `sleep` isn't supplied, use
         /// `Task.sleep(nanoseconds:)` so existing callers (mostly tests that
         /// only override `hasVisibleWindow`) keep compiling without change.
@@ -63,13 +70,15 @@ actor StatePoller {
                 try await Task.sleep(nanoseconds: ns)
             },
             blockingDialogInfo: @Sendable @escaping () -> AXLogicProElements.BlockingDialogInfo? = { nil },
-            projectFileReader: LogicProjectFileReader.Runtime = .unavailable
+            projectFileReader: LogicProjectFileReader.Runtime = .unavailable,
+            keyboardFocus: @Sendable @escaping () -> AccessibilityChannel.LogicKeyboardFocus = { .notTextEditing }
         ) {
             self.hasVisibleWindow = hasVisibleWindow
             self.dialogPresent = dialogPresent
             self.sleep = sleep
             self.blockingDialogInfo = blockingDialogInfo
             self.projectFileReader = projectFileReader
+            self.keyboardFocus = keyboardFocus
         }
 
         /// The AX project reader supplies a title but cannot provide a trusted
@@ -82,7 +91,8 @@ actor StatePoller {
             hasVisibleWindow: { ProcessUtils.hasVisibleWindow() },
             dialogPresent: { AXLogicProElements.dialogPresent() },
             blockingDialogInfo: { AXLogicProElements.blockingDialogInfo() },
-            projectFileReader: .production
+            projectFileReader: .production,
+            keyboardFocus: { AccessibilityChannel.readLogicKeyboardFocus(runtime: .production) }
         )
 
         /// Test-friendly runtime for lifecycle-only coverage. Short-circuits
@@ -103,7 +113,13 @@ actor StatePoller {
     private let axChannel: AccessibilityChannel
     private let cache: StateCache
     private let runtime: Runtime
-    private let postPoll: @Sendable ([ResourceCacheKey]) async -> Void
+    /// Publishes the sections a cycle wrote. The closure it is given answers whether to stop before
+    /// the next resource read; it answers false outside a background cycle. Returns false when it
+    /// stopped before publishing everything (#1079 review R3).
+    typealias PostPoll = @Sendable (
+        _ cacheKeys: [ResourceCacheKey], _ stopBeforeNextRead: @escaping @Sendable () -> Bool
+    ) async -> Bool
+    private let postPoll: PostPoll
     private var pollingTask: Task<Void, Never>?
     /// #668 coalescing state. `cycleInProgress` is the mutual exclusion the `actor` keyword does
     /// not give across `await`; `waitingForNextCycle` holds callers that arrived mid-cycle and are
@@ -124,12 +140,26 @@ actor StatePoller {
         axChannel: AccessibilityChannel,
         cache: StateCache,
         runtime: Runtime = .production,
-        postPoll: @escaping @Sendable ([ResourceCacheKey]) async -> Void = { _ in }
+        postPoll: @escaping PostPoll = { _, _ in true }
     ) {
         self.axChannel = axChannel
         self.cache = cache
         self.runtime = runtime
         self.postPoll = postPoll
+    }
+
+    /// A publisher that cannot stop partway: it is given no stop check and always reports that it
+    /// published everything. Kept for callers that only observe the call.
+    init(
+        axChannel: AccessibilityChannel,
+        cache: StateCache,
+        runtime: Runtime = .production,
+        postPoll: @escaping @Sendable ([ResourceCacheKey]) async -> Void
+    ) {
+        self.init(axChannel: axChannel, cache: cache, runtime: runtime, postPoll: { keys, _ in
+            await postPoll(keys)
+            return true
+        })
     }
 
     /// Start the background polling loop.
@@ -226,14 +256,17 @@ actor StatePoller {
     /// cycles instead of N, every caller's reads begin after its own request, and no two cycles
     /// overlap — which is also why poller-vs-poller `dropped_stale_writes` becomes unreachable
     /// here, this time by construction rather than by my assuming it.
-    private func runCoalescedCycle() async -> Bool {
+    /// `yieldingToTextEditing` is the background loop's: its cycle stops at the next read once
+    /// Logic's keyboard focus reads as text editing (`pollOnce`). A caller that queues behind a
+    /// cycle is served by a cycle of its own, which never yields.
+    private func runCoalescedCycle(yieldingToTextEditing: Bool = false) async -> Bool {
         // A stop is under way; starting a cycle now is the AX work that stop exists to end.
         if stopped { return false }
         if cycleInProgress {
             return await withCheckedContinuation { waitingForNextCycle.append($0) }
         }
         cycleInProgress = true
-        let mine = await pollOnce(axChannel: axChannel, cache: cache)
+        let mine = await pollOnce(axChannel: axChannel, cache: cache, yieldingToTextEditing: yieldingToTextEditing)
         if waitingForNextCycle.isEmpty {
             strandWaiters()
             releaseCycle()
@@ -267,7 +300,7 @@ actor StatePoller {
             if Task.isCancelled { break }
             let batch = waitingForNextCycle
             waitingForNextCycle = []
-            let shared = await pollOnce(axChannel: axChannel, cache: cache)
+            let shared = await pollOnce(axChannel: axChannel, cache: cache, yieldingToTextEditing: false)
             for waiter in batch { waiter.resume(returning: shared) }
         }
     }
@@ -312,8 +345,19 @@ actor StatePoller {
             // itself — it starves the operation the user is waiting on, and the operations carry
             // deadlines. Skip the tick; the next one is `intervalNs` away and the cache is
             // invalidated after the mutation regardless.
-            if !cycleInProgress, !runtime.mutationInFlight() {
-                _ = await runCoalescedCycle()
+            //
+            // #1079: the user is typing into a Logic text field (an inline track rename). With the
+            // server connected and idle, the rename lost keyboard focus partway through and the
+            // rest of the keystrokes reached Logic as key commands; with the process killed it did
+            // not. Which read takes the focus is not measured; a cycle is AX walks plus an
+            // `osascript` Apple Event, and none of it runs while the focus reads as text editing.
+            // An explicit `refreshNow` is not gated: a caller asking is not the background loop.
+            // Read last: it is itself an AX read, and while a mutation holds the surface even that
+            // is one too many. Synchronous, so the invariant above — no suspension between this
+            // check and `runCoalescedCycle`'s — still holds.
+            if !cycleInProgress, !runtime.mutationInFlight(),
+               !Self.backgroundTickYields(to: runtime.keyboardFocus()) {
+                _ = await runCoalescedCycle(yieldingToTextEditing: true)
             }
 
             do {
@@ -327,6 +371,28 @@ actor StatePoller {
         }
 
         Log.info("AX Supplementary Poller loop exited", subsystem: "poller")
+    }
+
+    /// #1079 — whether the background loop gives up its tick for what Logic's keyboard focus is.
+    ///
+    /// Only text editing yields. `syntheticKeyFocusRefusal` also refuses on a modal dialog, but the
+    /// poller must keep running under one: its cycle is what records the occlusion (`axOccluded`)
+    /// and the blocking dialog's buttons that `logic://project/audit` reports. A text field inside
+    /// a dialog that reads as the focused element yields like any other text field.
+    ///
+    /// An unreadable focus polls. That is not a claim that no text field is focused — a reading
+    /// that failed says nothing either way. It is the cheaper wrong answer: polling is exactly the
+    /// behaviour before #1079, while yielding would stop the loop for as long as the focus does not
+    /// read, and it never reads while Logic is not running (no application root). The cycle that
+    /// counts window misses and eventually reports the document closed would never run, so the
+    /// cache would keep serving a document that is gone, with nothing to say it stopped.
+    static func backgroundTickYields(to focus: AccessibilityChannel.LogicKeyboardFocus) -> Bool {
+        switch focus {
+        case .textEditing:
+            return true
+        case .notTextEditing, .unreadable:
+            return false
+        }
     }
 
     /// What one section's poll answers. #668 — a single `Bool` could not distinguish "the value
@@ -347,15 +413,85 @@ actor StatePoller {
     /// returns having written nothing (window not visible below threshold,
     /// backing off under an occluding dialog) must report `false`, not merely
     /// "the function returned" (#544 review).
+    ///
+    /// It also publishes the sections a yielded cycle wrote (`yieldCycle`), which were held back.
+    /// #1079 review R3: publishing reads resources back, so a background cycle asks the focus once
+    /// more before it publishes and before each resource read. Editing at either point holds every
+    /// key for the next whole cycle; a resource already published is not notified twice, since the
+    /// notifier compares content. A refresh's cycle publishes whatever the focus reads.
     @discardableResult
-    private func finishPoll(_ cacheKeys: [ResourceCacheKey]) async -> Bool {
-        guard !cacheKeys.isEmpty else { return false }
-        await postPoll(cacheKeys)
-        return true
+    private func finishPoll(_ cacheKeys: [ResourceCacheKey], yieldingToTextEditing: Bool = false) async -> Bool {
+        var publishing = keysHeldByAYield
+        keysHeldByAYield = []
+        for key in cacheKeys where !publishing.contains(key) { publishing.append(key) }
+        guard !publishing.isEmpty else { return !cacheKeys.isEmpty }
+        if backgroundCycleYields(yieldingToTextEditing) {
+            keysHeldByAYield = publishing
+            return !cacheKeys.isEmpty
+        }
+        let focus = runtime.keyboardFocus
+        // Supplementary review S-01: a help read the guard refused stays refused. A focus that
+        // reads as editing once and then does not read at all must not let a resource whose help
+        // was refused be published, so the guard's latch counts as well as the latest reading.
+        let guardian = AXHelpers.HelpReadGuard.current
+        let stop: @Sendable () -> Bool
+        if yieldingToTextEditing {
+            stop = { guardian?.stopped == true || Self.backgroundTickYields(to: focus()) }
+        } else {
+            stop = { false }
+        }
+        let completed = await postPoll(publishing, stop)
+        if !completed {
+            for key in publishing where !keysHeldByAYield.contains(key) { keysHeldByAYield.append(key) }
+        }
+        return !cacheKeys.isEmpty
+    }
+
+    /// #1079 review R2: how a background cycle ends when it yields to text editing. Its sections
+    /// are not published now, because publishing reads resources back -- the project path query,
+    /// a live transport read -- and those are the reads the yield exists to hold off. They are
+    /// held and published by the next cycle that reaches `finishPoll`. Whether the cache advanced
+    /// is answered as `finishPoll` answers it.
+    private func yieldCycle(_ cacheKeys: [ResourceCacheKey]) -> Bool {
+        for key in cacheKeys where !keysHeldByAYield.contains(key) { keysHeldByAYield.append(key) }
+        return !cacheKeys.isEmpty
+    }
+
+    /// #1079 review R1: the focus read at the top of a tick does not cover a user who starts an
+    /// inline edit while a background cycle is already running, and a 74-track project's cycle was
+    /// measured at a 12.6 s median. So a background cycle reads the focus again before each of its
+    /// reads -- the project read, the document-path query, the track read, transport, mixer and
+    /// markers -- and stops there, leaving the rest unread, once it reads as text editing. A read
+    /// already under way runs to its end: the track walk is one AX call chain with no point to stop
+    /// it at, so a rename opened during it waits for that one read, not for the cycle.
+    private func backgroundCycleYields(_ yieldingToTextEditing: Bool) -> Bool {
+        yieldingToTextEditing && Self.backgroundTickYields(to: runtime.keyboardFocus())
     }
 
     @discardableResult
-    private func pollOnce(axChannel: AccessibilityChannel, cache: StateCache) async -> Bool {
+    private func pollOnce(
+        axChannel: AccessibilityChannel, cache: StateCache, yieldingToTextEditing: Bool
+    ) async -> Bool {
+        // #1079 after review R3: the checks between reads do not reach inside one. A background
+        // cycle runs under a help-read guard, so an AXHelp read anywhere in it asks the focus
+        // first, and a section whose read the guard cut short is discarded, not written.
+        guard yieldingToTextEditing else {
+            return await pollOnceReading(axChannel: axChannel, cache: cache, yieldingToTextEditing: false)
+        }
+        let focus = runtime.keyboardFocus
+        let guardian = AXHelpers.HelpReadGuard(stop: { Self.backgroundTickYields(to: focus()) })
+        return await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
+            await pollOnceReading(axChannel: axChannel, cache: cache, yieldingToTextEditing: true)
+        }
+    }
+
+    /// A help read in this cycle was refused because text editing began: the section being read
+    /// is missing some of its help, and the cycle ends without writing it.
+    private static var helpReadsStopped: Bool { AXHelpers.HelpReadGuard.current?.stopped == true }
+
+    private func pollOnceReading(
+        axChannel: AccessibilityChannel, cache: StateCache, yieldingToTextEditing: Bool
+    ) async -> Bool {
         var cacheKeys: [ResourceCacheKey] = []
         guard runtime.hasVisibleWindow() else {
             // Be conservative: a single missed window check is often a transient
@@ -373,7 +509,7 @@ actor StatePoller {
                 await cache.updateBlockingDialogButtons(nil)
                 cacheKeys.append(.document)
             }
-            return await finishPoll(cacheKeys)
+            return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
         }
         consecutiveWindowMisses = 0
         // #432: sample the authoritative blocking-dialog signal once per
@@ -382,25 +518,54 @@ actor StatePoller {
         // what makes the project/track polls below fail (they occlude the arrange
         // subtree), so we capture it here — before those polls — regardless of
         // their outcome. `nil` when no blocking dialog owns the Logic window.
-        await cache.updateBlockingDialogButtons(runtime.blockingDialogInfo()?.buttonTitles)
+        let blockingDialog = runtime.blockingDialogInfo()
+        if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
+        await cache.updateBlockingDialogButtons(blockingDialog?.buttonTitles)
 
+        if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
+        // #1079 review R3: set when the path query yields. The update returning false says only
+        // that nothing was written, so the cycle reads this to end where the yield was decided
+        // rather than asking the focus again, which may not read.
+        var yieldedAtPathQuery = false
         let projectReady = await poll(
             operation: "project.get_info", label: "ProjectInfo",
             section: .project,
             axChannel: axChannel, cache: cache, as: ProjectInfo.self
         ) { cache, info, observed in
             var identityBacked = info
-            if (identityBacked.filePath ?? "").isEmpty,
-               let metadata = await LogicProjectFileReader.read(runtime: runtime.projectFileReader) {
-                identityBacked.filePath = metadata.bundlePath.path
+            if (identityBacked.filePath ?? "").isEmpty {
+                // #1079 review R2: a yield here must not write the pathless info. The cache reads a
+                // path that went missing as a different project and clears every section, so the
+                // write is skipped and the cycle ends at the next check.
+                if yieldingToTextEditing && Self.backgroundTickYields(to: runtime.keyboardFocus()) {
+                    yieldedAtPathQuery = true
+                    return false
+                }
+                if let metadata = await LogicProjectFileReader.read(runtime: runtime.projectFileReader) {
+                    identityBacked.filePath = metadata.bundlePath.path
+                }
             }
             return await cache.updateProject(identityBacked, ifCurrent: observed)
         }
         // #668: readability drives `hasDocument`; only an APPLIED write is reported as refreshed.
         if projectReady.applied { cacheKeys.append(.project) }
+        if yieldedAtPathQuery || Self.helpReadsStopped { return yieldCycle(cacheKeys) }
+        if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let tracksReady: PollOutcome
         let tracksVersion = await cache.currentVersion(for: .tracks)
-        if let tracks = await axChannel.readTrackStates() {
+        // #1079: the track walk reads AXHelp of every header's elements, and that read ends an
+        // inline rename (measured 2026-10-02). The background cycle's walk asks before each header.
+        let trackRead: (states: [TrackState]?, yielded: Bool)
+        if yieldingToTextEditing {
+            let focus = runtime.keyboardFocus
+            trackRead = await axChannel.readTrackStates(stoppingWhen: {
+                Self.backgroundTickYields(to: focus())
+            })
+        } else {
+            trackRead = (await axChannel.readTrackStates(), false)
+        }
+        if trackRead.yielded || Self.helpReadsStopped { return yieldCycle(cacheKeys) }
+        if let tracks = trackRead.states {
             // The read succeeded, so tracks are readable regardless of what the write does. The
             // write outcome is a separate answer and has to come from the CAS, not be assumed:
             // this fast path bypasses `poll`, so it is the one place the old `_ =` discard could
@@ -419,6 +584,7 @@ actor StatePoller {
             ) { cache, tracks, observed in
                 await cache.applyTracks(tracks, ifCurrent: observed)
             }
+            if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         }
         if tracksReady.applied { cacheKeys.append(.tracks) }
         // Deliberately `readable`, not `applied`: a refused write means the cache already holds
@@ -449,7 +615,7 @@ actor StatePoller {
                 // do NOT clear hasDocument. fetchedAt timestamps continue
                 // ageing so `cache_age_sec` keeps growing — clients that
                 // treat freshness as a contract still see staleness.
-                return await finishPoll(cacheKeys)
+                return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
             }
             consecutivePollMisses += 1
             if consecutivePollMisses >= Self.failureThreshold {
@@ -462,9 +628,10 @@ actor StatePoller {
         }
 
         guard hasDocument else {
-            return await finishPoll(cacheKeys)
+            return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
         }
 
+        if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let transportReady = await poll(
             operation: "transport.get_state", label: "Transport",
             section: .transport,
@@ -472,7 +639,9 @@ actor StatePoller {
         ) { cache, state, observed in
             await cache.updateTransport(state, ifCurrent: observed)
         }
+        if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if transportReady.applied { cacheKeys.append(.transport) }
+        if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
         let mixerReady = await poll(
             operation: "mixer.get_state", label: "Mixer",
             section: .mixer,
@@ -480,9 +649,11 @@ actor StatePoller {
         ) { cache, strips, observed in
             await cache.updateChannelStrips(strips, ifCurrent: observed)
         }
+        if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if mixerReady.applied { cacheKeys.append(.mixer) }
         markerPollTick += 1
         if markerPollTick >= Self.markerPollInterval {
+            if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
             markerPollTick = 0
             let markersReady = await pollUnversioned(
                 operation: "nav.get_markers", label: "Marker",
@@ -490,13 +661,14 @@ actor StatePoller {
             ) { cache, markers in
                 await cache.updateMarkers(markers)
             }
+            if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
             if markersReady {
                 cacheKeys.append(.markers)
             } else {
                 await cache.markMarkersUnreadable()
             }
         }
-        return await finishPoll(cacheKeys)
+        return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
     }
 
     /// 3 consecutive misses (~9s at the 3s poll interval) before declaring
@@ -507,6 +679,8 @@ actor StatePoller {
     private var consecutiveWindowMisses = 0
     private var consecutivePollMisses = 0
     private var markerPollTick = 4
+    /// Sections a yielded cycle wrote and has not yet published (`yieldCycle`).
+    private var keysHeldByAYield: [ResourceCacheKey] = []
 
     private static let iso8601Decoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -540,6 +714,8 @@ actor StatePoller {
         let observed = await cache.currentVersion(for: section)
         let result = await axChannel.execute(operation: operation, params: [:])
         guard case .success(let json) = result else { return .unreadable }
+        // A read the help-read guard cut short is not written (`pollOnce`).
+        if Self.helpReadsStopped { return .unreadable }
         guard let data = json.data(using: .utf8) else { return .unreadable }
         do {
             let value = try Self.iso8601Decoder.decode(T.self, from: data)
@@ -587,6 +763,7 @@ actor StatePoller {
     ) async -> Bool {
         let result = await axChannel.execute(operation: operation, params: [:])
         guard case .success(let json) = result else { return false }
+        if Self.helpReadsStopped { return false }
         guard let data = json.data(using: .utf8) else { return false }
         do {
             let value = try Self.iso8601Decoder.decode(T.self, from: data)

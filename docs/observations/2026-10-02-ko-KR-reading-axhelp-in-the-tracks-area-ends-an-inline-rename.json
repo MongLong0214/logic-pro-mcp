@@ -1,0 +1,170 @@
+{
+  "schema": 3,
+  "id": "2026-10-02-ko-KR-reading-axhelp-in-the-tracks-area-ends-an-inline-rename",
+  "date": "2026-10-02",
+  "subject": "which read ends an inline track rename in Logic: the bisection of the idle poll's reads",
+  "question": "With no server running, an inline track rename open, which of the reads an idle poll cycle makes, made once a second from another process, moves the keyboard focus off the rename field?",
+  "verdict": "works",
+  "surface": "arrange.track_headers",
+  "issues": [
+    1079
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "python3 Scripts/livekit/probe_1079_which_read_ends_the_rename.py <out.json> --samples 3 (run as /usr/bin/python3 with LPM_LIVE_LOCK naming a held lock, no server running, Logic open on a project with a selected track)",
+    "expected": "only the conditions that read AXHelp in the tracks area (walk_help and header_help) lose the field, in every sample; every other condition keeps it in every sample; the one-at-a-time search stops on an element beside the track headers",
+    "cost": "about ten minutes"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift:inferTrackType",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:defaultGetTrackStates"
+  ],
+  "evidence": [
+    "evidence/2026-10-02-1079-bisection.json"
+  ],
+  "method": "No server ran. Probe head b9375042. Per condition and sample, Track > Rename Track was opened on the selected track and the rename field recorded by its frame once it read as a text field with a string value. Then once a second for up to 8 s the condition's reads were made from /usr/bin/python3 and the focused element read; lost means the focus was no longer that field at that frame. A last pass, help_one_by_one, opened the rename and read AXHelp of one element at a time across Logic's windows, reading the focused element's role after each, and stopped at the first read after which it was no longer a text field.",
+  "observations": [
+    {
+      "condition": "none",
+      "read": "nothing",
+      "samples": 3,
+      "kept": 3,
+      "lost": 0,
+      "not_opened": 0,
+      "lost_to_roles": []
+    },
+    {
+      "condition": "osascript",
+      "read": "osascript: count of documents, then path of front document, as LogicProjectFileReader asks",
+      "samples": 3,
+      "kept": 3,
+      "lost": 0,
+      "not_opened": 0,
+      "lost_to_roles": []
+    },
+    {
+      "condition": "header_values",
+      "read": "the track headers' text fields, sliders and checkboxes: AXValue and AXDescription",
+      "samples": 3,
+      "kept": 3,
+      "lost": 0,
+      "not_opened": 0,
+      "lost_to_roles": []
+    },
+    {
+      "condition": "window_meta",
+      "read": "the application's focused and main window and focused element, and every window's title, document, sheets, modal flag, role, subrole, main and focused flags",
+      "samples": 3,
+      "kept": 3,
+      "lost": 0,
+      "not_opened": 0,
+      "lost_to_roles": []
+    },
+    {
+      "condition": "walk_roles",
+      "read": "every element of every window to depth 12: AXRole and AXDescription",
+      "samples": 3,
+      "kept": 3,
+      "lost": 0,
+      "not_opened": 0,
+      "lost_to_roles": []
+    },
+    {
+      "condition": "walk_values",
+      "read": "every element of every window to depth 12: AXValue and AXTitle",
+      "samples": 3,
+      "kept": 3,
+      "lost": 0,
+      "not_opened": 0,
+      "lost_to_roles": []
+    },
+    {
+      "condition": "walk_help",
+      "read": "every element of every window to depth 12: AXHelp",
+      "samples": 3,
+      "kept": 0,
+      "lost": 3,
+      "not_opened": 0,
+      "lost_to_roles": [
+        "AXCheckBox",
+        "AXCheckBox",
+        "AXCheckBox"
+      ]
+    },
+    {
+      "condition": "mixer_help",
+      "read": "the elements under the group the canon names the mixer, to depth 6: AXHelp",
+      "samples": 3,
+      "kept": 3,
+      "lost": 0,
+      "not_opened": 0,
+      "lost_to_roles": []
+    },
+    {
+      "condition": "header_help",
+      "read": "the track headers and their descendants to depth 4: AXHelp (inferTrackType)",
+      "samples": 3,
+      "kept": 0,
+      "lost": 3,
+      "not_opened": 0,
+      "lost_to_roles": [
+        "AXTextField",
+        "AXTextField",
+        "AXTextField"
+      ]
+    },
+    {
+      "reading": "AXHelp one element at a time, focus read after each",
+      "sample": 0,
+      "outcome": "lost",
+      "elements_read": 533,
+      "element_role": "AXButton",
+      "element_depth": 6,
+      "parent_role": "AXGroup",
+      "focus_role_after": "AXButton"
+    },
+    {
+      "reading": "AXHelp one element at a time, focus read after each",
+      "sample": 1,
+      "outcome": "lost",
+      "elements_read": 534,
+      "element_role": "AXButton",
+      "element_depth": 6,
+      "parent_role": "AXGroup",
+      "focus_role_after": "AXButton"
+    },
+    {
+      "reading": "totals",
+      "conditions_lost_in_every_sample": [
+        "header_help",
+        "walk_help"
+      ],
+      "conditions_kept_in_every_sample": [
+        "header_values",
+        "mixer_help",
+        "none",
+        "osascript",
+        "walk_roles",
+        "walk_values",
+        "window_meta"
+      ]
+    }
+  ],
+  "conclusion": "Reading AXHelp of tracks-area elements ended the rename: header_help, walk_help lost the field in every sample, while header_values, mixer_help, none, osascript, walk_roles, walk_values, window_meta kept it in every sample. The one-element search stopped on AXButton whose parent is AXGroup.",
+  "limits": [
+    "Korean only, one fixture, the sample count per condition recorded above.",
+    "Only the tracks area and the mixer were tested for help reads; other areas were not.",
+    "Why Logic ends the edit on a help read was not read."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states which kinds of AX read kept or lost the rename field, by role and count; it quotes no string Logic ships."
+  }
+}
