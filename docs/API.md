@@ -111,7 +111,7 @@ Every failure below is fail-closed and **pre-write**: `write_attempted: false` i
 
 Uniqueness is not a nicety. Two tracks sharing a name can swap positions and leave `(index, name)` self-consistent at **both** ordinals, so a match would prove nothing; `target_ref` is the only binding a swap cannot fool. Supplying `target_ref` bypasses this path entirely — the reference machinery carries its own live-identity and ambiguity checks, and the two are never stacked.
 
-**Corroboration is a pre-write proof, not atomic with the write.** It reads the live header, then writes; a reorder that lands in that narrow guard-to-write interval can still put the write on the wrong track. Corroboration *narrows* the wrong-target window (from "any time since your last read" down to "the guard-to-write interval"); it does not eliminate it. Only `target_ref` — and the future `ref_required` tier — bind an identity that holds across the write and close the window entirely. Prefer `target_ref` when wrong-target cost is high.
+**Corroboration is a pre-write proof, not atomic with the write.** It reads the live header, then writes; a reorder that lands in that narrow guard-to-write interval can still put the write on the wrong track. Corroboration *narrows* the wrong-target window (from "any time since your last read" down to "the guard-to-write interval"); it does not eliminate it. `target_ref` adds operation-specific live identity checks, including retained Arrange/Mixer elements for verified plug-in operations, but does not lock Logic against external user edits. Freshness is established at the observed actuation boundaries, not by an atomic host lock. Prefer `target_ref` when wrong-target cost is high.
 
 `expected_name` is a binding proof, not a write parameter: it is never forwarded to the channel, and a matching, unique corroboration leaves the existing index write path completely unchanged.
 
@@ -183,6 +183,8 @@ Read `logic://mixer` before and after mixer mutations.
 
 This is the verified apply-back surface.
 
+For every `logic_plugins` command, `track` is the zero-based Arrange track-header index, not the Mixer strip ordinal. `get_inventory` reports the observed `track_name` and `mixer_strip_index`; the latter is a read-only diagnostic, not a mutation selector. Aux strips can make these indices differ: if Bass is Arrange track 9 and Mixer strip 11, use `track: 9` for inventory and writes. Clients that previously compensated for the indexing bug by passing 11 must switch to 9. A `plugin_insert_ref` binds the observed Arrange identity, physical insert slot and occupied plugin identity (or a verified empty slot), rather than the Mixer ordinal; unreadable or incomplete inventory does not issue usable insert references.
+
 Flow:
 
 1. `get_inventory` reads the target track's plugin insert slots.
@@ -192,7 +194,8 @@ Flow:
 Important constraints:
 
 - `insert_verified` requires a confirmation gate named `duplicate_applyback` when the operation can mutate an existing session.
-- `set_param_verified` currently verifies Compressor `threshold` only, normalized 0..100, tolerance 1.0.
+- A referenced plug-in target's independently acquired name must still match its reference before selection. Parameter/EQ writes retain that same Arrange/Mixer binding through selection. Insertion revalidates the retained binding, exact physical slot element and empty state immediately before the terminal plug-in or format `AXPick`; wrong-slot rollback reads the original Mixer, not a newly discovered representation. If the target changes after opening the popup, the request refuses without a plug-in leaf pick, records the opener as an attempted actuation, cancels only its observed menu and reports `safe_to_retry: false`. An AX cancel acknowledgement does not prove the popup disappeared; inspect the UI and obtain a fresh target before retrying.
+- For Compressor `threshold`, use `unit: "percent"` or `unit: "%"` with a value in 0..100. The legacy `unit: "normalized"` is retained with exactly the same 0..100 percentage scale: `value: 0.5` means half a percent, **not** 50 percent. No 0..1 fraction or dB conversion is performed. Readback tolerance remains 1.0 percentage point, not a fraction or a dB guarantee; near zero it can accept an unchanged zero readback for a 0.5 request. State A means readback was within that tolerance, not that the exact requested value or an audible/dB result was achieved.
 - `set_param_verified` can open the target insert's plugin editor when it is closed, but it writes only after the requested AX slider is present in the acquired window.
 - Arbitrary plugin parameters fail closed with `unsupported_param_readback`.
 - The legacy Scripter `set_plugin_param` path is a legacy unverified State B path. Use `logic_plugins.set_param_verified` for verified apply-back.
@@ -207,7 +210,7 @@ Minimal `set_param_verified` shape:
   "plugin": "logic.stock.effect.compressor",
   "param": "threshold",
   "value": 60,
-  "unit": "normalized",
+  "unit": "percent",
   "mode": "duplicate_applyback",
   "project_expected_path": "/path/to/project.logicx"
 }

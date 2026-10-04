@@ -1303,6 +1303,7 @@ enum StockPluginCatalog {
             id: "threshold",
             displayName: "Threshold",
             unit: "normalized",
+            acceptedUnits: ["normalized", "percent", "%"],
             valueRange: StockPluginValueRange(min: 0, max: 100, defaultValue: nil),
             writeMethod: "ax_slider_axvalue",
             readbackMethod: "ax_slider_axvalue",

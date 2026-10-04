@@ -110,6 +110,12 @@ struct Issue982UnreadChildrenTests {
         b.setChildren(inspector, [inspectorWrapper])
 
         b.setChildren(window, mixerShowing ? [inspector, mixerPath[0]] : [inspector])
+        addPluginTrackAssociation(b, window: window, strip: first, name: "First Track")
+        let secondName = b.element(800_003)
+        b.setAttribute(secondName, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        b.setAttribute(secondName, kAXDescriptionAttribute as String, "이름")
+        b.setAttribute(secondName, kAXValueAttribute as String, "Second Track")
+        b.setChildren(second, [secondName] + b.makeAXRuntime().children(second))
         return Fixture(builder: b, app: app, window: window, mixer: mixer, mixerPath: mixerPath,
                        strips: [first, second], toolbar: toolbar, inspectorMixer: inspectorMixer)
     }

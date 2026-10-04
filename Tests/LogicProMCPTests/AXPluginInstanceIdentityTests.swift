@@ -32,6 +32,7 @@ private func strip(_ b: FakeAXRuntimeBuilder, _ id: Int, name: String, inserts: 
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     let nameField = b.element(id * 10 + 9)
     b.setAttribute(nameField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(nameField, kAXDescriptionAttribute as String, "Name")
     b.setAttribute(nameField, kAXValueAttribute as String, name)
     var children: [AXUIElement] = [nameField]
     for (i, insert) in inserts.enumerated() { children.append(occupiedSlot(b, id * 100 + i, name: insert)) }
@@ -189,6 +190,7 @@ private final class ReadCounter: @unchecked Sendable { var reads = 0 }
     let twoReadings = strip(b, 20, name: "Kick", inserts: [])
     let rival = b.element(9001)
     b.setAttribute(rival, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(rival, kAXDescriptionAttribute as String, "이름")
     b.setAttribute(rival, kAXValueAttribute as String, "Kick 2")
     b.setChildren(twoReadings, [b.element(209), rival])            // 209 = strip 20's name field
     let withReadout = strip(b, 21, name: "Snare", inserts: [])
@@ -201,6 +203,7 @@ private final class ReadCounter: @unchecked Sendable { var reads = 0 }
     let twin = strip(b, 23, name: "Hats", inserts: [])
     let echo = b.element(9003)
     b.setAttribute(echo, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(echo, kAXDescriptionAttribute as String, "Name")
     b.setAttribute(echo, kAXValueAttribute as String, "Hats")
     b.setChildren(twin, [b.element(239), echo])
     let ax = b.makeAXRuntime()
@@ -211,6 +214,100 @@ private final class ReadCounter: @unchecked Sendable { var reads = 0 }
     #expect(AXPluginInstanceIdentity.stripName(withReadout, runtime: ax) == "Snare",
             "a numeric readout beside the name field is not a reading")
     #expect(AXPluginInstanceIdentity.stripName(plain, runtime: ax) == "Bass")
+}
+
+@Test func semanticStripNameIgnoresFaderTextAndOpaqueStripDescription() {
+    let b = FakeAXRuntimeBuilder()
+    let channel = strip(b, 24, name: "Studio Grand", inserts: [])
+    b.setAttribute(channel, kAXDescriptionAttribute as String, "1008 40 4")
+    b.setAttribute(b.element(249), kAXDescriptionAttribute as String, "이름")
+    let fader = b.element(9004)
+    b.setAttribute(fader, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(fader, kAXDescriptionAttribute as String, "Volume Fader")
+    b.setAttribute(fader, kAXValueAttribute as String, "volume fader level, -4.0 dB")
+    b.setChildren(channel, [fader, b.element(249)])
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: b.makeAXRuntime()) == "Studio Grand")
+    b.setAttribute(b.element(249), kAXValueAttribute as String, "0")
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: b.makeAXRuntime()) == "0",
+            "a numeric user name is valid when the semantic Name field supplies it")
+    b.setAttribute(b.element(249), kAXDescriptionAttribute as String, "Unknown field")
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: b.makeAXRuntime()) == nil,
+            "opaque strip metadata and arbitrary text never substitute for the Name field")
+}
+
+@Test(arguments: AXLocalePolicy.mixerStripNameField.labels)
+func semanticStripNameUsesLocalizedNameLabel(_ label: String) {
+    let b = FakeAXRuntimeBuilder()
+    let channel = strip(b, 26, name: "Bass", inserts: [])
+    b.setAttribute(b.element(269), kAXDescriptionAttribute as String, label)
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: b.makeAXRuntime()) == "Bass")
+}
+
+@Test func semanticStripNameDoesNotBorrowANestedPluginNameField() {
+    let b = FakeAXRuntimeBuilder()
+    let channel = strip(b, 27, name: "Bass", inserts: [])
+    let plugin = b.element(9005)
+    let pluginName = b.element(9006)
+    b.setAttribute(plugin, kAXRoleAttribute as String, kAXGroupRole as String)
+    b.setAttribute(pluginName, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(pluginName, kAXDescriptionAttribute as String, "Name")
+    b.setAttribute(pluginName, kAXValueAttribute as String, "Compressor preset")
+    b.setChildren(plugin, [pluginName])
+    b.setChildren(channel, [b.element(279), plugin])
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: b.makeAXRuntime()) == "Bass")
+    b.setChildren(channel, [plugin])
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: b.makeAXRuntime()) == nil,
+            "a nested plug-in Name cannot stand in for the strip's absent direct Name field")
+}
+
+@Test func semanticStripNameRefusesUnknownDirectChildRoleOrTextFieldLabel() {
+    let b = FakeAXRuntimeBuilder()
+    let channel = strip(b, 28, name: "Bass", inserts: [])
+    let unknown = b.element(9007)
+    b.setChildren(channel, [b.element(289), unknown])
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: b.makeAXRuntime()) == nil)
+    b.setAttribute(unknown, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: b.makeAXRuntime()) == nil,
+            "an unknown TextField label could be another Name field")
+    b.setAttribute(unknown, kAXRoleAttribute as String, kAXGroupRole as String)
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: b.makeAXRuntime()) == "Bass",
+            "a known non-TextField child needs no description or descendant-name reads")
+}
+
+@Test(arguments: [kAXDescriptionAttribute as String, kAXValueAttribute as String, kAXRoleAttribute as String])
+func semanticStripNamePreservesAttributeFailure(_ attribute: String) {
+    let b = FakeAXRuntimeBuilder()
+    let channel = strip(b, 25, name: "Bass", inserts: [])
+    let field = b.element(259)
+    let runtime = b.makeAXRuntime(attributeValueResultHandler: { element, key in
+        CFEqual(element, field) && key == attribute
+            ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) : nil
+    }, setAttributeHandler: nil, performActionHandler: nil)
+    guard case .failure = AXPluginInstanceIdentity.stripNameResult(channel, runtime: runtime) else {
+        Issue.record("a failed semantic name read must remain a failure")
+        return
+    }
+    #expect(AXPluginInstanceIdentity.stripName(channel, runtime: runtime) == nil)
+}
+
+@Test func semanticStripNamePreservesChildrenFailureAndCensusBecomesPartial() throws {
+    let b = FakeAXRuntimeBuilder()
+    let f = mixerFixture(b)
+    windows(b, f.app, [f.main])
+    let runtime = b.makeLogicRuntime(appElement: f.app, attributeValueResultHandler: { element, key in
+        CFEqual(element, b.element(119)) && key == kAXValueAttribute as String
+            ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) : nil
+    }, setAttributeHandler: nil, performActionHandler: nil)
+    let snapshot = try AXPluginInstanceIdentity.census(pluginName: "SN8K", identifierPrefix: "sn8k.instance:", maxDepth: 12, runtime: runtime)
+    #expect(!snapshot.stripsReadWhole)
+    let ax = b.makeAXRuntime(childrenResultHandler: { element in
+        CFEqual(element, b.element(11))
+            ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) : nil
+    }, setAttributeHandler: nil, performActionHandler: nil)
+    guard case .failure = AXPluginInstanceIdentity.stripNameResult(b.element(11), runtime: ax) else {
+        Issue.record("unread children are not an absent Name field")
+        return
+    }
 }
 
 @Test func censusNamesAnEmptyRead() throws {

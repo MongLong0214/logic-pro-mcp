@@ -489,6 +489,18 @@ struct StockPluginCatalogTests {
         #expect(AccessibilityChannel.pluginInsertSpec(named: "ChromaVerb") == nil)
     }
 
+    @Test("Compressor threshold percent aliases preserve the legacy raw scale")
+    func compressorThresholdPercentAliasesDoNotChangeScale() throws {
+        let entry = try #require(StockPluginCatalog.entry(id: "logic.stock.effect.compressor"))
+        let threshold = try #require(entry.parameters.first { $0.id == "threshold" })
+        #expect(threshold.unit == "normalized")
+        #expect(threshold.acceptedUnits == ["normalized", "percent", "%"])
+        #expect(threshold.valueRange == StockPluginValueRange(min: 0, max: 100, defaultValue: nil))
+        #expect(threshold.tolerance == 1.0)
+        #expect(threshold.writeMethod == "ax_slider_axvalue")
+        #expect(threshold.readbackMethod == "ax_slider_axvalue")
+    }
+
     @Test("search matches id, name, category, and type case-insensitively")
     func searchSemantics() {
         let snapshot = StockPluginCatalog.defaultSnapshot(census: .deterministic())

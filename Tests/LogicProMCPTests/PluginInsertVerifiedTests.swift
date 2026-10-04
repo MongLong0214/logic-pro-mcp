@@ -99,6 +99,7 @@ private func makeMixerFixture(
     b.setChildren(mixer, [strip])
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(strip, stripChildren(b))
+    addPluginTrackAssociation(b, window: window, strip: strip)
     guard let unreadChildren else { return b.makeLogicRuntime(appElement: app) }
     if unreadChildren == .mixer, mixerByIdentifier {
         // The older shape. Logic 12.2 and 12.3 show the layout area above, with no identifier.
@@ -855,8 +856,36 @@ private final class SlotOccupier: @unchecked Sendable {
 
 private let coordFreeExpectedPath = "/Users/me/Music/CoordFree425 copy.logicx"
 
+private final class SelectionBindingReadFailure: @unchecked Sendable {
+    private let lock = NSLock()
+    private var selected = false
+    private var consumed = false
+    func markSelected() { lock.withLock { selected = true } }
+    func consume() -> Bool {
+        lock.withLock {
+            guard selected && !consumed else { return false }
+            consumed = true
+            return true
+        }
+    }
+}
+
+private enum PostOpenerDrift: String, Sendable {
+    case nameReadFailure, occupiedSlot, replacementSlot
+}
+
+private final class SlotPopupOpenedState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var opened = false
+    func markOpened() { lock.withLock { opened = true } }
+    var isOpened: Bool { lock.withLock { opened } }
+}
+
 private struct SlotPopupInsertFixture {
+    let builder: FakeAXRuntimeBuilder
     let runtime: AXLogicProElements.Runtime
+    let ownerWindowID: Int
+    let otherWindowID: Int
     let slotItemID: Int
     let categoryItemID: Int?
     let nonMatchingLeafItemID: Int?
@@ -892,7 +921,10 @@ private func makeSlotPopupInsertFixture(
     occupySlotOnWindowRaise: Bool = false,
     includeNonFormatSubmenu: Bool = false,
     includeNonTerminalFormatEntry: Bool = false,
-    leftoverNeighbourMenuVisible: Bool = false
+    leftoverNeighbourMenuVisible: Bool = false,
+    includeOtherMixerWindow: Bool = false,
+    failBindingReadOnceAfterSelection: Bool = false,
+    postOpenerDrift: PostOpenerDrift? = nil
 ) -> SlotPopupInsertFixture {
     let b = FakeAXRuntimeBuilder()
     let app = b.element(9000)
@@ -949,6 +981,19 @@ private func makeSlotPopupInsertFixture(
     b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
     b.setAttribute(window, kAXTitleAttribute as String, "CoordFree425 — Tracks")
     b.setChildren(window, [headersGroup, mixer])
+    let stripName = b.element(9050)
+    b.setAttribute(stripName, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(stripName, kAXDescriptionAttribute as String, "이름")
+    b.setAttribute(stripName, kAXValueAttribute as String, "Track 1")
+    b.setChildren(strip, [stripName, slot])
+
+    // Another Mixer may be first in AXWindows; it is not the acquired slot's owner.
+    let otherWindow = b.element(9060)
+    let otherMixer = b.element(9061)
+    b.setAttribute(otherWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(otherMixer, kAXRoleAttribute as String, kAXGroupRole as String)
+    b.setAttribute(otherMixer, kAXIdentifierAttribute as String, "Mixer")
+    b.setChildren(otherWindow, [otherMixer])
 
     // Slot popup: visible + anchored after the modeled custom slot-open action.
     b.setAttribute(gainItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
@@ -996,6 +1041,7 @@ private func makeSlotPopupInsertFixture(
     }
     if let formatLeafItem, let formatMenu {
         b.setAttribute(formatLeafItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(formatLeafItem, kAXEnabledAttribute as String, true as CFTypeRef)
         // Measured live on this Logic build: a plug-in entry's submenu contains only channel-format
         // entries (Gain -> "Mono", "Mono->Stereo"; Compressor and Channel EQ -> "Mono"). The former
         // "Audio Unit" label modelled no real entry and only kept the arbitrary items.first fallback
@@ -1069,7 +1115,7 @@ private func makeSlotPopupInsertFixture(
         b.setAttribute(replacementSlot, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
         b.setAttribute(replacementSlot, kAXPositionAttribute as String, axPoint(400, 300))
         b.setAttribute(replacementSlot, kAXSizeAttribute as String, axSize(70, 18))
-        b.setChildren(strip, [replacementSlot])
+        b.setChildren(strip, [stripName, replacementSlot])
     }
 
     let slotOccupier = SlotOccupier {
@@ -1084,8 +1130,25 @@ private func makeSlotPopupInsertFixture(
         b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
         b.setChildren(slot, [bypass, open])
     }
+    if includeOtherMixerWindow {
+        b.setAttribute(app, kAXWindowsAttribute as String, [otherWindow, window])
+    }
+    let bindingReadFailure = SelectionBindingReadFailure()
+    let popupOpened = SlotPopupOpenedState()
     let runtime = b.makeLogicRuntime(
         appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            if postOpenerDrift == .nameReadFailure, popupOpened.isOpened,
+               CFEqual(element, stripName), attribute == kAXValueAttribute as String {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            }
+            if failBindingReadOnceAfterSelection,
+               CFEqual(element, stripName), attribute == kAXValueAttribute as String,
+               bindingReadFailure.consume() {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            }
+            return nil
+        },
         setAttributeHandler: { element, attribute, _ in
             actions.recordAttributeWrite(elementID: b.elementID(element), attribute: attribute)
             return true
@@ -1093,12 +1156,23 @@ private func makeSlotPopupInsertFixture(
         performActionHandler: { element, action in
             let elementID = b.elementID(element)
             actions.record(elementID: elementID, action: action)
+            if CFEqual(element, headerRow), action == kAXPressAction as String {
+                bindingReadFailure.markSelected()
+            }
             if occupySlotOnWindowRaise,
                elementID == windowKey,
                action == (kAXRaiseAction as String) {
                 slotOccupier.occupy()
             }
             if elementID == slotKey, action == slotPopupOpenCustomAction {
+                // These changes occur strictly AFTER action enumeration and its final
+                // pre-opener binding/empty-slot checks, while the popup remains readable.
+                popupOpened.markOpened()
+                switch postOpenerDrift {
+                case .occupiedSlot: slotOccupier.occupy()
+                case .replacementSlot: slotReplacer.occupy()
+                case .nameReadFailure, .none: break
+                }
                 if popupAppearsAfterSlotOpen {
                     b.setChildren(app, leftoverMenu.map { [window, $0, popupMenu] } ?? [window, popupMenu])
                 }
@@ -1123,7 +1197,10 @@ private func makeSlotPopupInsertFixture(
         }
     )
     return SlotPopupInsertFixture(
+        builder: b,
         runtime: runtime,
+        ownerWindowID: b.elementID(window),
+        otherWindowID: b.elementID(otherWindow),
         slotItemID: slotKey,
         categoryItemID: categoryKey,
         nonMatchingLeafItemID: nonMatchingLeafKey,
@@ -1167,6 +1244,165 @@ private func run425Insert(
             await runRealInsert(runtime: fixture.runtime)
         }
     }
+}
+
+// R1108-02: exercise the real wrong-slot outcome handling and production rollback
+// inventory reader. Only the insert's mount and the Undo action are modeled, not
+// the rollback verdict. The original Mixer stays attached throughout.
+@Test(arguments: [false, true])
+func testPlugin1108WrongSlotRollbackVerifiesOriginalMixerDespiteGlobalSwitch(_ undoRemovesOriginal: Bool) async throws {
+    let fixture = makeSlotPopupInsertFixture()
+    let b = fixture.builder
+    let window = b.element(9001)
+    let headers = b.element(9002)
+    let originalMixer = b.element(9004)
+    let originalStrip = b.element(9005)
+    let originalName = b.element(9050)
+    let originalEmptySlot = b.element(9006)
+    let stray = addOccupiedSlot(b, 9080, name: "Gain")
+    b.setAttribute(stray, kAXPositionAttribute as String, axPoint(400, 320))
+    b.setAttribute(stray, kAXSizeAttribute as String, axSize(70, 18))
+
+    // This second representation describes the same track but never reports the stray.
+    // Its legacy identifier makes global discovery prefer it once the driver attaches it.
+    let otherMixer = b.element(9070)
+    let otherStrip = b.element(9071)
+    let otherName = b.element(9072)
+    b.setAttribute(otherMixer, kAXRoleAttribute as String, kAXGroupRole as String)
+    b.setAttribute(otherMixer, kAXIdentifierAttribute as String, "Mixer")
+    b.setAttribute(otherStrip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setAttribute(otherName, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(otherName, kAXDescriptionAttribute as String, "이름")
+    b.setAttribute(otherName, kAXValueAttribute as String, "Track 1")
+    b.setChildren(otherStrip, [otherName] + framedRows(b, [addEmptySlot(b, 9073), addEmptySlot(b, 9074)]))
+    b.setChildren(otherMixer, [otherStrip])
+    let initialMixer = try #require(AXLogicProElements.getMixerArea(runtime: fixture.runtime))
+    #expect(CFEqual(initialMixer, originalMixer))
+
+    let driver: AccessibilityChannel.PluginInsertDriver = { _, _, pluginID, _, _ in
+        b.setChildren(originalStrip, [originalName, originalEmptySlot, stray])
+        b.setChildren(window, [headers, originalMixer, otherMixer])
+        return (.mounted(slot: 1, pluginID: pluginID, observedName: "Gain"), [:])
+    }
+    let undoCalls = ClickCounter()
+    let rollback: AccessibilityChannel.PluginInsertRollback = { track, pluginID, slot, runtime in
+        return await AccessibilityChannel.verifiedUndoPluginInsert(
+            track: track, strayPluginID: pluginID, straySlot: slot,
+            runtime: runtime, maxRetries: 1,
+            undoClick: {
+                undoCalls.bump()
+                if undoRemovesOriginal {
+                    b.setChildren(originalStrip, [originalName, originalEmptySlot])
+                }
+                return "ok"
+            }
+        )
+    }
+    let obj = await runInsert(insertParams(path: coordFreeExpectedPath), runtime: fixture.runtime,
+                              frontDoc: coordFreeExpectedPath, driver: driver, rollback: rollback)
+    let globallyDiscovered = try #require(AXLogicProElements.getMixerArea(runtime: fixture.runtime))
+    #expect(CFEqual(globallyDiscovered, otherMixer))
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "insert_landed_at_different_slot")
+    let rollbackAttempted = try #require(obj["rollback_attempted"] as? Bool)
+    let rollbackSucceeded = try #require(obj["rollback_succeeded"] as? Bool)
+    #expect(rollbackAttempted)
+    if undoRemovesOriginal {
+        #expect(rollbackSucceeded)
+    } else {
+        #expect(!rollbackSucceeded,
+                "the other Mixer's empty inventory cannot certify removal from the acquired Mixer")
+    }
+    #expect(undoCalls.count == 1)
+    let remaining = try #require(AXLogicProElements.audioPluginInsertSlots(in: originalStrip, runtime: fixture.runtime.ax))
+    let stillMounted = remaining.contains { $0.name == "Gain" }
+    if undoRemovesOriginal { #expect(!stillMounted) } else { #expect(stillMounted) }
+    if !undoRemovesOriginal { #expect(obj["recovery_action"] as? String != nil) }
+}
+
+// R1108-03: every mode changes only after the actual custom opener dispatch.
+// Direct, direct-format and recursive-format paths must all guard terminal AXPick.
+@Test(arguments: ["direct", "format", "recursive_format"],
+      [PostOpenerDrift.nameReadFailure, .occupiedSlot, .replacementSlot])
+private func testPlugin1108PostOpenerDriftRefusesTerminalPick(_ branch: String, _ drift: PostOpenerDrift) async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: branch == "recursive_format",
+        includeFormatLeaf: branch != "direct",
+        mountGainOnLeafPick: true,
+        postOpenerDrift: drift
+    )
+    let obj = await run425Insert(fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction])
+    #expect(fixture.actions.count(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction) == 1,
+            "the mutation must occur after—not instead of—the popup opener")
+    #expect(fixture.actions.calls.filter { $0.action == kAXPickAction as String }.isEmpty,
+            "no plug-in or terminal format leaf may be picked after target drift")
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "insert_setup_failed")
+    #expect(obj["setup_stage"] as? String == "target_slot_changed_before_plugin_commit")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
+    #expect(writeAttempted, "the opener already dispatched")
+    #expect(!safeToRetry, "changed ownership/occupancy requires a fresh target check")
+    if let category = fixture.categoryItemID { #expect(!fixture.actions.touched(elementID: category)) }
+}
+
+@Test(arguments: ["direct", "format", "recursive_format"])
+func testPlugin1108StablePostOpenerTargetStillPicksAndCertifies(_ branch: String) async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: branch == "recursive_format",
+        includeFormatLeaf: branch != "direct",
+        mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction])
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.actions.count(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction) == 1)
+    #expect(fixture.actions.count(elementID: fixture.leafItemID, action: kAXPickAction as String) == 1)
+    #expect(fixture.actions.calls.filter { $0.action == kAXPickAction as String }.count == 1)
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    #expect(trace["winning_strategy"] as? String == (branch == "recursive_format"
+        ? "slot_popup_recursive_exact_leaf" : "slot_popup_direct_exact_leaf"))
+    if let category = fixture.categoryItemID { #expect(!fixture.actions.touched(elementID: category)) }
+}
+
+@Test(arguments: [nil, .nameReadFailure, .occupiedSlot, .replacementSlot] as [PostOpenerDrift?])
+private func testPlugin1108TerminalGuardReportsOnlyItsObservedSlotFacts(_ drift: PostOpenerDrift?) async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, postOpenerDrift: drift)
+    let obj = await run425Insert(fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction])
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let resolved = try #require(trace["slot_commit_target_resolved"] as? Bool)
+    if drift == .nameReadFailure {
+        #expect(!resolved)
+        #expect(trace["slot_commit_failure_stage"] as? String == "strip_name_unavailable/-25204")
+        #expect(trace["slot_commit_empty_observed"] == nil)
+        #expect(trace["slot_commit_same_physical_element"] == nil)
+        #expect(trace["slot_commit_read_status"] == nil)
+    } else {
+        #expect(resolved)
+        #expect(trace["slot_commit_failure_stage"] == nil)
+        let empty = try #require(trace["slot_commit_empty_observed"] as? Bool)
+        let sameElement = try #require(trace["slot_commit_same_physical_element"] as? Bool)
+        #expect(trace["slot_commit_read_status"] as? String == (drift == .occupiedSlot ? "ok" : "empty"))
+        if drift == .occupiedSlot { #expect(!empty) } else { #expect(empty) }
+        if drift == .replacementSlot { #expect(!sameElement) } else { #expect(sameElement) }
+    }
+}
+
+@Test func testPlugin1107InsertWaitsForSameBindingAfterTransientSelectionRead() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, failBindingReadOnceAfterSelection: true)
+    let obj = await run425Insert(fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction])
+    #expect(obj["state"] as? String == "A")
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let bindingStable = try #require(trace["target_binding_stable_after_selection"] as? Bool)
+    #expect(bindingStable)
+}
+
+@Test func testPlugin1107InsertRaisesAcquiredMixerWindowNotAnotherMixer() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, includeOtherMixerWindow: true)
+    let obj = await run425Insert(fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction])
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.actions.contains(elementID: fixture.ownerWindowID, action: kAXRaiseAction as String))
+    #expect(!fixture.actions.contains(elementID: fixture.otherWindowID, action: kAXRaiseAction as String),
+            "global discovery of another Mixer must not redirect the acquired slot's foreground window")
 }
 
 @Test func testPlugin425SlotOpenCustomActionFailureProceedsWhenPopupIsObserved() async throws {
@@ -1695,7 +1931,8 @@ private func emptyLogicRuntimeForRollbackTests() -> AXLogicProElements.Runtime {
     b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(mixer, [strip])
-    b.setChildren(strip, [])
+    b.setChildren(strip, [addEmptySlot(b, 9704)])
+    addPluginTrackAssociation(b, window: window, strip: strip)
     return b.makeLogicRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: { _, _ in false })
 }
 

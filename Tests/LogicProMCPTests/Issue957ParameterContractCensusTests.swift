@@ -139,9 +139,12 @@ struct Issue957ParameterContractCensusTests {
             "track": "0", "insert": "0", "band": "Low Cut", "parameter": "Frequency", "value": "20",
             "unit": "Hz", "mode": "duplicate_applyback", "project_expected_path": "/tmp/lpm-957.logicx",
         ]))
-        // With a unit the fake tree fails at track selection, after parameter validation.
+        // With a unit validation progresses to target acquisition. This empty AX tree has no
+        // Mixer to bind, so it refuses before selection rather than authorizing a later target.
         let object = try #require(sharedJSONObject(full.message))
-        #expect(object["error"] as? String == "track_selection_failed")
+        #expect(object["state"] as? String == "C")
+        #expect(object["error"] as? String == "incomplete_inventory")
+        #expect(!(try #require(object["write_attempted"] as? Bool)))
         let entry = try #require(OperationCatalog.snapshot().operations.first { $0.id == "plugins.set_eq_band_verified" })
         let branch = CommandSchemaProjection.branch(for: entry, strictParams: true)
         var request: [String: Value] = [
@@ -443,7 +446,14 @@ struct Issue957ParameterContractCensusTests {
             await cache.updateTracks([TrackState(id: 0, name: "Track 1", type: .audio)])
             let registry = TargetRegistry()
             let descriptor = TargetDescriptor(trackIndex: 0, trackName: "Track 1")
-            let fingerprint = "\(descriptor.fingerprint)|insert=2|plugin="
+            let observedPlugin: String
+            switch id {
+            case "plugins.insert_verified": observedPlugin = ""
+            case "plugins.set_eq_band_verified": observedPlugin = "logic.stock.effect.channel_eq"
+            default:
+                observedPlugin = VerifiedPluginCatalog.canonicalPluginID(from: request["plugin"]?.stringValue ?? "") ?? ""
+            }
+            let fingerprint = "\(descriptor.fingerprint)|insert=2|plugin=\(observedPlugin)"
             let reference = await registry.bind(kind: .pluginInsert, descriptor: descriptor, fingerprint: fingerprint)
             request["target_ref"] = .string(reference.rawValue)
             if !Self.schemaAdmits(branch, request) { problems.append("\(id): the schema refuses \(request.keys.sorted())") }

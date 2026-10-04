@@ -398,6 +398,14 @@ enum AXLocalePolicy {
             + " Eighteen rows in the bundle carry `Name` in English, seventeen of them with the"
             + " same ten-locale spelling, so the values were never in doubt and the row was.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Name#value")
+    /// Mixer name-field label, not the strip's own description or the field's value.
+    /// The Korean census reads AXTextField description `이름`, value `Audio 1`, and name-field
+    /// help (2026-09-05-ko-KR-navigation-free.census.json). The values of Apple's Name row
+    /// supply the localized label spellings; identity is still the separately read AXValue.
+    static let mixerStripNameField = LabelSet(
+        canonical: "Name", variants: ["이름", "名前", "Nombre", "Nom", "Nome", "名称", "名稱"],
+        rationale: "Semantic channel-strip Name text field; excludes fader readouts and opaque strip metadata.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Name#value")
     static let eventListColumnTrack = LabelSet(canonical: "Trk", variants: ["트랙", "Pista", "Piste", "Trc", "Pis", "轨道", "音軌"],
         rationale: "Region-level track column; distinguishes the region list from the event list."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
@@ -3310,6 +3318,7 @@ enum AXLocalePolicy {
         eventListColumnValue,
         eventListColumnLengthInfo,
         eventListColumnName,
+        mixerStripNameField,
         eventListColumnTrack,
         eventListColumnLength,
         eventPositionAsTimeMenuItem,

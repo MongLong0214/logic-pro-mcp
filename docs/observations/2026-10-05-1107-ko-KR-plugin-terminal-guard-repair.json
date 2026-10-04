@@ -1,0 +1,181 @@
+{
+  "id": "2026-10-05-1107-ko-KR-plugin-terminal-guard-repair",
+  "date": "2026-10-05",
+  "schema": 3,
+  "subject": "Terminal plug-in insertion revalidation retains the original target without treating AXTextField descendants as Arrange rails",
+  "question": "Can the repaired terminal guard re-read the uniquely named Arrange/Mixer binding and same empty physical insert while its owned popup is open, without weakening unread-name, unknown-subtree or CF-identity refusal?",
+  "verdict": "partial",
+  "issues": [
+    1107
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "On an owned disposable project with uniquely named Bass and Param Arrange tracks and a full Mixer in All mode, retain fresh occupied and empty plugin_insert_ref values from complete get_inventory reads. In duplicate_applyback with the exact project_expected_path, check wrong-plugin generic and wrong-plugin named-EQ requests against a fresh occupied Compressor ref. Independently read Compressor threshold 65 percent, write 38 percent, read it, inverse-write 65 and read it; independently read Channel EQ Peak 1 Gain +2.2 dB, write +3.0 dB, read it, inverse-write +2.2 and read it. Request Gain through the empty Bass slot-zero ref; preserve any first refusal. Retry exactly once only when the response allows safe retry and fresh inventory still reads the same empty target. Retain terminal resolved/empty/read-status/same-element facts, independently read slot-zero Gain on the uniquely named Bass strip and its editor title/static text, then reuse the old empty ref to check refusal. Stop the measured server, discard/restore the owned project backup and reopen in Korean to read three empty Bass slots and compare complete occupied-slider projections with their baselines.",
+    "expected": "Successful insertion observes the retained target, read_status empty and the same physical AX slot immediately before terminal AXPick, then inventory independently reads Gain at Bass Arrange10/Mixer41 slot0. Preserve first-request State C/write_attempted:false/safe_to_retry:true where observed; it is not first-request success. Wrong fresh occupied-plugin requests and reused empty refs refuse State C/write_attempted:false. Occupied readbacks are 65 -> 38 -> 65 percent and +2.2 -> +3.0 -> +2.2 dB, with all 20 Compressor and 26 EQ slider projections restored. No unread actual name or unknown subtree becomes mutation authority.",
+    "cost": "About 10 minutes per locale with Accessibility granted and an owned disposable Logic project"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXPluginTrackBinding.swift:resolve",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Tracks.swift:verifiedTrackHeaderCandidates",
+    "Sources/LogicProMCP/Accessibility/AXPluginInstanceIdentity.swift:stripNameResult",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:defaultGetPluginInventory",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:defaultInsertVerified",
+    "Sources/LogicProMCP/Dispatchers/PluginsDispatcher+TargetReferences.swift"
+  ],
+  "evidence": [
+    "evidence/2026-10-05-1107-plugin-terminal-guard-repair.json"
+  ],
+  "method": "Measured the immutable binary carrying commit c3ac14a523c75ccc8890e78f84043217decc447b (SHA-256 98530ee16f1c242bfaf97b1239f6bd4b9424190390de578ffda20a72cf66bdd2), built 2026-10-04T20:59:12Z, not a later documentation head. Actual MCP requests/responses and separate cfbridge occupied-editor AX reads are retained in the receipt. The reader resolves the full Mixer and unique semantic strip name, and reads window title plus plug-in static text independently of the writer; it does not write parameters. The earlier 86765165 diagnostic is a distinct failed measurement: existing reads logged AXTextField child-read status -25200 at structural path 8.1.48.0.0 without resampling. The bounded repair excludes only known AXTextField descendants from rail discovery, not menus or unknown roles; actual rail/name reads and retained header/strip/slot CF checks remain strict. Selected public requests redact only the disposable project path; source and full-slider projection hashes identify retained private artifacts.",
+  "canon_not_applicable": {
+    "reason": "This record measures structural scope, retained identity, terminal slot revalidation, parameter readback and conservative refusal. It does not claim the origin of localized strings or qualification of every semantic control."
+  },
+  "observations": [
+    {
+      "what": "Two unique Arrange identities remained distinct from full-Mixer ordinal observations",
+      "bindings": [
+        {
+          "track_name": "LPM1107 Param",
+          "arrange_index": 11,
+          "mixer_strip_index": 25
+        },
+        {
+          "track_name": "LPM1107 Bass",
+          "arrange_index": 10,
+          "mixer_strip_index": 41
+        }
+      ]
+    },
+    {
+      "what": "Earlier failed measurement localized the existing rail-discovery child-read failure; it is not a passing insertion result",
+      "measured_head": "86765165cee6074aa858eaea6c7ff410e5694473",
+      "role": "AXTextField",
+      "structural_path": "8.1.48.0.0",
+      "children_read_status": -25200,
+      "same_read_observations": 3,
+      "state": "C",
+      "setup_stage": "target_slot_changed_before_plugin_commit",
+      "failure_stage": "arrange_headers_unavailable/track_header_candidate_children/-25200",
+      "slot_commit_target_resolved": false,
+      "write_attempted": true,
+      "safe_to_retry": false,
+      "limit": "The failed target resolution did not reach empty-slot or slot-CF checks; it does not prove a name failure, slot replacement or menu cause."
+    },
+    {
+      "what": "Compressor percentage readback before write, after requested write and after inverse write",
+      "values": [
+        65,
+        38,
+        65
+      ],
+      "verified_write_states": [
+        "A",
+        "A"
+      ],
+      "all_slider_records_restored": 20,
+      "all_slider_projection_restored": true,
+      "unread_slider_descriptions": 1
+    },
+    {
+      "what": "Channel EQ first peak-band gain readback before write, after requested write and after inverse write",
+      "values_db": [
+        2.2,
+        3,
+        2.2
+      ],
+      "verified_write_states": [
+        "A",
+        "A"
+      ],
+      "all_slider_records_restored": 26,
+      "all_slider_projection_restored": true,
+      "unread_slider_descriptions": 0
+    },
+    {
+      "what": "Wrong generic plug-in identity and wrong named-EQ occupied ref against freshly obtained current Compressor refs refused before writing",
+      "count": 2,
+      "state": "C",
+      "write_attempted": false
+    },
+    {
+      "what": "Two requests using the older occupied ref also refused after insertion invalidated the earlier reference context; these are separate stale controls, not additional wrong-identity witnesses",
+      "count": 2,
+      "state": "C",
+      "write_attempted": false,
+      "credited_as_wrong_identity_controls": false
+    },
+    {
+      "what": "First insertion with Bass already selected succeeded; this does not measure first-request success after changing selection",
+      "count": 1,
+      "state": "A",
+      "successful_request_number": 1,
+      "arrange_index": 10,
+      "mixer_strip_index": 41,
+      "slot": 0,
+      "opener": "coordinate_fallback",
+      "slot_commit_target_resolved": true,
+      "slot_commit_empty_observed": true,
+      "slot_commit_read_status": "empty",
+      "slot_commit_same_physical_element": true,
+      "menu_frame": {
+        "height": 527,
+        "width": 230,
+        "x": 1612,
+        "y": 530
+      },
+      "slot_frame": {
+        "height": 18,
+        "width": 58,
+        "x": 1842,
+        "y": 527
+      }
+    },
+    {
+      "what": "Independent inventory and separately identified occupied editor observed Gain on Bass at the requested slot",
+      "track_name": "LPM1107 Bass",
+      "mixer_strip_index": 41,
+      "slot": 0,
+      "window_title": "LPM1107 Bass",
+      "plugin_static_text": "Gain",
+      "slider_records_read": 2,
+      "failed_slider_description_reads": 2,
+      "limit": "Editor identity and raw slider records were read; failed descriptions do not establish every slider's semantic identity."
+    },
+    {
+      "what": "Reusing the former empty-slot reference after insertion refused without a write",
+      "count": 1,
+      "state": "C",
+      "write_attempted": false
+    },
+    {
+      "what": "Both locale servers stopped; owned backup restoration was then independently read in Korean",
+      "restoration_locale": "ko-KR",
+      "empty_slots": 3,
+      "compressor_percent": 65,
+      "eq_peak1_gain_db": 2.2,
+      "compressor_slider_records_restored": 20,
+      "eq_slider_records_restored": 26,
+      "all_slider_projections_match_prewrite_baselines": true
+    }
+  ],
+  "conclusion": "The repaired terminal guard observed the original uniquely named binding, verified-empty read status and same physical slot before selecting Gain, then independent reads identified Gain at Bass slot0. Korean insertion succeeded on the first request with Bass already selected. Occupied parameter and EQ writes and inverse writes were independently read, and complete slider projections plus the restored backup matched baselines. The earlier AXTextField child-traversal diagnostic is separate evidence supporting the bounded discovery-scope repair, not permission to ignore unread names or unknown subtrees.",
+  "limits": [
+    "Only Logic Pro 12.3 build 6674 / macOS 26.3 (25D125) on this host and this record's locale were measured. Logic 12.3.1 and 12.4 were not qualified.",
+    "Verdict remains partial: this is behavioural measurement, not an E-clean campaign, film/screenshot qualification or audible/rendered audio result. These observations are not merge permission.",
+    "Bass was already selected for the Korean successful first insertion. This does not show that changing selection is first-request stable; the English first request still refused before opening the slot.",
+    "Only positively read AXTextField descendants are excluded from rail discovery. No menu or unknown-subtree skip, target rebinding, cached-name authority or timeout increase was used. Names, actual rail reads and original header/strip/slot CF stability remain required; AX reads are not an atomic host lock.",
+    "Compressor readback is legacy raw 0..100 percent, not a fraction or dB threshold guarantee. The one-percentage-point tolerance does not establish exact movement at every small requested value.",
+    "The inserted Gain editor had 2 failed descriptions out of 2 slider records. Compressor also retained one failed description; all-slider projection restoration is not proof of all controls' semantic identity.",
+    "Duplicate/missing names, unknown unread scope and same-name/slot replacement safeguards have fake-AX regression witnesses; this campaign is not a live duplicate-name or every-failure-mode qualification.",
+    "Backup restoration was independently reopened/read in Korean, not every locale. Only the owned disposable fixture was changed; the user's original music project was not modified.",
+    "The prior 2026-10-04 observation measures its older immutable binary and remains historical evidence; this new record does not relabel that earlier native run."
+  ],
+  "supersedes": null
+}

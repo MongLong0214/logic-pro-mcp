@@ -363,7 +363,9 @@ extension AXLogicProElements {
     /// consequently a role or child traversal that cannot be read is not the
     /// same observation as "no rail exists." The legacy best-effort APIs keep
     /// their flattening behavior, but this verdict path refuses on every status
-    /// except AX's two definitive-absence answers (-25205/-25212).
+    /// except AX's two definitive-absence answers (-25205/-25212). A positively
+    /// read text input is not a rail container; its descendants are outside
+    /// this discovery scope, not an unread competing Arrange rail.
     private static func verifiedTrackHeaderCandidates(
         in root: AXUIElement,
         maxDepth: Int,
@@ -373,11 +375,30 @@ extension AXLogicProElements {
         var encounteredUnreadableAX = false
         var unreadableStage = "track_header_candidate"
         var unreadableStatus = "unreadable"
+        let structuralRoles = Set([
+            kAXWindowRole, kAXGroupRole, kAXListRole, kAXScrollAreaRole,
+            kAXLayoutItemRole, kAXOutlineRole, kAXTableRole, kAXTextFieldRole,
+            kAXStaticTextRole, kAXButtonRole, kAXPopUpButtonRole, kAXSliderRole,
+            kAXCheckBoxRole, kAXRadioButtonRole, kAXMenuRole, kAXMenuItemRole,
+            kAXImageRole, kAXToolbarRole, kAXUnknownRole,
+        ].map { $0 as String })
 
-        func visit(_ element: AXUIElement, remainingDepth: Int) {
+        func visit(_ element: AXUIElement, remainingDepth: Int, path: [Int]) {
             guard !encounteredUnreadableAX else { return }
+            var knownMenuChildrenStage: String?
+            var diagnosticRole = "absent"
             switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
             case .success(.some(let role)):
+                // Popup text controls can refuse AXChildren while the original
+                // Arrange rail remains readable. They cannot contain an Arrange
+                // rail; track/strip names are still independently read afterward.
+                if role == (kAXTextFieldRole as String) { return }
+                diagnosticRole = structuralRoles.contains(role) ? role : "unclassified"
+                if role == (kAXMenuRole as String) {
+                    knownMenuChildrenStage = "track_header_menu_children"
+                } else if role == (kAXMenuItemRole as String) {
+                    knownMenuChildrenStage = "track_header_menu_item_children"
+                }
                 if role == (kAXListRole as String),
                    case .success(let identifier) = trackStringAttribute(
                         element, kAXIdentifierAttribute as String, runtime: runtime
@@ -408,20 +429,23 @@ extension AXLogicProElements {
             guard remainingDepth > 0 else { return }
             switch AXHelpers.childrenResult(element, runtime: runtime) {
             case .success(let children):
-                for child in children {
-                    visit(child, remainingDepth: remainingDepth - 1)
+                for (index, child) in children.enumerated() {
+                    visit(child, remainingDepth: remainingDepth - 1, path: path + [index])
                 }
             case .failure(let error) where error.isDefinitiveAbsence:
                 return
             case .failure(let error):
                 encounteredUnreadableAX = true
-                unreadableStage = "track_header_candidate_children"
+                unreadableStage = knownMenuChildrenStage ?? "track_header_candidate_children"
                 unreadableStatus = error.diagnosticLabel
+                Log.info("verified Track Headers child read refused: role=\(diagnosticRole), "
+                         + "path=\(path.map(String.init).joined(separator: ".")), status=\(error.diagnosticLabel)",
+                         subsystem: "ax")
                 return
             }
         }
 
-        visit(root, remainingDepth: maxDepth)
+        visit(root, remainingDepth: maxDepth, path: [])
         return encounteredUnreadableAX
             ? .unreadable(stage: unreadableStage, status: unreadableStatus)
             : .complete(candidates)
