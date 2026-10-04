@@ -113,15 +113,19 @@ struct Issue957ParameterContractCensusTests {
         if spec.tool == .logicPlugins, let accessibility = channels.first(where: { $0.id == .accessibility }),
            let passed = await accessibility.executedOps.last?.1,
            let answer = await channelAnswer(command, passed),
-           answer.message.contains("invalid_params") {
+           Self.channelInputRefusals.contains(where: { answer.message.contains($0) }) {
             return (toolTextResult(answer.message, isError: true), false)
         }
         return (result, ran)
     }
 
+    /// The channel's refusals of a request's own input, before it reads Logic (#1104 supplementary
+    /// review, SUP-02: unsupported_mode and project_path_required were credited as acceptance).
+    private static let channelInputRefusals = ["invalid_params", "unsupported_mode", "project_path_required"]
+
     /// The Accessibility channel's answer to the parameters the dispatcher passed, through its entry
-    /// points with a fake AX tree, a mixer reveal that finds nothing and no front document. The census
-    /// sends no `mode`, so the verified writes stop at the mode gate; nothing reaches Logic.
+    /// points with a fake AX tree, a mixer reveal that finds nothing and a front document that does not
+    /// read: a complete write stops at the front-document comparison, and nothing reaches Logic.
     private static func channelAnswer(_ command: String, _ params: [String: String]) async -> ChannelResult? {
         let builder = FakeAXRuntimeBuilder()
         let runtime = builder.makeLogicRuntime(appElement: builder.element(957))
@@ -367,6 +371,32 @@ struct Issue957ParameterContractCensusTests {
                     }
                 }
             }
+        }
+        let held = problems.isEmpty
+        #expect(held, "\(problems.joined(separator: "\n"))")
+    }
+
+    @Test("a plugin-insert target_ref stands for the track and the insert in the schema, as it does in the dispatcher")
+    func aPluginInsertReferenceStandsForTrackAndInsert() {
+        // #1104 supplementary review, SUP-01: insert was required even beside a plugin-insert reference,
+        // which the dispatcher resolves to both (ADR002ATargetKindTests drive that runtime path).
+        let entries = OperationCatalog.snapshot().operations
+        var problems: [String] = []
+        for id in ["plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified"] {
+            guard let contract = OperationRegistry.parameterContracts[OperationID(rawValue: id)!],
+                  let entry = entries.first(where: { $0.id == id }) else {
+                problems.append("\(id): not registered")
+                continue
+            }
+            let branch = CommandSchemaProjection.branch(for: entry, strictParams: true)
+            var request: [String: Value] = [:]
+            for (key, rule) in contract.params where !["track", "insert", "slot", "expected_name"].contains(key) {
+                if let sample = rule.sample { request[key] = sample }
+            }
+            request["target_ref"] = .string("ins_957")
+            if !Self.schemaAdmits(branch, request) { problems.append("\(id): the schema refuses \(request.keys.sorted())") }
+            request["target_ref"] = nil
+            if Self.schemaAdmits(branch, request) { problems.append("\(id): the schema admits no track, insert or reference") }
         }
         let held = problems.isEmpty
         #expect(held, "\(problems.joined(separator: "\n"))")

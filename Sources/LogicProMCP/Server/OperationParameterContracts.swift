@@ -142,22 +142,28 @@ extension OperationRegistry {
     private static let planSessionRepairSamples: [String: Value] = [
         "plan_id": .string("plan-957"), "snapshot_id": .string("snapshot-957"), "policy": .object([:]),
     ]
-    /// The plugin write fields: the dispatcher omits one that does not read, and the Accessibility
-    /// channel's step 1 (its schema check, before anything is read) refuses a missing one as invalid_params.
-    /// `mode` and `project_expected_path` are refused after it with their own codes (unsupported_mode,
-    /// project_path_required), so they are not required groups here.
+    /// The plugin write fields. The dispatcher omits one that does not read; the Accessibility channel
+    /// then refuses before reading anything: a missing selector or value at its step 1 (invalid_params),
+    /// a mode other than duplicate_applyback (unsupported_mode), a missing project path
+    /// (project_path_required). A plugin-insert target_ref supplies the track and the insert.
     private static func pluginWriteRules(_ keys: [String]) -> [String: ParamRule] {
-        Dictionary(uniqueKeysWithValues: keys.map {
-            ($0, ParamRule.unconstrained("omitted when it does not read; the channel's step 1 then refuses a missing one",
-                                         sample: pluginWriteSamples[$0]))
+        Dictionary(uniqueKeysWithValues: keys.map { key in
+            (key, ParamRule.unconstrained(pluginWriteReasons[key]
+                                            ?? "omitted when it does not read; the channel's step 1 then refuses a missing one",
+                                          sample: pluginWriteSamples[key]))
         })
     }
-    /// Values that pass the channel's step 1; with no mode the channel then stops at unsupported_mode,
-    /// before anything is read.
+    private static let pluginWriteReasons: [String: String] = [
+        "mode": "only duplicate_applyback is taken; any other value, or none, is refused as unsupported_mode before anything is read",
+        "project_expected_path": "required: refused as project_path_required when absent, then compared with Logic's front document",
+        "unit": "optional; when absent the unit comes from the parameter's metadata",
+    ]
+    /// Values that pass the channel's checks up to the front-document comparison.
     private static let pluginWriteSamples: [String: Value] = [
         "track": .int(0), "insert": .int(0), "slot": .int(0), "plugin": .string("Gain"), "plugin_id": .string("Gain"),
         "plugin_name": .string("Gain"), "param": .string("Gain"), "band": .string("Low Cut"),
-        "parameter": .string("Frequency"), "value": .int(0),
+        "parameter": .string("Frequency"), "value": .int(0), "mode": .string("duplicate_applyback"),
+        "project_expected_path": .string("/tmp/lpm-957.logicx"),
     ]
     /// Export inputs: placeholders the census replaces with a project package and an output folder it makes.
     private static let exportSamples: [String: Value] = [
@@ -374,18 +380,21 @@ extension OperationRegistry {
             "plugins.insert_verified": .init(params: pluginWriteRules(["insert", "slot", "plugin", "plugin_id", "plugin_name", "mode", "project_expected_path", "track"])
                 .merging([
                     "expected_name": .unconstrained("corroborates a bare track index, which is refused without it "
-                                                    + "(index_binding_corroboration_required); not read with a target_ref",
+                                                    + "(index_binding_corroboration_required); a text value beside a "
+                                                    + "target_ref is refused as invalid_params (two bindings)",
                                                     sample: .string("Track 1")),
                     "target_ref": targetRef, "project_ref": projectRef,
                 ]) { _, new in new },
-                required: [["track", "target_ref"], ["insert", "slot"], ["plugin", "plugin_id", "plugin_name"],
-                           ["expected_name", "target_ref"]]),
+                required: [["track", "target_ref"], ["insert", "slot", "target_ref"], ["plugin", "plugin_id", "plugin_name"],
+                           ["expected_name", "target_ref"], ["mode"], ["project_expected_path"]]),
             "plugins.set_eq_band_verified": .init(params: pluginWriteRules(["band", "insert", "mode", "parameter", "project_expected_path", "track", "unit", "value"])
                 .merging(["target_ref": targetRef, "project_ref": projectRef]) { _, new in new },
-                required: [["track", "target_ref"], ["insert"], ["band"], ["parameter"], ["value"]]),
+                required: [["track", "target_ref"], ["insert", "target_ref"], ["band"], ["parameter"], ["value"],
+                           ["mode"], ["project_expected_path"]]),
             "plugins.set_param_verified": .init(params: pluginWriteRules(["insert", "mode", "param", "plugin", "plugin_id", "plugin_name", "project_expected_path", "track", "unit", "value"])
                 .merging(["target_ref": targetRef, "project_ref": projectRef]) { _, new in new },
-                required: [["track", "target_ref"], ["insert"], ["plugin", "plugin_id", "plugin_name"], ["param"], ["value"]]),
+                required: [["track", "target_ref"], ["insert", "target_ref"], ["plugin", "plugin_id", "plugin_name"], ["param"],
+                           ["value"], ["mode"], ["project_expected_path"]]),
 
             // logic_project
             "project.bounce": .init(params: ["confirmed": .enforced(.boolean, .bool(false))], required: []),

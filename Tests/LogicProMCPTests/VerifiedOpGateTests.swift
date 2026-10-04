@@ -28,10 +28,9 @@ struct VerifiedOpGateSharedTests {
     // confirm it is refused with verified_op_in_progress before touching AX.
     // Release is synchronous so the shared singleton is clean before this test
     // returns.
-    // A gate of its own: holding `.shared` here refused every other suite's verified op that ran at
-    // the same moment (ADR002A/B, seen with the plugin suites run together, #1104).
-    let gate = VerifiedOpGate()
-    let acquired = gate.tryAcquire()
+    // The production default: no gate is passed, so the dispatcher takes `.shared`. The hold lasts
+    // one refused dispatch; the other tests in this suite use gates of their own (#1104).
+    let acquired = VerifiedOpGate.shared.tryAcquire()
     #expect(acquired)
 
     let router = ChannelRouter()
@@ -44,10 +43,9 @@ struct VerifiedOpGateSharedTests {
             "project_expected_path": .string("/tmp/x.logicx"),
         ],
         router: router,
-        cache: StateCache(),
-        verifiedGate: gate
+        cache: StateCache()
     )
-    gate.release()
+    VerifiedOpGate.shared.release()
 
     let text = sharedToolText(result)
     let obj = try! JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as! [String: Any]

@@ -42,9 +42,9 @@ struct StructuredContentTests {
             ("logic_project", "open", [:]),
             ("logic_audio", "analyze_file", [:]),
             ("logic_system", "health", [:]),
-            // Empty, as the others are: the channel's step 1 refuses it before anything is read. This
-            // used to send a complete request and hold the process-wide verified-op gate so it stopped
-            // early, which refused every other suite's verified op running at the same moment (#1104).
+            // Empty, as the others are: with no channel registered it answers channels_exhausted at once.
+            // This used to send a complete request and hold the process-wide verified-op gate so it
+            // stopped early, which refused every other suite's verified op running meanwhile (#1104).
             ("logic_plugins", "set_param_verified", [:]),
         ]
 
