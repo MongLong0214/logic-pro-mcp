@@ -39,8 +39,13 @@ extension ChannelRouter {
         // transport (Play on, playhead still), where the AX Play control already reads on and
         // would do nothing. Apple's Play key (keypad Enter) was measured to resume it.
         "transport.resume":           [.cgEvent],
-        "transport.rewind":           [.mcu, .coreMIDI, .cgEvent],
-        "transport.fast_forward":     [.mcu, .coreMIDI, .cgEvent],
+        // #1092: CGEvent alone. Apple's Rewind and Forward keys (Comma, Period) move the playhead
+        // one bar and stop. The MCU Rewind/Forward buttons and MMC REWIND/FAST FORWARD start a
+        // shuttle that keeps winding after the reply: driven live in ko on 2026-10-03 from bar 9,
+        // the MCU rung read 5, 2, -3 at 0.5, 1.5 and 3 s for rewind and 13, 16, 19 for forward.
+        // Like pause, a rung that cannot step must not run.
+        "transport.rewind":           [.cgEvent],
+        "transport.fast_forward":     [.cgEvent],
         "transport.toggle_cycle":     [.accessibility, .midiKeyCommands, .cgEvent, .mcu],
         "transport.toggle_metronome": [.accessibility, .midiKeyCommands, .cgEvent],
         // AX only — MIDIKeyCommands / CGEvent can't convey the tempo value

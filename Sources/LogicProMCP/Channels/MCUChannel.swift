@@ -471,10 +471,6 @@ actor MCUChannel: Channel {
             return await sendTransport(.stop)
         case "transport.record":
             return await sendTransport(.record)
-        case "transport.rewind":
-            return await sendTransport(.rewind)
-        case "transport.fast_forward":
-            return await sendTransport(.fastForward)
         case "transport.toggle_cycle":
             return await sendTransport(.cycle)
         case "track.set_mute":

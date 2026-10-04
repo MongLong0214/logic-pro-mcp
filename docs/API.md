@@ -137,7 +137,7 @@ Track objects do **not** carry a sample rate. Sample rate is a project/transport
 |---------|--------|--------|-------|
 | `play`, `record` | none | text / contract envelope | Accessibility -> MCU -> CoreMIDI -> CGEvent -> AppleScript |
 | `stop` | none | text / contract envelope | CGEvent -> Accessibility -> MCU -> CoreMIDI -> AppleScript |
-| `pause`, `rewind`, `fast_forward` | none | text / contract envelope | routed transport fallback chain |
+| `pause`, `rewind`, `fast_forward` | none | text / contract envelope | CGEvent alone. `rewind` and `fast_forward` move the playhead one bar and stop (Apple's Rewind and Forward keys); the MCU buttons and MMC wind on after the reply, so they are not routed (#1092) |
 | `toggle_cycle` | — | text | Accessibility → MIDIKeyCommands → CGEvent → MCU |
 | `toggle_count_in` | — | text / contract envelope | routed transport fallback chain |
 | `toggle_autopunch` | — | State A/B/C contract envelope | Accessibility |

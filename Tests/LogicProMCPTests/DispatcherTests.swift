@@ -435,6 +435,8 @@ private func liveTransportJSON(
         let channelID: ChannelID = switch testCase.operation {
         case "transport.toggle_autopunch": .accessibility
         case "transport.toggle_metronome", "transport.toggle_count_in": .midiKeyCommands
+        // #1092: a step is Apple's Rewind/Forward key; the MCU buttons shuttle.
+        case "transport.rewind", "transport.fast_forward": .cgEvent
         default: .mcu
         }
         let channel = MockChannel(id: channelID)
