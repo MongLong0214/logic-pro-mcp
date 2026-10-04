@@ -80,7 +80,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # the other binary's row on the same windowless screen, on this branch.
 # 31 -> 32 on 2026-10-03, the union with main: live_1039_plain_letters_under_2set_korean on this
 # branch, whose counterexample for each candidate row is the control binary's row.
-FLOOR = 33
+# 33 -> 34 on 2026-10-04: live_1097_select_and_rename_need_the_target_alone, whose counterexamples are
+# the merge-base answers measured in Korean: select State A with rows [0, 1] selected, and a rename
+# that renamed the other selected track as well.
+FLOOR = 34
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )
