@@ -48,7 +48,7 @@ The schema is derived from the operation registry, the same source the generic p
 - each listed value is taken, and an unlisted one is refused;
 - a missing group is refused, and a request with every group filled is not refused for its parameters.
 
-Allowed values are recorded only where the dispatcher keeps a list as a named constant. The keys a dispatcher always refuses with its own error (the eleven in `dispatcherRejectedParamsByOperation`) are not listed. Claude Code 2.1.283 listed every tool from the rich schema and called one with schema-conforming input (2026-10-03). Some clients refuse a top-level combinator; they are not measured, so keep them on the default. `docs/COMMAND-PARAMETERS.md` is a table generated from the same registry: `LPM_WRITE_GENERATED_DOCS=1 swift test --filter Issue957` rewrites it, and a test fails when it differs.
+Allowed values are recorded only where the dispatcher keeps a list as a named constant. The keys a dispatcher always refuses with its own error (the eleven in `dispatcherRejectedParamsByOperation`) are not listed. Claude Code 2.1.283 listed every tool from the rich schema and called one with schema-conforming input: on 2026-10-03 with parameter keys only, and on 2026-10-04 with the kinds, `enum` lists and `allOf` required groups. Some clients refuse a top-level combinator; they are not measured, so keep them on the default. `docs/COMMAND-PARAMETERS.md` is a table generated from the same registry: `LPM_WRITE_GENERATED_DOCS=1 swift test --filter Issue957` rewrites it, and a test fails when it differs.
 
 ## Resources
 
