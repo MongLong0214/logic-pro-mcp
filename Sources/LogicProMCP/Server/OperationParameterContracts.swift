@@ -142,8 +142,8 @@ extension OperationRegistry {
     private static let planSessionRepairSamples: [String: Value] = [
         "plan_id": .string("plan-957"), "snapshot_id": .string("snapshot-957"), "policy": .object([:]),
     ]
-    /// The plugin write fields: the dispatcher omits one that does not read, and the channel's step 1
-    /// (`AccessibilityChannel.verifiedPluginParameterFailure`) refuses a missing one as invalid_params.
+    /// The plugin write fields: the dispatcher omits one that does not read, and the Accessibility
+    /// channel's step 1 (its schema check, before anything is read) refuses a missing one as invalid_params.
     /// `mode` and `project_expected_path` are refused after it with their own codes (unsupported_mode,
     /// project_path_required), so they are not required groups here.
     private static func pluginWriteRules(_ keys: [String]) -> [String: ParamRule] {

@@ -108,14 +108,37 @@ struct Issue957ParameterContractCensusTests {
             ran = true
         }
         // The verified plugin commands check their parameters in the Accessibility channel, which a
-        // MockChannel does not. Its step 1 is applied to what the dispatcher passed, so a request the
-        // channel would refuse as invalid_params counts as refused here (#1104 review R3, R3-01).
+        // MockChannel does not. The channel's own entry point answers what the dispatcher passed, so a
+        // request it refuses as invalid_params counts as refused here (#1104 review R3, R3-01).
         if spec.tool == .logicPlugins, let accessibility = channels.first(where: { $0.id == .accessibility }),
            let passed = await accessibility.executedOps.last?.1,
-           let failure = AccessibilityChannel.verifiedPluginParameterFailure(command: command, params: passed) {
-            return (toolStateCResult(.invalidParams, hint: failure, extras: ["write_attempted": false]), false)
+           let answer = await channelAnswer(command, passed),
+           answer.message.contains("invalid_params") {
+            return (toolTextResult(answer.message, isError: true), false)
         }
         return (result, ran)
+    }
+
+    /// The Accessibility channel's answer to the parameters the dispatcher passed, through its entry
+    /// points with a fake AX tree, a mixer reveal that finds nothing and no front document. The census
+    /// sends no `mode`, so the verified writes stop at the mode gate; nothing reaches Logic.
+    private static func channelAnswer(_ command: String, _ params: [String: String]) async -> ChannelResult? {
+        let builder = FakeAXRuntimeBuilder()
+        let runtime = builder.makeLogicRuntime(appElement: builder.element(957))
+        let noDocument: AccessibilityChannel.FrontDocumentPathProvider = { nil }
+        switch command {
+        case "get_inventory":
+            return await AccessibilityChannel.defaultGetPluginInventory(
+                params: params, runtime: runtime, revealMixer: { _ in (nil, .childrenUnreadBeforeReveal) })
+        case "set_param_verified":
+            return await AccessibilityChannel.defaultSetParamVerified(params: params, runtime: runtime, frontDocumentPath: noDocument)
+        case "set_eq_band_verified":
+            return await AccessibilityChannel.defaultSetEQBandVerified(params: params, runtime: runtime, frontDocumentPath: noDocument)
+        case "insert_verified":
+            return await AccessibilityChannel.defaultInsertVerified(params: params, runtime: runtime, frontDocumentPath: noDocument)
+        default:
+            return nil
+        }
     }
 
     private static func refused(_ outcome: (result: CallTool.Result, channelRan: Bool)) -> Bool {
