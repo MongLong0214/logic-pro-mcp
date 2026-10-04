@@ -998,6 +998,7 @@ extension AccessibilityChannel {
         isFrontmost: @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost,
         activateLogic: @Sendable () -> Bool = ProcessUtils.Runtime.production.activateLogicPro,
         sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) },
+        observeFrontmost: (@Sendable () -> ProcessUtils.KeyboardOwnershipObservation)? = nil,
         executeDialogScript: (@Sendable (String) async -> ChannelResult)? = nil,
         reconcileAfterDialogExecutionFailure: (@Sendable () async -> Bool)? = nil,
         createDialogIssuanceLedger: @escaping @Sendable () -> DialogIssuanceLedger? = DialogIssuanceLedger.create,
@@ -1044,14 +1045,20 @@ extension AccessibilityChannel {
 
         // Refuse before touching anything: a non-ready result means nothing has been actuated, so
         // the caller can retry without wondering whether the playhead already moved.
-        let preparation = FrontmostGate.prepare(
-            isFrontmost: isFrontmost, activate: activateLogic, sleepMicros: sleepMicros
+        // Do not infer an observer from runtime here: a caller's explicit Bool seam owns its
+        // fake gate. Production dispatch passes its observer explicitly.
+        let observedPreparation = FrontmostGate.prepareObserved(
+            observe: observeFrontmost, isFrontmost: isFrontmost,
+            activate: activateLogic, sleepMicros: sleepMicros
         )
+        let preparation = observedPreparation.preparation
+        baseExtras.merge(observedPreparation.diagnosticExtras) { _, new in new }
         guard preparation.isReady else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "goto_position drives Logic's own UI; from the background it moves the playhead "
-                    + "to the wrong bar, so nothing was touched. Bring Logic Pro to the front and retry.",
+                    + "to the wrong bar, so nothing was touched. Bring Logic Pro to the front and retry. "
+                    + "The fixed ownership reason is in frontmost_observation.reason when observed.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "ax_goto_position_dialog",

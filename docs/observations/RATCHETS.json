@@ -90,7 +90,8 @@
       "2026-10-04-1107-en-US-plugin-arrange-binding",
       "2026-10-04-1107-ko-KR-plugin-arrange-binding",
       "2026-10-05-1107-en-US-plugin-terminal-guard-repair",
-      "2026-10-05-1107-ko-KR-plugin-terminal-guard-repair"
+      "2026-10-05-1107-ko-KR-plugin-terminal-guard-repair",
+      "2026-10-05-1084-ko-KR-positioning-diagnostic-preflight"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
@@ -498,12 +499,9 @@
     "manual_reverify": {
       "date": "2026-10-05",
       "members": [
-        "2026-10-04-1107-en-US-plugin-arrange-binding",
-        "2026-10-04-1107-ko-KR-plugin-arrange-binding",
-        "2026-10-05-1107-en-US-plugin-terminal-guard-repair",
-        "2026-10-05-1107-ko-KR-plugin-terminal-guard-repair"
+        "2026-10-05-1084-ko-KR-positioning-diagnostic-preflight"
       ],
-      "reason": "#1107: these four actual Korean/English observations require an owned disposable Logic project, independently named Arrange/Mixer targets, occupied-editor reads and inverse writes, safe empty-slot insertion, locale relaunch, and backup restoration. Their live GUI preparation and restoration are not a headless CI replay, so each retains its explicit manual reverify steps. The committed arrange-binding and terminal-guard-repair evidence receipts preserve the distinct immutable binaries, first-refusal/retry outcomes, failed description reads and restored projections. All four verdicts remain partial on Logic 12.3 build 6674; this records the manual-replay gap, not E-clean or Logic 12.4 qualification."
+      "reason": "#1107: these four actual Korean/English observations require an owned disposable Logic project, independently named Arrange/Mixer targets, occupied-editor reads and inverse writes, safe empty-slot insertion, locale relaunch, and backup restoration. Their live GUI preparation and restoration are not a headless CI replay, so each retains its explicit manual reverify steps. The committed arrange-binding and terminal-guard-repair evidence receipts preserve the distinct immutable binaries, first-refusal/retry outcomes, failed description reads and restored projections. All four verdicts remain partial on Logic 12.3 build 6674; this records the manual-replay gap, not E-clean or Logic 12.4 qualification. #1084: the added Korean positioning smoke requires an exclusively owned disposable Logic fixture and live dialog/transport observation, so it retains manual replay steps. Both actual requests refused before the ownership gate; its inconclusive receipt establishes neither native ownership diagnostics nor a remedy on Logic 12.4."
     },
     "records_without_evidence": {
       "date": "2026-09-19",

@@ -25,6 +25,8 @@ actor CGEventChannel: Channel {
         /// in-process activation poisons this process's own `postToPid`, so the
         /// production path goes through AppleScript.
         let activateLogic: @Sendable () -> Bool
+        /// #1084: absent in Bool-only fake runtimes; explicitly wired by production.
+        let observeFrontmost: (@Sendable () -> ProcessUtils.KeyboardOwnershipObservation)?
         /// #1029 review R-03 / #1039: the current keyboard input source, or nil when it did not
         /// read. A plain letter is refused under nil, and under a non-ASCII source it is posted
         /// only through a verified switch, so the default is an ASCII-capable source with no id:
@@ -84,6 +86,7 @@ actor CGEventChannel: Channel {
             sleepMicros: @escaping @Sendable (useconds_t) -> Void,
             isLogicFrontmost: @escaping @Sendable () -> Bool = { true },
             activateLogic: @escaping @Sendable () -> Bool = { true },
+            observeFrontmost: (@Sendable () -> ProcessUtils.KeyboardOwnershipObservation)? = nil,
             currentInputSource: @escaping @Sendable () -> InputSourceReading? = {
                 InputSourceReading(id: nil, isASCIICapable: true)
             },
@@ -102,6 +105,7 @@ actor CGEventChannel: Channel {
             self.sleepMicros = sleepMicros
             self.isLogicFrontmost = isLogicFrontmost
             self.activateLogic = activateLogic
+            self.observeFrontmost = observeFrontmost
             self.currentInputSource = currentInputSource
             self.asciiCapableLayoutID = asciiCapableLayoutID
             self.selectInputSource = selectInputSource
@@ -122,6 +126,7 @@ actor CGEventChannel: Channel {
             sleepMicros: { usleep($0) },
             isLogicFrontmost: ProcessUtils.Runtime.production.logicIsFrontmost,
             activateLogic: ProcessUtils.Runtime.production.activateLogicPro,
+            observeFrontmost: { ProcessUtils.keyboardOwnershipObservation() },
             currentInputSource: { CGEventChannel.readCurrentInputSource() },
             asciiCapableLayoutID: { CGEventChannel.readASCIICapableLayoutID() },
             selectInputSource: { CGEventChannel.selectEnabledInputSource(id: $0) },
@@ -409,9 +414,13 @@ actor CGEventChannel: Channel {
             // that lost the keyboard halfway would leave the Go To Position
             // dialog open with a partial value typed into it.
             if let refusal = postingAuthorizationRefusal(operation: operation) { return refusal }
-            let preparation = prepareFrontmost()
+            let observedPreparation = prepareFrontmostObserved()
+            let preparation = observedPreparation.preparation
             guard preparation.isReady else {
-                return Self.frontmostRefusal(operation: operation, preparation: preparation)
+                return Self.frontmostRefusal(
+                    operation: operation, preparation: preparation,
+                    observation: observedPreparation.observation
+                )
             }
             // #1038: the opener alone goes out first. Every character after it types into
             // whatever has the keyboard, so none is posted until the window server shows the
@@ -442,7 +451,7 @@ actor CGEventChannel: Channel {
                         "frontmost_preparation": preparation.rawValue,
                         "dialog_observation": dialogObservation,
                         "sent": true
-                    ]
+                    ].merging(observedPreparation.diagnosticExtras) { _, new in new }
                 ))
             } else {
                 return .error("Failed to post CGEvent sequence for \(operation)")
@@ -457,9 +466,13 @@ actor CGEventChannel: Channel {
         // Logic is in the background is swallowed, and the State B envelope
         // below would then report a keystroke Logic never received.
         if let refusal = postingAuthorizationRefusal(operation: operation) { return refusal }
-        let preparation = prepareFrontmost()
+        let observedPreparation = prepareFrontmostObserved()
+        let preparation = observedPreparation.preparation
         guard preparation.isReady else {
-            return Self.frontmostRefusal(operation: operation, preparation: preparation)
+            return Self.frontmostRefusal(
+                operation: operation, preparation: preparation,
+                observation: observedPreparation.observation
+            )
         }
 
         // #1029 review R-03 and #1039: under an input source that is not ASCII-capable, a plain
@@ -510,6 +523,7 @@ actor CGEventChannel: Channel {
                 "frontmost_preparation": preparation.rawValue,
                 "sent": true
             ]
+            extras.merge(observedPreparation.diagnosticExtras) { _, new in new }
             if let switched, let restore {
                 extras.merge(Self.switchedExtras(
                     originalID: switched.originalID, layoutID: switched.layoutID, restore: restore
@@ -738,10 +752,13 @@ actor CGEventChannel: Channel {
     /// this gate exists to remove, so a gate that could itself be fooled by it
     /// would be pointless.
     func prepareFrontmost() -> FrontmostPreparation {
-        FrontmostGate.prepare(
-            isFrontmost: runtime.isLogicFrontmost,
-            activate: runtime.activateLogic,
-            sleepMicros: runtime.sleepMicros
+        prepareFrontmostObserved().preparation
+    }
+
+    private func prepareFrontmostObserved() -> FrontmostGate.ObservedPreparation {
+        FrontmostGate.prepareObserved(
+            observe: runtime.observeFrontmost, isFrontmost: runtime.isLogicFrontmost,
+            activate: runtime.activateLogic, sleepMicros: runtime.sleepMicros
         )
     }
 
@@ -847,19 +864,25 @@ actor CGEventChannel: Channel {
         ))
     }
 
-    static func frontmostRefusal(operation: String, preparation: FrontmostPreparation) -> ChannelResult {
-        .error(HonestContract.encodeStateC(
+    static func frontmostRefusal(
+        operation: String, preparation: FrontmostPreparation,
+        observation: ProcessUtils.KeyboardOwnershipObservation? = nil
+    ) -> ChannelResult {
+        var extras: [String: Any] = [
+            "operation": operation,
+            "method": "cgevent",
+            "frontmost_preparation": preparation.rawValue,
+            "events_posted": 0,
+            "write_attempted": false,
+            "safe_to_retry": true,
+        ]
+        if let observation { extras["frontmost_observation"] = observation.diagnostic }
+        return .error(HonestContract.encodeStateC(
             error: .axWriteFailed,
             hint: "CGEvent keystrokes are delivered to the frontmost application; Logic Pro did not own the "
-                + "keyboard, so no event was posted. Bring Logic Pro to the front and retry.",
-            extras: [
-                "operation": operation,
-                "method": "cgevent",
-                "frontmost_preparation": preparation.rawValue,
-                "events_posted": 0,
-                "write_attempted": false,
-                "safe_to_retry": true,
-            ]
+                + "keyboard, so no event was posted. Bring Logic Pro to the front and retry. "
+                + "The fixed ownership reason is in frontmost_observation.reason when observed.",
+            extras: extras
         ))
     }
 

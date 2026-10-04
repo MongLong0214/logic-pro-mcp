@@ -243,6 +243,14 @@ actor OperationTraceStore {
         "channel": .publicDiagnostic,
         "chain": .publicDiagnostic,
         "outcome": .publicDiagnostic,
+        // #1084: typed per-attempt ownership projection; no window title or raw AX error.
+        "frontmost_preparation": .publicDiagnostic,
+        "frontmost_reason": .publicDiagnostic,
+        "frontmost_keyboard_owner_pid": .publicDiagnostic,
+        "frontmost_keyboard_owner_bundle_id": .publicDiagnostic,
+        "frontmost_keyboard_window_layer": .publicDiagnostic,
+        "frontmost_focused_application_pid": .publicDiagnostic,
+        "frontmost_focus_read": .publicDiagnostic,
         "parent_trace_id": .publicDiagnostic,
         "gate_mode": .publicDiagnostic,
         // #452 — measured elapsed time of a bounded AppleScript segment.

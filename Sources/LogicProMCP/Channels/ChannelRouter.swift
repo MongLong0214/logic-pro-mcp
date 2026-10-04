@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 /// Routes tool operations to the appropriate channel with fallback chains.
@@ -6,6 +7,52 @@ import Foundation
 /// If the primary channel fails or is unavailable, the router tries
 /// each fallback in order.
 actor ChannelRouter {
+    /// #1084: project only typed ownership facts from this channel attempt. Never stringify an
+    /// arbitrary extras dictionary, hint, title, path or AX error into the operation trace.
+    static func frontmostTraceAttributes(from message: String) -> [String: String] {
+        guard let data = message.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        var attributes: [String: String] = [:]
+        if let raw = object["frontmost_preparation"] as? String,
+           let preparation = FrontmostGate.Preparation(rawValue: raw) {
+            attributes["frontmost_preparation"] = preparation.rawValue
+        }
+        guard let observation = object["frontmost_observation"] as? [String: Any] else { return attributes }
+        if let raw = observation["reason"] as? String,
+           let reason = ProcessUtils.KeyboardOwnershipObservation.Reason(rawValue: raw) {
+            attributes["frontmost_reason"] = reason.rawValue
+        }
+        if let raw = observation["focus_read"] as? String,
+           let focus = ProcessUtils.KeyboardOwnershipObservation.FocusRead(rawValue: raw) {
+            attributes["frontmost_focus_read"] = focus.rawValue
+        }
+        for (source, target) in [
+            ("keyboard_owner_pid", "frontmost_keyboard_owner_pid"),
+            ("focused_application_pid", "frontmost_focused_application_pid"),
+        ] {
+            if let value = diagnosticInteger(observation[source]), (1...Int(Int32.max)).contains(value) {
+                attributes[target] = String(value)
+            }
+        }
+        if let layer = diagnosticInteger(observation["keyboard_window_layer"]),
+           layer == 0 || layer == LogicOnScreenWindows.modalPanelLevel {
+            attributes["frontmost_keyboard_window_layer"] = String(layer)
+        }
+        if let bundle = ProcessUtils.KeyboardOwnershipObservation.diagnosticBundleID(
+            observation["keyboard_owner_bundle_id"] as? String
+        ) {
+            attributes["frontmost_keyboard_owner_bundle_id"] = bundle
+        }
+        return attributes
+    }
+
+    private static func diagnosticInteger(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              !["f", "d"].contains(String(cString: number.objCType)) else { return nil }
+        // Exact bounded parsing here is export policy only, not ProcessUtils's ownership parser.
+        return Int(number.stringValue)
+    }
+
     struct StartReport: Sendable {
         let started: [ChannelID]
         let failures: [ChannelID: String]
@@ -321,10 +368,12 @@ actor ChannelRouter {
             // channel. Reads route without an arm, so this is a no-op for them.
             await OperationTraceWriteBoundaryArm.commitIfArmed()
             let result = await channel.execute(operation: operation, params: params)
-            await OperationTraceContext.record(.channelCompleted, attributes: [
+            var completedAttributes = [
                 "channel": channelID.rawValue,
                 "outcome": result.isSuccess ? "success" : "error",
-            ])
+            ]
+            completedAttributes.merge(Self.frontmostTraceAttributes(from: result.message)) { _, new in new }
+            await OperationTraceContext.record(.channelCompleted, attributes: completedAttributes)
             switch result {
             case .success(let message):
                 Log.debug("\(operation) succeeded via \(channelID.rawValue)", subsystem: "router")

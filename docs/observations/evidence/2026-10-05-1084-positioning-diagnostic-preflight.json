@@ -1,0 +1,21 @@
+{
+  "measured_commit": "4534434234c88abd7483b307c0eb2a738d915b49",
+  "embedded_commit": "4534434234c88abd7483b307c0eb2a738d915b49",
+  "build_time_utc": "2026-10-04T22:58:02Z",
+  "binary_kind": "debug",
+  "binary_sha256": "4a909e0ecc8dda975fe699268d0eef60500f6aa4fec75e70c536fd2544ca02fc",
+  "raw_source": "live-1084-goto-45344342/raw.json",
+  "raw_sha256": "0837469d56269d4c91df5e574c189c8e71ac7983087eca0db72f936f06ae27b4",
+  "exclusive_source": "live-1084-goto-45344342/exclusive.json",
+  "exclusive_sha256": "7c42e74d216cced3bbddb8247e80b4e4247f6be556609bf6c9d5f2c7444a8f3f",
+  "projection": "Selected actual structuredContent fields. Private document/window titles, paths and hints omitted. Gate non-execution is inferred from preflight refusal and absent gate facts, not a successful gate observation.",
+  "initialize": {"name": "logic-pro-mcp", "version": "3.18.0"},
+  "project_before": {"identity_source": "current_document_project_file", "ax_occluded": false, "trackCount": 42, "private_path_omitted": true},
+  "transport_before": {"source": "ax_live", "isPlaying": false, "isRecording": false, "position": "11.3", "observedComponents": ["bar", "beat"]},
+  "requests": [
+    {"id": 4, "name": "logic_transport", "command": "goto_position", "params": {"position": "2.1.1.1"}, "result": {"state": "C", "success": false, "error": "unsupported_state", "operation": "transport.goto_position", "failure_stage": "preflight_blocking_dialog", "blocking_dialog_present": true, "dialog_role": "AXDialog", "dialog_buttons": ["WindowSharingSessionButton"], "dialog_presence_reason": "blocking_window_found", "dialog_presence_reason_source": "re_read_at_refusal", "windows_read_ax_error": null, "write_attempted": false, "safe_to_retry": true}},
+    {"id": 5, "name": "logic_transport", "command": "goto_position", "params": {"position": "2.1.1.1"}, "result": {"state": "C", "success": false, "error": "unsupported_state", "operation": "transport.goto_position", "failure_stage": "preflight_blocking_dialog", "blocking_dialog_present": true, "dialog_role": "AXDialog", "dialog_buttons": ["WindowSharingSessionButton"], "dialog_presence_reason": "blocking_window_found", "dialog_presence_reason_source": "re_read_at_refusal", "windows_read_ax_error": null, "write_attempted": false, "safe_to_retry": true}}
+  ],
+  "stop": {"pid": 75385, "returncode": 0, "pid_gone": true, "reader_finished": true},
+  "exclusive_release": {"released": true, "exists_after": false}
+}
