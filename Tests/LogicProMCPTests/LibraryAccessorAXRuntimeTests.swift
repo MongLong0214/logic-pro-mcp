@@ -289,13 +289,15 @@ private func makeLibraryPanelFixture(
     ))
 }
 
-@Test func libraryAccessorCategoryUsesNativeClickAfterAXSelection() {
+@Test func libraryAccessorCategoryClicksBeforeAXCanScheduleAColumnSlide() {
     let fixture = makeLibraryPanelFixture()
     let clicks = LibraryClickRecorder()
     let library = LibraryAccessor.Runtime(
         ax: fixture.runtime.ax,
         postMouseClick: { point in
-            clicks.record(point)
+            #expect(fixture.builder.actionCalls.isEmpty)
+            #expect(!fixture.builder.setCalls.contains { $0.attribute == kAXSelectedChildrenAttribute as String })
+            return clicks.record(point)
         },
         postMouseDoubleClick: { _ in false }
     )
@@ -306,6 +308,105 @@ private func makeLibraryPanelFixture(
         library: library
     ))
     #expect(clicks.points().count == 1)
+}
+
+@Test func libraryAccessorCategoryDoesNotTriggerAXSlideBeforeClicking() {
+    // A one-column-wide Library slides the moment the category is selected
+    // over AX (measured on Logic 12.3.1: Synthesizer x=0 → x=-227 before any
+    // click). The row now under the old point belongs to the next column, so
+    // clicking there opens the wrong subfolder.
+    let fixture = makeLibraryPanelFixture()
+    let bass = fixture.builder.element(10_005)
+    let clicks = LibraryClickRecorder()
+    let runtime = fixture.builder.makeLogicRuntime(
+        appElement: fixture.app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if CFEqual(element, bass), action == kAXPressAction as String {
+                fixture.builder.setAttribute(bass, kAXPositionAttribute as String, libraryAXPoint(-127, 100))
+            }
+            return true
+        }
+    )
+    let library = LibraryAccessor.Runtime(
+        ax: runtime.ax,
+        postMouseClick: { point in
+            clicks.record(point)
+        },
+        postMouseDoubleClick: { _ in false }
+    )
+
+    #expect(LibraryAccessor.selectCategory(
+        named: "Bass",
+        runtime: runtime,
+        library: library
+    ))
+    #expect(clicks.points() == [CGPoint(x: 140, y: 110)])
+    #expect(AXHelpers.getPosition(bass, runtime: runtime.ax) == CGPoint(x: 100, y: 100))
+}
+
+@Test func libraryAccessorCategoryCannotSucceedFromAnUnreadablePosition() {
+    let fixture = makeLibraryPanelFixture()
+    let bass = fixture.builder.element(10_005)
+    let pressed = MutableBox(false)
+    let runtime = fixture.builder.makeLogicRuntime(
+        appElement: fixture.app,
+        attributeValueHandler: { element, attribute in
+            if CFEqual(element, bass), attribute == kAXPositionAttribute as String, pressed.value {
+                return .some(nil)
+            }
+            return nil
+        },
+        setAttributeHandler: { _, _, _ in false },
+        performActionHandler: { _, _ in pressed.value = true; return false }
+    )
+    let library = LibraryAccessor.Runtime(
+        ax: runtime.ax,
+        postMouseClick: { _ in false },
+        postMouseDoubleClick: { _ in false }
+    )
+    #expect(!LibraryAccessor.selectCategory(named: "Bass", runtime: runtime, library: library))
+}
+
+@Test func libraryAccessorSelectsCompletePathThroughOneVisibleColumn() {
+    let fixture = makeLibraryPanelFixture()
+    let bass = fixture.builder.element(10_005)
+    let drums = fixture.builder.element(10_006)
+    let sub = fixture.builder.element(10_007)
+    let funky = fixture.builder.element(10_008)
+    let leafList = fixture.builder.element(10_010)
+    let leaf = fixture.builder.element(10_011)
+    fixture.builder.setFrame(fixture.browser, x: 80, y: 80, width: 180, height: 180)
+    fixture.builder.setRole(leafList, kAXListRole as String)
+    fixture.builder.setRole(leaf, kAXStaticTextRole as String)
+    fixture.builder.setAttribute(leaf, kAXValueAttribute as String, "Deep Bass")
+    fixture.builder.setFrame(leaf, x: 100, y: 100, width: 80, height: 20)
+    fixture.builder.setChildren(leafList, [leaf])
+    let clicks = LibraryClickRecorder()
+    let doubleClicks = LibraryDoubleClickRecorder()
+    let library = LibraryAccessor.Runtime(
+        ax: fixture.runtime.ax,
+        postMouseClick: { point in
+            let first = clicks.points().isEmpty
+            for element in [bass, drums] {
+                fixture.builder.setAttribute(element, kAXPositionAttribute as String, libraryAXPoint(first ? -80 : -240, 100))
+            }
+            for element in [sub, funky] {
+                fixture.builder.setAttribute(element, kAXPositionAttribute as String, libraryAXPoint(first ? 100 : -80, 100))
+            }
+            if !first {
+                fixture.builder.setChildren(fixture.browser, [fixture.categoryList, fixture.presetList, leafList, fixture.horizontalScrollBar])
+            }
+            return clicks.record(point)
+        },
+        postMouseDoubleClick: { doubleClicks.record($0) }
+    )
+    #expect(LibraryAccessor.selectPath(
+        segments: ["Bass", "Sub", "Deep Bass"], settleDelay: 0,
+        runtime: fixture.runtime, library: library
+    ))
+    #expect(clicks.points().count == 2)
+    #expect(doubleClicks.points() == [CGPoint(x: 140, y: 110)])
 }
 
 @Test func libraryAccessorCategoryResetsHorizontalBrowserScrollBeforeSelection() {

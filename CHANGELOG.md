@@ -33,6 +33,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **`tracks.set_instrument` opened the wrong Library folder when the Library panel shows one
+  column (#1100).** Selecting the category over AX already slides the column view, so the
+  coordinate click that followed landed on the next column's row at the same height
+  (`Synthesizer` opened `Synthesizer/Strings`) and every three-segment path failed with
+  `Library path not fully resolvable`. The click is now sent only while the row is still where it
+  was measured. Live-checked on Logic 12.3.1 with a one-column Library; the two-column case, where
+  the click path is unchanged, was not re-checked live.
 - **Under a keyboard input source that is not ASCII-capable, a CGEvent plain-letter key is sent
   through a switch to an ASCII-capable layout and the user's source is selected back (#1039).**
   Under 2-Set Korean a letter with no Command, Control or Option reaches Logic as a Hangul

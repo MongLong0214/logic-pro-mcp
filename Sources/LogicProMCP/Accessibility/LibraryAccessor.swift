@@ -683,8 +683,8 @@ enum LibraryAccessor {
     }
 
     /// Select a category by name. Logic's Library can report successful AX
-    /// selection without changing the visible column, so this also posts a
-    /// native click at the row center when coordinates are readable.
+    /// selection without changing the visible column. Try the native click
+    /// first: AX selection can slide the column before a cached-point click.
     @discardableResult
     static func selectCategory(
         named name: String,
@@ -706,6 +706,13 @@ enum LibraryAccessor {
         ) else { return false }
         let targetFrame = frame(of: targetEl, runtime: runtime.ax)
         let targetPoint = position(of: targetEl, runtime: runtime.ax)
+        if let pos = targetPoint {
+            debugLibraryClick("selectCategory name=\(name) frame=\(String(describing: targetFrame)) point=\(pos)")
+            if library.postMouseClick(pos) {
+                Thread.sleep(forTimeInterval: 0.30)
+                return true
+            }
+        }
         var selectedChildrenOK = false
         if let parent = AXHelpers.getAttribute(
             targetEl, kAXParentAttribute, runtime: runtime.ax
@@ -718,15 +725,8 @@ enum LibraryAccessor {
             )
         }
         let pressOK = AXHelpers.performAction(targetEl, kAXPressAction, runtime: runtime.ax)
-        let clicked: Bool
-        if let pos = targetPoint {
-            debugLibraryClick("selectCategory name=\(name) frame=\(String(describing: targetFrame)) point=\(pos)")
-            clicked = library.postMouseClick(pos)
-        } else {
-            clicked = false
-        }
         Thread.sleep(forTimeInterval: 0.30)
-        return clicked || selectedChildrenOK || pressOK
+        return selectedChildrenOK || pressOK
     }
 
     @discardableResult
@@ -896,8 +896,16 @@ enum LibraryAccessor {
         case .leftmost:
             preferredColumnX = columns.first
         case .rightmost:
-            guard columns.count >= 2 else { return nil }
-            preferredColumnX = columns.last
+            // A narrow viewport hides the preceding column after selection.
+            // Identify the active column before visibility filtering, then
+            // require the requested row in that column to be visible. Keeping
+            // the two-column guard here prevents treating a lone root list as
+            // a child list when navigation has not actually opened one.
+            let allColumns = distinctColumnXs(from: textCandidates(
+                in: texts, visibleIn: nil, runtime: runtime
+            ))
+            guard allColumns.count >= 2 else { return nil }
+            preferredColumnX = allColumns.last
         }
         guard let preferredColumnX else { return nil }
         let matches = candidates.filter {
