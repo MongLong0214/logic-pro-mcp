@@ -166,7 +166,9 @@ exit 0
         self.fake_swift()
         result = self.run_release()
         self.assertNotIn("changed the tree", result.stderr, result.stdout + result.stderr)
-        self.assertIn("build_exit: 0", result.stdout)
+        # pre_strip_sha256 is printed after the post-build status read, so its presence shows that
+        # read passed; build_exit is printed before it (review round 3, R1099-03).
+        self.assertIn("pre_strip_sha256:", result.stdout, result.stdout + result.stderr)
         self.assertEqual(self.resolved(), RESOLVED)
 
 
