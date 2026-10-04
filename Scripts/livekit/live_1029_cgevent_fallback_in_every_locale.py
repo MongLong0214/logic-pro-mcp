@@ -500,12 +500,34 @@ def project_closed(before, after, extra):
         and extra.get("fixture_windows_after") == []
 
 
+ZOOM_AXES = ("vertical", "horizontal")
+
+
 def zoom_moved(before, after, extra):
     """The two zoom sliders, named by Logic's zoom rows, both read before and after, and at least one
     moved. Another slider moving does not count (#1091 review R2, R1091-06)."""
     b, a = before.get("zoom") or {}, after.get("zoom") or {}
-    read = all(isinstance(z.get(axis), float) for z in (b, a) for axis in ("vertical", "horizontal"))
-    return read and any(abs(a[axis] - b[axis]) > 0.01 for axis in ("vertical", "horizontal"))
+    read = all(isinstance(z.get(axis), float) for z in (b, a) for axis in ZOOM_AXES)
+    return read and any(abs(a[axis] - b[axis]) > 0.01 for axis in ZOOM_AXES)
+
+
+def zoom_fitted(before, after, extra):
+    """Zoom to Fit, not another zoom command: the zoom sliders moved, and the same call sent again
+    (`zoom_again`, read after it) left both where the first put them. Fitting is idempotent; zooming
+    in or out moves the sliders again (#1091 review R3, R1091-06: any named slider movement passed)."""
+    if not zoom_moved(before, after, extra):
+        return False
+    again, a = extra.get("zoom_again") or {}, after.get("zoom") or {}
+    return all(isinstance(again.get(axis), float) for axis in ZOOM_AXES) \
+        and all(abs(again[axis] - a[axis]) <= 0.01 for axis in ZOOM_AXES)
+
+
+def post_zoom_again(driver, ax, extra):
+    """Send Zoom to Fit a second time and read the zoom sliders after it, for `zoom_fitted`."""
+    call(driver, ax, "logic_navigate", "zoom_to_fit", {})
+    time.sleep(0.8)
+    again = snapshot(ax)
+    extra["zoom_again"] = None if again is None else again.get("zoom")
 
 
 def automation_toggled(before, after, extra):
@@ -756,10 +778,10 @@ OPS = [
     ("transport.toggle_metronome", "logic_transport", "toggle_metronome", {}, "k", toggled("transportMetronomeControl"), {"boxes:transportMetronomeControl"}),
     ("transport.toggle_metronome", "logic_transport", "toggle_metronome", {}, "k", toggled("transportMetronomeControl"), {"boxes:transportMetronomeControl"}),
     # Views, each twice so the state comes back.
-    ("automation.toggle_view", "logic_navigate", "toggle_view", {"view": "automation"}, "a", automation_toggled, {"structure", "sliders"}),
-    ("automation.toggle_view", "logic_navigate", "toggle_view", {"view": "automation"}, "a", automation_toggled, {"structure", "sliders"}),
-    ("nav.zoom_to_fit", "logic_navigate", "zoom_to_fit", {}, "z", zoom_moved, {"sliders", "structure"}),
-    ("nav.zoom_to_fit", "logic_navigate", "zoom_to_fit", {}, "z", zoom_moved, {"sliders", "structure"}),
+    ("automation.toggle_view", "logic_navigate", "toggle_view", {"view": "automation"}, "a", automation_toggled, {"structure", "sliders", "automation"}),
+    ("automation.toggle_view", "logic_navigate", "toggle_view", {"view": "automation"}, "a", automation_toggled, {"structure", "sliders", "automation"}),
+    ("nav.zoom_to_fit", "logic_navigate", "zoom_to_fit", {}, "z", zoom_fitted, {"sliders", "structure"}, None, post_zoom_again),
+    ("nav.zoom_to_fit", "logic_navigate", "zoom_to_fit", {}, "z", zoom_fitted, {"sliders", "structure"}, None, post_zoom_again),
     ("view.toggle_library", "logic_navigate", "toggle_view", {"view": "library"}, "y", toggled("libraryPanelLabel"), {"boxes:libraryPanelLabel", "structure", "sliders"}),
     ("view.toggle_library", "logic_navigate", "toggle_view", {"view": "library"}, "y", toggled("libraryPanelLabel"), {"boxes:libraryPanelLabel", "structure", "sliders"}),
     ("view.toggle_mixer", "logic_navigate", "toggle_view", {"view": "mixer"}, "x", toggled("mixerNamedElement"), {"boxes:mixerNamedElement", "structure", "sliders"}),
@@ -803,8 +825,10 @@ def others_kept(before, after, allowed):
     one by one unless all boxes are allowed."""
     moved = []
     for key in ("tracks", "bar", "windows", "structure", "sliders", "regions", "regions_selected",
-                "undo_title"):
-        if key in allowed:
+                "undo_title", "zoom", "automation"):
+        # The zoom sliders are among the sliders, so an op allowed to move sliders may move them;
+        # the automation reading is its own (#1091 review R3, R1091-06: both went uncompared).
+        if key in allowed or (key == "zoom" and "sliders" in allowed):
             continue
         if before.get(key) is None or after.get(key) is None:
             # Two readings that did not read are not one unchanged reading (#1091 review R2, R1091-06).

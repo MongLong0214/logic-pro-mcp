@@ -203,7 +203,8 @@ class UndoTitleFocus(unittest.TestCase):
     def test_a_bare_title_is_focus_and_a_named_change_is_history(self):
         _, allowed = predicate(index_of("view.toggle_library"))
         base = {"tracks": 1, "bar": 1, "windows": [], "structure": {}, "sliders": [], "regions": 8,
-                "regions_selected": 0, "boxes": {}}
+                "regions_selected": 0, "boxes": {}, "zoom": {"vertical": 0.5, "horizontal": 0.2},
+                "automation": {"box": 0, "mode_popups": 0}}
         to_bare = H.others_kept(dict(base, undo_title=titled(WORDS["Paste#und"])),
                                 dict(base, undo_title=WORDS["Undo"]), allowed)
         self.assertEqual(to_bare, [])
@@ -241,7 +242,8 @@ class FixtureRestorationNeedsAZeroCount(unittest.TestCase):
 def usable_snap(**overrides):
     snap = {"boxes": {"Play": 0, "Cycle": 0}, "tracks": 19, "bar": 9, "undo_title": WORDS["Can\u2019t Undo"],
             "regions": 8, "regions_selected": 0, "windows": [[0, "fixture - Tracks"]], "structure": {"1:AXGroup": 3},
-            "sliders": [120.0, 0.5, 0.2]}
+            "sliders": [120.0, 0.5, 0.2], "zoom": {"vertical": 0.5, "horizontal": 0.2},
+            "automation": {"box": 0, "mode_popups": 0}}
     snap.update(overrides)
     return snap
 
@@ -360,7 +362,7 @@ class NamedZoomAutomationAndCopy(unittest.TestCase):
     def test_zoom_needs_its_named_sliders_to_move(self):
         before = usable_snap(zoom={"vertical": 0.684, "horizontal": 0.213}, sliders=[120.0, 0.684, 0.213])
         after = usable_snap(zoom={"vertical": 0.0, "horizontal": 0.585}, sliders=[120.0, 0.0, 0.585])
-        row = judged_row("nav.zoom_to_fit", before, after)
+        row = judged_row("nav.zoom_to_fit", before, after, extra={"zoom_again": {"vertical": 0.0, "horizontal": 0.585}})
         self.assertTrue(H.judge(row))
         self.assertFalse(H.judge(H.unchanged(row)))
         other = usable_snap(zoom={"vertical": 0.684, "horizontal": 0.213}, sliders=[121.0, 0.684, 0.213])
@@ -451,6 +453,35 @@ class QuotedName(unittest.TestCase):
         self.assertIsNone(H.quoted_name("Track 1"))
         self.assertIsNone(H.quoted_name("Track 1 “”"))
         self.assertIsNone(H.quoted_name(None))
+
+
+class ZoomToFitAndTheNewReadings(unittest.TestCase):
+    """#1091 review R3, R1091-06: zoom is credited only as a fit, and zoom and automation are
+    compared for the ops that may not move them."""
+    BEFORE = {"zoom": {"vertical": 0.68, "horizontal": 0.21}}
+    AFTER = {"zoom": {"vertical": 0.50, "horizontal": 0.40}}
+
+    def test_a_fit_holds_when_sent_again(self):
+        self.assertTrue(H.zoom_fitted(self.BEFORE, self.AFTER, {"zoom_again": {"vertical": 0.50, "horizontal": 0.40}}))
+
+    def test_a_zoom_that_moves_again_is_not_a_fit(self):
+        self.assertFalse(H.zoom_fitted(self.BEFORE, self.AFTER, {"zoom_again": {"vertical": 0.50, "horizontal": 0.60}}),
+                         "a zoom in moved the horizontal slider again")
+        self.assertFalse(H.zoom_fitted(self.BEFORE, self.AFTER, {}), "the second reading did not read")
+        self.assertFalse(H.zoom_fitted(self.BEFORE, self.BEFORE, {"zoom_again": self.BEFORE["zoom"]}),
+                         "nothing moved")
+
+    def test_zoom_and_automation_are_compared_where_not_allowed(self):
+        base = {"tracks": 19, "bar": 9, "windows": [], "structure": {}, "sliders": [1.0], "regions": 8,
+                "regions_selected": 0, "undo_title": "u", "boxes": {}, "zoom": {"vertical": 0.5, "horizontal": 0.2},
+                "automation": {"box": 0, "mode_popups": 0}}
+        moved_zoom = dict(base, zoom={"vertical": 0.5, "horizontal": 0.3})
+        moved_automation = dict(base, automation={"box": 1, "mode_popups": 19})
+        self.assertIn("zoom", H.others_kept(base, moved_zoom, {"tracks"}))
+        self.assertNotIn("zoom", H.others_kept(base, moved_zoom, {"sliders"}), "an op allowed to move sliders")
+        self.assertIn("automation", H.others_kept(base, moved_automation, {"structure", "sliders"}))
+        self.assertNotIn("automation", H.others_kept(base, moved_automation, {"automation"}))
+        self.assertIn("unread:zoom", H.others_kept(dict(base, zoom=None), dict(base, zoom=None), {"tracks"}))
 
 
 if __name__ == "__main__":

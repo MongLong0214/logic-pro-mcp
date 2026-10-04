@@ -85,5 +85,92 @@ class Rename(unittest.TestCase):
         self.assertFalse(H.rename_honest(rename_row(after=("Kit", "Bass"))))
 
 
+class RenameNeedsReadNames(unittest.TestCase):
+    """#1091 review R3, R1091-10: names that did not read are not unchanged names."""
+
+    def test_unread_or_missing_names_fail(self):
+        self.assertFalse(H.rename_honest(rename_row(before=(None, None, None), after=(None, None, None))))
+        unread_after = rename_row()
+        unread_after["names_after"] = ["Kit", None, "Keys"]
+        self.assertFalse(H.rename_honest(unread_after))
+        missing = rename_row()
+        missing.pop("names_before")
+        missing.pop("names_after")
+        self.assertFalse(H.rename_honest(missing))
+
+    def test_a_missing_reply_state_fails(self):
+        self.assertFalse(H.rename_honest(rename_row(state=None)))
+
+    def test_names_must_cover_the_selected_rows(self):
+        self.assertFalse(H.rename_honest(rename_row(before=("Kit",), after=("Kit",), selected=(0, 1))))
+
+
+class MainCountsTheRestoration(unittest.TestCase):
+    """#1091 review R3, R1091-11: a failed restoration fails the run."""
+
+    def drive(self, final_restore_error):
+        import tempfile
+        from argparse import Namespace
+        from unittest import mock
+
+        class Notes:
+            def __init__(self, *_a, **_k):
+                self.records = []
+
+            def note(self, *_a, **_k):
+                pass
+
+            def falsifiable(self, *_a, **_k):
+                pass
+
+            def restored(self, tag, restored, detail=""):
+                self.records.append((tag, restored))
+
+            def write(self):
+                return {}
+
+        class Driver:
+            def __init__(self, *_a, **_k):
+                pass
+
+            def close(self):
+                pass
+
+        head = "0" * 40
+        with tempfile.NamedTemporaryFile(delete=False) as handle:
+            binary = handle.name
+        root = tempfile.mkdtemp()
+        args = Namespace(worktree=os.path.dirname(os.path.dirname(HERE)), head=head, binary=binary, lprojs=["ko"])
+        passing_select = {"lproj": "ko", "trial": "select", "selected_after": [0, 1], "reply_state": "B",
+                          "also_selected": [1]}
+        passing_rename = {"lproj": "ko", "trial": "rename", "selected_before": [0, 1], "names_before": ["a", "b"],
+                          "names_after": ["a", "b"], "reply_state": "C", "reply_error": "selection_not_exclusive",
+                          "requested": "x"}
+        restores = [None, final_restore_error]
+        try:
+            with mock.patch.object(H, "arguments", return_value=args), \
+                    mock.patch.object(H.P, "embedded_commit", return_value=head), \
+                    mock.patch.object(H.P, "sha256_of", return_value="0"), \
+                    mock.patch.object(H.E, "Evidence", Notes), \
+                    mock.patch.object(H.E, "Driver", Driver), \
+                    mock.patch.object(H.A, "AX", return_value=None), \
+                    mock.patch.object(H.subprocess, "run"), \
+                    mock.patch.object(H, "restore_fixture", side_effect=restores), \
+                    mock.patch.object(H.L993, "switch_to", return_value={"arrange_window": "t"}), \
+                    mock.patch.object(H, "select_trial", return_value=passing_select), \
+                    mock.patch.object(H, "rename_trial", return_value=passing_rename), \
+                    mock.patch.object(H.time, "sleep"), \
+                    mock.patch.dict(os.environ, {"LPM_EVIDENCE_ROOT": root}):
+                return H.main()
+        finally:
+            os.unlink(binary)
+
+    def test_a_failed_final_restoration_returns_one(self):
+        self.assertEqual(self.drive(RuntimeError("Logic did not quit")), 1)
+
+    def test_the_same_run_restored_returns_zero(self):
+        self.assertEqual(self.drive(None), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -26,7 +26,6 @@ the probe. The binary must carry the head it is run as in `__TEXT,__lpm_commit`.
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -76,17 +75,27 @@ def renamed_rows(row):
     return [i for i, (b, a) in enumerate(zip(before, after)) if b != a]
 
 
+def names_read(row):
+    """Every header row's name read, before and after, with the same row count and covering every
+    selected row. A name that did not read is not an unchanged name (#1091 review R3, R1091-10)."""
+    before, after = row.get("names_before"), row.get("names_after")
+    selected = row.get("selected_before") or []
+    return isinstance(before, list) and isinstance(after, list) and len(before) == len(after) \
+        and bool(before) and all(isinstance(n, str) and n for n in before + after) \
+        and max(selected, default=0) < len(before)
+
+
 def rename_honest(row):
-    """The condition was reproduced before the call, and no row but 0 changed name: row 0 alone
-    renamed to the requested name with State A, or a selection_not_exclusive refusal with nothing
-    renamed."""
+    """The condition was reproduced before the call, every name read, and no row but 0 changed
+    name: row 0 alone renamed to the requested name with State A, or a State C
+    selection_not_exclusive refusal with nothing renamed."""
     reproduced = 0 in (row.get("selected_before") or []) and bool(others(row.get("selected_before")))
-    changed = renamed_rows(row)
-    if not reproduced or changed is None:
+    if not reproduced or not names_read(row):
         return False
+    changed = renamed_rows(row)
     if row.get("reply_state") == "A":
-        return changed == [0] and (row.get("names_after") or [None])[0] == row.get("requested")
-    return changed == [] and row.get("reply_error") == "selection_not_exclusive"
+        return changed == [0] and row["names_after"][0] == row.get("requested")
+    return row.get("reply_state") == "C" and changed == [] and row.get("reply_error") == "selection_not_exclusive"
 
 
 def rename_as_base(row):
@@ -108,9 +117,10 @@ def rail(ax):
 
 
 def name_of(ax, row):
-    found = re.search(r"[‘'“„«\"](.+?)[’'”“»\"]",
-                      ax.value(row, "AXDescription") or "")
-    return found.group(1) if found else ax.value(row, "AXDescription")
+    """The track name in the header's description, through the #1029 harness's reader, which knows
+    each language's quotes (French « … » with spaces, Traditional Chinese 「」); None when it does not
+    read (#1091 review R3, R1091-10)."""
+    return P.quoted_name(ax.value(row, "AXDescription"))
 
 
 def headers(ax):
@@ -248,17 +258,23 @@ def main():
             finally:
                 driver.close()
     finally:
+        restored = False
         try:
             restore_fixture(backup)
-            ev.note("1097/restore", L993.switch_to(L993.RESTORE, force=True))
+            launch = L993.switch_to(L993.RESTORE, force=True)
+            ev.note("1097/restore", launch)
+            restored = bool(launch.get("arrange_window"))
         except Exception as exc:  # noqa: BLE001 - recorded as a failed restoration
             ev.note("1097/restore", {"error": repr(exc)})
+        # A failed restoration counts against the run, not only as a note (#1091 review R3, R1091-11).
+        ev.restored("1097/fixture-and-language", restored,
+                    "the fixture put back from the copy and Logic relaunched in the restore language")
     ev.note("1097/rows", rows)
     out = ev.write()
     failed = [f"{r['lproj']} {r.get('trial')}" for r in rows
               if not (select_honest(r) if r.get("trial") == "select" else rename_honest(r))]
-    print(json.dumps({"written": out, "rows": len(rows), "failed": failed}, ensure_ascii=False))
-    return 0 if rows and not failed and len(rows) == 2 * len(args.lprojs) else 1
+    print(json.dumps({"written": out, "rows": len(rows), "failed": failed, "restored": restored}, ensure_ascii=False))
+    return 0 if restored and rows and not failed and len(rows) == 2 * len(args.lprojs) else 1
 
 
 if __name__ == "__main__":
