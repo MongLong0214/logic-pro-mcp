@@ -15,37 +15,66 @@ enum AXPluginTrackBinding {
     }
 
     static func resolve(
-        track: Int, mixer: AXUIElement, runtime: AXLogicProElements.Runtime
+        track: Int, mixer: AXUIElement, runtime: AXLogicProElements.Runtime,
+        onRefusal: ((String) -> Void)? = nil
     ) -> Binding? {
-        guard track >= 0,
-              case .found(let window) = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime),
-              case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime),
-              track < headers.count else { return nil }
+        guard track >= 0 else { onRefusal?("invalid_track_index"); return nil }
+        let windowRead = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime)
+        guard case .found(let window) = windowRead else {
+            if case .unreadable(let stage, let status) = windowRead {
+                onRefusal?("arrange_window_unavailable/\(stage)/\(status)")
+            } else { onRefusal?("arrange_window_unavailable") }
+            return nil
+        }
+        let headerRead = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime)
+        guard case .read(let headers) = headerRead else {
+            if case .unreadable(let stage, let status) = headerRead {
+                onRefusal?("arrange_headers_unavailable/\(stage)/\(status)")
+            } else { onRefusal?("arrange_headers_unavailable") }
+            return nil
+        }
+        guard track < headers.count else { onRefusal?("track_index_absent"); return nil }
 
         var headerNames: [String] = []
         for header in headers {
-            guard case .success(.some(let name)) = AXValueExtractors.extractTrackNameResult(
+            let nameRead = AXValueExtractors.extractTrackNameResult(
                 from: header, runtime: runtime.ax
-            ) else { return nil }
+            )
+            guard case .success(.some(let name)) = nameRead else {
+                if case .failure(let error) = nameRead {
+                    onRefusal?("arrange_name_unavailable/\(error.diagnosticLabel)")
+                } else { onRefusal?("arrange_name_unavailable") }
+                return nil
+            }
             headerNames.append(name)
         }
         let name = headerNames[track]
-        guard headerNames.filter({ $0 == name }).count == 1 else { return nil }
+        guard headerNames.filter({ $0 == name }).count == 1 else {
+            onRefusal?("arrange_name_ambiguous"); return nil
+        }
 
         // Reuse the existing noting seam so legacy role reads in stripEnumeration cannot turn
         // an AX failure into an absent sibling and thereby hide a duplicate target name.
         let failures = AXPluginInstanceIdentity.FailedReads()
         let ax = AXPluginInstanceIdentity.noting(failures, over: runtime.ax)
         guard let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: ax),
-              enumeration.unreadableChildren == 0, !failures.any else { return nil }
+              enumeration.unreadableChildren == 0, !failures.any else {
+            onRefusal?("mixer_strips_unavailable"); return nil
+        }
         var matching: [(Int, AXUIElement)] = []
         for (index, strip) in enumeration.strips.enumerated() {
-            guard case .success(.some(let stripName)) = AXPluginInstanceIdentity.stripNameResult(
+            let nameRead = AXPluginInstanceIdentity.stripNameResult(
                 strip, runtime: runtime.ax
-            ) else { return nil }
+            )
+            guard case .success(.some(let stripName)) = nameRead else {
+                if case .failure(let error) = nameRead {
+                    onRefusal?("strip_name_unavailable/\(error.diagnosticLabel)")
+                } else { onRefusal?("strip_name_unavailable") }
+                return nil
+            }
             if stripName == name { matching.append((index, strip)) }
         }
-        guard matching.count == 1 else { return nil }
+        guard matching.count == 1 else { onRefusal?("strip_name_not_unique"); return nil }
         return Binding(trackIndex: track, trackName: name, mixerStripIndex: matching[0].0,
                        header: headers[track], mixer: mixer, strip: matching[0].1)
     }

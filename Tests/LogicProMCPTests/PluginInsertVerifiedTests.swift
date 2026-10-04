@@ -1372,11 +1372,13 @@ private func testPlugin1108TerminalGuardReportsOnlyItsObservedSlotFacts(_ drift:
     let resolved = try #require(trace["slot_commit_target_resolved"] as? Bool)
     if drift == .nameReadFailure {
         #expect(!resolved)
+        #expect(trace["slot_commit_failure_stage"] as? String == "strip_name_unavailable/-25204")
         #expect(trace["slot_commit_empty_observed"] == nil)
         #expect(trace["slot_commit_same_physical_element"] == nil)
         #expect(trace["slot_commit_read_status"] == nil)
     } else {
         #expect(resolved)
+        #expect(trace["slot_commit_failure_stage"] == nil)
         let empty = try #require(trace["slot_commit_empty_observed"] as? Bool)
         let sameElement = try #require(trace["slot_commit_same_physical_element"] as? Bool)
         #expect(trace["slot_commit_read_status"] as? String == (drift == .occupiedSlot ? "ok" : "empty"))

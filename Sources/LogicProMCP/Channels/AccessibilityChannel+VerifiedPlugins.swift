@@ -2630,14 +2630,25 @@ extension AccessibilityChannel {
     /// Mixer ordering may change; the actuation target may not change with it.
     private static func boundPluginTrack(
         track: Int,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        onRefusal: ((String) -> Void)? = nil
     ) -> AXPluginTrackBinding.Binding? {
-        guard let mixer = authorizedPluginTrack?.mixer ?? AXLogicProElements.getMixerArea(runtime: runtime),
-              let target = AXPluginTrackBinding.resolve(track: track, mixer: mixer, runtime: runtime) else { return nil }
+        guard let mixer = authorizedPluginTrack?.mixer ?? AXLogicProElements.getMixerArea(runtime: runtime) else {
+            onRefusal?("mixer_unavailable"); return nil
+        }
+        guard let target = AXPluginTrackBinding.resolve(
+            track: track, mixer: mixer, runtime: runtime, onRefusal: onRefusal
+        ) else { return nil }
         if let original = authorizedPluginTrack {
-            guard original.trackIndex == target.trackIndex,
-                  original.trackName == target.trackName,
-                  CFEqual(original.header, target.header), CFEqual(original.strip, target.strip) else { return nil }
+            guard original.trackIndex == target.trackIndex, original.trackName == target.trackName else {
+                onRefusal?("retained_track_mismatch"); return nil
+            }
+            guard CFEqual(original.header, target.header) else {
+                onRefusal?("retained_header_mismatch"); return nil
+            }
+            guard CFEqual(original.strip, target.strip) else {
+                onRefusal?("retained_strip_mismatch"); return nil
+            }
         }
         return target
     }
@@ -4055,7 +4066,10 @@ extension AccessibilityChannel {
                 trace.removeValue(forKey: "slot_commit_empty_observed")
                 trace.removeValue(forKey: "slot_commit_same_physical_element")
                 trace.removeValue(forKey: "slot_commit_read_status")
-                let fresh = liveInsertSlot(track: track, insert: insert, runtime: runtime)
+                trace.removeValue(forKey: "slot_commit_failure_stage")
+                let fresh = liveInsertSlot(track: track, insert: insert, runtime: runtime, onRefusal: {
+                    trace["slot_commit_failure_stage"] = $0
+                })
                 trace["slot_commit_target_resolved"] = fresh != nil
                 guard let fresh else {
                     commitTargetRefused = true
@@ -4418,11 +4432,12 @@ extension AccessibilityChannel {
     private static func liveInsertSlot(
         track: Int,
         insert: Int,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        onRefusal: ((String) -> Void)? = nil
     ) -> AXLogicProElements.PluginInsertSlot? {
-        guard let target = boundPluginTrack(track: track, runtime: runtime),
-              let slots = AXLogicProElements.audioPluginInsertSlots(in: target.strip, runtime: runtime.ax) else {
-            return nil
+        guard let target = boundPluginTrack(track: track, runtime: runtime, onRefusal: onRefusal) else { return nil }
+        guard let slots = AXLogicProElements.audioPluginInsertSlots(in: target.strip, runtime: runtime.ax) else {
+            onRefusal?("slot_inventory_unavailable"); return nil
         }
         // #234 — a zero-slot result on this mid-flight re-resolution means the
         // insert section became non-enumerable after the pre-insert snapshot
@@ -4430,7 +4445,7 @@ extension AccessibilityChannel {
         // Returning nil routes the caller to a transient setup failure; the static
         // fixture tree can't simulate a mid-operation vanish, so this wording is
         // pinned by the three tested envelope sites rather than a dedicated unit AC.
-        guard insert >= 0, insert < slots.count else { return nil }
+        guard insert >= 0, insert < slots.count else { onRefusal?("slot_index_absent"); return nil }
         return slots[insert]
     }
 
