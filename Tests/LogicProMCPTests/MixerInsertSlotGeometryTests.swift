@@ -108,6 +108,7 @@ private func mixerRuntime(
     b.setChildren(mixer, [strip])
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(strip, stripChildren)
+    addPluginTrackAssociation(b, window: window, strip: strip)
     return b.makeLogicRuntime(appElement: app)
 }
 
@@ -322,6 +323,7 @@ func invalidMultiSlotGeometryIsNotAnAddressableOrder(_ caseName: String) {
 
     let complete = try #require(obj["complete"] as? Bool)
     #expect(complete)
+    #expect(obj["track_name"] as? String == "Fixture Track")
     #expect(plugins.map { $0["insert"] as? Int } == [0, 1, 2])
     #expect(plugins.map { $0["name"] as? String } == ["Channel EQ", "Compressor", "ChromaVerb"])
     #expect(plugins.map { $0["plugin_id"] as? String }
@@ -392,6 +394,9 @@ func invalidMultiSlotGeometryIsNotAnAddressableOrder(_ caseName: String) {
 
     #expect(!result.isSuccess)
     #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "incomplete_inventory")
+    #expect(obj["what_was_observed"] as? String
+        == "one or more insert slots are unreadable (complete:false)")
     let writeAttempted = try #require(obj["write_attempted"] as? Bool)
     #expect(!writeAttempted)
     #expect(b.actionCalls.isEmpty)

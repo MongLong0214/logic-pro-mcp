@@ -79,6 +79,7 @@ private final class LiveFixture: @unchecked Sendable {
         openWindowOnSlotPress: Bool = false,
         forcedAfterValue: Double? = nil,
         otherTracks: Int = 0,
+        mixerAuxCountBeforeTarget: Int = 0,
         duplicateTrackNameAt: Int? = nil,
         pluginSlotNamesByTrack: [Int: [Int: String]] = [:],
         emptyInsertChain: Bool = false,
@@ -91,6 +92,7 @@ private final class LiveFixture: @unchecked Sendable {
         sliderWriteBehavior: SliderWriteBehavior = .direct,
         rejectSliderWrites: Bool = false,
         sliderDisplayUnit: String = "%",
+        sliderDisplayRoundsDown: Bool = false,
         sliderUsesSignedPositiveDisplay: Bool = false,
         pluginWindowStaticTextValues: [String]? = nil,
         pluginWindowTitleReadFails: Bool = false,
@@ -185,12 +187,19 @@ private final class LiveFixture: @unchecked Sendable {
         for i in 0..<rowCount {
             let strip = b.element(1200 + i)
             b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            let nameField = b.element(150_000 + i)
+            b.setAttribute(nameField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+            b.setAttribute(nameField, kAXDescriptionAttribute as String, "이름")
+            b.setAttribute(nameField, kAXValueAttribute as String,
+                           i == track || i == duplicateTrackNameAt ? trackDisplayName : "Other \(i)")
             if i == track {
                 if emptyInsertChain {
                     // #234 — a Master/VCA-shaped target strip that exposes zero
                     // enumerable insert slots, to exercise the slot-addressing
                     // guard's zero-slot branch.
-                    b.setChildren(strip, masterShapedStripChildren(b, base: 1500))
+                    let noInsertChildren = masterShapedStripChildren(b, base: 1500)
+                    b.setAttribute(noInsertChildren[0], kAXValueAttribute as String, trackDisplayName)
+                    b.setChildren(strip, noInsertChildren)
                 } else {
                     var slots: [AXUIElement] = []
                     for s in 0...insert {
@@ -217,6 +226,19 @@ private final class LiveFixture: @unchecked Sendable {
                 b.setChildren(strip, slots)
             } else {
                 b.setChildren(strip, [LiveFixture.emptySlot(b, 1400 + i)])
+            }
+            b.setChildren(strip, [nameField] + b.makeAXRuntime().children(strip))
+            if i == track {
+                for aux in 0..<mixerAuxCountBeforeTarget {
+                    let auxStrip = b.element(160_000 + aux)
+                    let auxName = b.element(161_000 + aux)
+                    b.setAttribute(auxStrip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+                    b.setAttribute(auxName, kAXRoleAttribute as String, kAXTextFieldRole as String)
+                    b.setAttribute(auxName, kAXDescriptionAttribute as String, "이름")
+                    b.setAttribute(auxName, kAXValueAttribute as String, "Aux \(aux + 1)")
+                    b.setChildren(auxStrip, [auxName, LiveFixture.emptySlot(b, 162_000 + aux)])
+                    strips.append(auxStrip)
+                }
             }
             strips.append(strip)
         }
@@ -250,7 +272,8 @@ private final class LiveFixture: @unchecked Sendable {
         b.setAttribute(slider, kAXMaxValueAttribute as String, 100.0)
         let formatSliderDisplay: @Sendable (Double) -> String = { value in
             let sign = sliderUsesSignedPositiveDisplay && value > 0 ? "+" : ""
-            return "\(sign)\(Int(value.rounded())) \(sliderDisplayUnit)"
+            let displayed = sliderDisplayRoundsDown ? value.rounded(.down) : value.rounded()
+            return "\(sign)\(Int(displayed)) \(sliderDisplayUnit)"
         }
         b.setAttribute(slider, kAXValueDescriptionAttribute as String, formatSliderDisplay(beforeValue))
         b.setAttribute(pluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
@@ -988,6 +1011,46 @@ private func namedEQBandParams(
     let noViewMenuSelection = fixture.controlsViewMenuPressCount.value == 0
         && fixture.editorViewMenuPressCount.value == 0
     #expect(noViewMenuSelection)
+}
+
+@Test func testVerifiedParameterBindsArrangeNineToMixerElevenPastTwoAuxes() async {
+    let fixture = LiveFixture(track: 9, trackDisplayName: "Bass", mixerAuxCountBeforeTarget: 2)
+    let obj = await runLive(fixture: fixture, params: thresholdParams(track: 9))
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+    #expect(fixture.sliderWriteCount.value == 1)
+    let identity = obj["target_identity"] as? [String: Any]
+    #expect(identity?["track_index"] as? Int == 9)
+}
+
+@Test func testThresholdPercentAliasKeepsRawHalfPercentAndReportsRoundedDisplay() async {
+    let fixture = LiveFixture(sliderDisplayRoundsDown: true)
+    let obj = await runLive(fixture: fixture, params: thresholdParams(value: "0.5", unit: "percent"))
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 0.5)
+    #expect(obj["requested_normalized"] as? Double == 0.5)
+    #expect(obj["observed_normalized"] as? Double == 0.5)
+    #expect(obj["observed_display"] as? String == "0 %")
+    #expect(obj["tolerance"] as? Double == 1)
+}
+
+@Test func testThresholdPercentAliasesDoNotConvertThirtyEightToFractionOrDB() async {
+    for unit in ["percent", "%", "normalized"] {
+        let fixture = LiveFixture()
+        let obj = await runLive(fixture: fixture, params: thresholdParams(value: "38", unit: unit))
+        #expect(obj["state"] as? String == "A")
+        #expect(fixture.currentSliderValue == 38)
+        #expect(obj["observed_display"] as? String == "38 %")
+    }
+}
+
+@Test func testThresholdPercentRequestOutsideRawScaleNeverWrites() async {
+    for value in ["-1", "101"] {
+        let fixture = LiveFixture()
+        let obj = await runLive(fixture: fixture, params: thresholdParams(value: value, unit: "percent"))
+        #expect(obj["state"] as? String == "C")
+        #expect(fixture.sliderWriteCount.value == 0)
+    }
 }
 
 @Test func testCompressorThresholdSwitchesControlsToEditorThenRestoresControls() async throws {
@@ -1993,9 +2056,11 @@ private func namedEQBandParams(
     )
 
     let result = await runLive(fixture: fixture, params: thresholdParams())
+    // AXWindows now also owns Arrange identity acquisition. A globally unreadable
+    // list refuses there before the duplicate-editor census; its direct status
+    // preservation remains covered by testPluginEditorEnumerationPreservesCannotCompleteAsAReadFailure.
     let unreadablePrecountRefusedBeforeThePress = result["state"] as? String == "C"
-        && result["error"] as? String == "window_identity_unresolved"
-        && result["plugin_window_read_failure"] as? String == "-25204"
+        && result["error"] as? String == "incomplete_inventory"
         && fixture.targetOpenControlPressCount.value == 0
         && fixture.currentSliderValue == 51
     #expect(unreadablePrecountRefusedBeforeThePress)
@@ -3326,6 +3391,11 @@ private final class OneShotStickyFixture: @unchecked Sendable {
             slots.append(g)
         }
         b.setChildren(strip, slots)
+        let stripName = b.element(3201)
+        b.setAttribute(stripName, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        b.setAttribute(stripName, kAXDescriptionAttribute as String, "이름")
+        b.setAttribute(stripName, kAXValueAttribute as String, trackName)
+        b.setChildren(strip, [stripName] + slots)
         b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
         b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
         b.setChildren(mixer, [strip])

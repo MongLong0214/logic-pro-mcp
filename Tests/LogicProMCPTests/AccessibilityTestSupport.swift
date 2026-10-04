@@ -1,5 +1,38 @@
 @preconcurrency import ApplicationServices
 import Foundation
+
+/// Supply the independently observed Arrange/strip identity required by verified plug-in paths.
+/// Older fixtures modelled only inserts; their unrelated slot assertions remain unchanged.
+func addPluginTrackAssociation(
+    _ builder: FakeAXRuntimeBuilder,
+    window: AXUIElement,
+    strip: AXUIElement,
+    name: String = "Fixture Track",
+    base: Int = 800_000
+) {
+    let headers = builder.element(base)
+    let header = builder.element(base + 1)
+    let nameField = builder.element(base + 2)
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(headers, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(headers, kAXDescriptionAttribute as String, "트랙 헤더")
+    builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    builder.setAttribute(header, kAXDescriptionAttribute as String, "1개의 ‘\(name)’ 트랙")
+    builder.setAttribute(header, kAXSelectedAttribute as String, true)
+    builder.setChildren(headers, [header])
+    builder.setAttribute(nameField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    builder.setAttribute(nameField, kAXDescriptionAttribute as String, "이름")
+    builder.setAttribute(nameField, kAXValueAttribute as String, name)
+    let ax = builder.makeAXRuntime()
+    for child in ax.children(strip)
+        where AXHelpers.getRole(child, runtime: ax) == (kAXTextFieldRole as String)
+            && AXLocalePolicy.mixerStripNameField.matches(AXHelpers.getDescription(child, runtime: ax), mode: .exact)
+            && AXHelpers.getAttribute(child, kAXValueAttribute as String, runtime: ax) as String? == nil {
+        builder.setAttribute(child, kAXValueAttribute as String, name)
+    }
+    builder.setChildren(window, [headers] + ax.children(window))
+    builder.setChildren(strip, [nameField] + ax.children(strip))
+}
 @testable import LogicProMCP
 
 final class FakeAXRuntimeBuilder: @unchecked Sendable {

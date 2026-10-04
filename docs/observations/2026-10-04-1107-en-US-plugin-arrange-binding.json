@@ -1,0 +1,139 @@
+{
+  "id": "2026-10-04-1107-en-US-plugin-arrange-binding",
+  "date": "2026-10-04",
+  "schema": 3,
+  "subject": "Arrange identities remain distinct from Mixer ordinals in plug-in inventory and verified writes",
+  "question": "Can independently named Arrange tracks bind to different Mixer ordinals for occupied parameter writes and empty-slot insertion without using ordinal or duplicate-name rank fallbacks?",
+  "verdict": "partial",
+  "issues": [
+    1107
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "On a disposable project, give two Arrange tracks distinct names; put stock Compressor and Channel EQ on one and leave three physical insert slots empty on the other. Open the embedded Mixer in All mode with non-track strips between track strips; refresh the MCP cache, get_inventory by Arrange index and retain its occupied and empty plugin_insert_ref values. In duplicate_applyback mode with the exact disposable project_expected_path, request Compressor threshold 38 percent then its independently read original value, and Channel EQ Peak 1 Gain 3 dB then its independently read original value. Open each occupied editor separately through its exact named strip and read AXValue/AXValueDescription before, after and after restoration. Request Gain insertion through the empty ref after selecting the other track; preserve any first-request State C. If safe_to_retry is true and the slot still reads empty, retry once; independently read the resulting named Gain editor, then reuse the old empty ref to check refusal. Stop the server, quit/discard the disposable project, restore its backup, reopen and verify empty slots and original parameter values.",
+    "expected": "Occupied writes bind the independently named Arrange track despite different Mixer ordinals; direct editor reads observe 65 -> 38 -> 65 percent and +2.2 -> +3.0 -> +2.2 dB on this fixture. Wrong occupied-plugin requests and re-used occupied-as-empty refs refuse with write_attempted:false. Preserve, rather than reclassify, a first insert refusal; a successful retry must read Gain at the requested physical slot. Restored fixture reads three empty slots and original parameter values.",
+    "cost": "About 10 minutes per locale with Accessibility granted and an owned disposable Logic project"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXPluginTrackBinding.swift:resolve",
+    "Sources/LogicProMCP/Accessibility/AXPluginInstanceIdentity.swift:stripNameResult",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:defaultGetPluginInventory",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:defaultInsertVerified",
+    "Sources/LogicProMCP/Dispatchers/PluginsDispatcher+TargetReferences.swift"
+  ],
+  "evidence": [
+    "evidence/2026-10-04-1107-plugin-arrange-binding.json"
+  ],
+  "method": "Measured the immutable binary carrying commit 0ebf2fa7b70c11f84ed204c50b39e5889eec9c1d (SHA-256 47b929f5dbe9105f1d7828eab7470c263846209b3065d1b488f99e5486fc7125), not a later documentation head. The owned fixture has two distinct synthetic track names. Actual MCP responses were recorded; a separate cfbridge AX reader located the embedded full Mixer by its direct strips, the unique strip by its semantic name field, and the occupied editor by a separately read window title and plug-in static text. That reader only opened/closed occupied editors, never wrote parameters. Slider read failures remain failures. Full raw reads are retained privately; the public receipt contains selected actual responses/readbacks, original artifact hashes and all-slider projection hashes, with only the disposable project path redacted.",
+  "canon_not_applicable": {
+    "reason": "This record measures identity association, distinct index spaces, parameter readback, popup geometry and conservative refusal after selection. It does not assert a localized string's origin; the separately derived semantic name-field label is cited to Apple's Name row in the implementation and PR description."
+  },
+  "observations": [
+    {
+      "what": "Two uniquely named Arrange tracks associated with different full-Mixer ordinals",
+      "bindings": [
+        {
+          "arrange_index": 11,
+          "mixer_strip_index": 25
+        },
+        {
+          "arrange_index": 10,
+          "mixer_strip_index": 41
+        }
+      ]
+    },
+    {
+      "what": "Occupied Compressor percentage control independently read before write, after write and after inverse write",
+      "values": [
+        65,
+        38,
+        65
+      ],
+      "verified_write_states": [
+        "A",
+        "A"
+      ],
+      "all_slider_records_restored": 20,
+      "unread_slider_descriptions": 1
+    },
+    {
+      "what": "Occupied Channel EQ first peak-band gain independently read before write, after write and after inverse write",
+      "values_db": [
+        2.2,
+        3,
+        2.2
+      ],
+      "verified_write_states": [
+        "A",
+        "A"
+      ],
+      "all_slider_records_restored": 26,
+      "unread_slider_descriptions": 0
+    },
+    {
+      "what": "Wrong occupied-plugin identity for the generic parameter operation and wrong occupied plug-in ref for named EQ were rejected before writing",
+      "count": 2,
+      "state": "C",
+      "write_attempted": false
+    },
+    {
+      "what": "First empty-slot insertion after selecting a different track did not establish the originally acquired binding as stable",
+      "count": 1,
+      "state": "C",
+      "setup_stage": "target_track_binding_changed_after_selection",
+      "write_attempted": false,
+      "safe_to_retry": true
+    },
+    {
+      "what": "One retry with the same track already selected read the requested Gain at physical slot zero and independently opened its named editor",
+      "count": 1,
+      "state": "A",
+      "arrange_index": 10,
+      "mixer_strip_index": 41,
+      "slot": 0,
+      "opener": "custom_action",
+      "menu_frame": {
+        "x": 1612,
+        "y": 514,
+        "width": 230,
+        "height": 560
+      },
+      "slot_frame": {
+        "x": 1842,
+        "y": 527,
+        "width": 58,
+        "height": 18
+      }
+    },
+    {
+      "what": "The former empty-slot reference refused after insertion rather than addressing the occupied slot as empty",
+      "count": 1,
+      "state": "C",
+      "write_attempted": false
+    },
+    {
+      "what": "After stopping the measured server, restoring the owned backup and reopening in Korean, the target chain had three empty physical slots and occupied controls retained their initial values",
+      "empty_slots": 3,
+      "compressor_percent": 65,
+      "eq_peak1_gain_db": 2.2
+    }
+  ],
+  "conclusion": "Both occupied verified-write paths used the Arrange identity despite the different Mixer ordinal, and direct editor reads confirmed requested changes and inverse restoration. Empty-slot insertion succeeded only on the single safe retry; the first request stayed State C without slot dispatch. The left-opening popup was anchored by its right edge touching the target slot's left edge, without relaxing remote-menu or unread-target refusal.",
+  "limits": [
+    "Only this Logic 12.3 build 6674 / macOS 26.3 host and this record's UI locale were measured. The reporter's Logic 12.3.1/12.4 reproduction is attributed evidence, not qualification performed here.",
+    "This is behavioural measurement, not an E-clean campaign, a film/screenshot qualification, or an audible/rendered audio result. Percentage readback does not establish a dB threshold conversion or exact movement within the one-percentage-point tolerance.",
+    "First insertion after changing selected track still refused in both measured locales; the strict original binding was not observed stable. The underlying CF replacement versus AX read failure was not determined, and no fallback or timeout increase was used to manufacture first-request success.",
+    "Duplicate/missing names, unread siblings, retained-Mixer ownership, same-name replacement and transient-read recovery are regression-tested with fake AX runtimes, not independently qualified in a live duplicate-name project.",
+    "Full raw slider projections are not embedded in this public receipt; their source-file and projection hashes identify the private measurements. Failed slider-description reads were retained and do not establish all controls' semantic identity.",
+    "The re-opened restoration was measured in Korean, not independently in every locale. No changes were made to the user's original music project."
+  ],
+  "supersedes": null
+}

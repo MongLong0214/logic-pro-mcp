@@ -183,6 +183,8 @@ Read `logic://mixer` before and after mixer mutations.
 
 This is the verified apply-back surface.
 
+For every `logic_plugins` command, `track` is the zero-based Arrange track-header index, not the Mixer strip ordinal. `get_inventory` reports the observed `track_name` and `mixer_strip_index`; the latter is a read-only diagnostic, not a mutation selector. Aux strips can make these indices differ: if Bass is Arrange track 9 and Mixer strip 11, use `track: 9` for inventory and writes. Clients that previously compensated for the indexing bug by passing 11 must switch to 9. A `plugin_insert_ref` binds the observed Arrange identity, physical insert slot and occupied plugin identity (or a verified empty slot), rather than the Mixer ordinal; unreadable or incomplete inventory does not issue usable insert references.
+
 Flow:
 
 1. `get_inventory` reads the target track's plugin insert slots.
@@ -192,7 +194,7 @@ Flow:
 Important constraints:
 
 - `insert_verified` requires a confirmation gate named `duplicate_applyback` when the operation can mutate an existing session.
-- `set_param_verified` currently verifies Compressor `threshold` only, normalized 0..100, tolerance 1.0.
+- For Compressor `threshold`, use `unit: "percent"` or `unit: "%"` with a value in 0..100. The legacy `unit: "normalized"` is retained with exactly the same 0..100 percentage scale: `value: 0.5` means half a percent, **not** 50 percent. No 0..1 fraction or dB conversion is performed. Readback tolerance remains 1.0 percentage point, not a fraction or a dB guarantee; near zero it can accept an unchanged zero readback for a 0.5 request. State A means readback was within that tolerance, not that the exact requested value or an audible/dB result was achieved.
 - `set_param_verified` can open the target insert's plugin editor when it is closed, but it writes only after the requested AX slider is present in the acquired window.
 - Arbitrary plugin parameters fail closed with `unsupported_param_readback`.
 - The legacy Scripter `set_plugin_param` path is a legacy unverified State B path. Use `logic_plugins.set_param_verified` for verified apply-back.
@@ -207,7 +209,7 @@ Minimal `set_param_verified` shape:
   "plugin": "logic.stock.effect.compressor",
   "param": "threshold",
   "value": 60,
-  "unit": "normalized",
+  "unit": "percent",
   "mode": "duplicate_applyback",
   "project_expected_path": "/path/to/project.logicx"
 }

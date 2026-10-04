@@ -157,6 +157,7 @@ private func makeMixerFixture(
     b.setChildren(mixer, [strip])
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(strip, stripChildren(b))
+    addPluginTrackAssociation(b, window: window, strip: strip)
     guard let unreadChildren else { return b.makeLogicRuntime(appElement: app) }
     if unreadChildren == .mixer, mixerByIdentifier {
         // The older shape. Logic 12.2 and 12.3 show the layout area above, with no identifier.
@@ -290,7 +291,7 @@ func testGetInventoryDoesNotReportUnreadChildrenAsAbsent(mixerUnread: Bool, mixe
     #expect(obj["reason"] as? String == "readback_unavailable")
     #expect(obj["plugins_unknown_reason"] as? String == "ax_subtree_unreadable")
     let observed = try #require(obj["what_was_observed"] as? String)
-    #expect(observed.contains(mixerUnread ? "the mixer's children did not read" : "its children did not read"))
+    #expect(observed.contains(mixerUnread ? "the mixer's children did not read" : "the strip's children did not read"))
     #expect(!observed.contains("is not present"), "a Mixer nobody saw is not one without the track")
     #expect(!observed.contains("0 enumerable"), "a strip nobody saw is not one without inserts")
 }
@@ -326,6 +327,7 @@ func testGetInventoryDoesNotReportUnreadChildrenAsAbsent(mixerUnread: Bool, mixe
             b.setChildren(strip, [slot])
             b.setChildren(mixer, [strip])
             b.setChildren(window, [mixer])
+            addPluginTrackAssociation(b, window: window, strip: strip)
             return (
                 mixer,
                 .init(
@@ -386,6 +388,7 @@ func testGetInventoryDoesNotReportUnreadChildrenAsAbsent(mixerUnread: Bool, mixe
             b.setChildren(strip, [slot])
             b.setChildren(mixer, [strip])
             b.setChildren(window, [mixer])
+            addPluginTrackAssociation(b, window: window, strip: strip)
             return (
                 mixer,
                 .init(
@@ -543,6 +546,14 @@ func testGetInventoryStateAImpliesNonEmptyPlugins(_ slotCount: Int) async {
     let b = FakeAXRuntimeBuilder()
     let strip = makeLiveDumpStrip(b, id: 600)
     let fixture = make123MixerFixture(stripCount: 3, firstStrip: strip, builder: b)
+    addPluginTrackAssociation(b, window: b.element(11), strip: strip, name: "Deluxe Classic")
+    for (index, other) in fixture.strips.enumerated() where index != 0 {
+        let field = b.element(810_000 + index)
+        b.setAttribute(field, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        b.setAttribute(field, kAXDescriptionAttribute as String, "이름")
+        b.setAttribute(field, kAXValueAttribute as String, "Other \(index)")
+        b.setChildren(other, [field] + b.makeAXRuntime().children(other))
+    }
 
     let result = await AccessibilityChannel.defaultGetPluginInventory(
         params: ["track": "0"],
@@ -564,8 +575,8 @@ func testGetInventoryStateAImpliesNonEmptyPlugins(_ slotCount: Int) async {
 @Test func testGetInventoryToolbarSelectedFlowsToStateB() async {
     // Simulate the pre-T1 wrong selection: feed the mixer TOOLBAR (not the strips
     // container) as the mixer. Its 8 widgets are treated as "strips" via the
-    // all-children fallback, strip[0] enumerates zero slots — and the honesty gate
-    // degrades that blind path to State B, never a false State A (AC-3.3 / US-3).
+    // all-children fallback. No Arrange/strip identity can be established, so
+    // the path refuses before any empty-chain claim (AC-3.3 / US-3).
     let fixture = make123MixerFixture(stripCount: 3)
     let toolbar = try! #require(fixture.toolbar)
 
@@ -576,6 +587,6 @@ func testGetInventoryStateAImpliesNonEmptyPlugins(_ slotCount: Int) async {
     )
     let obj = decodeObject(result.message)
     #expect(obj["state"] as? String == "B")
-    #expect(obj["plugins_unknown_reason"] as? String == "insert_section_not_enumerable")
+    #expect(obj["plugins_unknown_reason"] as? String == "ax_subtree_unreadable")
     #expect(obj["plugins"] == nil)
 }

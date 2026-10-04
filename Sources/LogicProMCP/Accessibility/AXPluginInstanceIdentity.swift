@@ -197,7 +197,14 @@ public enum AXPluginInstanceIdentity {
                     }
                     let hits = slots.filter { slotNameMatches($0.name, pluginName: pluginName) }.map(\.index)
                     guard !hits.isEmpty else { continue }
-                    strips.append(Strip(ordinal: index, name: stripName(strip, runtime: runtime.ax), insertSlots: hits))
+                    let name: String?
+                    switch stripNameResult(strip, runtime: runtime.ax) {
+                    case .success(let observed): name = observed
+                    case .failure:
+                        name = nil
+                        readWhole = false
+                    }
+                    strips.append(Strip(ordinal: index, name: name, insertSlots: hits))
                 }
             } else {
                 mixerChildrenUnreadable = true
@@ -247,30 +254,66 @@ public enum AXPluginInstanceIdentity {
                           diagnostics: diagnostics(note: note))
     }
 
-    /// A strip's readable name: the text field (or, failing that, static text)
-    /// whose value is non-empty and is not a numeric level readout. The lookup
-    /// is a census, not a first match: every candidate of the role is counted,
-    /// and the name is returned only when the name-like readings agree on ONE
-    /// string. Two distinct readings are an ambiguity a read-only census must
-    /// not settle by tree order, so the strip keeps its ordinal (nil) and the
-    /// join stays honest. Measured 12.3.1 docked Mixer: one name field per
-    /// strip, the level and pan readouts are numeric static texts.
+    /// Compatibility wrapper for read-only callers. Missing, ambiguous and failed names all
+    /// remain nil here; callers authorizing a write use the status-preserving counterpart.
     static func stripName(_ strip: AXUIElement, runtime: AXHelpers.Runtime) -> String? {
-        for role in [kAXTextFieldRole as String, kAXStaticTextRole as String] {
-            let census = AXHelpers.censusDescendant(of: strip, role: role, maxDepth: 3, runtime: runtime)
-            var readings: [String] = []
-            for element in census.matches {
-                guard let text = AXValueExtractors.extractTextValue(element, runtime: runtime)?
-                        .trimmingCharacters(in: .whitespacesAndNewlines),
-                      !text.isEmpty, Double(text) == nil, !readings.contains(text) else { continue }
-                readings.append(text)
-            }
-            if readings.count == 1 { return readings[0] }
-            if readings.count > 1 { return nil }
+        if case .success(let name) = stripNameResult(strip, runtime: runtime) { return name }
+        return nil
+    }
+
+    /// Only a direct, semantically labelled Name text field supplies a strip name. Archived
+    /// Logic 12.3 EN/KO/JA/DE censuses expose it directly under the strip; nested plug-in controls
+    /// are not channel-strip name authority. Numeric user names are valid; decorated fader
+    /// values and opaque AXDescription/title metadata are not names.
+    static func stripNameResult(
+        _ strip: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(strip, runtime: runtime) {
+        case .success(let observed): children = observed
+        case .failure(let error) where error.isDefinitiveAbsence: children = []
+        case .failure(let error): return .failure(error)
         }
-        let title = AXHelpers.getTitle(strip, runtime: runtime)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (title?.isEmpty ?? true) ? nil : title
+        var names = Set<String>()
+        var missingName = false
+        for field in children {
+            let role: String?
+            switch AXHelpers.getAttributeResult(field, kAXRoleAttribute as String, runtime: runtime)
+                as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let text): role = text
+            case .failure(let error) where error.isDefinitiveAbsence: role = nil
+            case .failure(let error): return .failure(error)
+            }
+            guard let role, !role.isEmpty else {
+                missingName = true
+                continue
+            }
+            guard role == kAXTextFieldRole as String else { continue }
+            let description: String?
+            switch AXHelpers.getAttributeResult(field, kAXDescriptionAttribute as String, runtime: runtime)
+                as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let text): description = text
+            case .failure(let error) where error.isDefinitiveAbsence: description = nil
+            case .failure(let error): return .failure(error)
+            }
+            guard let description, !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                missingName = true
+                continue
+            }
+            guard AXLocalePolicy.mixerStripNameField.matches(description, mode: .exact) else { continue }
+            switch AXHelpers.getAttributeResult(field, kAXValueAttribute as String, runtime: runtime)
+                as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let text):
+                guard let name = text?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+                    missingName = true
+                    continue
+                }
+                names.insert(name)
+            case .failure(let error) where error.isDefinitiveAbsence: missingName = true
+            case .failure(let error): return .failure(error)
+            }
+        }
+        return .success(!missingName && names.count == 1 ? names.first : nil)
     }
 
     /// Depth-first search for the first descendant whose `kAXIdentifier` starts
@@ -303,18 +346,27 @@ public enum AXPluginInstanceIdentity {
 
     /// Whether any read made under `noting(_:over:)` failed with a status other
     /// than -25205/-25212.
-    private final class FailedReads: @unchecked Sendable {
+    final class FailedReads: @unchecked Sendable {
         private let lock = NSLock()
         private var count = 0
+        private var error: AXHelpers.AXStatusError?
 
         var any: Bool {
             lock.lock(); defer { lock.unlock() }
             return count > 0
         }
 
+        var firstError: AXHelpers.AXStatusError? {
+            lock.lock(); defer { lock.unlock() }
+            return error
+        }
+
         func note<T>(_ result: Result<T, AXHelpers.AXStatusError>) -> Result<T, AXHelpers.AXStatusError> {
             if case let .failure(error) = result, !error.isDefinitiveAbsence {
-                lock.lock(); count += 1; lock.unlock()
+                lock.lock()
+                count += 1
+                if self.error == nil { self.error = error }
+                lock.unlock()
             }
             return result
         }
@@ -329,7 +381,7 @@ public enum AXPluginInstanceIdentity {
     /// the census call that read partial without changing what the classifier
     /// returns to anyone else. In production the status-preserving read is the
     /// same AX call the lossy one makes, so the classifier sees the same answers.
-    private static func noting(_ failures: FailedReads, over base: AXHelpers.Runtime) -> AXHelpers.Runtime {
+    static func noting(_ failures: FailedReads, over base: AXHelpers.Runtime) -> AXHelpers.Runtime {
         let attribute: @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError> = { element, name in
             failures.note(AXHelpers.getAttributeResult(element, name, runtime: base))
         }

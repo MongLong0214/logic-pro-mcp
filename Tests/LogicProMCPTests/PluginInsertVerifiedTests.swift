@@ -99,6 +99,7 @@ private func makeMixerFixture(
     b.setChildren(mixer, [strip])
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(strip, stripChildren(b))
+    addPluginTrackAssociation(b, window: window, strip: strip)
     guard let unreadChildren else { return b.makeLogicRuntime(appElement: app) }
     if unreadChildren == .mixer, mixerByIdentifier {
         // The older shape. Logic 12.2 and 12.3 show the layout area above, with no identifier.
@@ -855,8 +856,24 @@ private final class SlotOccupier: @unchecked Sendable {
 
 private let coordFreeExpectedPath = "/Users/me/Music/CoordFree425 copy.logicx"
 
+private final class SelectionBindingReadFailure: @unchecked Sendable {
+    private let lock = NSLock()
+    private var selected = false
+    private var consumed = false
+    func markSelected() { lock.withLock { selected = true } }
+    func consume() -> Bool {
+        lock.withLock {
+            guard selected && !consumed else { return false }
+            consumed = true
+            return true
+        }
+    }
+}
+
 private struct SlotPopupInsertFixture {
     let runtime: AXLogicProElements.Runtime
+    let ownerWindowID: Int
+    let otherWindowID: Int
     let slotItemID: Int
     let categoryItemID: Int?
     let nonMatchingLeafItemID: Int?
@@ -892,7 +909,9 @@ private func makeSlotPopupInsertFixture(
     occupySlotOnWindowRaise: Bool = false,
     includeNonFormatSubmenu: Bool = false,
     includeNonTerminalFormatEntry: Bool = false,
-    leftoverNeighbourMenuVisible: Bool = false
+    leftoverNeighbourMenuVisible: Bool = false,
+    includeOtherMixerWindow: Bool = false,
+    failBindingReadOnceAfterSelection: Bool = false
 ) -> SlotPopupInsertFixture {
     let b = FakeAXRuntimeBuilder()
     let app = b.element(9000)
@@ -949,6 +968,19 @@ private func makeSlotPopupInsertFixture(
     b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
     b.setAttribute(window, kAXTitleAttribute as String, "CoordFree425 — Tracks")
     b.setChildren(window, [headersGroup, mixer])
+    let stripName = b.element(9050)
+    b.setAttribute(stripName, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(stripName, kAXDescriptionAttribute as String, "이름")
+    b.setAttribute(stripName, kAXValueAttribute as String, "Track 1")
+    b.setChildren(strip, [stripName, slot])
+
+    // Another Mixer may be first in AXWindows; it is not the acquired slot's owner.
+    let otherWindow = b.element(9060)
+    let otherMixer = b.element(9061)
+    b.setAttribute(otherWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(otherMixer, kAXRoleAttribute as String, kAXGroupRole as String)
+    b.setAttribute(otherMixer, kAXIdentifierAttribute as String, "Mixer")
+    b.setChildren(otherWindow, [otherMixer])
 
     // Slot popup: visible + anchored after the modeled custom slot-open action.
     b.setAttribute(gainItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
@@ -1069,7 +1101,7 @@ private func makeSlotPopupInsertFixture(
         b.setAttribute(replacementSlot, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
         b.setAttribute(replacementSlot, kAXPositionAttribute as String, axPoint(400, 300))
         b.setAttribute(replacementSlot, kAXSizeAttribute as String, axSize(70, 18))
-        b.setChildren(strip, [replacementSlot])
+        b.setChildren(strip, [stripName, replacementSlot])
     }
 
     let slotOccupier = SlotOccupier {
@@ -1084,8 +1116,20 @@ private func makeSlotPopupInsertFixture(
         b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
         b.setChildren(slot, [bypass, open])
     }
+    if includeOtherMixerWindow {
+        b.setAttribute(app, kAXWindowsAttribute as String, [otherWindow, window])
+    }
+    let bindingReadFailure = SelectionBindingReadFailure()
     let runtime = b.makeLogicRuntime(
         appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            if failBindingReadOnceAfterSelection,
+               CFEqual(element, stripName), attribute == kAXValueAttribute as String,
+               bindingReadFailure.consume() {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            }
+            return nil
+        },
         setAttributeHandler: { element, attribute, _ in
             actions.recordAttributeWrite(elementID: b.elementID(element), attribute: attribute)
             return true
@@ -1093,6 +1137,9 @@ private func makeSlotPopupInsertFixture(
         performActionHandler: { element, action in
             let elementID = b.elementID(element)
             actions.record(elementID: elementID, action: action)
+            if CFEqual(element, headerRow), action == kAXPressAction as String {
+                bindingReadFailure.markSelected()
+            }
             if occupySlotOnWindowRaise,
                elementID == windowKey,
                action == (kAXRaiseAction as String) {
@@ -1124,6 +1171,8 @@ private func makeSlotPopupInsertFixture(
     )
     return SlotPopupInsertFixture(
         runtime: runtime,
+        ownerWindowID: b.elementID(window),
+        otherWindowID: b.elementID(otherWindow),
         slotItemID: slotKey,
         categoryItemID: categoryKey,
         nonMatchingLeafItemID: nonMatchingLeafKey,
@@ -1167,6 +1216,24 @@ private func run425Insert(
             await runRealInsert(runtime: fixture.runtime)
         }
     }
+}
+
+@Test func testPlugin1107InsertWaitsForSameBindingAfterTransientSelectionRead() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, failBindingReadOnceAfterSelection: true)
+    let obj = await run425Insert(fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction])
+    #expect(obj["state"] as? String == "A")
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let bindingStable = try #require(trace["target_binding_stable_after_selection"] as? Bool)
+    #expect(bindingStable)
+}
+
+@Test func testPlugin1107InsertRaisesAcquiredMixerWindowNotAnotherMixer() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, includeOtherMixerWindow: true)
+    let obj = await run425Insert(fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction])
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.actions.contains(elementID: fixture.ownerWindowID, action: kAXRaiseAction as String))
+    #expect(!fixture.actions.contains(elementID: fixture.otherWindowID, action: kAXRaiseAction as String),
+            "global discovery of another Mixer must not redirect the acquired slot's foreground window")
 }
 
 @Test func testPlugin425SlotOpenCustomActionFailureProceedsWhenPopupIsObserved() async throws {
@@ -1695,7 +1762,8 @@ private func emptyLogicRuntimeForRollbackTests() -> AXLogicProElements.Runtime {
     b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(mixer, [strip])
-    b.setChildren(strip, [])
+    b.setChildren(strip, [addEmptySlot(b, 9704)])
+    addPluginTrackAssociation(b, window: window, strip: strip)
     return b.makeLogicRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: { _, _ in false })
 }
 

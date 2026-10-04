@@ -80,6 +80,8 @@ import Testing
 @Test func testCompressorThresholdUnitRangeToleranceAndAXDescription() {
     let id = "logic.stock.effect.compressor"
     #expect(VerifiedPluginCatalog.paramUnit(pluginID: id, paramKey: "threshold") == "normalized")
+    let metadata = VerifiedPluginCatalog.productionEntryLookup(id)?.parameters.first { $0.id == "threshold" }
+    #expect(metadata?.acceptedUnits == ["normalized", "percent", "%"])
     let range = VerifiedPluginCatalog.paramRange(pluginID: id, paramKey: "threshold")
     #expect(range?.min == 0)
     #expect(range?.max == 100)

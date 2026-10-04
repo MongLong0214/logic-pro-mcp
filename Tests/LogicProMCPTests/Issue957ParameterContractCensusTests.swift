@@ -443,7 +443,14 @@ struct Issue957ParameterContractCensusTests {
             await cache.updateTracks([TrackState(id: 0, name: "Track 1", type: .audio)])
             let registry = TargetRegistry()
             let descriptor = TargetDescriptor(trackIndex: 0, trackName: "Track 1")
-            let fingerprint = "\(descriptor.fingerprint)|insert=2|plugin="
+            let observedPlugin: String
+            switch id {
+            case "plugins.insert_verified": observedPlugin = ""
+            case "plugins.set_eq_band_verified": observedPlugin = "logic.stock.effect.channel_eq"
+            default:
+                observedPlugin = VerifiedPluginCatalog.canonicalPluginID(from: request["plugin"]?.stringValue ?? "") ?? ""
+            }
+            let fingerprint = "\(descriptor.fingerprint)|insert=2|plugin=\(observedPlugin)"
             let reference = await registry.bind(kind: .pluginInsert, descriptor: descriptor, fingerprint: fingerprint)
             request["target_ref"] = .string(reference.rawValue)
             if !Self.schemaAdmits(branch, request) { problems.append("\(id): the schema refuses \(request.keys.sorted())") }

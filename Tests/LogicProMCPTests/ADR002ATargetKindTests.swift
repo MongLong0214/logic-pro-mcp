@@ -152,6 +152,8 @@ struct ADR002ATargetKindTests {
         let inventory = HonestContract.encodeV2StateA(extras: [
             "operation": "logic_plugins.get_inventory",
             "track": 2,
+            "track_name": "Bass",
+            "mixer_strip_index": 4,
             "complete": true,
             "plugins": [
                 [
@@ -212,10 +214,165 @@ struct ADR002ATargetKindTests {
     }
 
     @Test
+    func testPluginInventoryRequiresObservedAssociationAndCompleteReadableChain() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cache = await cacheWithTracks()
+            let registry = TargetRegistry()
+            let base: [String: Any] = [
+                "track": 2, "track_name": "Bass", "mixer_strip_index": 4, "complete": true,
+                "plugins": [["insert": 0, "read_status": "ok", "occupied": true,
+                             "name": "Gain", "plugin_id": "logic.stock.effect.gain"]],
+            ]
+            for (key, value) in [
+                ("track_name", NSNull()), ("track_name", "" as Any),
+                ("track_name", "Hi Synth" as Any), ("mixer_strip_index", NSNull()),
+                ("mixer_strip_index", -1 as Any), ("complete", false as Any),
+            ] {
+                var extras = base
+                extras[key] = value
+                let result = await PluginsDispatcher.addInventoryTargetReferences(
+                    to: toolTextResult(HonestContract.encodeV2StateA(extras: extras)),
+                    cache: cache, targetRegistry: registry
+                )
+                let plugins = try #require(object(result)["plugins"] as? [[String: Any]])
+                #expect(plugins[0]["plugin_insert_ref"] == nil)
+                #expect(plugins[0]["name"] as? String == "Gain")
+            }
+            // No cached row is needed to name a track that was actually read;
+            // conversely the missing observed name above must never become Track N.
+            let uncached = await PluginsDispatcher.addInventoryTargetReferences(
+                to: toolTextResult(HonestContract.encodeV2StateA(extras: base)),
+                cache: StateCache(), targetRegistry: registry
+            )
+            let plugins = try #require(object(uncached)["plugins"] as? [[String: Any]])
+            let raw = try #require(plugins[0]["plugin_insert_ref"] as? String)
+            let binding = await registry.resolve(TargetReference(rawValue: raw))
+            #expect(binding?.descriptor.trackName == "Bass")
+        }
+    }
+
+    @Test
+    func testPluginInventoryNeverReferencesUnreadableOrContradictorySlots() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cases: [[[String: Any]]] = [
+                [["insert": 0, "read_status": "unreadable", "occupied": true, "name": "Gain"]],
+                [["insert": 0, "read_status": "ok", "occupied": true]],
+                [["insert": 0, "read_status": "ok", "occupied": false, "name": "Gain"]],
+                [["insert": 0, "read_status": "ok", "occupied": true, "name": "Gain",
+                  "plugin_id": "logic.stock.effect.compressor"]],
+                [["insert": 0, "read_status": "empty", "occupied": false, "name": "Gain"]],
+                [["insert": 0, "read_status": "empty", "occupied": true]],
+                [["insert": 0, "read_status": "empty", "occupied": false],
+                 ["insert": 0, "read_status": "empty", "occupied": false]],
+            ]
+            for slots in cases {
+                let result = await PluginsDispatcher.addInventoryTargetReferences(
+                    to: toolTextResult(HonestContract.encodeV2StateA(extras: [
+                        "track": 2, "track_name": "Bass", "mixer_strip_index": 4,
+                        "complete": true, "plugins": slots,
+                    ])), cache: await cacheWithTracks(), targetRegistry: TargetRegistry()
+                )
+                let returned = try #require(object(result)["plugins"] as? [[String: Any]])
+                #expect(returned.count == slots.count)
+                #expect(returned.allSatisfy { $0["plugin_insert_ref"] == nil })
+            }
+        }
+    }
+
+    @Test
+    func testBassInsertRefUsesArrangeNineNotMixerElevenAndRejectsSelectorConflicts() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cache = StateCache()
+            await cache.updateTracks([
+                TrackState(id: 9, name: "Bass", type: .audio),
+                TrackState(id: 11, name: "Hi Synth", type: .softwareInstrument),
+            ])
+            let registry = TargetRegistry()
+            let inventory = await PluginsDispatcher.addInventoryTargetReferences(
+                to: toolTextResult(HonestContract.encodeV2StateA(extras: [
+                    "track": 9, "track_name": "Bass", "mixer_strip_index": 11, "complete": true,
+                    "plugins": [["insert": 5, "read_status": "ok", "occupied": true,
+                                 "name": "Compressor", "plugin_id": "logic.stock.effect.compressor"]],
+                ])), cache: cache, targetRegistry: registry
+            )
+            let plugins = try #require(object(inventory)["plugins"] as? [[String: Any]])
+            let reference = try #require(plugins[0]["plugin_insert_ref"] as? String)
+            let binding = await registry.resolve(TargetReference(rawValue: reference))
+            #expect(binding?.descriptor == TargetDescriptor(trackIndex: 9, trackName: "Bass"))
+            let params: [String: Value] = [
+                "target_ref": .string(reference), "track": .int(9), "insert": .int(5),
+                "plugin": .string("Compressor"), "param": .string("threshold"), "value": .double(38),
+                "unit": .string("normalized"), "mode": .string("duplicate_applyback"),
+                "project_expected_path": .string("/tmp/project.logicx"),
+            ]
+            let (router, channels) = await router()
+            let success = await PluginsDispatcher.handle(
+                verifiedGate: VerifiedOpGate(), command: "set_param_verified", params: params,
+                router: router, cache: cache, targetRegistry: registry
+            )
+            let successWasNotAnError = success.isError != true
+            #expect(successWasNotAnError)
+            #expect((await channels[0].operations()).first?.1["track"] == "9")
+            #expect((await channels[0].operations()).first?.1["expected_track_name"] == "Bass")
+            for (key, value) in [("track", 11), ("insert", 6), ("slot", 6)] {
+                var conflicting = params
+                conflicting[key] = .int(value)
+                let (blockedRouter, blockedChannels) = await self.router()
+                let refused = await PluginsDispatcher.handle(
+                    verifiedGate: VerifiedOpGate(), command: "set_param_verified", params: conflicting,
+                    router: blockedRouter, cache: cache, targetRegistry: registry
+                )
+                #expect(object(refused)["error"] as? String == "stale_target_reference")
+                let writeAttempted = try #require(object(refused)["write_attempted"] as? Bool)
+                #expect(!writeAttempted)
+                #expect((await blockedChannels[0].operations()).isEmpty)
+            }
+        }
+    }
+
+    @Test
+    func testPluginInsertRefRetainsOriginalPluginIdentityAndEmptyState() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cache = await cacheWithTracks()
+            let registry = TargetRegistry()
+            let descriptor = TargetDescriptor(trackIndex: 2, trackName: "Bass")
+            let occupied = await registry.bind(kind: .pluginInsert, descriptor: descriptor,
+                fingerprint: customPluginFingerprint(insert: 0, plugin: "logic.stock.effect.compressor"))
+            let empty = await registry.bind(kind: .pluginInsert, descriptor: descriptor,
+                fingerprint: customPluginFingerprint(insert: 1, plugin: nil))
+            for (command, reference, requestedPlugin) in [
+                ("set_param_verified", occupied, "Gain"),
+                ("set_eq_band_verified", occupied, "Channel EQ"),
+                ("set_param_verified", empty, "Compressor"),
+                ("set_eq_band_verified", empty, "Channel EQ"),
+                ("insert_verified", occupied, "Gain"),
+            ] {
+                let (router, channels) = await router()
+                let result = await PluginsDispatcher.handle(
+                    verifiedGate: VerifiedOpGate(), command: command,
+                    params: [
+                        "target_ref": .string(reference.rawValue), "plugin": .string(requestedPlugin),
+                        "param": .string("threshold"), "band": .string("Peak 1"),
+                        "parameter": .string("Frequency"), "value": .double(38),
+                        "unit": .string("normalized"), "mode": .string("duplicate_applyback"),
+                        "project_expected_path": .string("/tmp/project.logicx"),
+                    ], router: router, cache: cache, targetRegistry: registry
+                )
+                #expect(object(result)["error"] as? String == "stale_target_reference")
+                let writeAttempted = try #require(object(result)["write_attempted"] as? Bool)
+                #expect(!writeAttempted)
+                #expect((await channels[0].operations()).isEmpty)
+            }
+        }
+    }
+
+    @Test
     func testPluginInventorySkipsRefsWhenSnapshotTurnsStaleBeforeBind() async throws {
         let inventory = HonestContract.encodeV2StateA(extras: [
             "operation": "logic_plugins.get_inventory",
             "track": 2,
+            "track_name": "Bass",
+            "mixer_strip_index": 4,
             "complete": true,
             "plugins": [[
                 "insert": 0,
@@ -318,6 +475,8 @@ struct ADR002ATargetKindTests {
             let pluginOperationsAfterSetParam = await pluginChannels[0].operations()
             #expect(pluginOperationsAfterSetParam.first?.1["track"] == "2")
             #expect(pluginOperationsAfterSetParam.first?.1["insert"] == "0")
+            #expect(pluginOperationsAfterSetParam.first?.1["expected_plugin_identity"] == "logic.stock.effect.gain")
+            #expect(pluginOperationsAfterSetParam.first?.1["expected_slot_read_status"] == "ok")
 
             let (insertRouter, insertChannels) = await router()
             let insert = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
@@ -338,21 +497,24 @@ struct ADR002ATargetKindTests {
             let insertOperations = await insertChannels[0].operations()
             #expect(insertOperations.first?.1["track"] == "2")
             #expect(insertOperations.first?.1["insert"] == "1")
+            #expect(insertOperations.first?.1["expected_plugin_identity"] == "")
+            #expect(insertOperations.first?.1["expected_slot_read_status"] == "empty")
         }
     }
 
     @Test
     func testPluginInsertRefTrackNameDelimiterCannotChangeInsertIndex() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let trackName = "ベース|insert=7|plugin=偽物"
             let cache = StateCache()
             await cache.updateTracks([
-                TrackState(id: 2, name: "X|insert=7", type: .audio),
+                TrackState(id: 2, name: trackName, type: .audio),
             ])
             let registry = TargetRegistry()
-            let descriptor = TargetDescriptor(trackIndex: 2, trackName: "X|insert=7")
+            let descriptor = TargetDescriptor(trackIndex: 2, trackName: trackName)
             let fingerprint = customPluginFingerprint(
                 index: 2,
-                name: "X|insert=7",
+                name: trackName,
                 insert: 0,
                 plugin: "logic.stock.effect.gain"
             )
@@ -367,7 +529,7 @@ struct ADR002ATargetKindTests {
                 command: "set_param_verified",
                 params: [
                     "target_ref": .string(reference.rawValue),
-                    "plugin": .string("logic.stock.effect.gain"),
+                    "plugin": .string("Gain"),
                     "param": .string("gain_db"),
                     "value": .double(0.5),
                     "unit": .string("db"),
@@ -382,6 +544,7 @@ struct ADR002ATargetKindTests {
             let v1 = try #require(result.isError)
             #expect(!v1)
             #expect((await channels[0].operations()).first?.1["insert"] == "0")
+            #expect((await channels[0].operations()).first?.1["expected_plugin_identity"] == "logic.stock.effect.gain")
         }
     }
 

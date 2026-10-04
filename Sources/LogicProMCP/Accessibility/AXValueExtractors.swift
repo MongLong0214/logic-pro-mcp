@@ -726,6 +726,56 @@ enum AXValueExtractors {
 
     // MARK: - Private helpers
 
+    /// Name-only verified read: retains the measured metadata hierarchy of extractTrackName,
+    /// but counts distinct field readings and preserves failures rather than taking tree order.
+    static func extractTrackNameResult(
+        from header: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        let failures = AXPluginInstanceIdentity.FailedReads()
+        let ax = AXPluginInstanceIdentity.noting(failures, over: runtime)
+        let fields: AXHelpers.Census
+        switch AXHelpers.censusDescendantResult(of: header, role: kAXTextFieldRole as String,
+                                               maxDepth: 3, runtime: ax) {
+        case .success(let census): fields = census
+        case .failure(let error): return .failure(error)
+        }
+        let names = Set(fields.matches.compactMap { trackNameFieldReading($0, runtime: ax) })
+        if let error = failures.firstError { return .failure(error) }
+        if names.count > 1 { return .success(nil) }
+        if let name = names.first { return .success(name) }
+
+        let texts: AXHelpers.Census
+        switch AXHelpers.censusDescendantResult(of: header, role: kAXStaticTextRole as String,
+                                               maxDepth: 3, runtime: ax) {
+        case .success(let census): texts = census
+        case .failure(let error): return .failure(error)
+        }
+        let staticNames = Set(texts.matches.compactMap {
+            extractTextValue($0, runtime: ax)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty })
+        if let error = failures.firstError { return .failure(error) }
+        if staticNames.count > 1 { return .success(nil) }
+        if let name = staticNames.first { return .success(name) }
+        let description = AXHelpers.getDescription(header, runtime: ax)
+        if let error = failures.firstError { return .failure(error) }
+        if let name = description.flatMap({ extractQuotedTrackName(from: $0) }) { return .success(name) }
+        let title = AXHelpers.getTitle(header, runtime: ax)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let error = failures.firstError { return .failure(error) }
+        return .success(title?.isEmpty == false ? title : nil)
+    }
+
+    private static func trackNameFieldReading(
+        _ field: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> String? {
+        let candidates = [
+            AXHelpers.getDescription(field, runtime: runtime),
+            AXHelpers.getTitle(field, runtime: runtime),
+            extractTextValue(field, runtime: runtime)
+        ]
+        return candidates.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty && $0 != "0" }
+    }
+
     private static func extractTrackName(
         from header: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -738,16 +788,7 @@ enum AXValueExtractors {
             of: header, role: kAXTextFieldRole, maxDepth: 3, runtime: runtime
         )
         for field in textFields {
-            let candidates = [
-                AXHelpers.getDescription(field, runtime: runtime),
-                AXHelpers.getTitle(field, runtime: runtime),
-                extractTextValue(field, runtime: runtime)
-            ]
-            for candidate in candidates.compactMap({ $0?.trimmingCharacters(in: .whitespacesAndNewlines) }) {
-                if !candidate.isEmpty, candidate != "0" {
-                    return (candidate, true)
-                }
-            }
+            if let candidate = trackNameFieldReading(field, runtime: runtime) { return (candidate, true) }
         }
 
         if let text = AXHelpers.findDescendant(

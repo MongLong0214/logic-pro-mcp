@@ -180,6 +180,19 @@ enum TargetRefResolver {
         TargetDescriptor.pluginInsertIndex(from: fingerprint)
     }
 
+    /// Strip the exact length-aware descriptor prefix, not a delimiter found
+    /// inside an arbitrary track name. The remainder is the originally observed
+    /// occupied plugin identity (or the empty string for a verified empty slot).
+    static func pluginInsertIdentity(from binding: TargetBinding) -> String? {
+        guard binding.kind == .pluginInsert,
+              let insert = binding.pluginInsertIndex,
+              insert >= 0,
+              pluginInsertIndex(from: binding.observedFingerprint) == insert else { return nil }
+        let prefix = "\(binding.descriptor.fingerprint)|insert=\(insert)|plugin="
+        guard binding.observedFingerprint.hasPrefix(prefix) else { return nil }
+        return String(binding.observedFingerprint.dropFirst(prefix.count))
+    }
+
     private static func bindingFingerprintMatches(_ binding: TargetBinding) -> Bool {
         let descriptorFingerprint = binding.descriptor.fingerprint
         switch binding.kind {
@@ -188,13 +201,7 @@ enum TargetRefResolver {
         case .track, .mixerStrip:
             return binding.observedFingerprint == descriptorFingerprint
         case .pluginInsert:
-            guard let insert = binding.pluginInsertIndex,
-                  insert >= 0,
-                  pluginInsertIndex(from: binding.observedFingerprint) == insert,
-                  binding.observedFingerprint.hasPrefix("\(descriptorFingerprint)|insert=\(insert)|plugin=") else {
-                return false
-            }
-            return true
+            return pluginInsertIdentity(from: binding) != nil
         }
     }
 
