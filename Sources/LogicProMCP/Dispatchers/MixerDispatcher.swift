@@ -2,6 +2,10 @@ import Foundation
 import MCP
 
 struct MixerDispatcher: OperationTraceDispatching {
+    /// The bank directions `bank` takes; the operation registry's parameter contract reads the same
+    /// list (#957).
+    static let bankDirections = ["left", "right"]
+
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicMixer)
     static let notExposedCommands: Set<String> = [
@@ -233,7 +237,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             // upper row, so the operation is MCU-only like set_master_volume. Both params are
             // settled BEFORE the trace starts: a refusal here must not read as an attempted write.
             let direction = stringParam(params, "direction")
-            guard direction == "left" || direction == "right" else {
+            guard Self.bankDirections.contains(direction) else {
                 return toolInvalidParamsResult(
                     "bank requires 'direction' of exactly \"left\" or \"right\" (got \"\(direction)\")",
                     extras: ["operation": "mixer.bank"]

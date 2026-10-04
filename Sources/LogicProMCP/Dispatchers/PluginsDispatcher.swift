@@ -47,6 +47,9 @@ struct PluginsDispatcher: OperationTraceDispatching {
     )
 
     static func handle(
+        // The server-wide verified-op gate (R14). Production always takes `.shared`. Tests pass a gate
+        // of their own, so no suite holds or releases the one another suite's dispatch takes (#1104).
+        verifiedGate: VerifiedOpGate = .shared,
         command: String,
         params: [String: Value],
         router: ChannelRouter,
@@ -111,7 +114,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
             let traceID = await startTraceIfEnabled(command: command)
             var resolvedReference: TargetReference?
             var resolvedFingerprint: String?
-            let result = await runVerified(operation: "plugin.set_param_verified") {
+            let result = await runVerified(operation: "plugin.set_param_verified", gate: verifiedGate) {
                 var writeParams = verifiedWriteParams(params)
                 if params["target_ref"] != nil {
                     switch await TargetRefResolver.resolveMutationIndex(
@@ -165,7 +168,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
             let traceID = await startTraceIfEnabled(command: command)
             var resolvedReference: TargetReference?
             var resolvedFingerprint: String?
-            let result = await runVerified(operation: "plugin.set_eq_band_verified") {
+            let result = await runVerified(operation: "plugin.set_eq_band_verified", gate: verifiedGate) {
                 var writeParams = eqBandVerifiedParams(params)
                 if params["target_ref"] != nil {
                     switch await TargetRefResolver.resolveMutationIndex(
@@ -234,7 +237,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
             let traceID = await startTraceIfEnabled(command: command)
             var resolvedReference: TargetReference?
             var resolvedFingerprint: String?
-            let result = await runVerified(operation: "plugin.insert_verified") {
+            let result = await runVerified(operation: "plugin.insert_verified", gate: verifiedGate) {
                 var writeParams = insertVerifiedParams(params)
                 if params["target_ref"] != nil {
                     switch await TargetRefResolver.resolveMutationIndex(
@@ -307,9 +310,10 @@ struct PluginsDispatcher: OperationTraceDispatching {
     /// is held, refuse with State C `verified_op_in_progress` before touching AX.
     private static func runVerified(
         operation: String,
+        gate: VerifiedOpGate,
         _ body: () async -> CallTool.Result
     ) async -> CallTool.Result {
-        guard VerifiedOpGate.shared.tryAcquire() else {
+        guard gate.tryAcquire() else {
             return toolTextResult(HonestContract.encodeV2StateC(
                 error: .verifiedOpInProgress,
                 extras: [
@@ -321,7 +325,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
                 ]
             ), isError: true)
         }
-        defer { VerifiedOpGate.shared.release() }
+        defer { gate.release() }
         return await body()
     }
 

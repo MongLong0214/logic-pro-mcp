@@ -202,7 +202,7 @@ struct OperationHandlerBindingTests {
             (
                 .pluginsGetInventory,
                 ["track": .int(0)],
-                await PluginsDispatcher.handle(
+                await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                     command: "get_inventory",
                     params: ["track": .int(0)],
                     router: dependencies.router,

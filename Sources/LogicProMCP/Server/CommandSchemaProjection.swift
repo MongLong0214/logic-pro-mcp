@@ -74,14 +74,34 @@ enum CommandSchemaProjection {
         return .object(schema)
     }
 
+    /// The registry's parameter contract for `entry` (#957), or nil for a command with none.
+    static func contract(for entry: OperationCatalogEntry) -> OperationParameterContract? {
+        OperationID(rawValue: entry.id).flatMap { OperationRegistry.parameterContracts[$0] }
+    }
+
     /// One command's branch: `command` fixed to the command, and `params` naming its parameters.
+    /// A parameter whose contract rule is enforced carries its kind's schema; an unconstrained one
+    /// carries none. The required groups become `allOf` over `required` (one key) or `anyOf` of
+    /// `required` (aliases or alternatives), and `params` itself is then required.
     static func branch(for entry: OperationCatalogEntry, strictParams: Bool) -> Value {
+        let rules = contract(for: entry)?.params ?? [:]
         var params: [String: Value] = [
             "type": .string("object"),
-            "properties": .object(Dictionary(uniqueKeysWithValues: entry.allowedParams.map { ($0, Value.object([:])) })),
+            "properties": .object(Dictionary(uniqueKeysWithValues: entry.allowedParams.map {
+                ($0, rules[$0]?.schema ?? Value.object([:]))
+            })),
         ]
         if closesParameters(entry, strictParams: strictParams) {
             params["additionalProperties"] = .bool(false)
+        }
+        let groups = contract(for: entry)?.required ?? []
+        if !groups.isEmpty {
+            params["allOf"] = .array(groups.map { group in
+                let alternatives: [Value] = group.map { alternative in
+                    .object(["required": .array(OperationParameterContract.keys(of: alternative).map { .string($0) })])
+                }
+                return alternatives.count == 1 ? alternatives[0] : .object(["anyOf": .array(alternatives)])
+            })
         }
         return .object([
             "title": .string(entry.command),
@@ -90,7 +110,7 @@ enum CommandSchemaProjection {
                 "command": .object(["const": .string(entry.command)]),
                 "params": .object(params),
             ]),
-            "required": .array([.string("command")]),
+            "required": .array(groups.isEmpty ? [.string("command")] : [.string("command"), .string("params")]),
         ])
     }
 
@@ -133,6 +153,19 @@ enum CommandSchemaProjection {
         }
     }
 
+    /// One parameter in the table: its name, its kind when the rule is enforced, and its allowed
+    /// values when the dispatcher keeps a list.
+    static func parameterCell(_ key: String, _ rule: ParamRule?) -> String {
+        var cell = "`\(key)`"
+        if let kind = rule?.kind {
+            cell += ": " + kind.rawValue
+        }
+        if let allowed = rule?.allowed {
+            cell += " (" + allowed.joined(separator: ", ") + ")"
+        }
+        return cell
+    }
+
     static func parameterTable(
         entries: [OperationCatalogEntry] = documentationEntries(), strictParams: Bool = true
     ) -> String {
@@ -148,8 +181,13 @@ enum CommandSchemaProjection {
                 + "`list_ports`), which that gate forwards, by the dispatcher; "
                 + "\"open\" means that gate does not run for the row, and the command's dispatcher still validates "
                 + "its parameters. The table assumes strict parameter checking, the default; "
-                + "`LOGIC_MCP_ADR003_STRICT_PARAMS=0` turns the gate off and opens every row. Neither word covers "
-                + "values, types or required keys: the dispatchers check those and the registry does not record them. "
+                + "`LOGIC_MCP_ADR003_STRICT_PARAMS=0` turns the gate off and opens every row. "
+                + "A parameter followed by a kind (`bar: integer`) is one whose value of another type the dispatcher "
+                + "refuses before any channel runs; a parameter with no kind is one the dispatcher coerces, defaults or "
+                + "ignores, and the registry gives the reason. \"Required\" lists the groups of which one key must be "
+                + "present. Both come from `OperationRegistry.parameterContracts`, which a census drives against every "
+                + "dispatcher. A list in parentheses is the only values the dispatcher takes, read from the dispatcher's own "
+                + "constant. "
                 + "This is a projection of `OperationRegistry`, not a second source, and not qualification evidence.",
             "",
         ]
@@ -157,12 +195,20 @@ enum CommandSchemaProjection {
         for tool in byTool.keys.sorted() {
             lines.append("## `\(tool)`")
             lines.append("")
-            lines.append("| Command | Parameters | Unknown parameters | Mutability | Confirmation | Target | Verification | Retry | Availability |")
-            lines.append("|---|---|---|---|---|---|---|---|---|")
+            lines.append("| Command | Parameters | Required | Unknown parameters | Mutability | Confirmation | Target | Verification | Retry | Availability |")
+            lines.append("|---|---|---|---|---|---|---|---|---|---|")
             for entry in (byTool[tool] ?? []).sorted(by: { $0.command < $1.command }) {
-                let params = entry.allowedParams.isEmpty ? "none" : entry.allowedParams.map { "`\($0)`" }.joined(separator: ", ")
+                let rules = contract(for: entry)?.params ?? [:]
+                let params = entry.allowedParams.isEmpty ? "none" : entry.allowedParams.map { key in
+                    parameterCell(key, rules[key])
+                }.joined(separator: ", ")
+                let groups = contract(for: entry)?.required ?? []
+                let required = groups.isEmpty ? "none" : groups.map { group in
+                    group.map { OperationParameterContract.keys(of: $0).map { "`\($0)`" }.joined(separator: " and ") }
+                        .joined(separator: " or ")
+                }.joined(separator: "; ")
                 let unknown = closesParameters(entry, strictParams: strictParams) ? "closed" : "open"
-                lines.append("| `\(entry.command)` | \(params) | \(unknown) | \(entry.mutability) | \(entry.confirmation) | "
+                lines.append("| `\(entry.command)` | \(params) | \(required) | \(unknown) | \(entry.mutability) | \(entry.confirmation) | "
                     + "\(entry.target) | \(entry.verification) | \(entry.retry) | \(entry.availability) |")
             }
             lines.append("")

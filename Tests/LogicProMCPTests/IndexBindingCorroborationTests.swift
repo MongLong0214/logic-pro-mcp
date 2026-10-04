@@ -414,7 +414,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     let ax = MockChannel(id: .accessibility)
     await router.register(ax)
 
-    let result = await PluginsDispatcher.handle(
+    let result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
         command: "insert_verified",
         params: [
             "track": .int(2),
@@ -443,7 +443,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     await router.register(ax)
 
     // Caller believes track 2 is "Bass"; the live surface says "Lead".
-    let result = await PluginsDispatcher.handle(
+    let result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
         command: "insert_verified",
         params: [
             "track": .int(2),
@@ -476,7 +476,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     let ax = MockChannel(id: .accessibility)
     await router.register(ax)
 
-    let result = await PluginsDispatcher.handle(
+    let result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
         command: "insert_verified",
         params: [
             "track": .int(2),
@@ -507,7 +507,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     let ax = MockChannel(id: .accessibility)
     await router.register(ax)
 
-    let result = await PluginsDispatcher.handle(
+    let result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
         command: "insert_verified",
         params: [
             "track": .int(2),

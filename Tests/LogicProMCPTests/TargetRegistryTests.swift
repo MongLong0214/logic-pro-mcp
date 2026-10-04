@@ -378,7 +378,7 @@ struct TargetRegistryTests {
             // insert_verified supplies no `track`, so the binding gate is skipped
             // (the channel reports the missing selector) and this still exercises
             // the generation bump exactly as before.
-            _ = await PluginsDispatcher.handle(
+            _ = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "insert_verified",
                 params: [:],
                 router: trackRouter,

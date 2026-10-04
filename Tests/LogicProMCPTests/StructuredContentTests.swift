@@ -42,26 +42,16 @@ struct StructuredContentTests {
             ("logic_project", "open", [:]),
             ("logic_audio", "analyze_file", [:]),
             ("logic_system", "health", [:]),
-            ("logic_plugins", "set_param_verified", [
-                "track": .int(0),
-                "insert": .int(2),
-                "plugin": .string("Gain"),
-                "param": .string("gain_db"),
-                "value": .double(-4.0),
-                "unit": .string("dB"),
-                "mode": .string("duplicate_applyback"),
-                "project_expected_path": .string("/tmp/x.logicx"),
-            ]),
+            // Empty, as the others are: with no channel registered it answers channels_exhausted at once.
+            // This used to send a complete request and hold the process-wide verified-op gate so it
+            // stopped early, which refused every other suite's verified op running meanwhile (#1104).
+            ("logic_plugins", "set_param_verified", [:]),
         ]
 
         #expect(ServerCatalog.tools.count == 10)
         for tool in ServerCatalog.tools {
             #expect(tool.outputSchema != nil, "\(tool.name) must advertise outputSchema")
         }
-
-        let gateHeld = VerifiedOpGate.shared.tryAcquire()
-        #expect(gateHeld)
-        defer { VerifiedOpGate.shared.release() }
 
         for item in cases {
             let result = await handlers.callTool(.init(

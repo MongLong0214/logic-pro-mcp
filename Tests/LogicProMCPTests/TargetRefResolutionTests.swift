@@ -835,7 +835,7 @@ struct TargetRefResolutionTests {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
-            let result = await PluginsDispatcher.handle(
+            let result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "set_param_verified",
                 params: verifiedParams(track: nil, targetRef: reference.rawValue),
                 router: router,
@@ -854,7 +854,7 @@ struct TargetRefResolutionTests {
         try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
-            let result = await PluginsDispatcher.handle(
+            let result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "set_param_verified",
                 params: verifiedParams(track: 3, targetRef: reference.rawValue),
                 router: router,
@@ -875,7 +875,7 @@ struct TargetRefResolutionTests {
             let (registry, cache, reference) = await boundTrack(index: 2)
             await registry.bumpProjectEpoch()
             let (router, channels) = await makeRouter()
-            let result = await PluginsDispatcher.handle(
+            let result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "set_param_verified",
                 params: verifiedParams(track: nil, targetRef: reference.rawValue),
                 router: router,
