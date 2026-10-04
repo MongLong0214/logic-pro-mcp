@@ -80,10 +80,17 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # the other binary's row on the same windowless screen, on this branch.
 # 31 -> 32 on 2026-10-03, the union with main: live_1039_plain_letters_under_2set_korean on this
 # branch, whose counterexample for each candidate row is the control binary's row.
-# 33 -> 34 on 2026-10-04: live_1097_select_and_rename_need_the_target_alone, whose counterexamples are
-# the merge-base answers measured in Korean: select State A with rows [0, 1] selected, and a rename
-# that renamed the other selected track as well.
-FLOOR = 34
+# 32 -> 33 on 2026-10-03: live_965_audit_reads_the_inspections_observation, whose counterexample for
+# each language is its own row with the audit counting five more tracks than the inspection kept.
+# 33 -> 34 on 2026-10-04: live_1092_rewind_and_forward_step_one_bar, whose counterexample for each
+# row is the same row with the shuttle readings the MCU rung gave in Korean (5, 2, -3; 13, 16, 19).
+# 34 -> 36 on 2026-10-04, the union with main, both on this branch:
+# live_1029_cgevent_fallback_in_every_locale, whose counterexample for each row is the same row as if
+# the keystroke did nothing (the after reading replaced by the before reading), and
+# live_1097_select_and_rename_need_the_target_alone, whose counterexamples are the merge-base answers
+# measured in Korean: select State A with rows [0, 1] selected, and a rename that renamed the other
+# selected track as well.
+FLOOR = 36
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

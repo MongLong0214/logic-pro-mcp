@@ -64,6 +64,11 @@ actor CGEventChannel: Channel {
         /// leaves the window reading to answer alone, so the default changes nothing for a runtime
         /// that does not set it. `.production` asks the system-wide AX element.
         let focusedApplicationPID: @Sendable () -> pid_t?
+        /// #1092 review R1, R1092-01: whether this process may post synthetic keyboard events
+        /// (`CGPreflightPostEventAccess`). macOS discards an event this process is not authorized to
+        /// post, and `postToPid` returns nothing to say so. The default is the permissive one, like
+        /// the #440 defaults; `.production` asks the system.
+        let canPostEvents: @Sendable () -> Bool
 
         /// The two #440 fields default to an already-frontmost Logic so existing
         /// callers that construct a Runtime for an unrelated reason keep
@@ -88,7 +93,8 @@ actor CGEventChannel: Channel {
             layoutIsEnabled: @escaping @Sendable (String) -> Bool = { _ in false },
             inputSourceSettleMicros: useconds_t = CGEventChannel.inputSourceSwitchSettleMicros,
             onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = { nil },
-            focusedApplicationPID: @escaping @Sendable () -> pid_t? = { nil }
+            focusedApplicationPID: @escaping @Sendable () -> pid_t? = { nil },
+            canPostEvents: @escaping @Sendable () -> Bool = { true }
         ) {
             self.isLogicProRunning = isLogicProRunning
             self.logicProPID = logicProPID
@@ -104,6 +110,7 @@ actor CGEventChannel: Channel {
             self.inputSourceSettleMicros = inputSourceSettleMicros
             self.onScreenWindowList = onScreenWindowList
             self.focusedApplicationPID = focusedApplicationPID
+            self.canPostEvents = canPostEvents
         }
 
         static let production = Runtime(
@@ -121,7 +128,8 @@ actor CGEventChannel: Channel {
             layoutLetter: { CGEventChannel.readLayoutLetter(layoutID: $0, keyCode: $1) },
             layoutIsEnabled: { CGEventChannel.isEnabledInputSource(id: $0) },
             onScreenWindowList: AXLogicProElements.Runtime.liveOnScreenWindowList,
-            focusedApplicationPID: { ProcessUtils.focusedApplicationPID() }
+            focusedApplicationPID: { ProcessUtils.focusedApplicationPID() },
+            canPostEvents: { CGPreflightPostEventAccess() }
         )
     }
 
@@ -400,6 +408,7 @@ actor CGEventChannel: Channel {
             // #440 D: prepare BEFORE the sequence, not per keystroke. A sequence
             // that lost the keyboard halfway would leave the Go To Position
             // dialog open with a partial value typed into it.
+            if let refusal = postingAuthorizationRefusal(operation: operation) { return refusal }
             let preparation = prepareFrontmost()
             guard preparation.isReady else {
                 return Self.frontmostRefusal(operation: operation, preparation: preparation)
@@ -447,6 +456,7 @@ actor CGEventChannel: Channel {
         // #440 D: same gate as the sequence path. A mapped chord posted while
         // Logic is in the background is swallowed, and the State B envelope
         // below would then report a keystroke Logic never received.
+        if let refusal = postingAuthorizationRefusal(operation: operation) { return refusal }
         let preparation = prepareFrontmost()
         guard preparation.isReady else {
             return Self.frontmostRefusal(operation: operation, preparation: preparation)
@@ -818,6 +828,25 @@ actor CGEventChannel: Channel {
     /// State C for a refused preparation. `write_attempted` is false and
     /// `events_posted` is zero because nothing was created: the caller can
     /// retry without wondering whether a partial keystroke landed.
+    /// #1092 review R1, R1092-01: a keystroke this process is not authorized to post is discarded by
+    /// macOS, and the State B success after it would report a key Logic never received. Asked before
+    /// Logic is brought forward, so a refusal moves nothing.
+    func postingAuthorizationRefusal(operation: String) -> ChannelResult? {
+        guard !runtime.canPostEvents() else { return nil }
+        return .error(HonestContract.encodeStateC(
+            error: .permissionDenied,
+            hint: "This process is not authorized to post keyboard events (Privacy & Security, "
+                + "Accessibility), so macOS would discard them; no event was posted.",
+            extras: [
+                "operation": operation,
+                "method": "cgevent",
+                "events_posted": 0,
+                "write_attempted": false,
+                "safe_to_retry": true,
+            ]
+        ))
+    }
+
     static func frontmostRefusal(operation: String, preparation: FrontmostPreparation) -> ChannelResult {
         .error(HonestContract.encodeStateC(
             error: .axWriteFailed,
