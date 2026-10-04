@@ -2562,15 +2562,25 @@ extension AccessibilityChannel {
         strips: [AXUIElement],
         runtime: AXLogicProElements.Runtime
     ) -> Result<Int, StripBindingFailure> {
-        let stripNames = strips.map {
-            AXPluginInstanceIdentity.stripName($0, runtime: runtime.ax)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
+        let stripNames = strips.map { mixerStripName($0, runtime: runtime.ax) }
         return mixerStripIndex(
             forTrack: track,
             headerNames: AXLogicProElements.trackNames(runtime: runtime),
             stripNames: stripNames
         )
+    }
+
+    /// A mixer strip's name for the header join. The strip's own AXDescription
+    /// is the name (measured 12.4 docked Mixer: "Bass", "Reverb"); its text
+    /// fields cannot settle it there, because the fader level is a second
+    /// non-numeric text field ("volume fader level, -4,0 dB").
+    static func mixerStripName(_ strip: AXUIElement, runtime: AXHelpers.Runtime) -> String? {
+        if let description = AXHelpers.getDescription(strip, runtime: runtime)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty {
+            return description
+        }
+        return AXPluginInstanceIdentity.stripName(strip, runtime: runtime)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func mixerStripIndex(
