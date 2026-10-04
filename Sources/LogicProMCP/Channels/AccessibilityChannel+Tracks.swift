@@ -1837,9 +1837,14 @@ extension AccessibilityChannel {
         }
 
         usleep(150_000)
-        AXMouseHelper.typeText(truncatedName, runtime: mouseRuntime)
-        usleep(50_000)
-        AXMouseHelper.pressReturn(runtime: mouseRuntime)
+        let typing = typeRenameName(
+            truncatedName,
+            focus: { readLogicKeyboardFocus(runtime: runtime) },
+            mouseRuntime: mouseRuntime
+        )
+        if typing != .typed {
+            return renameTypingFailure(typing, baseExtras: baseExtras, observed: observedTrackName())
+        }
         usleep(150_000)
 
         if let verified = verifiedResult(via: "track_menu") {
@@ -1854,6 +1859,146 @@ extension AccessibilityChannel {
             extras: baseExtras.merging([
                 "observed": observed as Any? ?? NSNull(),
                 "via": "track_menu"
+            ]) { _, new in new }
+        ))
+    }
+
+    /// How typing a name into Logic's rename field ended.
+    enum RenameTypingOutcome: Equatable {
+        /// Every code unit and the confirming Return were posted while a text field had the focus.
+        case typed
+        /// The rename field never read as focused: nothing was posted.
+        case textFocusNotReached(LogicKeyboardFocus)
+        /// The focus left the text field after `sentCodeUnits`: nothing after it was posted,
+        /// neither the rest of the name nor Return.
+        case textFocusLost(sentCodeUnits: Int, focus: LogicKeyboardFocus)
+        /// Posting a code unit, or the confirming Return, failed after `sentCodeUnits` code units
+        /// were posted: nothing after it was posted.
+        case postFailed(sentCodeUnits: Int)
+    }
+
+    /// The menu item that opens the field, by its pinned row:
+    /// logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Rename%20Track#value
+    /// en: "Rename Track"
+    ///
+    /// Types `name` into the rename field Track > Rename Track opened, one code unit at a time,
+    /// and only while Logic's keyboard focus reads as text editing (`readLogicKeyboardFocus`, the
+    /// rule the key-command guard and the #1079 poll yield use).
+    ///
+    /// A synthetic key that reaches Logic outside a text field is a key command: measured on Logic
+    /// 12.3.1 (German UI), a rename to "MCP Test" left the name at "MCP T", and the track came out
+    /// soloed with the editor open, which is what `s` and `e` do as key commands. So the focus is
+    /// read before every code
+    /// unit and before Return, and anything other than `.textEditing` stops the typing there,
+    /// unreadable included. Nothing is posted after the stop, not even Escape: with the field gone,
+    /// Escape is a key command as well.
+    static func typeRenameName(
+        _ name: String,
+        focus: () -> LogicKeyboardFocus,
+        mouseRuntime: AXMouseHelper.Runtime,
+        focusWaitAttempts: Int = 10,
+        focusWaitMicros: useconds_t = 50_000
+    ) -> RenameTypingOutcome {
+        func isTextEditing(_ reading: LogicKeyboardFocus) -> Bool {
+            if case .textEditing = reading { return true }
+            return false
+        }
+
+        // Only a readable "not text editing" is waited out: the field takes a moment to take the
+        // focus after the menu item. A focus that cannot be read stops the rename at once, before
+        // anything is posted (#1102: "If the focus is lost, or cannot be read, the rename stops
+        // fail-closed"; #1103 review R2, F1: the wait retried an unreadable reading).
+        var reading = focus()
+        var attempt = 1
+        while case .notTextEditing = reading, attempt < focusWaitAttempts {
+            mouseRuntime.sleepMicros(focusWaitMicros)
+            reading = focus()
+            attempt += 1
+        }
+        guard isTextEditing(reading) else { return .textFocusNotReached(reading) }
+
+        // `sent` counts posts that went through, not attempts (#1103 review R2): a post that
+        // fails stops the typing and is reported as itself, not as focus loss.
+        var sent = 0
+        for codeUnit in name.utf16 {
+            let now = focus()
+            guard isTextEditing(now) else { return .textFocusLost(sentCodeUnits: sent, focus: now) }
+            guard mouseRuntime.postUnicodeScalar(codeUnit) else { return .postFailed(sentCodeUnits: sent) }
+            sent += 1
+            mouseRuntime.sleepMicros(12_000)
+        }
+
+        mouseRuntime.sleepMicros(50_000)
+        let beforeReturn = focus()
+        guard isTextEditing(beforeReturn) else {
+            return .textFocusLost(sentCodeUnits: sent, focus: beforeReturn)
+        }
+        // The confirming Return is a post like the others: one that fails is not a typed name
+        // (#1103 review R2, F2).
+        guard mouseRuntime.postKeyEvent(0x24) else { return .postFailed(sentCodeUnits: sent) }
+        return .typed
+    }
+
+    /// The State C a rename answers when its typing stopped for focus. Never State A: the name was
+    /// not confirmed, and a field left open or a partial name is a write nobody can vouch for.
+    static func renameTypingFailure(
+        _ outcome: RenameTypingOutcome,
+        baseExtras: [String: Any],
+        observed: String?
+    ) -> ChannelResult {
+        func describe(_ reading: LogicKeyboardFocus) -> String {
+            switch reading {
+            case .textEditing(let role, _): return role
+            case .notTextEditing: return "not_text_editing"
+            case .unreadable(let stage): return "unreadable_\(stage)"
+            }
+        }
+
+        let precondition: String
+        let hint: String
+        let sent: Int
+        let reading: LogicKeyboardFocus?
+        var error = HonestContract.FailureError.unsafeFocusForSyntheticKey
+        switch outcome {
+        case .typed:
+            return .error(HonestContract.encodeStateC(
+                error: .unsafeFocusForSyntheticKey,
+                hint: "track.rename: a completed typing was reported as a focus failure",
+                extras: baseExtras
+            ))
+        case .textFocusNotReached(let focus):
+            precondition = "text_focus_not_reached"
+            sent = 0
+            reading = focus
+            hint = "the rename field never took Logic's keyboard focus — no character, Return or "
+                + "Escape was posted. Click the track area so Logic has the keyboard, then retry."
+        case .textFocusLost(let count, let focus):
+            precondition = "text_focus_lost"
+            sent = count
+            reading = focus
+            hint = "Logic's keyboard focus left the rename field after \(count) code unit(s) — "
+                + "typing stopped and no Return or Escape was posted, so the rest of the name did "
+                + "not reach Logic as key commands. The field may still be open; `observed` is the "
+                + "name read afterwards."
+        case .postFailed(let count):
+            precondition = "key_post_failed"
+            sent = count
+            reading = nil
+            error = .axWriteFailed
+            hint = "posting a key to Logic failed after \(count) code unit(s) — typing stopped and no "
+                + "Return or Escape was posted. The field may still be open; `observed` is the name "
+                + "read afterwards."
+        }
+        return .error(HonestContract.encodeStateC(
+            error: error,
+            hint: hint,
+            extras: baseExtras.merging([
+                "via": "track_menu",
+                "precondition": precondition,
+                "sent_code_units": sent,
+                "keyboard_focus": reading.map(describe) as Any? ?? NSNull(),
+                "observed": observed as Any? ?? NSNull(),
+                "write_attempted": sent > 0
             ]) { _, new in new }
         ))
     }

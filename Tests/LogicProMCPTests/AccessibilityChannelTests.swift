@@ -3293,6 +3293,10 @@ private func makeTempoSliderFixture(
     let trackList = builder.element(565)
     let header = builder.element(566)
     let nameField = builder.element(567)
+    // The field Track > Rename Track opens: it holds the keyboard focus until Return closes it
+    // (#1103 review R1: without a focused text field the typing guard posts nothing).
+    let renameEditor = builder.element(568)
+    builder.setAttribute(renameEditor, kAXRoleAttribute as String, kAXTextFieldRole as String)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
@@ -3325,6 +3329,7 @@ private func makeTempoSliderFixture(
         case 0x24:
             builder.setAttribute(nameField, kAXDescriptionAttribute as String, session.typed)
             builder.setAttribute(header, kAXDescriptionAttribute as String, "Track 1 “\(session.typed)”")
+            builder.setAttribute(app, kAXFocusedUIElementAttribute as String, header)
             session.editing = false
         default:
             break
@@ -3344,6 +3349,7 @@ private func makeTempoSliderFixture(
                 session.renamePressed = true
                 session.editing = true
                 session.typed = ""
+                builder.setAttribute(app, kAXFocusedUIElementAttribute as String, renameEditor)
                 return true
             }
             return true
@@ -3379,6 +3385,8 @@ private func makeTempoSliderFixture(
     let trackList = builder.element(575)
     let header = builder.element(576)
     let nameField = builder.element(577)
+    let renameEditor = builder.element(578)
+    builder.setAttribute(renameEditor, kAXRoleAttribute as String, kAXTextFieldRole as String)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
@@ -3411,6 +3419,7 @@ private func makeTempoSliderFixture(
             }
             if builder.elementID(element) == builder.elementID(renameItem), action == kAXPressAction as String {
                 session.editing = true
+                builder.setAttribute(app, kAXFocusedUIElementAttribute as String, renameEditor)
                 return true
             }
             return true
@@ -3418,6 +3427,7 @@ private func makeTempoSliderFixture(
     )
     mouseRecorder.onKeyEvent = { keyCode in
         guard session.editing, keyCode == 0x24 else { return }
+        builder.setAttribute(app, kAXFocusedUIElementAttribute as String, header)
         session.editing = false
     }
     let channel = makeAXBackedAccessibilityChannel(
