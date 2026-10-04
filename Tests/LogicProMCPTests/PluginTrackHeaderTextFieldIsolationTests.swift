@@ -86,7 +86,7 @@ func testPluginTrackHeaderReadIgnoresUnreadKnownTextFieldOutsideRail(_ fieldFirs
     switch result {
     case .read(let rows):
         #expect(rows.count == 1)
-        #expect(rows.first.map { CFEqual($0, fixture.row) } == true,
+        #expect(rows.contains { CFEqual($0, fixture.row) },
                 "the actual original rail row must survive, not a fabricated or rebound row")
         if let row = rows.first {
             switch AXValueExtractors.extractTrackNameResult(from: row, runtime: fixture.runtime.ax) {
@@ -148,7 +148,7 @@ private func testPluginTrackHeaderReadRefusesUnreadRailOrRole(_ fault: HeaderTex
     expectNoHeaderTextFieldActuation(fixture)
     if case .read(let rows) = headerRead {
         #expect(rows.count == 1)
-        #expect(rows.first.map { CFEqual($0, fixture.row) } == true)
+        #expect(rows.contains { CFEqual($0, fixture.row) })
     } else {
         #expect(Bool(false), "rail discovery alone remains readable")
     }

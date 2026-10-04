@@ -1,0 +1,2178 @@
+{
+  "schema": 1,
+  "measured_head": "c3ac14a523c75ccc8890e78f84043217decc447b",
+  "binary": {
+    "head": "c3ac14a523c75ccc8890e78f84043217decc447b",
+    "embedded_commit": "c3ac14a523c75ccc8890e78f84043217decc447b",
+    "sha256": "98530ee16f1c242bfaf97b1239f6bd4b9424190390de578ffda20a72cf66bdd2",
+    "built_at": "2026-10-04T20:59:12Z"
+  },
+  "binary_source": {
+    "file": "bin-1108-review-repair/bin-c3ac14a5/build-receipt.json",
+    "sha256": "348efa652c2a59e5ce6c264f880ee33e95f5219f5d087caad0817602bcf7f96b"
+  },
+  "method": "Actual MCP responses and independent occupied-editor AX reads. Only the owned project path is redacted from selected requests. AX read statuses, failed-description counts and slider values are retained; these are observations, not merge permission.",
+  "locales": {
+    "ko-KR": {
+      "source": {
+        "file": "live-1107-ko-c3ac14a5/raw.json",
+        "sha256": "4710ba16ec6db9ecdf329ea4a5f5ffd88a7033a3bffdea467fe1c79526071e40"
+      },
+      "calls": [
+        {
+          "command": "get_inventory",
+          "params": {
+            "track": 10
+          },
+          "body": {
+            "complete": true,
+            "hc_schema": 2,
+            "mixer_reveal_attempted": false,
+            "mixer_reveal_strategies": [],
+            "mixer_strip_index": 41,
+            "operation": "logic_plugins.get_inventory",
+            "plugins": [
+              {
+                "bypassed": null,
+                "insert": 0,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_4404FD6C-34D9-4811-A2A9-187DD125F7FB",
+                "read_status": "empty"
+              },
+              {
+                "bypassed": null,
+                "insert": 1,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_845A9741-94B0-4644-A966-3AD17348564B",
+                "read_status": "empty"
+              },
+              {
+                "bypassed": null,
+                "insert": 2,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_AF078BE6-0182-442A-B116-2CA633E32E9C",
+                "read_status": "empty"
+              }
+            ],
+            "plugins_fetched_at": "2026-10-04T20:59:44.423Z",
+            "plugins_source": "ax",
+            "plugins_unknown_reason": null,
+            "state": "A",
+            "success": true,
+            "track": 10,
+            "track_name": "LPM1107 Bass",
+            "verified": true
+          },
+          "timed_out": false
+        },
+        {
+          "command": "get_inventory",
+          "params": {
+            "track": 11
+          },
+          "body": {
+            "complete": true,
+            "hc_schema": 2,
+            "mixer_reveal_attempted": false,
+            "mixer_reveal_strategies": [],
+            "mixer_strip_index": 25,
+            "operation": "logic_plugins.get_inventory",
+            "plugins": [
+              {
+                "bypassed": false,
+                "insert": 0,
+                "name": "Channel EQ",
+                "occupied": true,
+                "plugin_id": "logic.stock.effect.channel_eq",
+                "plugin_insert_ref": "ins_64A8AAD1-1944-4213-A63D-F0200D6DCE71",
+                "read_status": "ok"
+              },
+              {
+                "bypassed": false,
+                "insert": 1,
+                "name": "Compressor",
+                "occupied": true,
+                "plugin_id": "logic.stock.effect.compressor",
+                "plugin_insert_ref": "ins_4E96AF56-714C-4CEE-81A4-8C95CE4F1B0E",
+                "read_status": "ok"
+              },
+              {
+                "bypassed": false,
+                "insert": 2,
+                "name": "ChromaVerb",
+                "occupied": true,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_D3772447-03AE-4D42-B84C-040A7D338673",
+                "read_status": "ok"
+              }
+            ],
+            "plugins_fetched_at": "2026-10-04T20:59:45.690Z",
+            "plugins_source": "ax",
+            "plugins_unknown_reason": null,
+            "state": "A",
+            "success": true,
+            "track": 11,
+            "track_name": "LPM1107 Param",
+            "verified": true
+          },
+          "timed_out": false
+        },
+        {
+          "command": "insert_verified",
+          "params": {
+            "target_ref": "ins_4404FD6C-34D9-4811-A2A9-187DD125F7FB",
+            "plugin": "logic.stock.effect.gain",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "hc_schema": 2,
+            "observed_plugin_id": "logic.stock.effect.gain",
+            "observed_plugin_name": "Gain",
+            "observed_slot": 0,
+            "operation": "logic_plugins.insert_verified",
+            "select_trace": {
+              "go_to_position_closed": false,
+              "leaf_select_coord_free": true,
+              "observed_name": "Gain",
+              "observed_slot": 0,
+              "plugin_selection_id": "logic.stock.effect.gain",
+              "plugin_windows_hidden": false,
+              "pre_inventory_readable": true,
+              "requested_insert": 0,
+              "requested_plugin_id": "logic.stock.effect.gain",
+              "requested_track": 10,
+              "search_query": "Gain",
+              "slot_commit_empty_observed": true,
+              "slot_commit_read_status": "empty",
+              "slot_commit_same_physical_element": true,
+              "slot_commit_target_resolved": true,
+              "slot_popup_anchor_verified": true,
+              "slot_popup_frame": {
+                "height": 527,
+                "width": 230,
+                "x": 1612,
+                "y": 530
+              },
+              "slot_popup_menu_found": true,
+              "slot_popup_open_action": "coordinate_fallback",
+              "slot_popup_open_action_enumeration": "absent",
+              "slot_popup_open_fallback_taken": true,
+              "slot_popup_preexisting_menus": 0,
+              "strategies_attempted": [
+                "slot_popup_direct_exact_leaf"
+              ],
+              "target_binding_stable_after_selection": true,
+              "target_slot_found": true,
+              "target_slot_frame": {
+                "height": 18,
+                "width": 58,
+                "x": 1842,
+                "y": 527
+              },
+              "track_select_ok": true,
+              "track_select_verified": true,
+              "window_raised": true,
+              "winning_menu_path": "Gain",
+              "winning_strategy": "slot_popup_direct_exact_leaf",
+              "write_source": "ax_exact_slot_popup"
+            },
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "10:12:LPM1107 Bass|insert=0|plugin=",
+            "target_identity": {
+              "insert": 0,
+              "plugin_id": "logic.stock.effect.gain",
+              "track_index": 10
+            },
+            "target_ref": "ins_4404FD6C-34D9-4811-A2A9-187DD125F7FB",
+            "trace_id": "lpmcp_4762EE0E-F8E9-417E-85EA-FC3940C473B6",
+            "verified": true,
+            "verify_source": "ax_plugin_inventory",
+            "write_source": "ax_exact_slot_popup"
+          },
+          "timed_out": false
+        },
+        {
+          "command": "insert_verified",
+          "params": {
+            "target_ref": "ins_4404FD6C-34D9-4811-A2A9-187DD125F7FB",
+            "plugin": "logic.stock.effect.gain",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "error": "stale_target_reference",
+            "hint": "target_ref is stale or does not identify the requested current track",
+            "operation": "logic_plugins.insert_verified",
+            "state": "C",
+            "success": false,
+            "target_ref": "ins_4404FD6C-34D9-4811-A2A9-187DD125F7FB",
+            "write_attempted": false
+          },
+          "timed_out": false
+        },
+        {
+          "command": "get_inventory",
+          "params": {
+            "track": 10
+          },
+          "body": {
+            "complete": true,
+            "hc_schema": 2,
+            "mixer_reveal_attempted": false,
+            "mixer_reveal_strategies": [],
+            "mixer_strip_index": 41,
+            "operation": "logic_plugins.get_inventory",
+            "plugins": [
+              {
+                "bypassed": false,
+                "insert": 0,
+                "name": "Gain",
+                "occupied": true,
+                "plugin_id": "logic.stock.effect.gain",
+                "plugin_insert_ref": "ins_61259F95-D706-4648-B8AA-6BC2D92B8ADD",
+                "read_status": "ok"
+              },
+              {
+                "bypassed": null,
+                "insert": 1,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_21E169BF-F994-4206-BFE4-259C734D433B",
+                "read_status": "empty"
+              },
+              {
+                "bypassed": null,
+                "insert": 2,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_9F7AFADE-AA29-4DDE-A05B-DD86252F1F32",
+                "read_status": "empty"
+              }
+            ],
+            "plugins_fetched_at": "2026-10-04T21:00:52.156Z",
+            "plugins_source": "ax",
+            "plugins_unknown_reason": null,
+            "state": "A",
+            "success": true,
+            "track": 10,
+            "track_name": "LPM1107 Bass",
+            "verified": true
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_param_verified",
+          "params": {
+            "target_ref": "ins_4E96AF56-714C-4CEE-81A4-8C95CE4F1B0E",
+            "plugin": "logic.stock.effect.gain",
+            "param": "threshold",
+            "value": 38,
+            "unit": "percent",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "error": "stale_target_reference",
+            "hint": "target_ref is stale or does not identify the requested current track",
+            "operation": "logic_plugins.set_param_verified",
+            "state": "C",
+            "success": false,
+            "target_ref": "ins_4E96AF56-714C-4CEE-81A4-8C95CE4F1B0E",
+            "write_attempted": false
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_eq_band_verified",
+          "params": {
+            "target_ref": "ins_4E96AF56-714C-4CEE-81A4-8C95CE4F1B0E",
+            "band": "Peak 1",
+            "parameter": "Gain",
+            "value": 3,
+            "unit": "dB",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "error": "stale_target_reference",
+            "hint": "target_ref is stale or does not identify the requested current track",
+            "operation": "logic_plugins.set_eq_band_verified",
+            "state": "C",
+            "success": false,
+            "target_ref": "ins_4E96AF56-714C-4CEE-81A4-8C95CE4F1B0E",
+            "write_attempted": false
+          },
+          "timed_out": false
+        },
+        {
+          "command": "get_inventory",
+          "params": {
+            "track": 11
+          },
+          "body": {
+            "complete": true,
+            "hc_schema": 2,
+            "mixer_reveal_attempted": false,
+            "mixer_reveal_strategies": [],
+            "mixer_strip_index": 25,
+            "operation": "logic_plugins.get_inventory",
+            "plugins": [
+              {
+                "bypassed": false,
+                "insert": 0,
+                "name": "Channel EQ",
+                "occupied": true,
+                "plugin_id": "logic.stock.effect.channel_eq",
+                "plugin_insert_ref": "ins_E03E6280-4124-40A3-A3C2-BE4147925BCD",
+                "read_status": "ok"
+              },
+              {
+                "bypassed": false,
+                "insert": 1,
+                "name": "Compressor",
+                "occupied": true,
+                "plugin_id": "logic.stock.effect.compressor",
+                "plugin_insert_ref": "ins_B34C36FE-8CE7-418D-A5A1-7D510980CD1D",
+                "read_status": "ok"
+              },
+              {
+                "bypassed": false,
+                "insert": 2,
+                "name": "ChromaVerb",
+                "occupied": true,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_C8E3C3EB-0953-4D1A-95E0-DF86ED30EA85",
+                "read_status": "ok"
+              }
+            ],
+            "plugins_fetched_at": "2026-10-04T21:01:23.433Z",
+            "plugins_source": "ax",
+            "plugins_unknown_reason": null,
+            "state": "A",
+            "success": true,
+            "track": 11,
+            "track_name": "LPM1107 Param",
+            "verified": true
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_param_verified",
+          "params": {
+            "target_ref": "ins_B34C36FE-8CE7-418D-A5A1-7D510980CD1D",
+            "plugin": "logic.stock.effect.gain",
+            "param": "threshold",
+            "value": 38,
+            "unit": "percent",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "error": "stale_target_reference",
+            "hint": "target_ref is stale or does not identify the requested current track",
+            "operation": "logic_plugins.set_param_verified",
+            "state": "C",
+            "success": false,
+            "target_ref": "ins_B34C36FE-8CE7-418D-A5A1-7D510980CD1D",
+            "write_attempted": false
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_eq_band_verified",
+          "params": {
+            "target_ref": "ins_B34C36FE-8CE7-418D-A5A1-7D510980CD1D",
+            "band": "Peak 1",
+            "parameter": "Gain",
+            "value": 3,
+            "unit": "dB",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "error": "stale_target_reference",
+            "hint": "target_ref is stale or does not identify the requested current track",
+            "operation": "logic_plugins.set_eq_band_verified",
+            "state": "C",
+            "success": false,
+            "target_ref": "ins_B34C36FE-8CE7-418D-A5A1-7D510980CD1D",
+            "write_attempted": false
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_param_verified",
+          "params": {
+            "target_ref": "ins_B34C36FE-8CE7-418D-A5A1-7D510980CD1D",
+            "plugin": "logic.stock.effect.compressor",
+            "param": "threshold",
+            "value": 38,
+            "unit": "percent",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "display_unit": "%",
+            "editor_close_observed": true,
+            "hc_schema": 2,
+            "observed_display": "38 %",
+            "observed_normalized": 38,
+            "operation": "logic_plugins.set_param_verified",
+            "param": "threshold",
+            "plugin_view_restore_attempted": false,
+            "plugin_view_restore_observed": true,
+            "requested_normalized": 38,
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "11:13:LPM1107 Param|insert=1|plugin=logic.stock.effect.compressor",
+            "target_identity": {
+              "insert": 1,
+              "plugin_id": "logic.stock.effect.compressor",
+              "track_index": 11
+            },
+            "target_ref": "ins_B34C36FE-8CE7-418D-A5A1-7D510980CD1D",
+            "tolerance": 1,
+            "trace_id": "lpmcp_7D5DCBA4-EF1A-4027-927C-E53E104E0364",
+            "verified": true,
+            "verify_source": "ax_plugin_window",
+            "write_source": "ax_plugin_window"
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_param_verified",
+          "params": {
+            "target_ref": "ins_B34C36FE-8CE7-418D-A5A1-7D510980CD1D",
+            "plugin": "logic.stock.effect.compressor",
+            "param": "threshold",
+            "value": 65,
+            "unit": "percent",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "display_unit": "%",
+            "editor_close_observed": true,
+            "hc_schema": 2,
+            "observed_display": "65 %",
+            "observed_normalized": 65,
+            "operation": "logic_plugins.set_param_verified",
+            "param": "threshold",
+            "plugin_view_restore_attempted": false,
+            "plugin_view_restore_observed": true,
+            "requested_normalized": 65,
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "11:13:LPM1107 Param|insert=1|plugin=logic.stock.effect.compressor",
+            "target_identity": {
+              "insert": 1,
+              "plugin_id": "logic.stock.effect.compressor",
+              "track_index": 11
+            },
+            "target_ref": "ins_B34C36FE-8CE7-418D-A5A1-7D510980CD1D",
+            "tolerance": 1,
+            "trace_id": "lpmcp_113DDFAC-0865-4EB3-B6D2-00B9DD92A132",
+            "verified": true,
+            "verify_source": "ax_plugin_window",
+            "write_source": "ax_plugin_window"
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_eq_band_verified",
+          "params": {
+            "target_ref": "ins_E03E6280-4124-40A3-A3C2-BE4147925BCD",
+            "band": "Peak 1",
+            "parameter": "Gain",
+            "value": 3,
+            "unit": "dB",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "display_unit": "dB",
+            "editor_close_observed": true,
+            "hc_schema": 2,
+            "observed_display": "+3.0 dB",
+            "observed_normalized": 270,
+            "operation": "logic_plugins.set_eq_band_verified",
+            "param": "Peak 1 Gain",
+            "plugin_view_restore_attempted": false,
+            "plugin_view_restore_observed": true,
+            "requested_display": "+3 dB",
+            "requested_normalized": 3,
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "11:13:LPM1107 Param|insert=0|plugin=logic.stock.effect.channel_eq",
+            "target_identity": {
+              "insert": 0,
+              "plugin_id": "logic.stock.effect.channel_eq",
+              "track_index": 11
+            },
+            "target_ref": "ins_E03E6280-4124-40A3-A3C2-BE4147925BCD",
+            "trace_id": "lpmcp_F683658D-3266-432C-90F8-D5C676D35B38",
+            "verified": true,
+            "verify_source": "ax_plugin_window",
+            "walk_steps": 8,
+            "write_source": "ax_plugin_window"
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_eq_band_verified",
+          "params": {
+            "target_ref": "ins_E03E6280-4124-40A3-A3C2-BE4147925BCD",
+            "band": "Peak 1",
+            "parameter": "Gain",
+            "value": 2.2,
+            "unit": "dB",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "display_unit": "dB",
+            "editor_close_observed": true,
+            "hc_schema": 2,
+            "observed_display": "+2.2 dB",
+            "observed_normalized": 262,
+            "operation": "logic_plugins.set_eq_band_verified",
+            "param": "Peak 1 Gain",
+            "plugin_view_restore_attempted": false,
+            "plugin_view_restore_observed": true,
+            "requested_display": "+2.2 dB",
+            "requested_normalized": 2.2,
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "11:13:LPM1107 Param|insert=0|plugin=logic.stock.effect.channel_eq",
+            "target_identity": {
+              "insert": 0,
+              "plugin_id": "logic.stock.effect.channel_eq",
+              "track_index": 11
+            },
+            "target_ref": "ins_E03E6280-4124-40A3-A3C2-BE4147925BCD",
+            "trace_id": "lpmcp_871F3DA0-A930-4BA2-B8EF-1346645844D2",
+            "verified": true,
+            "verify_source": "ax_plugin_window",
+            "walk_steps": 10,
+            "write_source": "ax_plugin_window"
+          },
+          "timed_out": false
+        }
+      ],
+      "independent_editors": [
+        {
+          "source": {
+            "file": "native-1107-ko-c3ac-before65.json",
+            "sha256": "87504e933f29108adb8f0a7a5d72582160e3fc3f4a190d41544de73259817730"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Compressor",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "보기:",
+            "사이드 체인:",
+            "Compressor",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791147672.8924239,
+          "end": 1791147673.605091,
+          "slider_count": 20,
+          "all_slider_projection_sha256": "91c20a91ab88140827301aa99f7a1ee4f9f88fed944c087abd802554664ce3df",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Threshold"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 65.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "65 %"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 1,
+          "failed_slider_description_reads": [
+            {
+              "status": -25200,
+              "value": null
+            }
+          ]
+        },
+        {
+          "source": {
+            "file": "native-1107-ko-c3ac-after38.json",
+            "sha256": "99ad950b6823908916eec4cb44556bb2211c65b00b3b93ec1ae4ae2d8e29ef98"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Compressor",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "보기:",
+            "사이드 체인:",
+            "Compressor",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791147740.521763,
+          "end": 1791147741.230256,
+          "slider_count": 20,
+          "all_slider_projection_sha256": "b1c946a78989e05003b606928ebea464701a9d8d1f8d484bc92b46c1da5a6f64",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Threshold"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 38.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "38 %"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 1,
+          "failed_slider_description_reads": [
+            {
+              "status": -25200,
+              "value": null
+            }
+          ]
+        },
+        {
+          "source": {
+            "file": "native-1107-ko-c3ac-restored65.json",
+            "sha256": "e6b22eeb05e2464fa67a6a10a628723db9bced6aea5a44c9432db2712281c6f6"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Compressor",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "보기:",
+            "사이드 체인:",
+            "Compressor",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791147760.693884,
+          "end": 1791147761.058377,
+          "slider_count": 20,
+          "all_slider_projection_sha256": "91c20a91ab88140827301aa99f7a1ee4f9f88fed944c087abd802554664ce3df",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Threshold"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 65.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "65 %"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 1,
+          "failed_slider_description_reads": [
+            {
+              "status": -25200,
+              "value": null
+            }
+          ]
+        },
+        {
+          "source": {
+            "file": "native-1107-ko-c3ac-eq-before2.2.json",
+            "sha256": "b0ee18dc04f5f5cab3636694cd7d76aad077de85c91e579924164ef1de1af7aa"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Channel EQ",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "보기:",
+            "Channel EQ",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791147673.7879832,
+          "end": 1791147674.500944,
+          "slider_count": 26,
+          "all_slider_projection_sha256": "2d877aacfe8171db6dbe0186c5197127f5bd78c244916584d11a8812589f62c2",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Peak 1 Gain"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 262.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "+2.2 dB"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 0,
+          "failed_slider_description_reads": []
+        },
+        {
+          "source": {
+            "file": "native-1107-ko-c3ac-eq-after3.json",
+            "sha256": "a893a8fa880f33aff3a87b518535ca8b0936e950e9dd94b0de4bb36538a4113d"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Channel EQ",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "보기:",
+            "Channel EQ",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791147791.6179159,
+          "end": 1791147792.320141,
+          "slider_count": 26,
+          "all_slider_projection_sha256": "1ff621af020ea9202bcacca1acae24252cc81797630be2e0940a346c732a6121",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Peak 1 Gain"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 270.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "+3.0 dB"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 0,
+          "failed_slider_description_reads": []
+        },
+        {
+          "source": {
+            "file": "native-1107-ko-c3ac-eq-restored2.2.json",
+            "sha256": "8551d9dc63a08c9af9f548897cc041c98feb580ece8bbb8bb9b9d9fbabb48abe"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Channel EQ",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "보기:",
+            "Channel EQ",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791147820.8489249,
+          "end": 1791147821.5590641,
+          "slider_count": 26,
+          "all_slider_projection_sha256": "2d877aacfe8171db6dbe0186c5197127f5bd78c244916584d11a8812589f62c2",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Peak 1 Gain"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 262.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "+2.2 dB"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 0,
+          "failed_slider_description_reads": []
+        },
+        {
+          "source": {
+            "file": "native-1107-ko-c3ac-inserted-gain.json",
+            "sha256": "042103237be1be72ceeab95e5edbc632d393136508afafa19ae8d2324d58aea0"
+          },
+          "track_name": "LPM1107 Bass",
+          "plugin_name": "Gain",
+          "mixer_strip_index": 41,
+          "window_title": "LPM1107 Bass",
+          "identity_static_text": [
+            "Gain",
+            "LPM1107 Bass"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 1,
+          "close_status": 0,
+          "start": 1791147651.491999,
+          "end": 1791147651.7360058,
+          "slider_count": 2,
+          "all_slider_projection_sha256": "ddc5560c0fb42906e475d1d6843f09f14b3edeb95b3fdcb0c8ade8e2813b401f",
+          "target_sliders": [],
+          "failed_slider_description_read_count": 2,
+          "failed_slider_description_reads": [
+            {
+              "status": -25200,
+              "value": null
+            },
+            {
+              "status": -25200,
+              "value": null
+            }
+          ]
+        }
+      ],
+      "selected_header_observations": [
+        {
+          "record_ordinal": 16,
+          "selected_headers": [
+            {
+              "description": {
+                "status": 0,
+                "value": "35개의 ‘LPM1107 Param’ 트랙"
+              },
+              "selected": {
+                "status": 0,
+                "value": true
+              }
+            }
+          ]
+        }
+      ],
+      "server_stop": {
+        "pid": 70972,
+        "steps": [
+          {
+            "step": "close_stdin",
+            "exited": true,
+            "returncode": 0
+          }
+        ],
+        "returncode": 0,
+        "pid_gone": true,
+        "reader_finished": true
+      }
+    },
+    "en-US": {
+      "source": {
+        "file": "live-1107-en-c3ac14a5/raw.json",
+        "sha256": "c94d5840db906198d8cd5a1578efc69c460fdcebf026bb8c8183953d96cab279"
+      },
+      "calls": [
+        {
+          "command": "get_inventory",
+          "params": {
+            "track": 10
+          },
+          "body": {
+            "complete": true,
+            "hc_schema": 2,
+            "mixer_reveal_attempted": false,
+            "mixer_reveal_strategies": [],
+            "mixer_strip_index": 41,
+            "operation": "logic_plugins.get_inventory",
+            "plugins": [
+              {
+                "bypassed": null,
+                "insert": 0,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_62C8283F-1D84-44F5-A37A-2347DB61D4F8",
+                "read_status": "empty"
+              },
+              {
+                "bypassed": null,
+                "insert": 1,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_73575FEF-A2D1-4CF8-BC9E-1FA52C3409CB",
+                "read_status": "empty"
+              },
+              {
+                "bypassed": null,
+                "insert": 2,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_19F9D76C-FA91-4739-AC67-A350F48AA706",
+                "read_status": "empty"
+              }
+            ],
+            "plugins_fetched_at": "2026-10-04T21:05:28.981Z",
+            "plugins_source": "ax",
+            "plugins_unknown_reason": null,
+            "state": "A",
+            "success": true,
+            "track": 10,
+            "track_name": "LPM1107 Bass",
+            "verified": true
+          },
+          "timed_out": false
+        },
+        {
+          "command": "get_inventory",
+          "params": {
+            "track": 11
+          },
+          "body": {
+            "complete": true,
+            "hc_schema": 2,
+            "mixer_reveal_attempted": false,
+            "mixer_reveal_strategies": [],
+            "mixer_strip_index": 25,
+            "operation": "logic_plugins.get_inventory",
+            "plugins": [
+              {
+                "bypassed": false,
+                "insert": 0,
+                "name": "Channel EQ",
+                "occupied": true,
+                "plugin_id": "logic.stock.effect.channel_eq",
+                "plugin_insert_ref": "ins_3E43D1BA-B1BC-44E8-AD8B-79C53F67688B",
+                "read_status": "ok"
+              },
+              {
+                "bypassed": false,
+                "insert": 1,
+                "name": "Compressor",
+                "occupied": true,
+                "plugin_id": "logic.stock.effect.compressor",
+                "plugin_insert_ref": "ins_74139E29-296B-4839-B5BB-D7554D554125",
+                "read_status": "ok"
+              },
+              {
+                "bypassed": false,
+                "insert": 2,
+                "name": "ChromaVerb",
+                "occupied": true,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_0243CDB9-A76B-4CCC-A5CC-88C0EFB808E8",
+                "read_status": "ok"
+              }
+            ],
+            "plugins_fetched_at": "2026-10-04T21:05:30.214Z",
+            "plugins_source": "ax",
+            "plugins_unknown_reason": null,
+            "state": "A",
+            "success": true,
+            "track": 11,
+            "track_name": "LPM1107 Param",
+            "verified": true
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_param_verified",
+          "params": {
+            "target_ref": "ins_74139E29-296B-4839-B5BB-D7554D554125",
+            "plugin": "logic.stock.effect.gain",
+            "param": "threshold",
+            "value": 38,
+            "unit": "percent",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "error": "stale_target_reference",
+            "hint": "target_ref is stale or does not identify the requested current track",
+            "operation": "logic_plugins.set_param_verified",
+            "state": "C",
+            "success": false,
+            "target_ref": "ins_74139E29-296B-4839-B5BB-D7554D554125",
+            "write_attempted": false
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_eq_band_verified",
+          "params": {
+            "target_ref": "ins_74139E29-296B-4839-B5BB-D7554D554125",
+            "band": "Peak 1",
+            "parameter": "Gain",
+            "value": 3,
+            "unit": "dB",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "error": "stale_target_reference",
+            "hint": "target_ref is stale or does not identify the requested current track",
+            "operation": "logic_plugins.set_eq_band_verified",
+            "state": "C",
+            "success": false,
+            "target_ref": "ins_74139E29-296B-4839-B5BB-D7554D554125",
+            "write_attempted": false
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_param_verified",
+          "params": {
+            "target_ref": "ins_74139E29-296B-4839-B5BB-D7554D554125",
+            "plugin": "logic.stock.effect.compressor",
+            "param": "threshold",
+            "value": 38,
+            "unit": "percent",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "display_unit": "%",
+            "editor_close_observed": true,
+            "hc_schema": 2,
+            "observed_display": "38 %",
+            "observed_normalized": 38,
+            "operation": "logic_plugins.set_param_verified",
+            "param": "threshold",
+            "plugin_view_restore_attempted": false,
+            "plugin_view_restore_observed": true,
+            "requested_normalized": 38,
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "11:13:LPM1107 Param|insert=1|plugin=logic.stock.effect.compressor",
+            "target_identity": {
+              "insert": 1,
+              "plugin_id": "logic.stock.effect.compressor",
+              "track_index": 11
+            },
+            "target_ref": "ins_74139E29-296B-4839-B5BB-D7554D554125",
+            "tolerance": 1,
+            "trace_id": "lpmcp_8A4BAA68-226C-4343-8F91-9EC6362D712E",
+            "verified": true,
+            "verify_source": "ax_plugin_window",
+            "write_source": "ax_plugin_window"
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_param_verified",
+          "params": {
+            "target_ref": "ins_74139E29-296B-4839-B5BB-D7554D554125",
+            "plugin": "logic.stock.effect.compressor",
+            "param": "threshold",
+            "value": 65,
+            "unit": "percent",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "display_unit": "%",
+            "editor_close_observed": true,
+            "hc_schema": 2,
+            "observed_display": "65 %",
+            "observed_normalized": 65,
+            "operation": "logic_plugins.set_param_verified",
+            "param": "threshold",
+            "plugin_view_restore_attempted": false,
+            "plugin_view_restore_observed": true,
+            "requested_normalized": 65,
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "11:13:LPM1107 Param|insert=1|plugin=logic.stock.effect.compressor",
+            "target_identity": {
+              "insert": 1,
+              "plugin_id": "logic.stock.effect.compressor",
+              "track_index": 11
+            },
+            "target_ref": "ins_74139E29-296B-4839-B5BB-D7554D554125",
+            "tolerance": 1,
+            "trace_id": "lpmcp_E0EACFEE-8389-490A-83B9-DE7F7D6278FE",
+            "verified": true,
+            "verify_source": "ax_plugin_window",
+            "write_source": "ax_plugin_window"
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_eq_band_verified",
+          "params": {
+            "target_ref": "ins_3E43D1BA-B1BC-44E8-AD8B-79C53F67688B",
+            "band": "Peak 1",
+            "parameter": "Gain",
+            "value": 3,
+            "unit": "dB",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "display_unit": "dB",
+            "editor_close_observed": true,
+            "hc_schema": 2,
+            "observed_display": "+3.0 dB",
+            "observed_normalized": 270,
+            "operation": "logic_plugins.set_eq_band_verified",
+            "param": "Peak 1 Gain",
+            "plugin_view_restore_attempted": false,
+            "plugin_view_restore_observed": true,
+            "requested_display": "+3 dB",
+            "requested_normalized": 3,
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "11:13:LPM1107 Param|insert=0|plugin=logic.stock.effect.channel_eq",
+            "target_identity": {
+              "insert": 0,
+              "plugin_id": "logic.stock.effect.channel_eq",
+              "track_index": 11
+            },
+            "target_ref": "ins_3E43D1BA-B1BC-44E8-AD8B-79C53F67688B",
+            "trace_id": "lpmcp_C469B99C-7586-43DA-B365-C8EEECBA733C",
+            "verified": true,
+            "verify_source": "ax_plugin_window",
+            "walk_steps": 8,
+            "write_source": "ax_plugin_window"
+          },
+          "timed_out": false
+        },
+        {
+          "command": "set_eq_band_verified",
+          "params": {
+            "target_ref": "ins_3E43D1BA-B1BC-44E8-AD8B-79C53F67688B",
+            "band": "Peak 1",
+            "parameter": "Gain",
+            "value": 2.2,
+            "unit": "dB",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "display_unit": "dB",
+            "editor_close_observed": true,
+            "hc_schema": 2,
+            "observed_display": "+2.2 dB",
+            "observed_normalized": 262,
+            "operation": "logic_plugins.set_eq_band_verified",
+            "param": "Peak 1 Gain",
+            "plugin_view_restore_attempted": false,
+            "plugin_view_restore_observed": true,
+            "requested_display": "+2.2 dB",
+            "requested_normalized": 2.2,
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "11:13:LPM1107 Param|insert=0|plugin=logic.stock.effect.channel_eq",
+            "target_identity": {
+              "insert": 0,
+              "plugin_id": "logic.stock.effect.channel_eq",
+              "track_index": 11
+            },
+            "target_ref": "ins_3E43D1BA-B1BC-44E8-AD8B-79C53F67688B",
+            "trace_id": "lpmcp_F399A6EA-D10D-4855-9E13-059887CA2205",
+            "verified": true,
+            "verify_source": "ax_plugin_window",
+            "walk_steps": 10,
+            "write_source": "ax_plugin_window"
+          },
+          "timed_out": false
+        },
+        {
+          "command": "insert_verified",
+          "params": {
+            "target_ref": "ins_62C8283F-1D84-44F5-A37A-2347DB61D4F8",
+            "plugin": "logic.stock.effect.gain",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "error": "insert_setup_failed",
+            "hc_schema": 2,
+            "operation": "logic_plugins.insert_verified",
+            "safe_to_retry": true,
+            "select_trace": {
+              "go_to_position_closed": false,
+              "plugin_windows_hidden": false,
+              "requested_insert": 0,
+              "requested_plugin_id": "logic.stock.effect.gain",
+              "requested_track": 10,
+              "search_query": "Gain",
+              "strategies_attempted": [],
+              "target_binding_stable_after_selection": false,
+              "track_select_ok": true,
+              "track_select_verified": true,
+              "write_source": "ax_exact_slot_popup"
+            },
+            "setup_stage": "target_track_binding_changed_after_selection",
+            "state": "C",
+            "success": false,
+            "target_identity": {
+              "insert": 0,
+              "plugin_id": "logic.stock.effect.gain",
+              "track_index": 10
+            },
+            "verified": false,
+            "what_was_attempted": "open the requested slot popup and choose logic.stock.effect.gain",
+            "what_was_observed": "the exact slot popup UI was not ready at stage 'target_track_binding_changed_after_selection' — nothing was dispatched at the slot",
+            "write_attempted": false
+          },
+          "timed_out": false
+        },
+        {
+          "command": "get_inventory",
+          "params": {
+            "track": 10
+          },
+          "body": {
+            "complete": true,
+            "hc_schema": 2,
+            "mixer_reveal_attempted": false,
+            "mixer_reveal_strategies": [],
+            "mixer_strip_index": 41,
+            "operation": "logic_plugins.get_inventory",
+            "plugins": [
+              {
+                "bypassed": null,
+                "insert": 0,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_62C8283F-1D84-44F5-A37A-2347DB61D4F8",
+                "read_status": "empty"
+              },
+              {
+                "bypassed": null,
+                "insert": 1,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_73575FEF-A2D1-4CF8-BC9E-1FA52C3409CB",
+                "read_status": "empty"
+              },
+              {
+                "bypassed": null,
+                "insert": 2,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_19F9D76C-FA91-4739-AC67-A350F48AA706",
+                "read_status": "empty"
+              }
+            ],
+            "plugins_fetched_at": "2026-10-04T21:09:21.482Z",
+            "plugins_source": "ax",
+            "plugins_unknown_reason": null,
+            "state": "A",
+            "success": true,
+            "track": 10,
+            "track_name": "LPM1107 Bass",
+            "verified": true
+          },
+          "timed_out": false
+        },
+        {
+          "command": "insert_verified",
+          "params": {
+            "target_ref": "ins_62C8283F-1D84-44F5-A37A-2347DB61D4F8",
+            "plugin": "logic.stock.effect.gain",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "hc_schema": 2,
+            "observed_plugin_id": "logic.stock.effect.gain",
+            "observed_plugin_name": "Gain",
+            "observed_slot": 0,
+            "operation": "logic_plugins.insert_verified",
+            "select_trace": {
+              "go_to_position_closed": false,
+              "leaf_select_coord_free": true,
+              "observed_name": "Gain",
+              "observed_slot": 0,
+              "plugin_selection_id": "logic.stock.effect.gain",
+              "plugin_windows_hidden": false,
+              "pre_inventory_readable": true,
+              "requested_insert": 0,
+              "requested_plugin_id": "logic.stock.effect.gain",
+              "requested_track": 10,
+              "search_query": "Gain",
+              "slot_commit_empty_observed": true,
+              "slot_commit_read_status": "empty",
+              "slot_commit_same_physical_element": true,
+              "slot_commit_target_resolved": true,
+              "slot_popup_anchor_verified": true,
+              "slot_popup_frame": {
+                "height": 560,
+                "width": 230,
+                "x": 1612,
+                "y": 514
+              },
+              "slot_popup_menu_found": true,
+              "slot_popup_open_action": "custom_action",
+              "slot_popup_open_action_enumeration": "present",
+              "slot_popup_open_fallback_taken": false,
+              "slot_popup_preexisting_menus": 0,
+              "strategies_attempted": [
+                "slot_popup_direct_exact_leaf"
+              ],
+              "target_binding_stable_after_selection": true,
+              "target_slot_found": true,
+              "target_slot_frame": {
+                "height": 18,
+                "width": 58,
+                "x": 1842,
+                "y": 527
+              },
+              "track_select_ok": true,
+              "track_select_verified": true,
+              "window_raised": true,
+              "winning_menu_path": "Gain",
+              "winning_strategy": "slot_popup_direct_exact_leaf",
+              "write_source": "ax_exact_slot_popup"
+            },
+            "state": "A",
+            "success": true,
+            "target_fingerprint": "10:12:LPM1107 Bass|insert=0|plugin=",
+            "target_identity": {
+              "insert": 0,
+              "plugin_id": "logic.stock.effect.gain",
+              "track_index": 10
+            },
+            "target_ref": "ins_62C8283F-1D84-44F5-A37A-2347DB61D4F8",
+            "trace_id": "lpmcp_DE49104F-E02F-48D7-AF4A-B4621E4CFF3C",
+            "verified": true,
+            "verify_source": "ax_plugin_inventory",
+            "write_source": "ax_exact_slot_popup"
+          },
+          "timed_out": false
+        },
+        {
+          "command": "insert_verified",
+          "params": {
+            "target_ref": "ins_62C8283F-1D84-44F5-A37A-2347DB61D4F8",
+            "plugin": "logic.stock.effect.gain",
+            "mode": "duplicate_applyback",
+            "project_expected_path": "[owned disposable fixture]"
+          },
+          "body": {
+            "error": "stale_target_reference",
+            "hint": "target_ref is stale or does not identify the requested current track",
+            "operation": "logic_plugins.insert_verified",
+            "state": "C",
+            "success": false,
+            "target_ref": "ins_62C8283F-1D84-44F5-A37A-2347DB61D4F8",
+            "write_attempted": false
+          },
+          "timed_out": false
+        },
+        {
+          "command": "get_inventory",
+          "params": {
+            "track": 10
+          },
+          "body": {
+            "complete": true,
+            "hc_schema": 2,
+            "mixer_reveal_attempted": false,
+            "mixer_reveal_strategies": [],
+            "mixer_strip_index": 41,
+            "operation": "logic_plugins.get_inventory",
+            "plugins": [
+              {
+                "bypassed": false,
+                "insert": 0,
+                "name": "Gain",
+                "occupied": true,
+                "plugin_id": "logic.stock.effect.gain",
+                "plugin_insert_ref": "ins_59F08381-5B58-4E8C-93C7-65407980F1AF",
+                "read_status": "ok"
+              },
+              {
+                "bypassed": null,
+                "insert": 1,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_2D833879-3295-4DBB-B434-3088EBDD787E",
+                "read_status": "empty"
+              },
+              {
+                "bypassed": null,
+                "insert": 2,
+                "name": null,
+                "occupied": false,
+                "plugin_id": null,
+                "plugin_insert_ref": "ins_FB4166B0-A3D9-4664-AE90-8E879CDAB66B",
+                "read_status": "empty"
+              }
+            ],
+            "plugins_fetched_at": "2026-10-04T21:09:56.784Z",
+            "plugins_source": "ax",
+            "plugins_unknown_reason": null,
+            "state": "A",
+            "success": true,
+            "track": 10,
+            "track_name": "LPM1107 Bass",
+            "verified": true
+          },
+          "timed_out": false
+        }
+      ],
+      "independent_editors": [
+        {
+          "source": {
+            "file": "native-1107-en-c3ac-before65.json",
+            "sha256": "44cd24002f8b37ff55666096fd3f57da27d753d5a9e6bf451760440a10d26f72"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Compressor",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "View:",
+            "Side Chain:",
+            "Compressor",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791147923.7924,
+          "end": 1791147924.705034,
+          "slider_count": 20,
+          "all_slider_projection_sha256": "91c20a91ab88140827301aa99f7a1ee4f9f88fed944c087abd802554664ce3df",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Threshold"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 65.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "65 %"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 1,
+          "failed_slider_description_reads": [
+            {
+              "status": -25200,
+              "value": null
+            }
+          ]
+        },
+        {
+          "source": {
+            "file": "native-1107-en-c3ac-after38.json",
+            "sha256": "50732d0604fef6306912a296cc007740141da5ee02919496ad89d3d6f7f1769c"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Compressor",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "View:",
+            "Side Chain:",
+            "Compressor",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791147990.047748,
+          "end": 1791147990.727031,
+          "slider_count": 20,
+          "all_slider_projection_sha256": "b1c946a78989e05003b606928ebea464701a9d8d1f8d484bc92b46c1da5a6f64",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Threshold"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 38.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "38 %"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 1,
+          "failed_slider_description_reads": [
+            {
+              "status": -25200,
+              "value": null
+            }
+          ]
+        },
+        {
+          "source": {
+            "file": "native-1107-en-c3ac-restored65.json",
+            "sha256": "c68ad11879a31ebfbb8de35d8af34ecb91a8a7e435706fe61298a59161c44c33"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Compressor",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "View:",
+            "Side Chain:",
+            "Compressor",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791148022.8187141,
+          "end": 1791148023.501913,
+          "slider_count": 20,
+          "all_slider_projection_sha256": "91c20a91ab88140827301aa99f7a1ee4f9f88fed944c087abd802554664ce3df",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Threshold"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 65.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "65 %"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 1,
+          "failed_slider_description_reads": [
+            {
+              "status": -25200,
+              "value": null
+            }
+          ]
+        },
+        {
+          "source": {
+            "file": "native-1107-en-c3ac-eq-before2.2.json",
+            "sha256": "bd03c96ae71a7f4fd4fc6621cade25423872a5182706e7db3924d6622b515182"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Channel EQ",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "View:",
+            "Channel EQ",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791147924.8867998,
+          "end": 1791147925.664117,
+          "slider_count": 26,
+          "all_slider_projection_sha256": "2d877aacfe8171db6dbe0186c5197127f5bd78c244916584d11a8812589f62c2",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Peak 1 Gain"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 262.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "+2.2 dB"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 0,
+          "failed_slider_description_reads": []
+        },
+        {
+          "source": {
+            "file": "native-1107-en-c3ac-eq-after3.json",
+            "sha256": "0b4cec35cbb8e7a0615bd8205db06d93f56da6edb71562d94dabea789a6d0d5d"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Channel EQ",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "View:",
+            "Channel EQ",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791148085.0569391,
+          "end": 1791148085.717252,
+          "slider_count": 26,
+          "all_slider_projection_sha256": "1ff621af020ea9202bcacca1acae24252cc81797630be2e0940a346c732a6121",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Peak 1 Gain"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 270.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "+3.0 dB"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 0,
+          "failed_slider_description_reads": []
+        },
+        {
+          "source": {
+            "file": "native-1107-en-c3ac-eq-restored2.2.json",
+            "sha256": "5981dc9a9f310587a6caefe5ec691ee6b36807f99e6456024ce7645edbc21b4d"
+          },
+          "track_name": "LPM1107 Param",
+          "plugin_name": "Channel EQ",
+          "mixer_strip_index": 25,
+          "window_title": "LPM1107 Param",
+          "identity_static_text": [
+            "View:",
+            "Channel EQ",
+            "LPM1107 Param"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 0,
+          "open_status": 0,
+          "close_status": 0,
+          "start": 1791148130.287358,
+          "end": 1791148130.954544,
+          "slider_count": 26,
+          "all_slider_projection_sha256": "2d877aacfe8171db6dbe0186c5197127f5bd78c244916584d11a8812589f62c2",
+          "target_sliders": [
+            {
+              "AXRole": {
+                "status": 0,
+                "value": "AXSlider"
+              },
+              "AXDescription": {
+                "status": 0,
+                "value": "Peak 1 Gain"
+              },
+              "AXValue": {
+                "status": 0,
+                "value": 262.0
+              },
+              "AXValueDescription": {
+                "status": 0,
+                "value": "+2.2 dB"
+              }
+            }
+          ],
+          "failed_slider_description_read_count": 0,
+          "failed_slider_description_reads": []
+        },
+        {
+          "source": {
+            "file": "native-1107-en-c3ac-inserted-gain.json",
+            "sha256": "f6e79aa0957e648dd6067e2804b46c0ae1d854f8181d4f52e70de7713ac3a4d4"
+          },
+          "track_name": "LPM1107 Bass",
+          "plugin_name": "Gain",
+          "mixer_strip_index": 41,
+          "window_title": "LPM1107 Bass",
+          "identity_static_text": [
+            "Gain",
+            "LPM1107 Bass"
+          ],
+          "outcome": "raw_read_completed",
+          "preexisting_matching_windows": 1,
+          "close_status": 0,
+          "start": 1791148196.176692,
+          "end": 1791148196.408556,
+          "slider_count": 1,
+          "all_slider_projection_sha256": "b6cf39e50433e40f7d774310cc9a0ff66733592971537a575afd88ea86384cdf",
+          "target_sliders": [],
+          "failed_slider_description_read_count": 1,
+          "failed_slider_description_reads": [
+            {
+              "status": -25200,
+              "value": null
+            }
+          ]
+        }
+      ],
+      "selected_header_observations": [
+        {
+          "record_ordinal": 15,
+          "selected_headers": [
+            {
+              "description": {
+                "status": 0,
+                "value": "Track 34 “LPM1107 Bass”"
+              },
+              "selected": {
+                "status": 0,
+                "value": true
+              }
+            }
+          ]
+        }
+      ],
+      "server_stop": {
+        "pid": 72528,
+        "steps": [
+          {
+            "step": "close_stdin",
+            "exited": true,
+            "returncode": 0
+          }
+        ],
+        "returncode": 0,
+        "pid_gone": true,
+        "reader_finished": true
+      }
+    }
+  },
+  "restoration": {
+    "source": {
+      "file": "live-1107-restored-c3ac14a5/raw.json",
+      "sha256": "0d193aff0de583c3fe8052d6a91f56fe80bfb7350c8581fb837ed8981f9fb2ed"
+    },
+    "calls": [
+      {
+        "command": "get_inventory",
+        "params": {
+          "track": 10
+        },
+        "body": {
+          "complete": true,
+          "hc_schema": 2,
+          "mixer_reveal_attempted": false,
+          "mixer_reveal_strategies": [],
+          "mixer_strip_index": 41,
+          "operation": "logic_plugins.get_inventory",
+          "plugins": [
+            {
+              "bypassed": null,
+              "insert": 0,
+              "name": null,
+              "occupied": false,
+              "plugin_id": null,
+              "plugin_insert_ref": "ins_252D8C2A-C68D-4D84-BB08-7B3A8D6EAC4D",
+              "read_status": "empty"
+            },
+            {
+              "bypassed": null,
+              "insert": 1,
+              "name": null,
+              "occupied": false,
+              "plugin_id": null,
+              "plugin_insert_ref": "ins_40FC7ED8-B7A1-4B22-8636-45A8698B026F",
+              "read_status": "empty"
+            },
+            {
+              "bypassed": null,
+              "insert": 2,
+              "name": null,
+              "occupied": false,
+              "plugin_id": null,
+              "plugin_insert_ref": "ins_00B448D1-BE6A-4A71-8488-EC594AFA1CC2",
+              "read_status": "empty"
+            }
+          ],
+          "plugins_fetched_at": "2026-10-04T21:11:26.118Z",
+          "plugins_source": "ax",
+          "plugins_unknown_reason": null,
+          "state": "A",
+          "success": true,
+          "track": 10,
+          "track_name": "LPM1107 Bass",
+          "verified": true
+        },
+        "timed_out": false
+      },
+      {
+        "command": "get_inventory",
+        "params": {
+          "track": 11
+        },
+        "body": {
+          "complete": true,
+          "hc_schema": 2,
+          "mixer_reveal_attempted": false,
+          "mixer_reveal_strategies": [],
+          "mixer_strip_index": 25,
+          "operation": "logic_plugins.get_inventory",
+          "plugins": [
+            {
+              "bypassed": false,
+              "insert": 0,
+              "name": "Channel EQ",
+              "occupied": true,
+              "plugin_id": "logic.stock.effect.channel_eq",
+              "plugin_insert_ref": "ins_87905E68-3040-44F4-B8FB-27B9F5A4B5A1",
+              "read_status": "ok"
+            },
+            {
+              "bypassed": false,
+              "insert": 1,
+              "name": "Compressor",
+              "occupied": true,
+              "plugin_id": "logic.stock.effect.compressor",
+              "plugin_insert_ref": "ins_E14BAEC0-1BC4-4184-ADC6-8A5CF565DAF0",
+              "read_status": "ok"
+            },
+            {
+              "bypassed": false,
+              "insert": 2,
+              "name": "ChromaVerb",
+              "occupied": true,
+              "plugin_id": null,
+              "plugin_insert_ref": "ins_E9BB44EE-D2E7-4B37-8515-7CC014FD7CB8",
+              "read_status": "ok"
+            }
+          ],
+          "plugins_fetched_at": "2026-10-04T21:11:27.340Z",
+          "plugins_source": "ax",
+          "plugins_unknown_reason": null,
+          "state": "A",
+          "success": true,
+          "track": 11,
+          "track_name": "LPM1107 Param",
+          "verified": true
+        },
+        "timed_out": false
+      }
+    ],
+    "independent_editors": [
+      {
+        "source": {
+          "file": "native-1107-restored-c3ac-compressor.json",
+          "sha256": "98b89c7c632b8015aa613b1c8809a951fe14f18bbd10ae17f1f9f6fc45e0d42c"
+        },
+        "track_name": "LPM1107 Param",
+        "plugin_name": "Compressor",
+        "mixer_strip_index": 25,
+        "window_title": "LPM1107 Param",
+        "identity_static_text": [
+          "보기:",
+          "사이드 체인:",
+          "Compressor",
+          "LPM1107 Param"
+        ],
+        "outcome": "raw_read_completed",
+        "preexisting_matching_windows": 0,
+        "open_status": 0,
+        "close_status": 0,
+        "start": 1791148328.220597,
+        "end": 1791148329.0736058,
+        "slider_count": 20,
+        "all_slider_projection_sha256": "91c20a91ab88140827301aa99f7a1ee4f9f88fed944c087abd802554664ce3df",
+        "target_sliders": [
+          {
+            "AXRole": {
+              "status": 0,
+              "value": "AXSlider"
+            },
+            "AXDescription": {
+              "status": 0,
+              "value": "Threshold"
+            },
+            "AXValue": {
+              "status": 0,
+              "value": 65.0
+            },
+            "AXValueDescription": {
+              "status": 0,
+              "value": "65 %"
+            }
+          }
+        ],
+        "failed_slider_description_read_count": 1,
+        "failed_slider_description_reads": [
+          {
+            "status": -25200,
+            "value": null
+          }
+        ]
+      },
+      {
+        "source": {
+          "file": "native-1107-restored-c3ac-eq.json",
+          "sha256": "c13567e57807db8e9c0fc59d31f0f2e4e37171ec5e777ec59423f7c647c44a0e"
+        },
+        "track_name": "LPM1107 Param",
+        "plugin_name": "Channel EQ",
+        "mixer_strip_index": 25,
+        "window_title": "LPM1107 Param",
+        "identity_static_text": [
+          "보기:",
+          "Channel EQ",
+          "LPM1107 Param"
+        ],
+        "outcome": "raw_read_completed",
+        "preexisting_matching_windows": 0,
+        "open_status": 0,
+        "close_status": 0,
+        "start": 1791148329.2580101,
+        "end": 1791148329.987345,
+        "slider_count": 26,
+        "all_slider_projection_sha256": "2d877aacfe8171db6dbe0186c5197127f5bd78c244916584d11a8812589f62c2",
+        "target_sliders": [
+          {
+            "AXRole": {
+              "status": 0,
+              "value": "AXSlider"
+            },
+            "AXDescription": {
+              "status": 0,
+              "value": "Peak 1 Gain"
+            },
+            "AXValue": {
+              "status": 0,
+              "value": 262.0
+            },
+            "AXValueDescription": {
+              "status": 0,
+              "value": "+2.2 dB"
+            }
+          }
+        ],
+        "failed_slider_description_read_count": 0,
+        "failed_slider_description_reads": []
+      }
+    ],
+    "server_stop": {
+      "pid": 74524,
+      "steps": [
+        {
+          "step": "close_stdin",
+          "exited": true,
+          "returncode": 0
+        }
+      ],
+      "returncode": 0,
+      "pid_gone": true,
+      "reader_finished": true
+    },
+    "locale": "ko-KR",
+    "method": "Actual post-restoration inventory and independent occupied-editor AX reads in Korean, with full slider projections compared against the pre-write Korean baselines."
+  },
+  "pre_repair_same_read_diagnostic": {
+    "measured_head": "86765165cee6074aa858eaea6c7ff410e5694473",
+    "binary": {
+      "head": "86765165cee6074aa858eaea6c7ff410e5694473",
+      "embedded_commit": "86765165cee6074aa858eaea6c7ff410e5694473",
+      "sha256": "cf78ac470145377b249a624bc9478ae0073c05533635617ce0a0bd75402c41cb",
+      "built_at": "2026-10-04T20:51:44Z"
+    },
+    "binary_source": {
+      "file": "bin-1108-review-repair/bin-86765165/build-receipt.json",
+      "sha256": "c6e038bb78a474c3840becf6b7ab96d5bc1139e35371108b249e9bbce37dba3a"
+    },
+    "source": {
+      "file": "live-1107-ko-86765165-traversal-diagnostic/raw.json",
+      "sha256": "38a3b840eaba1ecfbba90c9180416c70d1b212a9f7a9a52ba3e724ef2d58a453"
+    },
+    "stderr_source": {
+      "file": "live-1107-ko-86765165-traversal-diagnostic/lpm-verify-server-5v37ne06.stderr.log",
+      "sha256": "e5cfeda139159b2eba8797adf117dcdc6d154f968d9a8e2b0bb3ac6bb53e1089"
+    },
+    "observations": [
+      {
+        "timestamp": "2026-10-04T20:52:28.525Z",
+        "role": "AXTextField",
+        "path": "8.1.48.0.0",
+        "children_read_status": -25200
+      },
+      {
+        "timestamp": "2026-10-04T20:52:28.767Z",
+        "role": "AXTextField",
+        "path": "8.1.48.0.0",
+        "children_read_status": -25200
+      },
+      {
+        "timestamp": "2026-10-04T20:52:29.098Z",
+        "role": "AXTextField",
+        "path": "8.1.48.0.0",
+        "children_read_status": -25200
+      }
+    ],
+    "selected_insert_failures": [
+      {
+        "command": "insert_verified",
+        "params": {
+          "target_ref": "ins_8690B34C-360D-48AF-AFB5-BF520F206720",
+          "plugin": "logic.stock.effect.gain",
+          "mode": "duplicate_applyback",
+          "project_expected_path": "[owned disposable fixture]"
+        },
+        "body": {
+          "error": "insert_setup_failed",
+          "hc_schema": 2,
+          "operation": "logic_plugins.insert_verified",
+          "safe_to_retry": false,
+          "select_trace": {
+            "go_to_position_closed": false,
+            "plugin_windows_hidden": false,
+            "pre_inventory_readable": true,
+            "requested_insert": 0,
+            "requested_plugin_id": "logic.stock.effect.gain",
+            "requested_track": 10,
+            "search_query": "Gain",
+            "slot_commit_failure_stage": "arrange_headers_unavailable/track_header_candidate_children/-25200",
+            "slot_commit_target_resolved": false,
+            "slot_popup_anchor_verified": true,
+            "slot_popup_cancel_attempted": true,
+            "slot_popup_cancel_returned": true,
+            "slot_popup_frame": {
+              "height": 527,
+              "width": 230,
+              "x": 1612,
+              "y": 530
+            },
+            "slot_popup_menu_found": true,
+            "slot_popup_open_action": "coordinate_fallback",
+            "slot_popup_open_action_enumeration": "absent",
+            "slot_popup_open_fallback_taken": true,
+            "slot_popup_preexisting_menus": 0,
+            "strategies_attempted": [],
+            "target_binding_stable_after_selection": true,
+            "target_slot_found": true,
+            "target_slot_frame": {
+              "height": 18,
+              "width": 58,
+              "x": 1842,
+              "y": 527
+            },
+            "track_select_ok": true,
+            "track_select_verified": true,
+            "window_raised": true,
+            "write_source": "ax_exact_slot_popup"
+          },
+          "setup_stage": "target_slot_changed_before_plugin_commit",
+          "state": "C",
+          "success": false,
+          "target_identity": {
+            "insert": 0,
+            "plugin_id": "logic.stock.effect.gain",
+            "track_index": 10
+          },
+          "verified": false,
+          "what_was_attempted": "open the requested slot popup and choose logic.stock.effect.gain",
+          "what_was_observed": "the slot's opener was dispatched, then setup stopped at stage 'target_slot_changed_before_plugin_commit' before any plugin was chosen",
+          "write_attempted": true
+        },
+        "timed_out": false
+      }
+    ],
+    "server_stop": {
+      "pid": 64847,
+      "steps": [
+        {
+          "step": "close_stdin",
+          "exited": true,
+          "returncode": 0
+        }
+      ],
+      "returncode": 0,
+      "pid_gone": true,
+      "reader_finished": true
+    },
+    "method": "Earlier unchanged refusal predicate logged existing role/path/status observations without extra AX reads. This identifies the failed children-read node as AXTextField; it does not establish unread names, CF replacement or a menu cause, and is not a passing insertion measurement."
+  }
+}
