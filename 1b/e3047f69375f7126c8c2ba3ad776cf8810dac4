@@ -1,14 +1,18 @@
 Limit: claims are about the dispatchers driven with mocks; a refusal that depends on Logic's state is outside them
 Limit: the named-client check of the richer schema is run separately, before review
+Record-Id: r-inh1be3042bd0c5af
 Provenance: inherited 2bd0c5af0a63f08b379490a78dd1da266a736583
 
 Limit: the planning samples pass the planner's parse and are refused only because nothing with those ids is retained; a retained plan is not built here
 Limit: target_ref alternatives are not driven, because the census issues no target references
+Record-Id: r-inh1be304e01e6b53
 Provenance: inherited e01e6b5311d83a401161ac592009654772909521
 
 Limit: the vocabulary test proves the validator implements the keywords used, not that a client's validator agrees on them
+Record-Id: r-inh1be30441951ee4
 Provenance: inherited 41951ee4cfcde65c66d2e2e85f5284c5e497d722
 
 Limit: mode and project_expected_path are refused after step 1 with their own codes (unsupported_mode, project_path_required) and are not required groups; the census stops before them so no AppleScript reaches Logic
 Limit: parallel plugin suites still contend on VerifiedOpGate.shared for a moment per verified op, as on main
+Record-Id: r-inh1be30423f96be8
 Provenance: inherited 23f96be810e5d9f4e946f8bc965eb90302b961c8
