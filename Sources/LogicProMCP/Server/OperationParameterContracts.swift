@@ -142,11 +142,29 @@ extension OperationRegistry {
     private static let planSessionRepairSamples: [String: Value] = [
         "plan_id": .string("plan-957"), "snapshot_id": .string("snapshot-957"), "policy": .object([:]),
     ]
+    /// The plugin write fields: the dispatcher omits one that does not read, and the channel's step 1
+    /// (`AccessibilityChannel.verifiedPluginParameterFailure`) refuses a missing one as invalid_params.
+    /// `mode` and `project_expected_path` are refused after it with their own codes (unsupported_mode,
+    /// project_path_required), so they are not required groups here.
     private static func pluginWriteRules(_ keys: [String]) -> [String: ParamRule] {
         Dictionary(uniqueKeysWithValues: keys.map {
-            ($0, ParamRule.unconstrained("omitted when it does not read; the channel's own schema step then refuses the request"))
+            ($0, ParamRule.unconstrained("omitted when it does not read; the channel's step 1 then refuses a missing one",
+                                         sample: pluginWriteSamples[$0]))
         })
     }
+    /// Values that pass the channel's step 1; with no mode the channel then stops at unsupported_mode,
+    /// before anything is read.
+    private static let pluginWriteSamples: [String: Value] = [
+        "track": .int(0), "insert": .int(0), "slot": .int(0), "plugin": .string("Gain"), "plugin_id": .string("Gain"),
+        "plugin_name": .string("Gain"), "param": .string("Gain"), "band": .string("Low Cut"),
+        "parameter": .string("Frequency"), "value": .int(0),
+    ]
+    /// Export inputs: placeholders the census replaces with a project package and an output folder it makes.
+    private static let exportSamples: [String: Value] = [
+        "path": .string("/tmp/lpm-957.logicx"), "project": .string("/tmp/lpm-957.logicx"),
+        "projects": .array([.string("/tmp/lpm-957.logicx")]),
+        "output_root": .string("/tmp/lpm-957-out"), "outputRoot": .string("/tmp/lpm-957-out"),
+    ]
 
     /// Commands with parameters. A command with none has no entry.
     static let parameterContracts: [OperationID: OperationParameterContract] = {
@@ -350,18 +368,24 @@ extension OperationRegistry {
             // logic_plugins: the dispatcher omits a value that does not read, and the channel's own
             // schema step refuses the request, so those refusals come after a channel ran.
             "plugins.get_inventory": .init(params: Dictionary(uniqueKeysWithValues: ["index", "track", "track_index"].map {
-                ($0, ParamRule.unconstrained("omitted when it does not read as an integer; the inventory then covers every track"))
-            }), required: []),
+                ($0, ParamRule.unconstrained("omitted when it does not read as an integer; the channel then refuses the request",
+                                             sample: .int(0)))
+            }), required: [["index", "track", "track_index"]]),
             "plugins.insert_verified": .init(params: pluginWriteRules(["insert", "slot", "plugin", "plugin_id", "plugin_name", "mode", "project_expected_path", "track"])
                 .merging([
-                    "expected_name": .unconstrained("compared only when the track reads; with no track the request goes on to the channel"),
+                    "expected_name": .unconstrained("corroborates a bare track index, which is refused without it "
+                                                    + "(index_binding_corroboration_required); not read with a target_ref",
+                                                    sample: .string("Track 1")),
                     "target_ref": targetRef, "project_ref": projectRef,
                 ]) { _, new in new },
-                required: []),
+                required: [["track", "target_ref"], ["insert", "slot"], ["plugin", "plugin_id", "plugin_name"],
+                           ["expected_name", "target_ref"]]),
             "plugins.set_eq_band_verified": .init(params: pluginWriteRules(["band", "insert", "mode", "parameter", "project_expected_path", "track", "unit", "value"])
-                .merging(["target_ref": targetRef, "project_ref": projectRef]) { _, new in new }, required: []),
+                .merging(["target_ref": targetRef, "project_ref": projectRef]) { _, new in new },
+                required: [["track", "target_ref"], ["insert"], ["band"], ["parameter"], ["value"]]),
             "plugins.set_param_verified": .init(params: pluginWriteRules(["insert", "mode", "param", "plugin", "plugin_id", "plugin_name", "project_expected_path", "track", "unit", "value"])
-                .merging(["target_ref": targetRef, "project_ref": projectRef]) { _, new in new }, required: []),
+                .merging(["target_ref": targetRef, "project_ref": projectRef]) { _, new in new },
+                required: [["track", "target_ref"], ["insert"], ["plugin", "plugin_id", "plugin_name"], ["param"], ["value"]]),
 
             // logic_project
             "project.bounce": .init(params: ["confirmed": .enforced(.boolean, .bool(false))], required: []),
@@ -410,9 +434,13 @@ extension OperationRegistry {
             var params = Dictionary(uniqueKeysWithValues: [
                 "artifact", "artifacts", "collision_policy", "kind", "naming_policy", "outputRoot", "output_root",
                 "path", "project", "projects",
-            ].map { ($0, ParamRule.unconstrained("checked by ProjectExportPlanner.plan, whose refusals are not yet recorded by kind")) })
+            ].map { ($0, ParamRule.unconstrained("checked by ProjectExportPlanner.plan, whose refusals are not yet recorded by kind",
+                                                 sample: exportSamples[$0])) })
             if op != "export_plan" { params["confirmed"] = .enforced(.boolean, .bool(false)) }
-            contracts["project.\(op)"] = .init(params: params, required: [])
+            // The planner refuses a request with no project or no output folder as invalid_params
+            // (ProjectExportPlanner.projectPaths and .outputRoot; #1104 review R3, R3-01).
+            contracts["project.\(op)"] = .init(params: params,
+                                               required: [["projects", "project", "path"], ["output_root", "outputRoot"]])
         }
         for (tool, ops) in [("tracks", ["mute", "solo", "arm"])] {
             for op in ops {

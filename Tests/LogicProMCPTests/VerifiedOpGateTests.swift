@@ -28,7 +28,10 @@ struct VerifiedOpGateSharedTests {
     // confirm it is refused with verified_op_in_progress before touching AX.
     // Release is synchronous so the shared singleton is clean before this test
     // returns.
-    let acquired = VerifiedOpGate.shared.tryAcquire()
+    // A gate of its own: holding `.shared` here refused every other suite's verified op that ran at
+    // the same moment (ADR002A/B, seen with the plugin suites run together, #1104).
+    let gate = VerifiedOpGate()
+    let acquired = gate.tryAcquire()
     #expect(acquired)
 
     let router = ChannelRouter()
@@ -41,9 +44,10 @@ struct VerifiedOpGateSharedTests {
             "project_expected_path": .string("/tmp/x.logicx"),
         ],
         router: router,
-        cache: StateCache()
+        cache: StateCache(),
+        verifiedGate: gate
     )
-    VerifiedOpGate.shared.release()
+    gate.release()
 
     let text = sharedToolText(result)
     let obj = try! JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as! [String: Any]
@@ -54,7 +58,7 @@ struct VerifiedOpGateSharedTests {
 }
 
 @Test func testPluginsDispatcherReleasesVerifiedGateAfterCompletion() async {
-    VerifiedOpGate.shared.release()
+    let gate = VerifiedOpGate()
 
     let router = ChannelRouter()
     _ = await PluginsDispatcher.handle(
@@ -66,17 +70,19 @@ struct VerifiedOpGateSharedTests {
             "project_expected_path": .string("/tmp/x.logicx"),
         ],
         router: router,
-        cache: StateCache()
+        cache: StateCache(),
+        verifiedGate: gate
     )
 
-    #expect(VerifiedOpGate.shared.tryAcquire())
-    VerifiedOpGate.shared.release()
+    #expect(gate.tryAcquire())
+    gate.release()
 }
 
 @Test func testGetInventoryNotGatedByVerifiedOpLock() async {
     // Even while the verified-op gate is held, get_inventory (read-only) must
     // still run — it is not a mutating verified op.
-    let acquired = VerifiedOpGate.shared.tryAcquire()
+    let gate = VerifiedOpGate()
+    let acquired = gate.tryAcquire()
     #expect(acquired)
 
     let router = ChannelRouter()
@@ -84,9 +90,10 @@ struct VerifiedOpGateSharedTests {
         command: "get_inventory",
         params: ["track": .int(0)],
         router: router,
-        cache: StateCache()
+        cache: StateCache(),
+        verifiedGate: gate
     )
-    VerifiedOpGate.shared.release()
+    gate.release()
 
     let text = sharedToolText(result)
     // No channels registered → channels_exhausted, NOT verified_op_in_progress.

@@ -37,9 +37,18 @@ struct Issue957ParameterContractCensusTests {
         case "project.open":
             if params["path"] == placeholder { params["path"] = .string(temporaryProject()) }
         case "project.export_plan", "project.export_run", "project.export_resume":
-            if params["path"] == nil { params["path"] = .string(temporaryProject()) }
-            if params["output_root"] == nil {
-                params["output_root"] = .string(FileManager.default.temporaryDirectory
+            // Only a placeholder the request carries is replaced; an omitted key stays omitted, so an
+            // empty request reaches the planner empty (#1104 review R3, R3-01: this used to add
+            // `path` and `output_root` to every request, which hid the planner's refusal).
+            let samples = OperationRegistry.parameterContracts[spec.id]?.params
+            for key in ["path", "project"] where params[key] != nil && params[key] == samples?[key]?.sample {
+                params[key] = .string(temporaryProject())
+            }
+            if params["projects"] != nil, params["projects"] == samples?["projects"]?.sample {
+                params["projects"] = .array([.string(temporaryProject())])
+            }
+            for key in ["output_root", "outputRoot"] where params[key] != nil && params[key] == samples?[key]?.sample {
+                params[key] = .string(FileManager.default.temporaryDirectory
                     .appendingPathComponent("lpm-957-out-\(UUID().uuidString)").path)
             }
         case "midi.import_file":
@@ -82,7 +91,8 @@ struct Issue957ParameterContractCensusTests {
         case .logicSystem:
             result = await SystemDispatcher.handle(command: command, params: params, router: router, cache: cache)
         case .logicPlugins:
-            result = await PluginsDispatcher.handle(command: command, params: params, router: router, cache: cache)
+            result = await PluginsDispatcher.handle(command: command, params: params, router: router, cache: cache,
+                                                    liveTrackNames: names, verifiedGate: VerifiedOpGate())
         case .logicEdit:
             result = await EditDispatcher.handle(command: command, params: params, router: router, cache: cache)
         case .logicProject:
@@ -96,6 +106,14 @@ struct Issue957ParameterContractCensusTests {
         var ran = false
         for channel in channels where !(await channel.executedOps.isEmpty) {
             ran = true
+        }
+        // The verified plugin commands check their parameters in the Accessibility channel, which a
+        // MockChannel does not. Its step 1 is applied to what the dispatcher passed, so a request the
+        // channel would refuse as invalid_params counts as refused here (#1104 review R3, R3-01).
+        if spec.tool == .logicPlugins, let accessibility = channels.first(where: { $0.id == .accessibility }),
+           let passed = await accessibility.executedOps.last?.1,
+           let failure = AccessibilityChannel.verifiedPluginParameterFailure(command: command, params: passed) {
+            return (toolStateCResult(.invalidParams, hint: failure, extras: ["write_attempted": false]), false)
         }
         return (result, ran)
     }

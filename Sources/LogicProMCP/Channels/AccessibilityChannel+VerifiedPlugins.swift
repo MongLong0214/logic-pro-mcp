@@ -151,6 +151,40 @@ extension AccessibilityChannel {
         )
     }
 
+    /// Step 1 of the verified plugin commands: what each needs before it reads anything. `nil` when
+    /// it is all there, else the refusal's text. The channel refuses on it as invalid_params, and the
+    /// #957 census applies it to the parameters the dispatcher passed, so the schema's required
+    /// groups and the channel answer from this one place (#1104 review R3, R3-01).
+    static func verifiedPluginParameterFailure(command: String, params: [String: String]) -> String? {
+        func nonNegative(_ raw: String?) -> Bool { raw.flatMap { Int($0) }.map { $0 >= 0 } ?? false }
+        func present(_ key: String) -> Bool {
+            !(params[key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        switch command {
+        case "get_inventory":
+            return nonNegative(params["track"] ?? params["track_index"] ?? params["index"])
+                ? nil : "missing or invalid 'track' (expected Int >= 0)"
+        case "set_param_verified", "set_eq_band_verified", "insert_verified":
+            guard nonNegative(params["track"]) else { return "missing or invalid 'track' (Int >= 0)" }
+            guard nonNegative(params["insert"]) else { return "missing or invalid 'insert' (Int >= 0)" }
+            if command == "set_eq_band_verified" {
+                guard present("band") else { return "missing Channel EQ 'band' name" }
+                guard present("parameter") else { return "missing Channel EQ 'parameter' name" }
+            } else {
+                guard present("plugin") else { return "missing 'plugin' identity" }
+                if command == "set_param_verified", !present("param") { return "missing 'param' key" }
+            }
+            if command != "insert_verified" {
+                guard let value = params["value"].flatMap({ Double($0) }), value.isFinite else {
+                    return "missing or non-finite 'value'"
+                }
+            }
+            return nil
+        default:
+            return nil
+        }
+    }
+
     /// `plugin.get_inventory` channel entry. Non-mutating: never carries
     /// `write_source`/`verify_source`. Returns a `complete:true|false` snapshot
     /// (HC-v2-adjacent inventory shape) when the strip can be enumerated, or
@@ -162,17 +196,19 @@ extension AccessibilityChannel {
         revealMixer: MixerRevealAction = ensureMixerAreaVisibleForInventory
     ) async -> ChannelResult {
         let operation = "logic_plugins.get_inventory"
-        guard let trackRaw = params["track"] ?? params["track_index"] ?? params["index"],
-              let track = Int(trackRaw), track >= 0 else {
+        if let failure = verifiedPluginParameterFailure(command: "get_inventory", params: params) {
             return .error(HonestContract.encodeV2StateC(
                 error: .invalidParams,
                 extras: [
                     "operation": operation,
                     "what_was_attempted": "read insert chain inventory",
-                    "what_was_observed": "missing or invalid 'track' (expected Int >= 0)",
+                    "what_was_observed": failure,
                     "safe_to_retry": false,
                 ]
             ))
+        }
+        guard let track = (params["track"] ?? params["track_index"] ?? params["index"]).flatMap({ Int($0) }) else {
+            return .error(invalidParamsStateC(operation, "the track did not parse after validation"))
         }
 
         let fetchedAt = ISO8601DateFormatter.cacheFormatter.string(from: Date())
@@ -781,30 +817,17 @@ extension AccessibilityChannel {
     ) async -> ChannelResult {
 
         // Step 1 — schema / params (presence, type, range, unit).
-        guard let trackRaw = params["track"], let track = Int(trackRaw), track >= 0 else {
-            return .error(invalidParamsStateC(operation, "missing or invalid 'track' (Int >= 0)"))
-        }
-        guard let insertRaw = params["insert"], let insert = Int(insertRaw), insert >= 0 else {
-            return .error(invalidParamsStateC(operation, "missing or invalid 'insert' (Int >= 0)"))
-        }
+        let command: String
         switch selector {
-        case let .plugin(pluginAlias, paramAlias):
-            guard !pluginAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return .error(invalidParamsStateC(operation, "missing 'plugin' identity"))
-            }
-            guard !paramAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return .error(invalidParamsStateC(operation, "missing 'param' key"))
-            }
-        case let .channelEQ(bandName, parameterName):
-            guard !bandName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return .error(invalidParamsStateC(operation, "missing Channel EQ 'band' name"))
-            }
-            guard !parameterName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return .error(invalidParamsStateC(operation, "missing Channel EQ 'parameter' name"))
-            }
+        case .plugin: command = "set_param_verified"
+        case .channelEQ: command = "set_eq_band_verified"
         }
-        guard let valueRaw = params["value"], let value = Double(valueRaw), value.isFinite else {
-            return .error(invalidParamsStateC(operation, "missing or non-finite 'value'"))
+        if let failure = verifiedPluginParameterFailure(command: command, params: params) {
+            return .error(invalidParamsStateC(operation, failure))
+        }
+        guard let track = params["track"].flatMap({ Int($0) }), let insert = params["insert"].flatMap({ Int($0) }),
+              let value = params["value"].flatMap({ Double($0) }) else {
+            return .error(invalidParamsStateC(operation, "the parameters did not parse after validation"))
         }
         let unit = params["unit"]
         let mode = params["mode"] ?? ""
@@ -3380,16 +3403,13 @@ extension AccessibilityChannel {
         let operation = "logic_plugins.insert_verified"
 
         // Step 1 — schema.
-        guard let trackRaw = params["track"], let track = Int(trackRaw), track >= 0 else {
-            return .error(invalidParamsStateC(operation, "missing or invalid 'track' (Int >= 0)"))
+        if let failure = verifiedPluginParameterFailure(command: "insert_verified", params: params) {
+            return .error(invalidParamsStateC(operation, failure))
         }
-        guard let insertRaw = params["insert"], let insert = Int(insertRaw), insert >= 0 else {
-            return .error(invalidParamsStateC(operation, "missing or invalid 'insert' (Int >= 0)"))
+        guard let track = params["track"].flatMap({ Int($0) }), let insert = params["insert"].flatMap({ Int($0) }) else {
+            return .error(invalidParamsStateC(operation, "the parameters did not parse after validation"))
         }
         let pluginAlias = params["plugin"] ?? ""
-        guard !pluginAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .error(invalidParamsStateC(operation, "missing 'plugin' identity"))
-        }
         let mode = params["mode"] ?? ""
 
         let preResolutionIdentity: [String: Any] = [

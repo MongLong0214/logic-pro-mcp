@@ -83,10 +83,10 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 
 | Command | Parameters | Required | Unknown parameters | Mutability | Confirmation | Target | Verification | Retry | Availability |
 |---|---|---|---|---|---|---|---|---|---|
-| `get_inventory` | `index`, `track`, `track_index` | none | closed | read_only | none | none | none | never_automatic | default_install |
-| `insert_verified` | `expected_name`, `insert`, `mode`, `plugin`, `plugin_id`, `plugin_name`, `project_expected_path`, `project_ref`, `slot`, `target_ref`, `track` | none | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
-| `set_eq_band_verified` | `band`, `insert`, `mode`, `parameter`, `project_expected_path`, `project_ref`, `target_ref`, `track`, `unit`, `value` | none | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
-| `set_param_verified` | `insert`, `mode`, `param`, `plugin`, `plugin_id`, `plugin_name`, `project_expected_path`, `project_ref`, `target_ref`, `track`, `unit`, `value` | none | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
+| `get_inventory` | `index`, `track`, `track_index` | `index` or `track` or `track_index` | closed | read_only | none | none | none | never_automatic | default_install |
+| `insert_verified` | `expected_name`, `insert`, `mode`, `plugin`, `plugin_id`, `plugin_name`, `project_expected_path`, `project_ref`, `slot`, `target_ref`, `track` | `track` or `target_ref`; `insert` or `slot`; `plugin` or `plugin_id` or `plugin_name`; `expected_name` or `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
+| `set_eq_band_verified` | `band`, `insert`, `mode`, `parameter`, `project_expected_path`, `project_ref`, `target_ref`, `track`, `unit`, `value` | `track` or `target_ref`; `insert`; `band`; `parameter`; `value` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
+| `set_param_verified` | `insert`, `mode`, `param`, `plugin`, `plugin_id`, `plugin_name`, `project_expected_path`, `project_ref`, `target_ref`, `track`, `unit`, `value` | `track` or `target_ref`; `insert`; `plugin` or `plugin_id` or `plugin_name`; `param`; `value` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
 
 ## `logic_project`
 
@@ -97,9 +97,9 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | `cleanup_apply` | `confirmed`: boolean, `name`, `names`, `new_name`, `stepId`, `step_id` | `step_id` or `stepId`; `confirmed` | closed | mutating | l1 | none | readback_required | never_automatic | default_install |
 | `cleanup_plan` | none | none | closed | read_only | none | none | none | never_automatic | default_install |
 | `close` | `confirmed`: boolean, `saving` | none | closed | mutating | l3 | none | none | never_automatic | default_install |
-| `export_plan` | `artifact`, `artifacts`, `collision_policy`, `kind`, `naming_policy`, `outputRoot`, `output_root`, `path`, `project`, `projects` | none | closed | read_only | none | none | none | never_automatic | default_install |
-| `export_resume` | `artifact`, `artifacts`, `collision_policy`, `confirmed`: boolean, `kind`, `naming_policy`, `outputRoot`, `output_root`, `path`, `project`, `projects` | none | closed | mutating | l2 | none | readback_required | never_automatic | default_install |
-| `export_run` | `artifact`, `artifacts`, `collision_policy`, `confirmed`: boolean, `kind`, `naming_policy`, `outputRoot`, `output_root`, `path`, `project`, `projects` | none | closed | mutating | l2 | none | readback_required | never_automatic | default_install |
+| `export_plan` | `artifact`, `artifacts`, `collision_policy`, `kind`, `naming_policy`, `outputRoot`, `output_root`, `path`, `project`, `projects` | `projects` or `project` or `path`; `output_root` or `outputRoot` | closed | read_only | none | none | none | never_automatic | default_install |
+| `export_resume` | `artifact`, `artifacts`, `collision_policy`, `confirmed`: boolean, `kind`, `naming_policy`, `outputRoot`, `output_root`, `path`, `project`, `projects` | `projects` or `project` or `path`; `output_root` or `outputRoot` | closed | mutating | l2 | none | readback_required | never_automatic | default_install |
+| `export_run` | `artifact`, `artifacts`, `collision_policy`, `confirmed`: boolean, `kind`, `naming_policy`, `outputRoot`, `output_root`, `path`, `project`, `projects` | `projects` or `project` or `path`; `output_root` or `outputRoot` | closed | mutating | l2 | none | readback_required | never_automatic | default_install |
 | `get_regions` | none | none | closed | read_only | none | none | none | never_automatic | default_install |
 | `inspect_session` | `allow_ui_navigation`: boolean, `domains`, `project_ref`, `scope`, `snapshot_id` | none | closed | read_only | none | none | none | never_automatic | default_install |
 | `is_running` | none | none | closed | read_only | none | none | none | never_automatic | default_install |
