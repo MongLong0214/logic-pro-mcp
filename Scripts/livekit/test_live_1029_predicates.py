@@ -362,7 +362,7 @@ class NamedZoomAutomationAndCopy(unittest.TestCase):
     def test_zoom_needs_its_named_sliders_to_move(self):
         before = usable_snap(zoom={"vertical": 0.684, "horizontal": 0.213}, sliders=[120.0, 0.684, 0.213])
         after = usable_snap(zoom={"vertical": 0.0, "horizontal": 0.585}, sliders=[120.0, 0.0, 0.585])
-        row = judged_row("nav.zoom_to_fit", before, after, extra={"zoom_again": {"vertical": 0.0, "horizontal": 0.585}})
+        row = judged_row("nav.zoom_to_fit", before, after, extra={"zoom_again": {"vertical": 0.684, "horizontal": 0.213}})
         self.assertTrue(H.judge(row))
         self.assertFalse(H.judge(H.unchanged(row)))
         other = usable_snap(zoom={"vertical": 0.684, "horizontal": 0.213}, sliders=[121.0, 0.684, 0.213])
@@ -461,12 +461,16 @@ class ZoomToFitAndTheNewReadings(unittest.TestCase):
     BEFORE = {"zoom": {"vertical": 0.68, "horizontal": 0.21}}
     AFTER = {"zoom": {"vertical": 0.50, "horizontal": 0.40}}
 
-    def test_a_fit_holds_when_sent_again(self):
-        self.assertTrue(H.zoom_fitted(self.BEFORE, self.AFTER, {"zoom_again": {"vertical": 0.50, "horizontal": 0.40}}))
+    def test_the_toggle_returns_when_sent_again(self):
+        self.assertTrue(H.zoom_fitted(self.BEFORE, self.AFTER, {"zoom_again": {"vertical": 0.68, "horizontal": 0.21}}))
 
     def test_a_zoom_that_moves_again_is_not_a_fit(self):
         self.assertFalse(H.zoom_fitted(self.BEFORE, self.AFTER, {"zoom_again": {"vertical": 0.50, "horizontal": 0.60}}),
                          "a zoom in moved the horizontal slider again")
+        self.assertFalse(H.zoom_fitted(self.BEFORE, self.AFTER, {"zoom_again": {"vertical": 0.50, "horizontal": 0.40}}),
+                         "a second press that left the zoom where the first put it is not Logic's toggle")
+        self.assertFalse(H.zoom_fitted(self.BEFORE, self.AFTER, {"zoom_again": {"vertical": 0.68, "horizontal": 0.40}}),
+                         "only one axis came back")
         self.assertFalse(H.zoom_fitted(self.BEFORE, self.AFTER, {}), "the second reading did not read")
         self.assertFalse(H.zoom_fitted(self.BEFORE, self.BEFORE, {"zoom_again": self.BEFORE["zoom"]}),
                          "nothing moved")
@@ -482,6 +486,38 @@ class ZoomToFitAndTheNewReadings(unittest.TestCase):
         self.assertIn("automation", H.others_kept(base, moved_automation, {"structure", "sliders"}))
         self.assertNotIn("automation", H.others_kept(base, moved_automation, {"automation"}))
         self.assertIn("unread:zoom", H.others_kept(dict(base, zoom=None), dict(base, zoom=None), {"tracks"}))
+
+
+class StoppedRunsRestore(unittest.TestCase):
+    """A run stopped from outside runs its `finally` blocks, whichever way it was started."""
+
+    def stopped(self, signum, ignore_sigint):
+        import subprocess
+        import tempfile
+        marker = os.path.join(tempfile.mkdtemp(), "restored")
+        script = (
+            "import os, signal, sys, time\n"
+            f"sys.path.insert(0, {HERE!r})\n"
+            + ("signal.signal(signal.SIGINT, signal.SIG_IGN)\n" if ignore_sigint else "")
+            + "import live_1029_cgevent_fallback_in_every_locale as H\n"
+            "H.stop_on_signals()\n"
+            "try:\n"
+            f"    os.kill(os.getpid(), {int(signum)})\n"
+            "    time.sleep(5)\n"
+            "    os._exit(3)\n"  # not interrupted: leave without running the finally
+            "finally:\n"
+            f"    open({marker!r}, 'w').write('yes')\n"
+        )
+        subprocess.run([sys.executable, "-c", script], capture_output=True, timeout=30)
+        return os.path.exists(marker)
+
+    def test_sigterm_runs_the_restorations(self):
+        import signal
+        self.assertTrue(self.stopped(signal.SIGTERM, ignore_sigint=False))
+
+    def test_sigint_runs_them_even_when_started_with_sigint_ignored(self):
+        import signal
+        self.assertTrue(self.stopped(signal.SIGINT, ignore_sigint=True))
 
 
 if __name__ == "__main__":

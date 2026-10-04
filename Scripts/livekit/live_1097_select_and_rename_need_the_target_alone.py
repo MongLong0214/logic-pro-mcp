@@ -212,6 +212,7 @@ def restore_fixture(backup):
 
 
 def main():
+    P.stop_on_signals()
     args = arguments()
     E.REPO, E.BIN = args.worktree, args.binary
     sys.path.insert(0, os.path.join(args.worktree, "Scripts"))

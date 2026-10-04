@@ -65,6 +65,7 @@ import live_993_plugin_root_menu_in_every_locale as L993  # noqa: E402
 import logic_live_ax as A  # noqa: E402
 import probe_942_escape_over_goto_dialog as P  # noqa: E402
 import shutil  # noqa: E402
+import signal  # noqa: E402
 
 ONLY_CHANNEL_KEY = "LOGIC_MCP_DEBUG_ONLY_CHANNEL"
 PASS_KEY = "LOGIC_MCP_DEBUG_ONLY_CHANNEL_PASS"
@@ -501,6 +502,8 @@ def project_closed(before, after, extra):
 
 
 ZOOM_AXES = ("vertical", "horizontal")
+# The reading that holds the zoom sliders, which are among `sliders` as well.
+ZOOM_READING = "zoom"
 
 
 def zoom_moved(before, after, extra):
@@ -513,17 +516,21 @@ def zoom_moved(before, after, extra):
 
 def zoom_fitted(before, after, extra):
     """Zoom to Fit, not another zoom command: the zoom sliders moved, and the same call sent again
-    (`zoom_again`, read after it) left both where the first put them. Fitting is idempotent; zooming
-    in or out moves the sliders again (#1091 review R3, R1091-06: any named slider movement passed)."""
+    (`zoom_again`, read after it) put both back where they were before the first. Z is Logic's
+    "Toggle Zoom to fit Selection or All Contents", so the second press returns to the zoom the first
+    left; a Zoom In or Out sent twice moves further instead (#1091 review R3, R1091-06: any named
+    slider movement passed). The first version of this check read the command as idempotent and
+    failed every Zoom to Fit row in the 2026-10-04 run at 543c557d."""
     if not zoom_moved(before, after, extra):
         return False
-    again, a = extra.get("zoom_again") or {}, after.get("zoom") or {}
+    again, b = extra.get("zoom_again") or {}, before.get("zoom") or {}
     return all(isinstance(again.get(axis), float) for axis in ZOOM_AXES) \
-        and all(abs(again[axis] - a[axis]) <= 0.01 for axis in ZOOM_AXES)
+        and all(abs(again[axis] - b[axis]) <= 0.01 for axis in ZOOM_AXES)
 
 
 def post_zoom_again(driver, ax, extra):
-    """Send Zoom to Fit a second time and read the zoom sliders after it, for `zoom_fitted`."""
+    """Send Zoom to Fit a second time and read the zoom sliders after it, for `zoom_fitted`. The
+    second press also returns the view to the zoom the row started from."""
     call(driver, ax, "logic_navigate", "zoom_to_fit", {})
     time.sleep(0.8)
     again = snapshot(ax)
@@ -828,7 +835,7 @@ def others_kept(before, after, allowed):
                 "undo_title", "zoom", "automation"):
         # The zoom sliders are among the sliders, so an op allowed to move sliders may move them;
         # the automation reading is its own (#1091 review R3, R1091-06: both went uncompared).
-        if key in allowed or (key == "zoom" and "sliders" in allowed):
+        if key in allowed or (key == ZOOM_READING and "sliders" in allowed):
             continue
         if before.get(key) is None or after.get(key) is None:
             # Two readings that did not read are not one unchanged reading (#1091 review R2, R1091-06).
@@ -1087,7 +1094,18 @@ def restore_fixture(backup):
     subprocess.run(["/usr/bin/ditto", backup, L993.FIXTURE], check=True)
 
 
+def stop_on_signals():
+    """Make SIGTERM and SIGINT raise KeyboardInterrupt, so a run stopped from outside still runs its
+    `finally` restorations. A run started with `nohup ... &` inherits SIGINT as ignored, and SIGTERM's
+    default kills without them: a run stopped on 2026-10-04 could only be left to finish."""
+    def interrupt(signum, frame):
+        raise KeyboardInterrupt(f"signal {signum}")
+    signal.signal(signal.SIGTERM, interrupt)
+    signal.signal(signal.SIGINT, interrupt)
+
+
 def main():
+    stop_on_signals()
     args = arguments()
     sys.path.insert(0, os.path.join(args.worktree, "Scripts"))
     import logic_canon  # noqa: E402
