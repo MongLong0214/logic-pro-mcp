@@ -363,7 +363,9 @@ extension AXLogicProElements {
     /// consequently a role or child traversal that cannot be read is not the
     /// same observation as "no rail exists." The legacy best-effort APIs keep
     /// their flattening behavior, but this verdict path refuses on every status
-    /// except AX's two definitive-absence answers (-25205/-25212).
+    /// except AX's two definitive-absence answers (-25205/-25212). A positively
+    /// read text input is not a rail container; its descendants are outside
+    /// this discovery scope, not an unread competing Arrange rail.
     private static func verifiedTrackHeaderCandidates(
         in root: AXUIElement,
         maxDepth: Int,
@@ -387,6 +389,10 @@ extension AXLogicProElements {
             var diagnosticRole = "absent"
             switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
             case .success(.some(let role)):
+                // Popup text controls can refuse AXChildren while the original
+                // Arrange rail remains readable. They cannot contain an Arrange
+                // rail; track/strip names are still independently read afterward.
+                if role == (kAXTextFieldRole as String) { return }
                 diagnosticRole = structuralRoles.contains(role) ? role : "unclassified"
                 if role == (kAXMenuRole as String) {
                     knownMenuChildrenStage = "track_header_menu_children"
