@@ -376,8 +376,14 @@ extension AXLogicProElements {
 
         func visit(_ element: AXUIElement, remainingDepth: Int) {
             guard !encounteredUnreadableAX else { return }
+            var knownMenuChildrenStage: String?
             switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
             case .success(.some(let role)):
+                if role == (kAXMenuRole as String) {
+                    knownMenuChildrenStage = "track_header_menu_children"
+                } else if role == (kAXMenuItemRole as String) {
+                    knownMenuChildrenStage = "track_header_menu_item_children"
+                }
                 if role == (kAXListRole as String),
                    case .success(let identifier) = trackStringAttribute(
                         element, kAXIdentifierAttribute as String, runtime: runtime
@@ -415,7 +421,7 @@ extension AXLogicProElements {
                 return
             case .failure(let error):
                 encounteredUnreadableAX = true
-                unreadableStage = "track_header_candidate_children"
+                unreadableStage = knownMenuChildrenStage ?? "track_header_candidate_children"
                 unreadableStatus = error.diagnosticLabel
                 return
             }
