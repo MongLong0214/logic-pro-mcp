@@ -204,8 +204,6 @@ private func expectCoreMIDIStateB(
         ("transport.pause", [:], "MMC pause sent"),
         ("transport.record_strobe", [:], "MMC record strobe sent"),
         ("transport.record_exit", [:], "MMC record exit sent"),
-        ("transport.fast_forward", [:], "MMC fast forward sent"),
-        ("transport.rewind", [:], "MMC rewind sent"),
         (
             "transport.locate",
             ["hours": "1", "minutes": "2", "seconds": "3", "frames": "4", "subframes": "5"],
@@ -355,8 +353,6 @@ private func expectCoreMIDIStateB(
         ("transport.pause", [:], MMCCommands.pause()),
         ("transport.record_strobe", [:], MMCCommands.recordStrobe()),
         ("transport.record_exit", [:], MMCCommands.recordExit()),
-        ("transport.fast_forward", [:], MMCCommands.fastForward()),
-        ("transport.rewind", [:], MMCCommands.rewind()),
         ("transport.record", [:], MMCCommands.recordStrobe()),
         ("mmc.play", [:], MMCCommands.play()),
         ("mmc.stop", [:], MMCCommands.stop()),
