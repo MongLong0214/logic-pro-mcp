@@ -373,12 +373,21 @@ extension AXLogicProElements {
         var encounteredUnreadableAX = false
         var unreadableStage = "track_header_candidate"
         var unreadableStatus = "unreadable"
+        let structuralRoles = Set([
+            kAXWindowRole, kAXGroupRole, kAXListRole, kAXScrollAreaRole,
+            kAXLayoutItemRole, kAXOutlineRole, kAXTableRole, kAXTextFieldRole,
+            kAXStaticTextRole, kAXButtonRole, kAXPopUpButtonRole, kAXSliderRole,
+            kAXCheckBoxRole, kAXRadioButtonRole, kAXMenuRole, kAXMenuItemRole,
+            kAXImageRole, kAXToolbarRole, kAXUnknownRole,
+        ].map { $0 as String })
 
-        func visit(_ element: AXUIElement, remainingDepth: Int) {
+        func visit(_ element: AXUIElement, remainingDepth: Int, path: [Int]) {
             guard !encounteredUnreadableAX else { return }
             var knownMenuChildrenStage: String?
+            var diagnosticRole = "absent"
             switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
             case .success(.some(let role)):
+                diagnosticRole = structuralRoles.contains(role) ? role : "unclassified"
                 if role == (kAXMenuRole as String) {
                     knownMenuChildrenStage = "track_header_menu_children"
                 } else if role == (kAXMenuItemRole as String) {
@@ -414,8 +423,8 @@ extension AXLogicProElements {
             guard remainingDepth > 0 else { return }
             switch AXHelpers.childrenResult(element, runtime: runtime) {
             case .success(let children):
-                for child in children {
-                    visit(child, remainingDepth: remainingDepth - 1)
+                for (index, child) in children.enumerated() {
+                    visit(child, remainingDepth: remainingDepth - 1, path: path + [index])
                 }
             case .failure(let error) where error.isDefinitiveAbsence:
                 return
@@ -423,11 +432,14 @@ extension AXLogicProElements {
                 encounteredUnreadableAX = true
                 unreadableStage = knownMenuChildrenStage ?? "track_header_candidate_children"
                 unreadableStatus = error.diagnosticLabel
+                Log.info("verified Track Headers child read refused: role=\(diagnosticRole), "
+                         + "path=\(path.map(String.init).joined(separator: ".")), status=\(error.diagnosticLabel)",
+                         subsystem: "ax")
                 return
             }
         }
 
-        visit(root, remainingDepth: maxDepth)
+        visit(root, remainingDepth: maxDepth, path: [])
         return encounteredUnreadableAX
             ? .unreadable(stage: unreadableStage, status: unreadableStatus)
             : .complete(candidates)
