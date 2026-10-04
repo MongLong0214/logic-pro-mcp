@@ -1,0 +1,15 @@
+Warn: Verified plug-in clients that compensated for the former indexing bug must now pass Arrange track-header indices; Mixer strip ordinals are diagnostic only.
+Record-Id: r-3aee3f086b91
+Provenance: inherited 132630ce6d0dc4d9a26f37f588f29a4253a480d3
+
+Warn: A global Mixer search can raise a different open window from the acquired insertion target; the acquired Mixer is retained through insertion.
+Record-Id: r-8beb0848207c
+Provenance: inherited 0ac3fa57da12fa443fb4b7b681a38247375600c5
+
+Warn: At the right screen edge, Logic's insertion popup can open left of its slot; comparing only the menu's left origin rejects a valid popup, while unrelated menus must remain rejected.
+Record-Id: r-78ddc60594f6
+Provenance: inherited 7508c3b29840908f28337fcfb171e78df36ddb07
+
+Warn: First insertion after track selection is not guaranteed: Korean and English measurements refused the initial request at the target-stability guard, which remains intact.
+Record-Id: r-e18dce335f1a
+Provenance: inherited e8c93b459f89555ef91d5c8413d6d8e92bdf5d95
