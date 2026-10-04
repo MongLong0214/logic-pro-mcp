@@ -1,0 +1,46 @@
+Limit: the harness has not run on Logic at this commit; region edits and the project ops are not in it yet
+Warn: a chain without the debug channel is now walked as the table has it; a harness relying on the old refusal must not assume a read failed for that reason
+Record-Id: r-b68e835ab402
+Provenance: inherited 2612bae332030a31dd6c599cb6dc353dd5e0370e
+
+Warn: project.save writes the fixture; the harness copies it before the run and puts it back with Logic quit before every launch and at the end, and refuses to replace it if Logic did not quit
+Warn: an op whose letter Logic leaves unbound now fails instead of passing on its reply, the correction #1085 review R1 made to the #1039 harness
+Record-Id: r-ba99188e0e78
+Provenance: inherited b57010a512b5f62dfd4aa86bfbe47454dab960a3
+
+Warn: shutil.copytree on macOS drops extended attributes; a fixture restored with it lost the Finder info that hides .logicx, Logic then titled the arrange window with the extension, and every title match failed while the content digest still matched; back up and restore with ditto and hash the attributes too
+Record-Id: r-0c6d66a70d3a
+Provenance: inherited 8ed20947361178a3b03cb4783c7432c80f0d6a6e
+
+Ruled-out: walking every chain without the channel, as the first harness commit did | #1085 had pinned the refusal for those chains, so the walk is opt-in per operation instead
+Warn: the pass list widens only a chain that does not hold the restricted channel; naming an op that holds CGEvent keeps CGEvent alone, so the list cannot widen an op under test
+Record-Id: r-17b2cfa9f19b
+Provenance: inherited 7ecafa66f1d84dd8c5d0da0b979d630df9431171
+
+Warn: the track name is confirmed by the unique name the harness gave it; parsing the quoted part of the description misses German „…“ and French « … »
+Record-Id: r-a0789c4af809
+Provenance: inherited aa572afe8283fcc98f01b5e9bb05aa2463ed3476
+
+Warn: edit.quantize posts no CGEvent keystroke: its value names a grid, and Apple's Q applies whatever quantize value Logic holds; the MIDI key-command rung has the same limit and is not changed here
+Record-Id: r-2819bedd462c
+Provenance: inherited bae08361f6870ea0df239958cf43a382c3c22eb0
+
+Limit: this commit adds readings only; the duplicate refusal is not fixed here
+Provenance: inherited 0bb3a72397c84ee4850bf2607c131d2a6d3832bd
+
+Limit: the unit tests cover the sequence; that performKeyEvent posts it is shown only by the live rows check
+Warn: select's verification still accepts a target that is selected alongside another row; that gap is filed separately
+Provenance: inherited 0b103dd6086e89ae74920d85db67d2553577e2fb
+
+Limit: record_check's timing is shown by the rerun's checks, not by a unit test
+Provenance: inherited 1e1197c16d1dde7644adc237cd79e2aa937db773
+
+Limit: not yet driven live; the cause measured in Korean is fixed separately in #1091 (0b103dd6), so the live check needs another way to put two rows in the selection
+Warn: plugins' verifiedTrackSelected still accepts the target selected alongside other rows; it was not changed here
+Provenance: inherited a33ac71911621099b814504e5d4708d494d2c778
+
+Limit: the production run predates a33ac719 (#1097's fix), which changes select verification and rename; production judges nothing, so it records only which channel answered
+Provenance: inherited 69c829be5f44b64d021101cdac67a25357d8985a
+
+Limit: the toggle's return was measured with the fixture's zoom; a project already at its fitted zoom was not driven
+Provenance: inherited 06178c1f22a3359a13a192950f2ec6158b426466
