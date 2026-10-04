@@ -3432,13 +3432,11 @@ func testUnreadChildrenAreIncompleteInventoryForThatReason(mixerUnread: Bool, mi
     #expect(obj["what_was_observed"] as? String
         == (mixerUnread ? "the mixer's children did not read" : "the strip's children did not read"))
     #expect(fixture.currentSliderValue == 51, "no write may occur when the chain was not read")
-    // Every AX action before the refusal. Step 6 selects the track before Step 7 reads the
-    // inventory, as it does ahead of every inventory refusal on this path, so the selection is the
-    // one action; no plug-in window is opened and no parameter is written.
-    let header = try #require(AXLogicProElements.findTrackHeader(at: 0, runtime: fixture.runtime))
+    // Acquiring the original identity now precedes selection. Unread Mixer/strip children
+    // cannot establish that binding, so even the selection action must not dispatch.
     let actions = fixture.axActions.value
-    #expect(actions.map(\.name) == [kAXPressAction as String], "\(actions)")
-    #expect(actions.map(\.element) == [fixture.builder.elementID(header)])
+    #expect(actions.isEmpty, "\(actions)")
+    #expect(fixture.sliderWriteCount.value == 0)
 }
 
 // MARK: - #234 zero-slot slot-addressing diagnostics (AC-5)

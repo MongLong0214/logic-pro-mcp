@@ -658,7 +658,9 @@ extension AccessibilityChannel {
     ///   5  capability preflight — `.unsupported`/`.unknownParameter` fail closed
     ///      with `unsupported_param_readback` (AC10); only `.writeReadback`
     ///      proceeds.
-    ///   6  track verified select (`track_selection_failed`)
+    ///   6  acquire the original Arrange/Mixer identity before selection, bind it to any
+    ///      expected reference name, then verify track selection (`track_selection_failed`)
+    ///      and retain the acquired identity through stabilization
     ///   7  inventory complete + occupied and identity-matched at `insert`
     ///      (`incomplete_inventory` / `target_plugin_mismatch`)
     ///   8  plugin window: a single plug-in instance uses the existing opener;

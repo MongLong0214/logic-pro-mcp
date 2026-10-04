@@ -139,9 +139,12 @@ struct Issue957ParameterContractCensusTests {
             "track": "0", "insert": "0", "band": "Low Cut", "parameter": "Frequency", "value": "20",
             "unit": "Hz", "mode": "duplicate_applyback", "project_expected_path": "/tmp/lpm-957.logicx",
         ]))
-        // With a unit the fake tree fails at track selection, after parameter validation.
+        // With a unit validation progresses to target acquisition. This empty AX tree has no
+        // Mixer to bind, so it refuses before selection rather than authorizing a later target.
         let object = try #require(sharedJSONObject(full.message))
-        #expect(object["error"] as? String == "track_selection_failed")
+        #expect(object["state"] as? String == "C")
+        #expect(object["error"] as? String == "incomplete_inventory")
+        #expect(!(try #require(object["write_attempted"] as? Bool)))
         let entry = try #require(OperationCatalog.snapshot().operations.first { $0.id == "plugins.set_eq_band_verified" })
         let branch = CommandSchemaProjection.branch(for: entry, strictParams: true)
         var request: [String: Value] = [
