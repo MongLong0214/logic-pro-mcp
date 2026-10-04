@@ -634,7 +634,8 @@ struct MIDIDispatcher: OperationTraceDispatching {
     /// - Returns: `.success("midi")` if missing (default for backward compat),
     ///   `.success("midi"|"keycmd")` if explicitly set to a supported value,
     ///   `.failure(...)` for any other string (including `""`, `"scripter"`).
-    private static let validPorts: Set<String> = ["midi", "keycmd"]
+    /// Also read by the operation registry's parameter contract (#957).
+    static let validPorts: Set<String> = ["midi", "keycmd"]
 
     internal static func validatePort(_ params: [String: Value]) -> Result<String, ValidationFailure> {
         // Empty string `""` is explicitly rejected (does not fall through to default).

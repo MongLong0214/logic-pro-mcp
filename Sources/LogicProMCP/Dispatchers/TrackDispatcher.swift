@@ -2,6 +2,10 @@ import Foundation
 import MCP
 
 struct TrackDispatcher: OperationTraceDispatching {
+    /// The automation modes `set_automation` takes; the operation registry's parameter contract
+    /// reads the same list (#957).
+    static let automationModes = ["read", "write", "touch", "latch", "trim"]
+
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicTracks)
     static let notExposedCommands: Set<String> = ["set_color"]
@@ -802,10 +806,9 @@ struct TrackDispatcher: OperationTraceDispatching {
                 )
             }
             let mode = stringParam(params, "mode")
-            let validModes = ["read", "write", "touch", "latch", "trim"]
-            guard validModes.contains(mode) else {
+            guard Self.automationModes.contains(mode) else {
                 return toolInvalidParamsResult(
-                    "set_automation 'mode' must be one of \(validModes.joined(separator: ", ")) (got '\(mode)')",
+                    "set_automation 'mode' must be one of \(Self.automationModes.joined(separator: ", ")) (got '\(mode)')",
                     extras: ["operation": "track.set_automation"]
                 )
             }
