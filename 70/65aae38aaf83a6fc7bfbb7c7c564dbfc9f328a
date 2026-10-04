@@ -1,0 +1,5 @@
+Limit: the fallback path is driven here with fakes; whether Logic reaches it in a given language is a live question
+Provenance: inherited 78a51f52e28c02d061e253ce0f2b69cde230a1ba
+
+Limit: whether Logic's focus reads unreadable for a moment after the menu item is a live question; if it does, this refuses renames that would have worked
+Provenance: inherited e29f580c9c86a29ebbcb1416d3937ab5dacc1b05
