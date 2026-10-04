@@ -3544,6 +3544,32 @@
     "zh-TW": "/AXWindow/AXGroup/AXLayoutArea"
    }
   },
+  "mixerStripNameField": {
+   "canonical": "Name",
+   "variants": [
+    "이름",
+    "名前",
+    "Nombre",
+    "Nom",
+    "Nome",
+    "名称",
+    "名稱"
+   ],
+   "rationale": "Semantic channel-strip Name text field; excludes fader readouts and opaque strip metadata.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "moveMenuItem": {
    "canonical": "Move",
    "variants": [

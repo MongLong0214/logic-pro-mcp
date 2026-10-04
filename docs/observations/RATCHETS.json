@@ -86,7 +86,11 @@
       "2026-09-28-zh-TW-track-header-toggles-without-the-mute-led-writer",
       "2026-09-29-1038-transport-goto-gate-toggle-and-pause-ten-languages",
       "2026-09-29-ko-KR-a-tooltip-in-axwindows-is-not-a-modal-blocker",
-      "2026-10-02-ko-KR-a-permission-prompt-holds-the-keyboard-over-logic"
+      "2026-10-02-ko-KR-a-permission-prompt-holds-the-keyboard-over-logic",
+      "2026-10-04-1107-en-US-plugin-arrange-binding",
+      "2026-10-04-1107-ko-KR-plugin-arrange-binding",
+      "2026-10-05-1107-en-US-plugin-terminal-guard-repair",
+      "2026-10-05-1107-ko-KR-plugin-terminal-guard-repair"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
@@ -492,11 +496,14 @@
   "note": "What the ledger does not know, as SETS of identities. A member may leave; a new member fails CI. Sets rather than counts because a count is defeated by a swap — add one undocumented variant, document a different one, and the total is unchanged while the ledger knows strictly less about a new string. The guard also compares against the MERGE BASE, so raising the file in the same commit as the regression does not help. Raising requires a dated reason under `raised`. ADR-019 D8. Live: observations-status.py --unproven",
   "raised": {
     "manual_reverify": {
-      "date": "2026-10-02",
+      "date": "2026-10-05",
       "members": [
-        "2026-10-02-ko-KR-a-permission-prompt-holds-the-keyboard-over-logic"
+        "2026-10-04-1107-en-US-plugin-arrange-binding",
+        "2026-10-04-1107-ko-KR-plugin-arrange-binding",
+        "2026-10-05-1107-en-US-plugin-terminal-guard-repair",
+        "2026-10-05-1107-ko-KR-plugin-terminal-guard-repair"
       ],
-      "reason": "#942: the record's reverify needs another process's permission prompt left up in front of Logic when the window list is read and the two binaries are driven. macOS raises those prompts for its own reasons and a script cannot raise one on demand, so the steps are written out by hand. The window list and both binaries' replies are in docs/observations/evidence/2026-10-02-942-keyboard-owner-window-list.json and 2026-10-02-942-keyboard-owner-drive.json."
+      "reason": "#1107: these four actual Korean/English observations require an owned disposable Logic project, independently named Arrange/Mixer targets, occupied-editor reads and inverse writes, safe empty-slot insertion, locale relaunch, and backup restoration. Their live GUI preparation and restoration are not a headless CI replay, so each retains its explicit manual reverify steps. The committed arrange-binding and terminal-guard-repair evidence receipts preserve the distinct immutable binaries, first-refusal/retry outcomes, failed description reads and restored projections. All four verdicts remain partial on Logic 12.3 build 6674; this records the manual-replay gap, not E-clean or Logic 12.4 qualification."
     },
     "records_without_evidence": {
       "date": "2026-09-19",
