@@ -77,9 +77,12 @@ extension AccessibilityChannel {
         }
 
         let menusBefore = popupMenus(of: valuePopup, runtime: runtime.ax)
-        guard AXHelpers.performAction(valuePopup, kAXPressAction as String, runtime: runtime.ax) else {
-            return refusal(.axWriteFailed, "The value pop-up did not take the press; nothing was chosen.")
-        }
+        // The press's return code is not the answer: Logic's pop-ups answer AXPress with
+        // kAXErrorCannotComplete (-25205) on presses that do open the menu. Gating on it refused
+        // every call in the 2026-10-04 ten-language run (20 of 20, "did not take the press") while
+        // the pop-up was there. The menu that opens is the answer.
+        let pressed = AXHelpers.performAction(valuePopup, kAXPressAction as String, runtime: runtime.ax)
+        extras["popup_press_returned"] = pressed
         let menus = await newPopupMenus(of: valuePopup, excluding: menusBefore, timing: timing, runtime: runtime.ax)
         guard menus.count == 1, let menu = menus.first else {
             extras["menus_opened"] = menus.count
@@ -96,10 +99,9 @@ extension AccessibilityChannel {
             return refusal(.elementNotFound, "The value pop-up's menu offered no single item for '\(grid)'; nothing was chosen.",
                            written: true)
         }
-        guard AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) else {
-            extras["popup"] = closeState(popupCleaner(runtime))
-            return refusal(.axWriteFailed, "The menu item for '\(grid)' did not take the press.", written: true)
-        }
+        // As with the pop-up, the item's press return code is not the answer; the pop-up's value
+        // read back after it is.
+        extras["item_press_returned"] = AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax)
         extras["popup"] = await waitForMenusToClose(runtime: runtime, timing: timing, cleaner: popupCleaner)
 
         // The pop-up's own value after the choice is the readback, not the press's return code.

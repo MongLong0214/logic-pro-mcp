@@ -34,8 +34,10 @@ private struct FakeInspector {
     let value: AXUIElement
 
     /// `items` are the menu's titles; `takesChoice` false leaves the value unchanged after an item press.
+    /// `pressReturns` is what AXPress answers: Logic's pop-ups answer kAXErrorCannotComplete
+    /// (false here) on presses that do open the menu and do choose the item.
     init(start: String = "Off", items: [String] = ["Off", "1/8 Note", "1/16 Note"], rows: Int = 1,
-         takesChoice: Bool = true, modeValue: String = "Quantize") {
+         takesChoice: Bool = true, modeValue: String = "Quantize", pressReturns: Bool = true) {
         let builder = self.builder
         let presses = self.presses
         let app = builder.element(10_900)
@@ -86,7 +88,7 @@ private struct FakeInspector {
                     }
                     builder.setChildren(value, [])
                 }
-                return true
+                return pressReturns
             }
         )
     }
@@ -122,6 +124,19 @@ struct Issue1094QuantizeThroughTheRegionInspectorTests {
         #expect(inspector.valueNow == "1/16 Note")
         #expect(inspector.presses.all == [FakeInspector.valueID, FakeInspector.itemBase + 2],
                 "one press on the value pop-up, one on the 1/16 item")
+    }
+
+    /// Measured on 2026-10-04: every call in ten languages was refused as "did not take the press"
+    /// while the pop-up opened its menu, because the press answers kAXErrorCannotComplete. Mutation
+    /// killed: gating the choice on either press's return code.
+    @Test func aPressThatAnswersAnErrorButOpensTheMenuStillChoosesTheGrid() async throws {
+        let inspector = FakeInspector(pressReturns: false)
+        let (result, object) = await quantize(inspector, grid: "1/8")
+        #expect(result.isSuccess, "\(result.message)")
+        #expect(object["state"] as? String == "A")
+        #expect(inspector.valueNow == "1/8 Note")
+        let returned = try #require(object["popup_press_returned"] as? Bool)
+        #expect(!returned)
     }
 
     @Test func noSelectedRegionPressesNothing() async {
