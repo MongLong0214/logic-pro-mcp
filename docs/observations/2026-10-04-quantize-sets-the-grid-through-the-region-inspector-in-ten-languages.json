@@ -1,0 +1,308 @@
+{
+  "schema": 3,
+  "id": "2026-10-04-quantize-sets-the-grid-through-the-region-inspector-in-ten-languages",
+  "date": "2026-10-04",
+  "subject": "whether logic_edit quantize sets the requested grid on the selected region, read from the Region inspector",
+  "question": "Does quantize with a grid set the Region inspector's quantize value to that grid and answer State A, in each of Logic's ten languages; and what did the binary before the change do?",
+  "verdict": "works",
+  "surface": "arrange.regions",
+  "issues": [
+    1094
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_1094_quantize_sets_the_grid_in_every_locale.py <worktree> <full-40-char-head> <debug binary>",
+    "expected": "every check passes: the inspector's quantize value reads the grid's label after the call and not before, and the reply is State A; the fixture and Logic's Korean UI are restored",
+    "cost": "relaunches Logic once per language, about a minute per language"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Quantize.swift:quantizeSelectedRegions",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Quantize.swift:quantizeRows",
+    "Scripts/livekit/live_1094_quantize_sets_the_grid_in_every_locale.py:quantize_value",
+    "Scripts/livekit/live_1094_quantize_sets_the_grid_in_every_locale.py:set_grid"
+  ],
+  "evidence": [
+    "evidence/2026-10-04-1094-quantize-fixed-run.json",
+    "evidence/2026-10-04-1094-quantize-control-run.json"
+  ],
+  "method": "Scripts/livekit/live_1094_quantize_sets_the_grid_in_every_locale.py at d671c867b63a442242c7f3f405c3070b1a9b839a drove a debug build (sha256 32ffb5140050d4814f1eec24d9b37b86b91596c28b274778d43f33c7827d80f3) that carries d671c867b63a442242c7f3f405c3070b1a9b839a in __TEXT,__lpm_commit, one server per language with no route restriction, the fixture restored before each language. One MIDI region was selected and read back as selected. For each grid (1/8, then 1/4) the harness called logic_edit quantize and read, in its own process, the Region inspector's Quantize row: the pop-up beside the one showing Logic's label for Quantize. A check passes when that pop-up read something else before the call and Logic's label for the grid after it, and the reply was State A. Its counterexample is the same row with the value unchanged. 1/16 was not used: the fixture's region already reads 1/16, so it could pass by coincidence. The control is the same harness with the binary built at 6d1d97f6af31f595f4e9231533a090673adbc44e (sha256 325486e3c20953b89d2f30068fd48d306bfed5445f036e0be385e59a9125fe03), the commit the change sits on, in Korean and English.",
+  "observations": [
+    {
+      "fixed": {
+        "checks": 20,
+        "passed": 20
+      },
+      "control": {
+        "checks": 4,
+        "passed": 0
+      }
+    },
+    {
+      "fixed_rows": [
+        {
+          "locale": "en-US",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "en-US",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "ko-KR",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "ko-KR",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "ja-JP",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "ja-JP",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "de-DE",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "de-DE",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "es-ES",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "es-ES",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "fr-FR",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "fr-FR",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "it-IT",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "it-IT",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "pt-BR",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "pt-BR",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "zh-CN",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "zh-CN",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "zh-TW",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "zh-TW",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": true,
+          "reads_the_grid": true,
+          "reply_state": "A",
+          "reply_method": "region_inspector",
+          "counterexample_rejected": true
+        }
+      ]
+    },
+    {
+      "control_rows": [
+        {
+          "locale": "ko-KR",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": false,
+          "reads_the_grid": false,
+          "reply_state": "B",
+          "reply_method": "midi_key_command",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "ko-KR",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": false,
+          "reads_the_grid": false,
+          "reply_state": "B",
+          "reply_method": "midi_key_command",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "en-US",
+          "grid": "1/8",
+          "regions_selected": 1,
+          "value_changed": false,
+          "reads_the_grid": false,
+          "reply_state": "B",
+          "reply_method": "midi_key_command",
+          "counterexample_rejected": true
+        },
+        {
+          "locale": "en-US",
+          "grid": "1/4",
+          "regions_selected": 1,
+          "value_changed": false,
+          "reads_the_grid": false,
+          "reply_state": "B",
+          "reply_method": "midi_key_command",
+          "counterexample_rejected": true
+        }
+      ]
+    }
+  ],
+  "conclusion": "At d671c867b63a442242c7f3f405c3070b1a9b839a, 20 of 20 checks passed: in each language the Region inspector's quantize value moved to each requested grid and the reply was State A. The binary before the change passed 0 of 4: control_rows holds its replies and the values it left unchanged.",
+  "limits": [
+    "One Logic installation (12.3, build 6674), one fixture, one host; one MIDI region selected; two grids per language, each run once.",
+    "The Region inspector's Quantize row is found by Logic's own label for it, read from Logic.framework's strings for the language; a row that carried the same label and a pop-up beside it would be read the same way.",
+    "The pop-up's press return codes are recorded in the reply, not read: Logic's pop-ups answer AXPress with kAXErrorCannotComplete when the menu does open.",
+    "Several regions selected at once, and a region whose inspector is collapsed, were not driven.",
+    "The modal reading before 20 of 20 checks was cannot_tell (AXChildren (AX status -25200)): the sheet search walks every descendant of every Logic window, and one descendant's read failed. The run is therefore not clean by the evidence framework's rule. A sheet that blocked the call would have left the inspector's value where it was, which the predicate refuses (every unchanged counterexample was rejected); it was not read directly."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states counts, booleans, reply states and channel names; it quotes no string Logic ships. The labels read are in the evidence files."
+  }
+}

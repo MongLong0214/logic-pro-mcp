@@ -1,0 +1,295 @@
+{
+ "name": "live_1094_quantize_sets_the_grid_in_every_locale",
+ "head": "6d1d97f6af31f595f4e9231533a090673adbc44e",
+ "artifact": {
+  "path": "/Users/isaac/lpm-evidence/1029/bin-6d1d97f6/LogicProMCP",
+  "sha256": "325486e3c20953b89d2f30068fd48d306bfed5445f036e0be385e59a9125fe03",
+  "built_from": "6d1d97f6af31f595f4e9231533a090673adbc44e",
+  "worktree_clean": false,
+  "built_from_is_measured": false,
+  "artifact_older_than_sources": true
+ },
+ "records": [
+  {
+   "kind": "declaration",
+   "surface": "ui"
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/binary",
+   "payload": {
+    "binary": "/Users/isaac/lpm-evidence/1029/bin-6d1d97f6/LogicProMCP",
+    "sha256": "325486e3c20953b89d2f30068fd48d306bfed5445f036e0be385e59a9125fe03"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/ko/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \ud2b8\ub799",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d",
+     "lpm-locale-campaign - \ud2b8\ub799"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/ko/1/8",
+   "passed": false,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'ko', 'grid': '1/8', 'label': '8\ubd84\uc74c\ud45c', 'regions_selected': 1, 'value_before': '\ub054', 'value_after': '\ub054', 'reply_state': 'B', 'reply_method': 'midi_key_command', 'reply_error': None}",
+    "accepted_the_observation": false,
+    "counterexample": "{'lproj': 'ko', 'grid': '1/8', 'label': '8\ubd84\uc74c\ud45c', 'regions_selected': 1, 'value_before': '\ub054', 'value_after': '\ub054', 'reply_state': 'B', 'reply_method': 'midi_key_command', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/ko/1/4",
+   "passed": false,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'ko', 'grid': '1/4', 'label': '4\ubd84\uc74c\ud45c', 'regions_selected': 1, 'value_before': '\ub054', 'value_after': '\ub054', 'reply_state': 'B', 'reply_method': 'midi_key_command', 'reply_error': None}",
+    "accepted_the_observation": false,
+    "counterexample": "{'lproj': 'ko', 'grid': '1/4', 'label': '4\ubd84\uc74c\ud45c', 'regions_selected': 1, 'value_before': '\ub054', 'value_after': '\ub054', 'reply_state': 'B', 'reply_method': 'midi_key_command', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/en/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Tracks",
+    "language_setting": [
+     "en"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Marker List",
+     "lpm-locale-campaign - Tracks"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/en/1/8",
+   "passed": false,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'en', 'grid': '1/8', 'label': '1/8 Note', 'regions_selected': 1, 'value_before': 'Off', 'value_after': 'Off', 'reply_state': 'B', 'reply_method': 'midi_key_command', 'reply_error': None}",
+    "accepted_the_observation": false,
+    "counterexample": "{'lproj': 'en', 'grid': '1/8', 'label': '1/8 Note', 'regions_selected': 1, 'value_before': 'Off', 'value_after': 'Off', 'reply_state': 'B', 'reply_method': 'midi_key_command', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "B",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": false,
+    "write_attempted": null
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/en/1/4",
+   "passed": false,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'en', 'grid': '1/4', 'label': '1/4 Note', 'regions_selected': 1, 'value_before': 'Off', 'value_after': 'Off', 'reply_state': 'B', 'reply_method': 'midi_key_command', 'reply_error': None}",
+    "accepted_the_observation": false,
+    "counterexample": "{'lproj': 'en', 'grid': '1/4', 'label': '1/4 Note', 'regions_selected': 1, 'value_before': 'Off', 'value_after': 'Off', 'reply_state': 'B', 'reply_method': 'midi_key_command', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/restore",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \ud2b8\ub799",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d",
+     "lpm-locale-campaign - \ud2b8\ub799"
+    ]
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/rows",
+   "payload": [
+    {
+     "lproj": "ko",
+     "grid": "1/8",
+     "label": "8\ubd84\uc74c\ud45c",
+     "regions_selected": 1,
+     "value_before": "\ub054",
+     "value_after": "\ub054",
+     "reply_state": "B",
+     "reply_method": "midi_key_command",
+     "reply_error": null
+    },
+    {
+     "lproj": "ko",
+     "grid": "1/4",
+     "label": "4\ubd84\uc74c\ud45c",
+     "regions_selected": 1,
+     "value_before": "\ub054",
+     "value_after": "\ub054",
+     "reply_state": "B",
+     "reply_method": "midi_key_command",
+     "reply_error": null
+    },
+    {
+     "lproj": "en",
+     "grid": "1/8",
+     "label": "1/8 Note",
+     "regions_selected": 1,
+     "value_before": "Off",
+     "value_after": "Off",
+     "reply_state": "B",
+     "reply_method": "midi_key_command",
+     "reply_error": null
+    },
+    {
+     "lproj": "en",
+     "grid": "1/4",
+     "label": "1/4 Note",
+     "regions_selected": 1,
+     "value_before": "Off",
+     "value_after": "Off",
+     "reply_state": "B",
+     "reply_method": "midi_key_command",
+     "reply_error": null
+    }
+   ]
+  },
+  {
+   "kind": "environment",
+   "screen_locked": false
+  },
+  {
+   "kind": "provenance",
+   "tag": "artifact/older-than-its-sources",
+   "source": "mtime(Sources/**) vs mtime(binary)",
+   "cache_age_sec": null,
+   "usable_as_live_evidence": false,
+   "newer_than_binary": [
+    "Sources/LogicProMCP/Accessibility/AXHelpers.swift",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+    "Sources/LogicProMCP/Accessibility/AXLocaleValues.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Markers.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Menu.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+PluginSlots.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Tracks.swift"
+   ],
+   "newer_than_binary_count": 243
+  }
+ ]
+}

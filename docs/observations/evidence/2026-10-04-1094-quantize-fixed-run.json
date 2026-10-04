@@ -1,0 +1,1181 @@
+{
+ "name": "live_1094_quantize_sets_the_grid_in_every_locale",
+ "head": "d671c867b63a442242c7f3f405c3070b1a9b839a",
+ "artifact": {
+  "path": "/Users/isaac/lpm-evidence/1094/bin-d671c867/LogicProMCP",
+  "sha256": "32ffb5140050d4814f1eec24d9b37b86b91596c28b274778d43f33c7827d80f3",
+  "built_from": "d671c867b63a442242c7f3f405c3070b1a9b839a",
+  "worktree_clean": true,
+  "built_from_is_measured": false,
+  "artifact_older_than_sources": false
+ },
+ "records": [
+  {
+   "kind": "declaration",
+   "surface": "ui"
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/binary",
+   "payload": {
+    "binary": "/Users/isaac/lpm-evidence/1094/bin-d671c867/LogicProMCP",
+    "sha256": "32ffb5140050d4814f1eec24d9b37b86b91596c28b274778d43f33c7827d80f3"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/en/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Tracks",
+    "language_setting": [
+     "en"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Marker List",
+     "lpm-locale-campaign - Tracks"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/en/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'en', 'grid': '1/8', 'label': '1/8 Note', 'regions_selected': 1, 'value_before': 'Off', 'value_after': '1/8 Note', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'en', 'grid': '1/8', 'label': '1/8 Note', 'regions_selected': 1, 'value_before': 'Off', 'value_after': 'Off', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/en/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'en', 'grid': '1/4', 'label': '1/4 Note', 'regions_selected': 1, 'value_before': '1/8 Note', 'value_after': '1/4 Note', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'en', 'grid': '1/4', 'label': '1/4 Note', 'regions_selected': 1, 'value_before': '1/8 Note', 'value_after': '1/8 Note', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/ko/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \ud2b8\ub799",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d",
+     "lpm-locale-campaign - \ud2b8\ub799"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/ko/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'ko', 'grid': '1/8', 'label': '8\ubd84\uc74c\ud45c', 'regions_selected': 1, 'value_before': '\ub054', 'value_after': '8\ubd84\uc74c\ud45c', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'ko', 'grid': '1/8', 'label': '8\ubd84\uc74c\ud45c', 'regions_selected': 1, 'value_before': '\ub054', 'value_after': '\ub054', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/ko/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'ko', 'grid': '1/4', 'label': '4\ubd84\uc74c\ud45c', 'regions_selected': 1, 'value_before': '8\ubd84\uc74c\ud45c', 'value_after': '4\ubd84\uc74c\ud45c', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'ko', 'grid': '1/4', 'label': '4\ubd84\uc74c\ud45c', 'regions_selected': 1, 'value_before': '8\ubd84\uc74c\ud45c', 'value_after': '8\ubd84\uc74c\ud45c', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/ja/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \u30c8\u30e9\u30c3\u30af",
+    "language_setting": [
+     "ja"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \u30de\u30fc\u30ab\u30fc\u30ea\u30b9\u30c8",
+     "lpm-locale-campaign - \u30c8\u30e9\u30c3\u30af"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/ja/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'ja', 'grid': '1/8', 'label': '1/8 -\u97f3\u7b26', 'regions_selected': 1, 'value_before': '\u30aa\u30d5', 'value_after': '1/8 -\u97f3\u7b26', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'ja', 'grid': '1/8', 'label': '1/8 -\u97f3\u7b26', 'regions_selected': 1, 'value_before': '\u30aa\u30d5', 'value_after': '\u30aa\u30d5', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/ja/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'ja', 'grid': '1/4', 'label': '1/4 - \u97f3\u7b26', 'regions_selected': 1, 'value_before': '1/8 -\u97f3\u7b26', 'value_after': '1/4 - \u97f3\u7b26', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'ja', 'grid': '1/4', 'label': '1/4 - \u97f3\u7b26', 'regions_selected': 1, 'value_before': '1/8 -\u97f3\u7b26', 'value_after': '1/8 -\u97f3\u7b26', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/de/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Spuren",
+    "language_setting": [
+     "de"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Marker-Liste",
+     "lpm-locale-campaign - Spuren"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/de/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'de', 'grid': '1/8', 'label': '1/8 Note', 'regions_selected': 1, 'value_before': 'Aus', 'value_after': '1/8 Note', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'de', 'grid': '1/8', 'label': '1/8 Note', 'regions_selected': 1, 'value_before': 'Aus', 'value_after': 'Aus', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/de/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'de', 'grid': '1/4', 'label': '1/4 Note', 'regions_selected': 1, 'value_before': '1/8 Note', 'value_after': '1/4 Note', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'de', 'grid': '1/4', 'label': '1/4 Note', 'regions_selected': 1, 'value_before': '1/8 Note', 'value_after': '1/8 Note', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/es/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Pistas",
+    "language_setting": [
+     "es"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Lista marcadores",
+     "lpm-locale-campaign - Pistas"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/es/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'es', 'grid': '1/8', 'label': 'Corchea', 'regions_selected': 1, 'value_before': 'Desactivado', 'value_after': 'Corchea', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'es', 'grid': '1/8', 'label': 'Corchea', 'regions_selected': 1, 'value_before': 'Desactivado', 'value_after': 'Desactivado', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/es/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'es', 'grid': '1/4', 'label': 'Negra', 'regions_selected': 1, 'value_before': 'Corchea', 'value_after': 'Negra', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'es', 'grid': '1/4', 'label': 'Negra', 'regions_selected': 1, 'value_before': 'Corchea', 'value_after': 'Corchea', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/fr/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Pistes",
+    "language_setting": [
+     "fr"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Liste des marqueurs",
+     "lpm-locale-campaign - Pistes"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/fr/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'fr', 'grid': '1/8', 'label': '1/8 Note', 'regions_selected': 1, 'value_before': 'D\u00e9sactiv\u00e9', 'value_after': '1/8 Note', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'fr', 'grid': '1/8', 'label': '1/8 Note', 'regions_selected': 1, 'value_before': 'D\u00e9sactiv\u00e9', 'value_after': 'D\u00e9sactiv\u00e9', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/fr/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'fr', 'grid': '1/4', 'label': '1/4 Note', 'regions_selected': 1, 'value_before': '1/8 Note', 'value_after': '1/4 Note', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'fr', 'grid': '1/4', 'label': '1/4 Note', 'regions_selected': 1, 'value_before': '1/8 Note', 'value_after': '1/8 Note', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/it/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Tracce",
+    "language_setting": [
+     "it"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Elenco marcatori",
+     "lpm-locale-campaign - Tracce"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/it/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'it', 'grid': '1/8', 'label': 'Nota da 1/8', 'regions_selected': 1, 'value_before': 'Non attivo', 'value_after': 'Nota da 1/8', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'it', 'grid': '1/8', 'label': 'Nota da 1/8', 'regions_selected': 1, 'value_before': 'Non attivo', 'value_after': 'Non attivo', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/it/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'it', 'grid': '1/4', 'label': 'Nota da 1/4', 'regions_selected': 1, 'value_before': 'Nota da 1/8', 'value_after': 'Nota da 1/4', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'it', 'grid': '1/4', 'label': 'Nota da 1/4', 'regions_selected': 1, 'value_before': 'Nota da 1/8', 'value_after': 'Nota da 1/8', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/pt/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - Pistas",
+    "language_setting": [
+     "pt-BR"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - Lista de Marcadores",
+     "lpm-locale-campaign - Pistas"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/pt/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'pt', 'grid': '1/8', 'label': 'Colcheia', 'regions_selected': 1, 'value_before': 'Desativado', 'value_after': 'Colcheia', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'pt', 'grid': '1/8', 'label': 'Colcheia', 'regions_selected': 1, 'value_before': 'Desativado', 'value_after': 'Desativado', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/pt/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'pt', 'grid': '1/4', 'label': 'Sem\u00ednima', 'regions_selected': 1, 'value_before': 'Colcheia', 'value_after': 'Sem\u00ednima', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'pt', 'grid': '1/4', 'label': 'Sem\u00ednima', 'regions_selected': 1, 'value_before': 'Colcheia', 'value_after': 'Colcheia', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/zh_CN/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \u8f68\u9053",
+    "language_setting": [
+     "zh-CN"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \u6807\u8bb0\u5217\u8868",
+     "lpm-locale-campaign - \u8f68\u9053"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/zh_CN/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'zh_CN', 'grid': '1/8', 'label': '1/8 \u97f3\u7b26', 'regions_selected': 1, 'value_before': '\u5173', 'value_after': '1/8 \u97f3\u7b26', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'zh_CN', 'grid': '1/8', 'label': '1/8 \u97f3\u7b26', 'regions_selected': 1, 'value_before': '\u5173', 'value_after': '\u5173', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/zh_CN/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'zh_CN', 'grid': '1/4', 'label': '1/4 \u97f3\u7b26', 'regions_selected': 1, 'value_before': '1/8 \u97f3\u7b26', 'value_after': '1/4 \u97f3\u7b26', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'zh_CN', 'grid': '1/4', 'label': '1/4 \u97f3\u7b26', 'regions_selected': 1, 'value_before': '1/8 \u97f3\u7b26', 'value_after': '1/8 \u97f3\u7b26', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/zh_TW/launch",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \u97f3\u8ecc",
+    "language_setting": [
+     "zh-TW"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \u6a19\u8a18\u5217\u8868",
+     "lpm-locale-campaign - \u97f3\u8ecc"
+    ]
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/8"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/zh_TW/1/8",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'zh_TW', 'grid': '1/8', 'label': '8 \u5206\u97f3\u7b26', 'regions_selected': 1, 'value_before': '\u95dc\u9589', 'value_after': '8 \u5206\u97f3\u7b26', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'zh_TW', 'grid': '1/8', 'label': '8 \u5206\u97f3\u7b26', 'regions_selected': 1, 'value_before': '\u95dc\u9589', 'value_after': '\u95dc\u9589', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "operation",
+   "tool": "logic_edit",
+   "command": "quantize",
+   "params": {
+    "value": "1/4"
+   },
+   "response": {
+    "state": "A",
+    "success": true,
+    "error": null,
+    "hint": null,
+    "verified": true,
+    "write_attempted": true
+   }
+  },
+  {
+   "kind": "check",
+   "tag": "1094/zh_TW/1/4",
+   "passed": true,
+   "expected": "the inspector's quantize value shows the grid's label after the call",
+   "observed": {
+    "observation": "{'lproj': 'zh_TW', 'grid': '1/4', 'label': '4 \u5206\u97f3\u7b26', 'regions_selected': 1, 'value_before': '8 \u5206\u97f3\u7b26', 'value_after': '4 \u5206\u97f3\u7b26', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "accepted_the_observation": true,
+    "counterexample": "{'lproj': 'zh_TW', 'grid': '1/4', 'label': '4 \u5206\u97f3\u7b26', 'regions_selected': 1, 'value_before': '8 \u5206\u97f3\u7b26', 'value_after': '8 \u5206\u97f3\u7b26', 'reply_state': 'A', 'reply_method': 'region_inspector', 'reply_error': None}",
+    "rejected_the_counterexample": true
+   },
+   "mutation": null,
+   "mutation_claimed": false,
+   "has_counterexample": true,
+   "counterexample_rejected": true,
+   "blocking_modal": {
+    "state": "cannot_tell",
+    "kind": "cannot_tell",
+    "signal": "accessibility",
+    "reason": "AXChildren (AX status -25200)"
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/restore",
+   "payload": {
+    "switched": true,
+    "arrange_window": "lpm-locale-campaign - \ud2b8\ub799",
+    "language_setting": [
+     "ko"
+    ],
+    "window_names": [
+     "lpm-locale-campaign - \ub9c8\ucee4 \ubaa9\ub85d",
+     "lpm-locale-campaign - \ud2b8\ub799"
+    ]
+   }
+  },
+  {
+   "kind": "observation",
+   "tag": "1094/rows",
+   "payload": [
+    {
+     "lproj": "en",
+     "grid": "1/8",
+     "label": "1/8 Note",
+     "regions_selected": 1,
+     "value_before": "Off",
+     "value_after": "1/8 Note",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "en",
+     "grid": "1/4",
+     "label": "1/4 Note",
+     "regions_selected": 1,
+     "value_before": "1/8 Note",
+     "value_after": "1/4 Note",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "ko",
+     "grid": "1/8",
+     "label": "8\ubd84\uc74c\ud45c",
+     "regions_selected": 1,
+     "value_before": "\ub054",
+     "value_after": "8\ubd84\uc74c\ud45c",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "ko",
+     "grid": "1/4",
+     "label": "4\ubd84\uc74c\ud45c",
+     "regions_selected": 1,
+     "value_before": "8\ubd84\uc74c\ud45c",
+     "value_after": "4\ubd84\uc74c\ud45c",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "ja",
+     "grid": "1/8",
+     "label": "1/8 -\u97f3\u7b26",
+     "regions_selected": 1,
+     "value_before": "\u30aa\u30d5",
+     "value_after": "1/8 -\u97f3\u7b26",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "ja",
+     "grid": "1/4",
+     "label": "1/4 - \u97f3\u7b26",
+     "regions_selected": 1,
+     "value_before": "1/8 -\u97f3\u7b26",
+     "value_after": "1/4 - \u97f3\u7b26",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "de",
+     "grid": "1/8",
+     "label": "1/8 Note",
+     "regions_selected": 1,
+     "value_before": "Aus",
+     "value_after": "1/8 Note",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "de",
+     "grid": "1/4",
+     "label": "1/4 Note",
+     "regions_selected": 1,
+     "value_before": "1/8 Note",
+     "value_after": "1/4 Note",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "es",
+     "grid": "1/8",
+     "label": "Corchea",
+     "regions_selected": 1,
+     "value_before": "Desactivado",
+     "value_after": "Corchea",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "es",
+     "grid": "1/4",
+     "label": "Negra",
+     "regions_selected": 1,
+     "value_before": "Corchea",
+     "value_after": "Negra",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "fr",
+     "grid": "1/8",
+     "label": "1/8 Note",
+     "regions_selected": 1,
+     "value_before": "D\u00e9sactiv\u00e9",
+     "value_after": "1/8 Note",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "fr",
+     "grid": "1/4",
+     "label": "1/4 Note",
+     "regions_selected": 1,
+     "value_before": "1/8 Note",
+     "value_after": "1/4 Note",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "it",
+     "grid": "1/8",
+     "label": "Nota da 1/8",
+     "regions_selected": 1,
+     "value_before": "Non attivo",
+     "value_after": "Nota da 1/8",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "it",
+     "grid": "1/4",
+     "label": "Nota da 1/4",
+     "regions_selected": 1,
+     "value_before": "Nota da 1/8",
+     "value_after": "Nota da 1/4",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "pt",
+     "grid": "1/8",
+     "label": "Colcheia",
+     "regions_selected": 1,
+     "value_before": "Desativado",
+     "value_after": "Colcheia",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "pt",
+     "grid": "1/4",
+     "label": "Sem\u00ednima",
+     "regions_selected": 1,
+     "value_before": "Colcheia",
+     "value_after": "Sem\u00ednima",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "zh_CN",
+     "grid": "1/8",
+     "label": "1/8 \u97f3\u7b26",
+     "regions_selected": 1,
+     "value_before": "\u5173",
+     "value_after": "1/8 \u97f3\u7b26",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "zh_CN",
+     "grid": "1/4",
+     "label": "1/4 \u97f3\u7b26",
+     "regions_selected": 1,
+     "value_before": "1/8 \u97f3\u7b26",
+     "value_after": "1/4 \u97f3\u7b26",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "zh_TW",
+     "grid": "1/8",
+     "label": "8 \u5206\u97f3\u7b26",
+     "regions_selected": 1,
+     "value_before": "\u95dc\u9589",
+     "value_after": "8 \u5206\u97f3\u7b26",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    },
+    {
+     "lproj": "zh_TW",
+     "grid": "1/4",
+     "label": "4 \u5206\u97f3\u7b26",
+     "regions_selected": 1,
+     "value_before": "8 \u5206\u97f3\u7b26",
+     "value_after": "4 \u5206\u97f3\u7b26",
+     "reply_state": "A",
+     "reply_method": "region_inspector",
+     "reply_error": null
+    }
+   ]
+  },
+  {
+   "kind": "environment",
+   "screen_locked": false
+  }
+ ]
+}
