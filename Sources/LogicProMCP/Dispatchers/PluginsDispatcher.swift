@@ -47,6 +47,9 @@ struct PluginsDispatcher: OperationTraceDispatching {
     )
 
     static func handle(
+        // The server-wide verified-op gate (R14). Production always takes `.shared`. Tests pass a gate
+        // of their own, so no suite holds or releases the one another suite's dispatch takes (#1104).
+        verifiedGate: VerifiedOpGate = .shared,
         command: String,
         params: [String: Value],
         router: ChannelRouter,
@@ -62,11 +65,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
         // TrackDispatcher already does. Nil by default: the deterministic suite
         // never touches live AX; production wires the real reader at the
         // dispatch chokepoint.
-        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
-        // The server-wide verified-op gate (R14). Production always takes `.shared`; the #957 census
-        // passes its own, so a test that drives these commands does not hold the gate other suites
-        // assert on (VerifiedOpGateSharedTests).
-        verifiedGate: VerifiedOpGate = .shared
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
     ) async -> CallTool.Result {
         if let projectFailure = await TargetRefResolver.validateProjectReference(
             params,

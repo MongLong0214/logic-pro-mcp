@@ -539,7 +539,7 @@ struct HCGlobalInvariantTests {
                 }
             )
         case "logic_plugins":
-            return await PluginsDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache, liveTrackNames: hcLiveTrackHeaders)
+            return await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(), command: routeCase.command, params: routeCase.params, router: router, cache: cache, liveTrackNames: hcLiveTrackHeaders)
         default:
             Issue.record("Unhandled HC invariant tool \(routeCase.tool)")
             return toolTextResult("Unhandled HC invariant tool \(routeCase.tool)", isError: true)

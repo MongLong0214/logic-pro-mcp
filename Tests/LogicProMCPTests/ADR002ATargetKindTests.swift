@@ -177,14 +177,14 @@ struct ADR002ATargetKindTests {
             let (router, channels) = await router(inventoryResponse: inventory)
             let registry = TargetRegistry()
 
-            let first = await PluginsDispatcher.handle(
+            let first = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "get_inventory",
                 params: ["track": .int(2)],
                 router: router,
                 cache: cache,
                 targetRegistry: registry
             )
-            let second = await PluginsDispatcher.handle(
+            let second = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "get_inventory",
                 params: ["track": .int(2)],
                 router: router,
@@ -303,7 +303,7 @@ struct ADR002ATargetKindTests {
                 "project_expected_path": .string("/tmp/project.logicx"),
             ]
             let (pluginRouter, pluginChannels) = await router()
-            let setParam = await PluginsDispatcher.handle(
+            let setParam = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "set_param_verified",
                 params: pluginParams,
                 router: pluginRouter,
@@ -320,7 +320,7 @@ struct ADR002ATargetKindTests {
             #expect(pluginOperationsAfterSetParam.first?.1["insert"] == "0")
 
             let (insertRouter, insertChannels) = await router()
-            let insert = await PluginsDispatcher.handle(
+            let insert = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "insert_verified",
                 params: [
                     "target_ref": .string(emptyInsertReference.rawValue),
@@ -363,7 +363,7 @@ struct ADR002ATargetKindTests {
             )
             let (router, channels) = await router()
 
-            let result = await PluginsDispatcher.handle(
+            let result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "set_param_verified",
                 params: [
                     "target_ref": .string(reference.rawValue),
@@ -424,7 +424,7 @@ struct ADR002ATargetKindTests {
             #expect(v1)
             #expect(object(mixerResult)["error"] as? String == "stale_target_reference")
 
-            let pluginResult = await PluginsDispatcher.handle(
+            let pluginResult = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "set_param_verified",
                 params: [
                     "target_ref": .string(mixerReference.rawValue),
@@ -443,7 +443,7 @@ struct ADR002ATargetKindTests {
             #expect(v2)
             #expect(object(pluginResult)["error"] as? String == "stale_target_reference")
 
-            let insertResult = await PluginsDispatcher.handle(
+            let insertResult = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "insert_verified",
                 params: [
                     "target_ref": .string(mixerReference.rawValue),
@@ -508,7 +508,7 @@ struct ADR002ATargetKindTests {
             )
             await pluginRegistry.bumpTopologyGeneration()
             let (pluginRouter, pluginChannels) = await router()
-            let insert = await PluginsDispatcher.handle(
+            let insert = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "insert_verified",
                 params: [
                     "target_ref": .string(pluginReference.rawValue),
@@ -539,7 +539,7 @@ struct ADR002ATargetKindTests {
                 fingerprint: customPluginFingerprint(insert: 1, plugin: "logic.stock.effect.gain")
             )
             let (router, channels) = await router()
-            let result = await PluginsDispatcher.handle(
+            let result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "insert_verified",
                 params: [
                     "target_ref": .string(reference.rawValue),
@@ -717,7 +717,7 @@ struct ADR002ATargetKindTests {
             #expect(await registry.currentTopologyGeneration == 1)
 
             let (staleRouter, staleChannels) = await router()
-            let stale = await PluginsDispatcher.handle(
+            let stale = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "insert_verified",
                 params: [
                     "target_ref": .string(reference.rawValue),

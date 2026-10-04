@@ -244,7 +244,7 @@ struct ADR002BProjectTargetTests {
             #expect(await mixerChannel.executedOps.isEmpty)
 
             let (pluginRouter, pluginChannel) = await router(id: .accessibility)
-            let pluginResult = await PluginsDispatcher.handle(
+            let pluginResult = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
                 command: "insert_verified",
                 params: [
                     "target_ref": .string(pluginReference.rawValue),

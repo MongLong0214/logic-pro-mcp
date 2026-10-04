@@ -5,7 +5,7 @@ import Testing
 
 /// #957: every claim in `OperationRegistry.parameterContracts` is driven against the dispatcher it
 /// describes. Every channel is a `MockChannel`. "Refused" means the reply is an error and no channel
-/// ran. "Accepted" means a channel ran, or the reply is not an invalid_params refusal.
+/// ran. "Accepted" means validation progressed; it does not claim a successful Logic write.
 ///
 /// The claims:
 /// - every command with parameters has a contract, and it names exactly the command's allowed
@@ -91,8 +91,8 @@ struct Issue957ParameterContractCensusTests {
         case .logicSystem:
             result = await SystemDispatcher.handle(command: command, params: params, router: router, cache: cache)
         case .logicPlugins:
-            result = await PluginsDispatcher.handle(command: command, params: params, router: router, cache: cache,
-                                                    liveTrackNames: names, verifiedGate: VerifiedOpGate())
+            result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(), command: command, params: params, router: router, cache: cache,
+                                                    liveTrackNames: names)
         case .logicEdit:
             result = await EditDispatcher.handle(command: command, params: params, router: router, cache: cache)
         case .logicProject:
@@ -107,25 +107,62 @@ struct Issue957ParameterContractCensusTests {
         for channel in channels where !(await channel.executedOps.isEmpty) {
             ran = true
         }
-        // The verified plugin commands check their parameters in the Accessibility channel, which a
-        // MockChannel does not. The channel's own entry point answers what the dispatcher passed, so a
-        // request it refuses as invalid_params counts as refused here (#1104 review R3, R3-01).
+        // The verified plugin commands check their input in the Accessibility channel, which a
+        // MockChannel does not. The channel's own entry point answers what the dispatcher passed, and
+        // that answer is the outcome, never the mock's success (#1104 review R3, R3-01; supplementary
+        // review SUP-02/06). The replay preserves the channel's refusal or validated progress.
         if spec.tool == .logicPlugins, let accessibility = channels.first(where: { $0.id == .accessibility }),
-           let passed = await accessibility.executedOps.last?.1,
-           let answer = await channelAnswer(command, passed),
-           Self.channelInputRefusals.contains(where: { answer.message.contains($0) }) {
-            return (toolTextResult(answer.message, isError: true), false)
+           let passed = await accessibility.executedOps.last?.1 {
+            guard let answer = await channelAnswer(command, passed) else {
+                Issue.record("No channel replay for plugins.\(command)")
+                return (toolInvalidParamsResult("channel replay unavailable"), false)
+            }
+            return (toolTextResult(answer.message, isError: !answer.isSuccess), false)
         }
         return (result, ran)
     }
 
+    @Test("a named Channel EQ write without a unit is refused before anything is changed")
+    func aNamedEQWriteWithoutAUnitIsRefused() async throws {
+        // #1104 supplementary review, SUP-06. The front document reads as the requested project, so the
+        // write reaches the unit check, which comes before any AX change; with no unit it stops there.
+        let builder = FakeAXRuntimeBuilder()
+        let answer = await AccessibilityChannel.defaultSetEQBandVerified(
+            params: ["track": "0", "insert": "0", "band": "Low Cut", "parameter": "Frequency", "value": "0",
+                     "mode": "duplicate_applyback", "project_expected_path": "/tmp/lpm-957.logicx"],
+            runtime: builder.makeLogicRuntime(appElement: builder.element(958)),
+            frontDocumentPath: { "/tmp/lpm-957.logicx" })
+        #expect(!answer.isSuccess)
+        #expect(answer.message.contains("invalid_params"), "\(answer.message.prefix(200))")
+        #expect(answer.message.contains("unit"), "\(answer.message.prefix(200))")
+        let full = try #require(await Self.channelAnswer("set_eq_band_verified", [
+            "track": "0", "insert": "0", "band": "Low Cut", "parameter": "Frequency", "value": "20",
+            "unit": "Hz", "mode": "duplicate_applyback", "project_expected_path": "/tmp/lpm-957.logicx",
+        ]))
+        // With a unit the fake tree fails at track selection, after parameter validation.
+        let object = try #require(sharedJSONObject(full.message))
+        #expect(object["error"] as? String == "track_selection_failed")
+        let entry = try #require(OperationCatalog.snapshot().operations.first { $0.id == "plugins.set_eq_band_verified" })
+        let branch = CommandSchemaProjection.branch(for: entry, strictParams: true)
+        var request: [String: Value] = [
+            "track": .int(0), "insert": .int(0), "band": .string("Low Cut"), "parameter": .string("Frequency"),
+            "value": .int(20), "unit": .string("Hz"), "mode": .string("duplicate_applyback"),
+            "project_expected_path": .string("/tmp/lpm-957.logicx"),
+        ]
+        #expect(Self.schemaAdmits(branch, request))
+        request["unit"] = nil
+        #expect(!Self.schemaAdmits(branch, request))
+    }
+
     /// The channel's refusals of a request's own input, before it reads Logic (#1104 supplementary
     /// review, SUP-02: unsupported_mode and project_path_required were credited as acceptance).
-    private static let channelInputRefusals = ["invalid_params", "unsupported_mode", "project_path_required"]
+    private static let channelInputRefusals = [
+        "invalid_params", "unsupported_mode", "project_path_required", "index_binding_corroboration_required",
+    ]
 
     /// The Accessibility channel's answer to the parameters the dispatcher passed, through its entry
-    /// points with a fake AX tree, a mixer reveal that finds nothing and a front document that does not
-    /// read: a complete write stops at the front-document comparison, and nothing reaches Logic.
+    /// points with a fake AX tree. Named EQ gets a matching injected document path so its unit check
+    /// runs; the empty tree then refuses selection. Other writes stop at the document comparison.
     private static func channelAnswer(_ command: String, _ params: [String: String]) async -> ChannelResult? {
         let builder = FakeAXRuntimeBuilder()
         let runtime = builder.makeLogicRuntime(appElement: builder.element(957))
@@ -137,7 +174,10 @@ struct Issue957ParameterContractCensusTests {
         case "set_param_verified":
             return await AccessibilityChannel.defaultSetParamVerified(params: params, runtime: runtime, frontDocumentPath: noDocument)
         case "set_eq_band_verified":
-            return await AccessibilityChannel.defaultSetEQBandVerified(params: params, runtime: runtime, frontDocumentPath: noDocument)
+            return await AccessibilityChannel.defaultSetEQBandVerified(
+                params: params, runtime: runtime,
+                frontDocumentPath: { params["project_expected_path"] },
+                pluginWindowOpener: { _, _, _, _, _ in nil })
         case "insert_verified":
             return await AccessibilityChannel.defaultInsertVerified(params: params, runtime: runtime, frontDocumentPath: noDocument)
         default:
@@ -158,15 +198,20 @@ struct Issue957ParameterContractCensusTests {
         guard refused(outside) else { return false }
         if control.channelRan { return true }
         if !(control.result.isError ?? false) { return true }
-        return !sharedToolText(control.result).contains("invalid_params")
-            && sharedToolText(outside.result).contains("invalid_params")
+        return !inputRefusal(control.result) && inputRefusal(outside.result)
+    }
+
+    /// A refusal of the request's own input, before Logic is read.
+    private static func inputRefusal(_ result: CallTool.Result) -> Bool {
+        let text = sharedToolText(result)
+        return channelInputRefusals.contains(where: { text.contains($0) })
     }
 
     /// Past parameter validation: a channel ran, or the reply is not an invalid_params refusal. A
     /// command that answers in the server (a trace that is not there, an audio path that does not
     /// open) is past validation when it says so.
     private static func accepted(_ outcome: (result: CallTool.Result, channelRan: Bool)) -> Bool {
-        outcome.channelRan || !sharedToolText(outcome.result).contains("invalid_params")
+        outcome.channelRan || !inputRefusal(outcome.result)
     }
 
     private static func describe(_ outcome: (result: CallTool.Result, channelRan: Bool)) -> String {
@@ -377,9 +422,10 @@ struct Issue957ParameterContractCensusTests {
     }
 
     @Test("a plugin-insert target_ref stands for the track and the insert in the schema, as it does in the dispatcher")
-    func aPluginInsertReferenceStandsForTrackAndInsert() {
+    func aPluginInsertReferenceStandsForTrackAndInsert() async throws {
         // #1104 supplementary review, SUP-01: insert was required even beside a plugin-insert reference,
         // which the dispatcher resolves to both (ADR002ATargetKindTests drive that runtime path).
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
         let entries = OperationCatalog.snapshot().operations
         var problems: [String] = []
         for id in ["plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified"] {
@@ -393,13 +439,31 @@ struct Issue957ParameterContractCensusTests {
             for (key, rule) in contract.params where !["track", "insert", "slot", "expected_name"].contains(key) {
                 if let sample = rule.sample { request[key] = sample }
             }
-            request["target_ref"] = .string("ins_957")
+            let cache = StateCache()
+            await cache.updateTracks([TrackState(id: 0, name: "Track 1", type: .audio)])
+            let registry = TargetRegistry()
+            let descriptor = TargetDescriptor(trackIndex: 0, trackName: "Track 1")
+            let fingerprint = "\(descriptor.fingerprint)|insert=2|plugin="
+            let reference = await registry.bind(kind: .pluginInsert, descriptor: descriptor, fingerprint: fingerprint)
+            request["target_ref"] = .string(reference.rawValue)
             if !Self.schemaAdmits(branch, request) { problems.append("\(id): the schema refuses \(request.keys.sorted())") }
+            let router = ChannelRouter()
+            let channel = MockChannel(id: .accessibility, successEnvelope: HonestContract.encodeV2StateA())
+            await router.register(channel)
+            let result = await PluginsDispatcher.handle(
+                verifiedGate: VerifiedOpGate(), command: entry.command, params: request, router: router,
+                cache: cache, targetRegistry: registry)
+            let failed = try #require(result.isError)
+            #expect(!failed, "\(sharedToolText(result))")
+            let dispatched = try #require(await channel.executedOps.first)
+            #expect(dispatched.1["track"] == "0")
+            #expect(dispatched.1["insert"] == "2")
             request["target_ref"] = nil
             if Self.schemaAdmits(branch, request) { problems.append("\(id): the schema admits no track, insert or reference") }
         }
         let held = problems.isEmpty
         #expect(held, "\(problems.joined(separator: "\n"))")
+        }
     }
 
     @Test("the census's schema check implements every keyword the params schemas use")

@@ -16,25 +16,21 @@ import Testing
     gate.release()
 }
 
-// These three tests mutate the process-global VerifiedOpGate.shared singleton.
-// They must run serially so a peer test's unconditional release() cannot free
-// another's in-flight claim — the default-parallel race the repo's --no-parallel
-// CI used to mask (same class of flake fixed in ProjectAuditPhaseTests).
+// Keep the production-default witness and server-handler calls serial. Other suites inject gates.
 @Suite(.serialized)
 struct VerifiedOpGateSharedTests {
 
-@Test func testPluginsDispatcherRefusesConcurrentVerifiedOp() async {
-    // Hold the shared gate, then issue a verified op through the dispatcher and
-    // confirm it is refused with verified_op_in_progress before touching AX.
-    // Release is synchronous so the shared singleton is clean before this test
-    // returns.
-    // The production default: no gate is passed, so the dispatcher takes `.shared`. The hold lasts
-    // one refused dispatch; the other tests in this suite use gates of their own (#1104).
-    let acquired = VerifiedOpGate.shared.tryAcquire()
-    #expect(acquired)
+@Test func testPluginsDispatcherRefusesConcurrentVerifiedOp() async throws {
+    // The production default: no gate is passed, so the dispatcher takes `.shared`. Hold it, issue a
+    // verified op and confirm it is refused with verified_op_in_progress before touching AX. Every
+    // other test passes a gate of its own, so nothing else takes `.shared` (#1104 supplementary review,
+    // SUP-07); the test stops if it cannot acquire, and releases only what it acquired.
+    try #require(VerifiedOpGate.shared.tryAcquire())
+    defer { VerifiedOpGate.shared.release() }
 
     let router = ChannelRouter()
     let result = await PluginsDispatcher.handle(
+
         command: "set_param_verified",
         params: [
             "track": .int(0), "insert": .int(2), "plugin": .string("Gain"),
@@ -45,21 +41,51 @@ struct VerifiedOpGateSharedTests {
         router: router,
         cache: StateCache()
     )
-    VerifiedOpGate.shared.release()
 
-    let text = sharedToolText(result)
-    let obj = try! JSONSerialization.jsonObject(with: text.data(using: .utf8)!) as! [String: Any]
+    let obj = try #require(sharedJSONObject(sharedToolText(result)))
     #expect(obj["error"] as? String == "verified_op_in_progress")
     #expect(obj["state"] as? String == "C")
-    #expect((obj["safe_to_retry"] as? Bool)!)
-    #expect(!((obj["write_attempted"] as? Bool)!))
+    let retryable = try #require(obj["safe_to_retry"] as? Bool)
+    let attempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(retryable)
+    #expect(!attempted)
+}
+
+@Test func differentVerifiedCommandsContendWhileAChannelIsRunning() async throws {
+    let gate = VerifiedOpGate()
+    let router = ChannelRouter()
+    let channel = HeldVerifiedChannel()
+    await router.register(channel)
+    let params: [String: Value] = [
+        "track": .int(0), "insert": .int(0), "plugin": .string("Gain"), "param": .string("gain_db"),
+        "value": .double(0), "unit": .string("dB"), "band": .string("Low Cut"),
+        "parameter": .string("Frequency"), "mode": .string("duplicate_applyback"),
+        "project_expected_path": .string("/tmp/x.logicx"), "expected_name": .string("Track 1"),
+    ]
+    let first = Task {
+        await PluginsDispatcher.handle(verifiedGate: gate, command: "set_param_verified", params: params,
+                                       router: router, cache: StateCache())
+    }
+    await channel.waitForEntry()
+    for command in ["set_eq_band_verified", "insert_verified"] {
+        let result = await PluginsDispatcher.handle(
+            verifiedGate: gate, command: command, params: params, router: router, cache: StateCache(),
+            liveTrackNames: { [0: "Track 1"] })
+        #expect(sharedJSONObject(sharedToolText(result))?["error"] as? String == "verified_op_in_progress")
+    }
+    #expect(await channel.calls == 1)
+    await channel.unblock()
+    _ = await first.value
+    try #require(gate.tryAcquire())
+    gate.release()
 }
 
 @Test func testPluginsDispatcherReleasesVerifiedGateAfterCompletion() async {
     let gate = VerifiedOpGate()
 
     let router = ChannelRouter()
-    _ = await PluginsDispatcher.handle(
+    _ = await PluginsDispatcher.handle(verifiedGate: gate,
+
         command: "set_param_verified",
         params: [
             "track": .int(0), "insert": .int(2), "plugin": .string("Gain"),
@@ -68,8 +94,7 @@ struct VerifiedOpGateSharedTests {
             "project_expected_path": .string("/tmp/x.logicx"),
         ],
         router: router,
-        cache: StateCache(),
-        verifiedGate: gate
+        cache: StateCache()
     )
 
     #expect(gate.tryAcquire())
@@ -84,12 +109,11 @@ struct VerifiedOpGateSharedTests {
     #expect(acquired)
 
     let router = ChannelRouter()
-    let result = await PluginsDispatcher.handle(
+    let result = await PluginsDispatcher.handle(verifiedGate: gate,
         command: "get_inventory",
         params: ["track": .int(0)],
         router: router,
-        cache: StateCache(),
-        verifiedGate: gate
+        cache: StateCache()
     )
     gate.release()
 
@@ -123,3 +147,28 @@ struct VerifiedOpGateSharedTests {
 }
 
 }  // end @Suite(.serialized) struct VerifiedOpGateSharedTests
+
+private actor HeldVerifiedChannel: Channel {
+    nonisolated let id: ChannelID = .accessibility
+    private(set) var calls = 0
+    private var entered: CheckedContinuation<Void, Never>?
+    private var release: CheckedContinuation<Void, Never>?
+
+    func start() async throws {}
+    func stop() async {}
+    func healthCheck() async -> ChannelHealth { .healthy(detail: "held verified operation") }
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        calls += 1
+        entered?.resume()
+        entered = nil
+        await withCheckedContinuation { release = $0 }
+        return .success(HonestContract.encodeV2StateA())
+    }
+    func waitForEntry() async {
+        if calls == 0 { await withCheckedContinuation { entered = $0 } }
+    }
+    func unblock() {
+        release?.resume()
+        release = nil
+    }
+}

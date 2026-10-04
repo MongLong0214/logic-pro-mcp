@@ -883,7 +883,7 @@ private func dispatchOperationTraceCoverageSpec(
             }
         )
     case .logicPlugins:
-        return await PluginsDispatcher.handle(
+        return await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(),
             command: spec.command,
             params: params,
             router: router,

@@ -146,9 +146,9 @@ extension OperationRegistry {
     /// then refuses before reading anything: a missing selector or value at its step 1 (invalid_params),
     /// a mode other than duplicate_applyback (unsupported_mode), a missing project path
     /// (project_path_required). A plugin-insert target_ref supplies the track and the insert.
-    private static func pluginWriteRules(_ keys: [String]) -> [String: ParamRule] {
+    private static func pluginWriteRules(_ keys: [String], reasons: [String: String] = [:]) -> [String: ParamRule] {
         Dictionary(uniqueKeysWithValues: keys.map { key in
-            (key, ParamRule.unconstrained(pluginWriteReasons[key]
+            (key, ParamRule.unconstrained(reasons[key] ?? pluginWriteReasons[key]
                                             ?? "omitted when it does not read; the channel's step 1 then refuses a missing one",
                                           sample: pluginWriteSamples[key]))
         })
@@ -158,11 +158,16 @@ extension OperationRegistry {
         "project_expected_path": "required: refused as project_path_required when absent, then compared with Logic's front document",
         "unit": "optional; when absent the unit comes from the parameter's metadata",
     ]
+    /// A named Channel EQ write refuses a missing unit (invalid_params), after the front-document
+    /// comparison, so the census does not reach it; declared from the channel's own check.
+    private static let channelEQReasons: [String: String] = [
+        "unit": "required for a named Channel EQ parameter: refused as invalid_params when absent",
+    ]
     /// Values that pass the channel's checks up to the front-document comparison.
     private static let pluginWriteSamples: [String: Value] = [
         "track": .int(0), "insert": .int(0), "slot": .int(0), "plugin": .string("Gain"), "plugin_id": .string("Gain"),
         "plugin_name": .string("Gain"), "param": .string("Gain"), "band": .string("Low Cut"),
-        "parameter": .string("Frequency"), "value": .int(0), "mode": .string("duplicate_applyback"),
+        "parameter": .string("Frequency"), "value": .int(0), "unit": .string("Hz"), "mode": .string("duplicate_applyback"),
         "project_expected_path": .string("/tmp/lpm-957.logicx"),
     ]
     /// Export inputs: placeholders the census replaces with a project package and an output folder it makes.
@@ -387,10 +392,11 @@ extension OperationRegistry {
                 ]) { _, new in new },
                 required: [["track", "target_ref"], ["insert", "slot", "target_ref"], ["plugin", "plugin_id", "plugin_name"],
                            ["expected_name", "target_ref"], ["mode"], ["project_expected_path"]]),
-            "plugins.set_eq_band_verified": .init(params: pluginWriteRules(["band", "insert", "mode", "parameter", "project_expected_path", "track", "unit", "value"])
+            "plugins.set_eq_band_verified": .init(params: pluginWriteRules(["band", "insert", "mode", "parameter", "project_expected_path", "track", "unit", "value"],
+                                                                         reasons: channelEQReasons)
                 .merging(["target_ref": targetRef, "project_ref": projectRef]) { _, new in new },
                 required: [["track", "target_ref"], ["insert", "target_ref"], ["band"], ["parameter"], ["value"],
-                           ["mode"], ["project_expected_path"]]),
+                           ["unit"], ["mode"], ["project_expected_path"]]),
             "plugins.set_param_verified": .init(params: pluginWriteRules(["insert", "mode", "param", "plugin", "plugin_id", "plugin_name", "project_expected_path", "track", "unit", "value"])
                 .merging(["target_ref": targetRef, "project_ref": projectRef]) { _, new in new },
                 required: [["track", "target_ref"], ["insert", "target_ref"], ["plugin", "plugin_id", "plugin_name"], ["param"],
