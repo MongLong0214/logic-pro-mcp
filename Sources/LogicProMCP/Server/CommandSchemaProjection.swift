@@ -97,9 +97,10 @@ enum CommandSchemaProjection {
         let groups = contract(for: entry)?.required ?? []
         if !groups.isEmpty {
             params["allOf"] = .array(groups.map { group in
-                group.count == 1
-                    ? .object(["required": .array([.string(group[0])])])
-                    : .object(["anyOf": .array(group.map { .object(["required": .array([.string($0)])]) })])
+                let alternatives: [Value] = group.map { alternative in
+                    .object(["required": .array(OperationParameterContract.keys(of: alternative).map { .string($0) })])
+                }
+                return alternatives.count == 1 ? alternatives[0] : .object(["anyOf": .array(alternatives)])
             })
         }
         return .object([
@@ -202,7 +203,10 @@ enum CommandSchemaProjection {
                     parameterCell(key, rules[key])
                 }.joined(separator: ", ")
                 let groups = contract(for: entry)?.required ?? []
-                let required = groups.isEmpty ? "none" : groups.map { $0.map { "`\($0)`" }.joined(separator: " or ") }.joined(separator: "; ")
+                let required = groups.isEmpty ? "none" : groups.map { group in
+                    group.map { OperationParameterContract.keys(of: $0).map { "`\($0)`" }.joined(separator: " and ") }
+                        .joined(separator: " or ")
+                }.joined(separator: "; ")
                 let unknown = closesParameters(entry, strictParams: strictParams) ? "closed" : "open"
                 lines.append("| `\(entry.command)` | \(params) | \(required) | \(unknown) | \(entry.mutability) | \(entry.confirmation) | "
                     + "\(entry.target) | \(entry.verification) | \(entry.retry) | \(entry.availability) |")

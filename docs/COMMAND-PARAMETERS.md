@@ -106,7 +106,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | `launch` | none | none | closed | mutating | l1 | none | readback_required | never_automatic | default_install |
 | `new` | none | none | closed | mutating | l1 | none | readback_required | never_automatic | default_install |
 | `open` | `confirmed`: boolean, `path`: scalar | `path` | closed | mutating | l2 | none | readback_required | never_automatic | default_install |
-| `plan_session_repair` | `allow_create_aux`, `allow_replace_send`, `allow_stack_membership_change`, `digest`, `names`, `on_ambiguity`, `plan_id`, `policy`, `snapshot_id` | none | closed | read_only | none | none | none | never_automatic | default_install |
+| `plan_session_repair` | `allow_create_aux`, `allow_replace_send`, `allow_stack_membership_change`, `digest`, `names`, `on_ambiguity`, `plan_id`, `policy`, `snapshot_id` | `plan_id` or `snapshot_id` and `policy` | closed | read_only | none | none | none | never_automatic | default_install |
 | `quit` | `confirmed`: boolean | none | closed | mutating | l3 | none | readback_required | never_automatic | default_install |
 | `save` | none | none | closed | mutating | l1 | none | readback_required | never_automatic | default_install |
 | `save_as` | `confirmed`: boolean, `path`: scalar | `path` | closed | mutating | l2 | none | readback_required | never_automatic | default_install |
@@ -115,7 +115,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 
 | Command | Parameters | Required | Unknown parameters | Mutability | Confirmation | Target | Verification | Retry | Availability |
 |---|---|---|---|---|---|---|---|---|---|
-| `clear_traces` | `confirmed`: boolean | none | closed | read_only | l2 | none | none | never_automatic | default_install |
+| `clear_traces` | `confirmed`: boolean | `confirmed` | closed | read_only | l2 | none | none | never_automatic | default_install |
 | `export_support_bundle` | `dir`: string | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `get_trace` | `trace_id`: string | `trace_id` | closed | read_only | none | none | none | never_automatic | default_install |
 | `health` | none | none | closed | read_only | none | none | none | never_automatic | default_install |
@@ -140,8 +140,8 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | `create_drummer` | none | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `create_external_midi` | none | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `create_instrument` | none | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
-| `delete` | `expected_name`: string, `index`: integer, `project_ref`, `target_ref`, `track`: integer | `index` or `track` or `target_ref`; `expected_name` or `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
-| `duplicate` | `expected_name`: string, `index`: integer, `project_ref`, `target_ref`, `track`: integer | `index` or `track` or `target_ref`; `expected_name` or `target_ref` | closed | mutating | none | accepts_stable_target | none | never_automatic | default_install |
+| `delete` | `expected_name`, `index`: integer, `project_ref`, `target_ref`, `track`: integer | `index` or `track` or `target_ref`; `expected_name` or `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
+| `duplicate` | `expected_name`, `index`: integer, `project_ref`, `target_ref`, `track`: integer | `index` or `track` or `target_ref`; `expected_name` or `target_ref` | closed | mutating | none | accepts_stable_target | none | never_automatic | default_install |
 | `list_library` | none | none | closed | read_only | none | none | none | never_automatic | default_install |
 | `mute` | `enabled`: booleanLike, `index`: integer, `project_ref`, `target_ref`, `track`: integer | `index` or `track` or `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
 | `record_sequence` | `bar`: integer, `instrument`, `instrument_path`, `notes`: string, `tempo`: number | `notes` | closed | mutating | none | none | readback_required | never_automatic | default_install |
@@ -151,7 +151,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | `scan_plugin_presets` | `submenuOpenDelayMs`: integer | none | closed | read_only | none | none | none | never_automatic | default_install |
 | `select` | `index`: integer, `name`, `project_ref`, `target_ref`, `track`: integer | `index` or `track` or `name` or `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
 | `set_automation` | `index`: integer, `mode`: scalar (read, write, touch, latch, trim), `project_ref`, `target_ref`, `track`: integer | `index` or `track` or `target_ref`; `mode` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
-| `set_instrument` | `category`, `expected_name`: string, `index`: integer, `path`, `preset`, `project_ref`, `target_ref` | `index` or `target_ref`; `path` or `category`; `expected_name` or `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
+| `set_instrument` | `category`, `expected_name`, `index`: integer, `path`, `preset`, `project_ref`, `target_ref` | `index` or `target_ref`; `path` or `category` and `preset`; `expected_name` or `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
 | `solo` | `enabled`: booleanLike, `index`: integer, `project_ref`, `target_ref`, `track`: integer | `index` or `track` or `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
 | `sort_verified` | `confirmed`, `criterion`: scalar (midi_channel, audio_channel, output_channel, instrument_name, track_name, used, creation_date), `expected_order`: array | `criterion`; `expected_order` | closed | mutating | l2 | none | readback_required | never_automatic | default_install |
 
@@ -160,7 +160,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | Command | Parameters | Required | Unknown parameters | Mutability | Confirmation | Target | Verification | Retry | Availability |
 |---|---|---|---|---|---|---|---|---|---|
 | `fast_forward` | none | none | closed | mutating | none | none | none | never_automatic | default_install |
-| `goto_position` | `bar`: integer, `position` | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
+| `goto_position` | `bar`: integer, `position` | `bar` or `position` | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `pause` | none | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `play` | none | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `record` | none | none | closed | mutating | none | none | readback_required | never_automatic | default_install |

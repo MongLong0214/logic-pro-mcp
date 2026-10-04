@@ -111,8 +111,14 @@ struct ParamRule: Sendable, Equatable {
 
 struct OperationParameterContract: Sendable, Equatable {
     let params: [String: ParamRule]
-    /// Each group is satisfied by any one of its keys.
+    /// Each group is satisfied by any one of its alternatives. An alternative is one key, or keys
+    /// joined by `+` that must all be present (`category+preset`).
     let required: [[String]]
+
+    /// The keys of one alternative.
+    static func keys(of alternative: String) -> [String] {
+        alternative.split(separator: "+").map(String.init)
+    }
 }
 
 extension OperationRegistry {
@@ -126,6 +132,16 @@ extension OperationRegistry {
     private static let port = ParamRule.enforced(.string, .string("midi"), allowed: MIDIDispatcher.validPorts.sorted())
     private static let channel = ParamRule.enforced(.integer, .int(1))
     private static let indexGroup = ["index", "track", "target_ref"]
+    /// Corroborates an index-bound write. With a target_ref it is not read at all, and without one a
+    /// value that is not a string reads as absent and the write is refused for want of it (#1104
+    /// review R1: declared a string, it refused requests the runtime takes).
+    private static let expectedName = ParamRule.unconstrained(
+        "compared with the track at the index; not read when a target_ref is given", sample: .string("Track 1"))
+    /// The planner parses its own input; these samples pass that parse and are then refused only
+    /// because no plan or inspection with these ids is retained.
+    private static let planSessionRepairSamples: [String: Value] = [
+        "plan_id": .string("plan-957"), "snapshot_id": .string("snapshot-957"), "policy": .object([:]),
+    ]
     private static func pluginWriteRules(_ keys: [String]) -> [String: ParamRule] {
         Dictionary(uniqueKeysWithValues: keys.map {
             ($0, ParamRule.unconstrained("omitted when it does not read; the channel's own schema step then refuses the request"))
@@ -140,8 +156,9 @@ extension OperationRegistry {
                                          required: [["bpm", "tempo"]]),
             "transport.goto_position": .init(params: [
                 "bar": index(9),
-                "position": .unconstrained("read as text with 1.1.1.1 as the default, so an object or array goes to bar 1"),
-            ], required: []),
+                "position": .unconstrained("read as text with 1.1.1.1 as the default, so an object or array goes to bar 1",
+                                           sample: .string("9.1.1.1")),
+            ], required: [["bar", "position"]]),
             "transport.set_cycle_range": .init(params: ["start": index(1), "end": index(4)], required: [["start"], ["end"]]),
 
             // logic_mixer
@@ -163,8 +180,10 @@ extension OperationRegistry {
                 "slot": index(), "insert": index(),
                 "plugin_name": .unconstrained("read as text; one alias that does not read as text is skipped for the next",
                                               sample: .string("Gain")),
-                "plugin": .unconstrained("read as text; one alias that does not read as text is skipped for the next"),
-                "name": .unconstrained("read as text; one alias that does not read as text is skipped for the next"),
+                "plugin": .unconstrained("read as text; one alias that does not read as text is skipped for the next",
+                                         sample: .string("Gain")),
+                "name": .unconstrained("read as text; one alias that does not read as text is skipped for the next",
+                                       sample: .string("Gain")),
                 "confirmed": .enforced(.boolean, .bool(false)),
                 "configuration": .unconstrained("read as text and checked by the channel against the strip's menu"),
                 "channel_configuration": .unconstrained("read as text and checked by the channel against the strip's menu"),
@@ -182,7 +201,7 @@ extension OperationRegistry {
             "navigate.goto_bar": .init(params: ["bar": index(9)], required: [["bar"]]),
             "navigate.goto_marker": .init(params: [
                 "index": index(),
-                "name": .unconstrained("read as text, and not read at all when an index is given"),
+                "name": .unconstrained("read as text, and not read at all when an index is given", sample: .string("Verse")),
             ], required: [["index", "name"]]),
             "navigate.create_marker": .init(params: [
                 "name": .unconstrained("read as text; a value that does not read as text leaves the marker to be named by Logic"),
@@ -192,7 +211,7 @@ extension OperationRegistry {
                                        required: [["index"], ["name"]]),
             "navigate.set_zoom": .init(params: [
                 "level": .unconstrained("read as text with fit as the default", sample: .string("fit")),
-                "direction": .unconstrained("read as text with fit as the default"),
+                "direction": .unconstrained("read as text with fit as the default", sample: .string("fit")),
             ], required: [["level", "direction"]]),
             "navigate.toggle_view": .init(params: ["view": .unconstrained("read as text with mixer as the default", sample: .string("mixer"))],
                                      required: [["view"]]),
@@ -200,7 +219,7 @@ extension OperationRegistry {
             // logic_edit
             "edit.quantize": .init(params: [
                 "value": .unconstrained("read as text with 1/16 as the default", sample: .string("1/16")),
-                "grid": .unconstrained("read as text with 1/16 as the default"),
+                "grid": .unconstrained("read as text with 1/16 as the default", sample: .string("1/16")),
             ], required: [["value", "grid"]]),
 
             // logic_midi
@@ -230,7 +249,8 @@ extension OperationRegistry {
                                      required: [["note"], ["duration"]]),
             "midi.mmc_locate": .init(params: [
                 "bar": index(9),
-                "time": .unconstrained("not read when a bar is given; alone, a value that is not HH:MM:SS:FF text is refused"),
+                "time": .unconstrained("not read when a bar is given; alone, a value that is not HH:MM:SS:FF text is refused",
+                                       sample: .string("00:00:01:00")),
             ],
                                      required: [["bar", "time"]]),
             "midi.import_file": .init(params: ["path": .enforced(.string, .string("/tmp/lpm-957.mid"))], required: [["path"]]),
@@ -240,15 +260,15 @@ extension OperationRegistry {
             // logic_tracks
             "tracks.select": .init(params: [
                 "index": index(), "track": index(), "target_ref": targetRef, "project_ref": projectRef,
-                "name": .unconstrained("read as text, and not read at all when an index is given"),
+                "name": .unconstrained("read as text, and not read at all when an index is given", sample: .string("Track 1")),
             ], required: [["index", "track", "name", "target_ref"]]),
             "tracks.delete": .init(params: [
                 "index": index(), "track": index(), "target_ref": targetRef, "project_ref": projectRef,
-                "expected_name": .enforced(.string, .string("Track 1")),
+                "expected_name": expectedName,
             ], required: [indexGroup, ["expected_name", "target_ref"]]),
             "tracks.duplicate": .init(params: [
                 "index": index(), "track": index(), "target_ref": targetRef, "project_ref": projectRef,
-                "expected_name": .enforced(.string, .string("Track 1")),
+                "expected_name": expectedName,
             ], required: [indexGroup, ["expected_name", "target_ref"]]),
             "tracks.rename": .init(params: [
                 "index": index(), "track": index(), "target_ref": targetRef, "project_ref": projectRef,
@@ -260,12 +280,12 @@ extension OperationRegistry {
             ], required: [indexGroup, ["mode"]]),
             "tracks.set_instrument": .init(params: [
                 "index": index(), "target_ref": targetRef, "project_ref": projectRef,
-                "expected_name": .enforced(.string, .string("Track 1")),
+                "expected_name": expectedName,
                 "path": .unconstrained("read as text, and not needed when category and preset are given",
                                        sample: .string("Bass/Electric Bass")),
-                "category": .unconstrained("read as text, and not needed when a path is given"),
-                "preset": .unconstrained("read as text, and not needed when a path is given"),
-            ], required: [["index", "target_ref"], ["path", "category"], ["expected_name", "target_ref"]]),
+                "category": .unconstrained("read as text, and not needed when a path is given", sample: .string("Bass")),
+                "preset": .unconstrained("read as text, and not needed when a path is given", sample: .string("Electric Bass")),
+            ], required: [["index", "target_ref"], ["path", "category+preset"], ["expected_name", "target_ref"]]),
             "tracks.resolve_path": .init(params: ["path": .enforced(.scalar, .string("Bass/Electric Bass"))], required: [["path"]]),
             "tracks.scan_library": .init(params: ["mode": .unconstrained("read as text; an empty mode leaves the channel's default")],
                                         required: []),
@@ -288,7 +308,7 @@ extension OperationRegistry {
             "system.list_recent_traces": .init(params: ["limit": index(5)], required: []),
             "system.get_trace": .init(params: ["trace_id": .enforced(.string, .string("lpmcp_00000000-0000-0000-0000-000000000957"))],
                                       required: [["trace_id"]]),
-            "system.clear_traces": .init(params: ["confirmed": .enforced(.boolean, .bool(true))], required: []),
+            "system.clear_traces": .init(params: ["confirmed": .enforced(.boolean, .bool(true))], required: [["confirmed"]]),
             "system.export_support_bundle": .init(params: ["dir": .enforced(.string, .string("lpm-957-bundle"))], required: []),
             "system.setup_arm_key": .init(params: [
                 "consent": .unconstrained("only the string \"true\" consents; any other value, a JSON true included, reads as no consent"),
@@ -372,8 +392,10 @@ extension OperationRegistry {
             "project.plan_session_repair": .init(params: Dictionary(uniqueKeysWithValues: [
                 "plan_id", "digest", "snapshot_id", "policy", "names", "on_ambiguity", "allow_create_aux",
                 "allow_stack_membership_change", "allow_replace_send",
-            ].map { ($0, ParamRule.unconstrained("checked by the repair planner's own parse, which refuses combinations as well as types")) }),
-                required: []),
+            ].map { ($0, ParamRule.unconstrained("checked by the repair planner's own parse, which refuses combinations as well as types",
+                                                  sample: Self.planSessionRepairSamples[$0])) }),
+                // A retained plan by id, or a retained inspection with a policy to plan from.
+                required: [["plan_id", "snapshot_id+policy"]]),
 
             // logic_system: the saga commands validate their own wire format (they are opted out of
             // the generic unknown-parameter gate).

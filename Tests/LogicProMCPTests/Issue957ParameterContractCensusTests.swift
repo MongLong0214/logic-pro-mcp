@@ -128,17 +128,52 @@ struct Issue957ParameterContractCensusTests {
             + String(sharedToolText(outcome.result).prefix(160))
     }
 
-    /// One key with a sample from each required group, preferring `prefer` when a group holds it.
-    private static func filling(_ contract: OperationParameterContract, prefer: String? = nil,
-                                skipping skipped: Int? = nil) -> [String: Value]? {
+    /// The samples for one alternative of a group (`category+preset` is two keys), or nil when a key
+    /// has none.
+    private static func samples(_ contract: OperationParameterContract, _ alternative: String) -> [String: Value]? {
         var params: [String: Value] = [:]
-        for (offset, group) in contract.required.enumerated() where offset != skipped {
-            if let prefer, group.contains(prefer) { continue }
-            guard let key = group.first(where: { contract.params[$0]?.sample != nil }),
-                  let sample = contract.params[key]?.sample else { return nil }
+        for key in OperationParameterContract.keys(of: alternative) {
+            guard let sample = contract.params[key]?.sample else { return nil }
             params[key] = sample
         }
         return params
+    }
+
+    /// An alternative with samples from each required group, preferring a group's alternative that
+    /// holds `prefer` (left for the caller to fill), and `choosing` a given alternative for a group.
+    private static func filling(_ contract: OperationParameterContract, prefer: String? = nil,
+                                skipping skipped: Int? = nil,
+                                choosing chosen: (group: Int, alternative: String)? = nil) -> [String: Value]? {
+        var params: [String: Value] = [:]
+        for (offset, group) in contract.required.enumerated() where offset != skipped {
+            if let prefer, group.contains(where: { OperationParameterContract.keys(of: $0).contains(prefer) }) { continue }
+            let alternatives = chosen?.group == offset ? [chosen!.alternative] : group
+            guard let filled = alternatives.lazy.compactMap({ Self.samples(contract, $0) }).first else { return nil }
+            params.merge(filled) { _, new in new }
+        }
+        return params
+    }
+
+    /// Whether `params` satisfies the branch schema's `params` object as projected: each property's
+    /// schema, `additionalProperties`, and the `allOf` of `required` / `anyOf` groups.
+    private static func schemaAdmits(_ branch: Value, _ params: [String: Value]) -> Bool {
+        guard let object = branch.objectValue?["properties"]?.objectValue?["params"]?.objectValue else { return false }
+        let properties = object["properties"]?.objectValue ?? [:]
+        for (key, value) in params {
+            guard let schema = properties[key] else {
+                if object["additionalProperties"] == .bool(false) { return false }
+                continue
+            }
+            if !admits(schema, value) { return false }
+            if let allowed = schema.objectValue?["enum"]?.arrayValue, !allowed.contains(value) { return false }
+        }
+        func satisfies(_ rule: Value) -> Bool {
+            let rule = rule.objectValue ?? [:]
+            if let anyOf = rule["anyOf"]?.arrayValue { return anyOf.contains(where: satisfies) }
+            let keys = rule["required"]?.arrayValue?.compactMap(\.stringValue) ?? []
+            return keys.allSatisfy { params[$0] != nil }
+        }
+        return (object["allOf"]?.arrayValue ?? []).allSatisfy(satisfies)
     }
 
     @Test("every command with parameters has a contract naming exactly its parameters")
@@ -153,7 +188,8 @@ struct Issue957ParameterContractCensusTests {
             if named != spec.allowedParams {
                 problems.append("\(spec.id.rawValue): contract \(named.sorted()) vs allowed \(spec.allowedParams.sorted())")
             }
-            for group in contract.required where group.isEmpty || !Set(group).isSubset(of: spec.allowedParams) {
+            for group in contract.required
+            where group.isEmpty || !Set(group.flatMap(OperationParameterContract.keys(of:))).isSubset(of: spec.allowedParams) {
                 problems.append("\(spec.id.rawValue): required group \(group) names an unknown key")
             }
             for (key, rule) in contract.params where (rule.kind == nil) == (rule.reason == nil) {
@@ -257,9 +293,49 @@ struct Issue957ParameterContractCensusTests {
         #expect(held, "\(problems.joined(separator: "\n"))")
     }
 
+    @Test("a request the dispatcher refuses for missing parameters is one the schema refuses, and every alternative is taken and admitted")
+    func requirementsAreAllDeclared() async {
+        var problems: [String] = []
+        let entries = OperationCatalog.snapshot().operations
+        for spec in OperationRegistry.specs where !spec.allowedParams.isEmpty {
+            guard let contract = OperationRegistry.parameterContracts[spec.id],
+                  let entry = entries.first(where: { $0.id == spec.id.rawValue }) else { continue }
+            let branch = CommandSchemaProjection.branch(for: entry, strictParams: true)
+            // An empty request refused as invalid_params names a requirement the contract must hold
+            // (#1104 review R1: goto_position, clear_traces and set_instrument's pair were missing).
+            let empty = await Self.dispatch(spec, [:])
+            let refusedEmpty = Self.refused(empty) && sharedToolText(empty.result).contains("invalid_params")
+            if refusedEmpty && Self.schemaAdmits(branch, [:]) {
+                problems.append("\(spec.id.rawValue): an empty request is refused, and the schema admits it: \(Self.describe(empty))")
+            }
+            for (offset, group) in contract.required.enumerated() {
+                // A stable target reference must be issued by a target registry first; this census
+                // builds none, so that alternative is not driven here.
+                for alternative in group where !OperationParameterContract.keys(of: alternative).contains("target_ref") {
+                    guard let request = Self.filling(contract, choosing: (offset, alternative)) else {
+                        problems.append("\(spec.id.rawValue): the alternative \(alternative) has no samples")
+                        continue
+                    }
+                    let outcome = await Self.dispatch(spec, request)
+                    if !Self.accepted(outcome) {
+                        problems.append("\(spec.id.rawValue) with \(alternative): refused: \(Self.describe(outcome))")
+                    }
+                    if !Self.schemaAdmits(branch, request) {
+                        problems.append("\(spec.id.rawValue) with \(alternative): the schema refuses \(request.keys.sorted())")
+                    }
+                }
+            }
+        }
+        let held = problems.isEmpty
+        #expect(held, "\(problems.joined(separator: "\n"))")
+    }
+
     /// The `type` / `anyOf` subset of JSON Schema the kinds use.
     private static func admits(_ schema: Value, _ value: Value) -> Bool {
         let object = schema.objectValue ?? [:]
+        if object["anyOf"] == nil && object["type"] == nil {
+            return true
+        }
         if let anyOf = object["anyOf"]?.arrayValue {
             return anyOf.contains { admits($0, value) }
         }
