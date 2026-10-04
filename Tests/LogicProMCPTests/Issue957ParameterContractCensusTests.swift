@@ -53,7 +53,8 @@ struct Issue957ParameterContractCensusTests {
         return params
     }
 
-    private static func dispatch(_ spec: OperationSpec, _ given: [String: Value]) async -> (result: CallTool.Result, channelRan: Bool) {
+    private static func dispatch(_ spec: OperationSpec, _ given: [String: Value],
+                                 targetRegistry: TargetRegistry? = nil) async -> (result: CallTool.Result, channelRan: Bool) {
         let params = materialize(spec, given)
         let router = ChannelRouter()
         var channels: [MockChannel] = []
@@ -90,7 +91,7 @@ struct Issue957ParameterContractCensusTests {
             result = await MIDIDispatcher.handle(command: command, params: params, router: router, cache: cache)
         case .logicTracks:
             result = await TrackDispatcher.handle(command: command, params: params, router: router, cache: cache,
-                                                  liveTrackNames: names)
+                                                  targetRegistry: targetRegistry, liveTrackNames: names)
         }
         var ran = false
         for channel in channels where !(await channel.executedOps.isEmpty) {
@@ -323,6 +324,83 @@ struct Issue957ParameterContractCensusTests {
                     if !Self.schemaAdmits(branch, request) {
                         problems.append("\(spec.id.rawValue) with \(alternative): the schema refuses \(request.keys.sorted())")
                     }
+                }
+            }
+        }
+        let held = problems.isEmpty
+        #expect(held, "\(problems.joined(separator: "\n"))")
+    }
+
+    @Test("the census's schema check implements every keyword the params schemas use")
+    func theSchemaCheckCoversTheSchemaVocabulary() {
+        // #1104 review R1 asked for actual schema validation. `schemaAdmits` is a subset validator;
+        // it is a validator for these schemas only while they use no keyword it skips. A skipped
+        // keyword (a `pattern`, a `minimum`) would let it admit what a client refuses.
+        let paramsKeywords: Set<String> = ["type", "properties", "additionalProperties", "allOf"]
+        let groupKeywords: Set<String> = ["required", "anyOf"]
+        let propertyKeywords: Set<String> = ["type", "anyOf", "enum"]
+        var problems: [String] = []
+        func check(_ schema: Value, _ allowed: Set<String>, _ at: String) {
+            let keys = Set(schema.objectValue?.keys.map { $0 } ?? [])
+            for extra in keys.subtracting(allowed) { problems.append("\(at): \(extra)") }
+        }
+        for entry in OperationCatalog.snapshot().operations {
+            let branch = CommandSchemaProjection.branch(for: entry, strictParams: true)
+            guard let params = branch.objectValue?["properties"]?.objectValue?["params"] else { continue }
+            check(params, paramsKeywords, entry.id)
+            for group in params.objectValue?["allOf"]?.arrayValue ?? [] {
+                check(group, groupKeywords, "\(entry.id) allOf")
+                for alternative in group.objectValue?["anyOf"]?.arrayValue ?? [] {
+                    check(alternative, ["required"], "\(entry.id) allOf anyOf")
+                }
+            }
+            for (key, property) in params.objectValue?["properties"]?.objectValue ?? [:] {
+                check(property, propertyKeywords, "\(entry.id).\(key)")
+                for option in property.objectValue?["anyOf"]?.arrayValue ?? [] {
+                    check(option, ["type"], "\(entry.id).\(key) anyOf")
+                }
+            }
+        }
+        let held = problems.isEmpty
+        #expect(held, "\(problems.sorted().joined(separator: "\n"))")
+    }
+
+    @Test("with an issued target reference, expected_name of any type is not read: the dispatcher takes the request and the schema admits it")
+    func anIssuedReferenceTakesAnyExpectedName() async throws {
+        // #1104 review R1: expected_name was declared a string on delete, duplicate and set_instrument,
+        // while a request carrying a target_ref never reads it, so the schema refused requests the
+        // server takes. The census issues no references elsewhere; here one is issued for row 0.
+        let registry = TargetRegistry()
+        let snapshot = await registry.currentSnapshot
+        let issued = try #require(await TrackReferenceIssuance.issue(
+            for: [TrackState(id: 0, name: "Track 1", type: .audio), TrackState(id: 1, name: "Track 2", type: .audio)],
+            registry: registry, snapshot: snapshot))
+        let reference = try #require(issued.byTrackIndex[0]).rawValue
+        let entries = OperationCatalog.snapshot().operations
+        var problems: [String] = []
+        for id in ["tracks.delete", "tracks.duplicate", "tracks.set_instrument"] {
+            guard let spec = OperationRegistry.specs.first(where: { $0.id.rawValue == id }),
+                  let entry = entries.first(where: { $0.id == id }) else {
+                problems.append("\(id): not registered")
+                continue
+            }
+            let branch = CommandSchemaProjection.branch(for: entry, strictParams: true)
+            var base: [String: Value] = ["target_ref": .string(reference)]
+            if id == "tracks.set_instrument" { base["path"] = .string("Bass/Electric Bass") }
+            // The control: the reference alone reaches a channel, so the reference path is live here.
+            let control = await Self.dispatch(spec, base, targetRegistry: registry)
+            if !control.channelRan {
+                problems.append("\(id) with the reference alone reached no channel: \(Self.describe(control))")
+            }
+            for value: Value in [.object([:]), .int(7), .array([])] {
+                var request = base
+                request["expected_name"] = value
+                let outcome = await Self.dispatch(spec, request, targetRegistry: registry)
+                if !outcome.channelRan {
+                    problems.append("\(id) with expected_name \(value): \(Self.describe(outcome))")
+                }
+                if !Self.schemaAdmits(branch, request) {
+                    problems.append("\(id) with expected_name \(value): the schema refuses it")
                 }
             }
         }
