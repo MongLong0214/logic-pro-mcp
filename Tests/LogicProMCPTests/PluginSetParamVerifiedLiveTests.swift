@@ -128,7 +128,8 @@ private final class LiveFixture: @unchecked Sendable {
         viewMenuDuplicatesOnReveal: Bool = false,
         viewMenuOmitsEditorItem: Bool = false,
         viewMenuEditorItemEnabled: Bool = true,
-        viewSettleDelay: TimeInterval = 0.5
+        viewSettleDelay: TimeInterval = 0.5,
+        onTrackHeaderPress: (@Sendable (FakeAXRuntimeBuilder, Int) -> Void)? = nil
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
@@ -389,6 +390,7 @@ private final class LiveFixture: @unchecked Sendable {
         let controlsViewSwitcherKey = b.elementID(controlsViewSwitcher)
         let controlsWindowChildren = controlsViewWindowChildren
         let editorWindowChildren = pluginWindowChildren
+        let selectionHeaderRows = headerRows
         let forced = forcedAfterValue
         let writeBehavior = sliderWriteBehavior
         let pluginWindowsReadStatusBeforeTargetOpen = pluginWindowsReadStatusBeforeTargetOpen
@@ -529,6 +531,12 @@ private final class LiveFixture: @unchecked Sendable {
                     return true
                 }
                 let key = b.elementID(el)
+                if action == (kAXPressAction as String),
+                   let ordinal = selectionHeaderRows.firstIndex(where: { CFEqual($0, el) }) {
+                    // elementID is pointer-backed, not the creation ID supplied
+                    // to element(_:). Match the AX element before naming its row.
+                    onTrackHeaderPress?(b, 1100 + ordinal)
+                }
                 if key == controlsViewSwitcherKey {
                     guard action == (kAXPressAction as String) else { return false }
                     guard !(viewMenuBecomesUnavailableAfterControlsSelection
@@ -2332,6 +2340,153 @@ private func namedEQBandParams(
     #expect(obj["state"] as? String == "A")
     #expect((obj["verified"] as? Bool)!)
     #expect(fixture.currentSliderValue == 60)
+}
+
+// R1108-01: a reference's first name check must not authorize a different,
+// independently acquired target. The entry lookup is production's step 4,
+// after the first name guard and before track selection / Mixer acquisition.
+private func expectedNameAcquisitionInterleave(
+    eq: Bool,
+    occupiedInsertReference: Bool,
+    reorderAfterInitialGuard: Bool
+) async throws -> (object: [String: Any], fixture: LiveFixture, lookups: Int) {
+    let pluginName = eq ? "Channel EQ" : "Compressor"
+    let pluginID = eq ? "logic.stock.effect.channel_eq" : "logic.stock.effect.compressor"
+    let fixture = LiveFixture(
+        track: 9, trackDisplayName: "Bass",
+        thresholdDescription: eq ? "Peak 1 Frequency" : "Threshold",
+        pluginSlotName: pluginName,
+        beforeValue: eq ? 0 : 51,
+        otherTracks: 10,
+        pluginSlotNamesByTrack: [10: [6: pluginName]],
+        sliderWriteBehavior: eq ? .oneStepTowardRequest : .direct
+    )
+    let builder = fixture.builder
+    let bassHeader = builder.element(1109)
+    let replacementHeader = builder.element(1110)
+    builder.setAttribute(replacementHeader, kAXDescriptionAttribute as String, "1개의 ‘Hi Synth’ 트랙")
+    builder.setAttribute(builder.element(150_010), kAXValueAttribute as String, "Hi Synth")
+    let lookups = MutableBox(0)
+    let lookup: VerifiedPluginCatalog.EntryLookup = { requestedID in
+        lookups.value += 1
+        if lookups.value == 1, reorderAfterInitialGuard {
+            // This is a reorder of distinct AX header elements, not a duplicate
+            // name or a mismatch already present when the reference guard ran.
+            var headers = (0...10).map { builder.element(1100 + $0) }
+            headers.swapAt(9, 10)
+            builder.setChildren(builder.element(1002), headers)
+            builder.setAttribute(bassHeader, kAXSelectedAttribute as String, false)
+            builder.setAttribute(replacementHeader, kAXSelectedAttribute as String, true)
+            builder.setAttribute(builder.element(1004), kAXTitleAttribute as String, "Hi Synth")
+            builder.setAttribute(builder.element(1012), kAXValueAttribute as String, "Hi Synth")
+        }
+        return VerifiedPluginCatalog.productionEntryLookup(requestedID)
+    }
+    var params = eq ? namedEQBandParams() : thresholdParams()
+    params["track"] = "9"
+    // These are the channel parameters forwarded by trk_ and occupied ins_
+    // resolution, respectively; the dispatcher itself is not under test here.
+    params["expected_track_name"] = "Bass"
+    if occupiedInsertReference {
+        params["expected_slot_read_status"] = "ok"
+        params["expected_plugin_identity"] = pluginID
+    }
+    let result: ChannelResult
+    if eq {
+        result = await AccessibilityChannel.defaultSetEQBandVerified(
+            params: params, runtime: fixture.runtime,
+            frontDocumentPath: { expectedPath }, entryLookup: lookup,
+            pluginPopupMenuCleaner: { _ in .noPopupObserved }
+        )
+    } else {
+        result = await AccessibilityChannel.defaultSetParamVerified(
+            params: params, runtime: fixture.runtime,
+            frontDocumentPath: { expectedPath }, entryLookup: lookup,
+            pluginPopupMenuCleaner: { _ in .noPopupObserved }
+        )
+    }
+    let data = try #require(result.message.data(using: .utf8))
+    let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    return (object, fixture, lookups.value)
+}
+
+private func assertExpectedNameAcquisitionRefusal(eq: Bool, occupiedInsertReference: Bool) async throws {
+    let observed = try await expectedNameAcquisitionInterleave(
+        eq: eq, occupiedInsertReference: occupiedInsertReference, reorderAfterInitialGuard: true
+    )
+    // Reaching the first catalog lookup proves the initial expected-name guard
+    // allowed Bass before the interleaving changed the index's identity.
+    #expect(observed.lookups > 0)
+    #expect(observed.object["state"] as? String == "C")
+    #expect(observed.object["error"] as? String == "stale_target_reference")
+    #expect(observed.fixture.sliderWriteCount.value == 0)
+    #expect(observed.fixture.currentSliderValue == (eq ? 0 : 51))
+    let writeAttempted = try #require(observed.object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+}
+
+@Test func testTrackReferenceCompressorRefusesReorderAfterInitialNameGuardBeforeAcquisition() async throws {
+    try await assertExpectedNameAcquisitionRefusal(eq: false, occupiedInsertReference: false)
+}
+
+@Test func testOccupiedInsertReferenceCompressorRefusesReorderAfterInitialNameGuardBeforeAcquisition() async throws {
+    try await assertExpectedNameAcquisitionRefusal(eq: false, occupiedInsertReference: true)
+}
+
+@Test func testTrackReferenceEQRefusesReorderAfterInitialNameGuardBeforeAcquisition() async throws {
+    try await assertExpectedNameAcquisitionRefusal(eq: true, occupiedInsertReference: false)
+}
+
+@Test func testOccupiedInsertReferenceEQRefusesReorderAfterInitialNameGuardBeforeAcquisition() async throws {
+    try await assertExpectedNameAcquisitionRefusal(eq: true, occupiedInsertReference: true)
+}
+
+@Test func testUnchangedTrackAndOccupiedInsertReferenceAcquisitionStillWritesRequestedPlugin() async throws {
+    for eq in [false, true] {
+        for occupiedInsertReference in [false, true] {
+            let observed = try await expectedNameAcquisitionInterleave(
+                eq: eq, occupiedInsertReference: occupiedInsertReference, reorderAfterInitialGuard: false
+            )
+            #expect(observed.lookups > 0)
+            #expect(observed.object["state"] as? String == "A")
+            #expect(observed.fixture.sliderWriteCount.value == (eq ? 3 : 1))
+            #expect(observed.fixture.currentSliderValue == (eq ? 3 : 60))
+        }
+    }
+}
+
+@Test func testTrackReferenceRetainsOriginalBindingAcrossHeaderReorderDuringSelectionPress() async throws {
+    let selectionPresses = MutableBox(0)
+    let fixture = LiveFixture(
+        track: 9, trackDisplayName: "Bass", otherTracks: 10,
+        pluginSlotNamesByTrack: [10: [6: "Compressor"]],
+        onTrackHeaderPress: { builder, headerID in
+            guard headerID == 1109 else { return }
+            selectionPresses.value += 1
+            guard selectionPresses.value == 1 else { return }
+            var headers = (0...10).map { builder.element(1100 + $0) }
+            headers.swapAt(9, 10)
+            builder.setChildren(builder.element(1002), headers)
+            builder.setAttribute(builder.element(1109), kAXSelectedAttribute as String, false)
+            builder.setAttribute(builder.element(1110), kAXSelectedAttribute as String, true)
+            builder.setAttribute(builder.element(1004), kAXTitleAttribute as String, "Hi Synth")
+            builder.setAttribute(builder.element(1012), kAXValueAttribute as String, "Hi Synth")
+        }
+    )
+    fixture.builder.setAttribute(fixture.builder.element(1110), kAXDescriptionAttribute as String,
+                                 "1개의 ‘Hi Synth’ 트랙")
+    fixture.builder.setAttribute(fixture.builder.element(150_010), kAXValueAttribute as String, "Hi Synth")
+    var params = thresholdParams(track: 9)
+    params["expected_track_name"] = "Bass"
+    let object = await runLive(fixture: fixture, params: params)
+    let selectionWasTriggeredExactlyOnce = selectionPresses.value == 1
+    try #require(selectionWasTriggeredExactlyOnce, "the actual header AXPress must trigger this interleaving")
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == "stale_target_reference")
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.currentSliderValue == 51)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
 }
 
 @Test func testDuplicateLiveTrackNameFailsClosedBeforeWrite() async throws {

@@ -1249,6 +1249,23 @@ extension AccessibilityChannel {
             entryLookup: entryLookup
         ) ?? 1.0
 
+        // Acquire identity before selection can yield to a changed Arrange order. A reference's
+        // name must authorize this independently read binding, not a later replacement target.
+        let mixerLookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        guard let mixer = mixerLookup.mixer else {
+            return .error(incompleteInventoryStateC(
+                operation, identity,
+                mixerLookup.childrenUnread ? "the mixer's children did not read" : "mixer area was not locatable"
+            ))
+        }
+        guard let target = AXPluginTrackBinding.resolve(track: track, mixer: mixer, runtime: runtime) else {
+            return .error(incompleteInventoryStateC(operation, identity,
+                pluginTrackBindingFailureDetail(mixer: mixer, runtime: runtime)))
+        }
+        if let refusal = pluginReferenceBindingGuard(
+            params: referenceParams, target: target, operation: operation, identity: identity
+        ) { return refusal }
+
         // Step 6 — track verified select. Drive the AX-native selection ladder,
         // then confirm the target header reads back as selected (a write that the
         // AX API accepted vacuously must not be trusted — v3.0.9 lesson).
@@ -1261,21 +1278,23 @@ extension AccessibilityChannel {
                 "track \(track) selection could not be verified via AXSelected readback"
             ))
         }
+        guard await AXPluginTrackBinding.waitUntilStable(target, runtime: runtime) else {
+            return .error(HonestContract.encodeV2StateC(
+                error: referenceParams["expected_track_name"] == nil ? .incompleteInventory : .staleTargetReference,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "what_was_attempted": "retain the acquired track identity through selection",
+                    "what_was_observed": "the acquired track or Mixer binding changed during selection",
+                    "write_attempted": false,
+                    "safe_to_retry": false,
+                ]
+            ))
+        }
 
         // Step 7 — inventory complete + slot occupied at `insert` (reuse the
         // drift-safe enumerator; an unreadable chain or an empty target slot
         // means there is no plugin to write into).
-        let mixerLookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
-        guard let mixer = mixerLookup.mixer else {
-            return .error(incompleteInventoryStateC(
-                operation, identity,
-                mixerLookup.childrenUnread ? "the mixer's children did not read" : "mixer area was not locatable"
-            ))
-        }
-        guard let target = AXPluginTrackBinding.resolve(track: track, mixer: mixer, runtime: runtime) else {
-            return .error(incompleteInventoryStateC(operation, identity,
-                pluginTrackBindingFailureDetail(mixer: mixer, runtime: runtime)))
-        }
         guard let slots = AXLogicProElements.audioPluginInsertSlots(in: target.strip, runtime: runtime.ax) else {
             return .error(incompleteInventoryStateC(operation, identity, "the strip's children did not read"))
         }
@@ -2549,6 +2568,24 @@ extension AccessibilityChannel {
         )
     }
 
+    private static func pluginReferenceBindingGuard(
+        params: [String: String], target: AXPluginTrackBinding.Binding,
+        operation: String, identity: [String: Any]
+    ) -> ChannelResult? {
+        guard let expected = params["expected_track_name"],
+              target.trackName != expected.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        return .error(HonestContract.encodeV2StateC(error: .staleTargetReference, extras: [
+            "operation": operation,
+            "target_identity": identity,
+            "expected_track_name": expected,
+            "observed_track_name": target.trackName,
+            "what_was_attempted": "bind the acquired Arrange/Mixer identity to the referenced track",
+            "what_was_observed": "the acquired target no longer has the reference's observed name",
+            "write_attempted": false,
+            "safe_to_retry": false,
+        ]))
+    }
+
     /// An insert reference carries the observed physical slot state, not just its number.
     /// Reusing a reference after replacement must not authorize a different plug-in.
     private static func pluginInsertReferenceGuard(
@@ -3382,7 +3419,7 @@ extension AccessibilityChannel {
         /// failure was raised. Several setup stages are only reachable after the slot's opener has
         /// been performed or clicked, and reporting those as "no write attempted" denies an
         /// actuation that did happen.
-        case transientSetupFailure(stage: String, actuated: Bool = false)
+        case transientSetupFailure(stage: String, actuated: Bool = false, safeToRetry: Bool = true)
     }
 
     /// The injectable live-insert seam. Performs the live insert sequence and
@@ -3528,6 +3565,9 @@ extension AccessibilityChannel {
         guard let target = AXPluginTrackBinding.resolve(track: track, mixer: mixer, runtime: runtime) else {
             return refuseBeforeInsert(pluginTrackBindingFailureDetail(mixer: mixer, runtime: runtime))
         }
+        if let refusal = pluginReferenceBindingGuard(
+            params: params, target: target, operation: operation, identity: identity
+        ) { return refusal }
         guard let slots = AXLogicProElements.audioPluginInsertSlots(in: target.strip, runtime: runtime.ax) else {
             return refuseBeforeInsert("the strip's children did not read")
         }
@@ -3625,7 +3665,9 @@ extension AccessibilityChannel {
             // confirm a slot we did not target — roll the stray mount back and
             // fail closed with the observed slot.
             guard observedSlot == insert else {
-                let rollbackResult = await rollback(track, observedID, observedSlot, runtime)
+                let rollbackResult = await $authorizedPluginTrack.withValue(target) {
+                    await rollback(track, observedID, observedSlot, runtime)
+                }
                 var extras: [String: Any] = [
                     "operation": operation,
                     "target_identity": identity,
@@ -3773,10 +3815,9 @@ extension AccessibilityChannel {
                 ]
             ))
 
-        case let .transientSetupFailure(stage, actuated):
-            // A pre-mount UI-setup step did not complete (slot popup, anchor, or
-            // exact leaf not ready). No write attempted → retry-able (P2-3), distinct from the
-            // permanent insert_not_ax_automatable.
+        case let .transientSetupFailure(stage, actuated, safeToRetry):
+            // No plug-in leaf was chosen. Preserve whether the slot opener was dispatched;
+            // lost target identity after opening is not an automatically safe retry.
             return .error(HonestContract.encodeV2StateC(
                 error: .insertSetupFailed,
                 extras: [
@@ -3788,7 +3829,7 @@ extension AccessibilityChannel {
                     "what_was_observed": actuated
                         ? "the slot's opener was dispatched, then setup stopped at stage '\(stage)' before any plugin was chosen"
                         : "the exact slot popup UI was not ready at stage '\(stage)' — nothing was dispatched at the slot",
-                    "safe_to_retry": true,
+                    "safe_to_retry": safeToRetry,
                     "write_attempted": actuated,
                 ]
             ))
@@ -3999,12 +4040,35 @@ extension AccessibilityChannel {
             return (.transientSetupFailure(stage: "slot_popup_not_anchored_to_target_slot", actuated: true), trace)
         }
 
+        var commitTargetRefused = false
         guard let pluginClick = await clickPluginInAnchoredSlotPopup(
             pluginID: pluginID,
             displayName: searchQuery,
             rootMenu: rootMenu,
-            runtime: runtime.ax
+            runtime: runtime.ax,
+            authorizePick: {
+                // Menu discovery can yield while the user changes the track or physical slot.
+                // Authorize the terminal AXPick from a fresh observation of the retained target,
+                // never from popup geometry or the earlier empty-slot snapshot alone.
+                guard let fresh = liveInsertSlot(track: track, insert: insert, runtime: runtime),
+                      fresh.isEmpty, CFEqual(fresh.element, slot.element) else {
+                    commitTargetRefused = true
+                    return false
+                }
+                return true
+            }
         ) else {
+            if commitTargetRefused {
+                // Cancel only the menu this attempt observed after its opener. A target failure
+                // cannot authorize a global Escape or claim the popup is gone from AX's return.
+                trace["slot_popup_cancel_attempted"] = true
+                trace["slot_popup_cancel_returned"] = AXHelpers.performAction(
+                    rootMenu, kAXCancelAction as String, runtime: runtime.ax
+                )
+                return (.transientSetupFailure(
+                    stage: "target_slot_changed_before_plugin_commit", actuated: true, safeToRetry: false
+                ), trace)
+            }
             AXMouseHelper.pressEscape()
             return (.transientSetupFailure(stage: "plugin_exact_leaf_not_found", actuated: true), trace)
         }
@@ -4563,13 +4627,14 @@ extension AccessibilityChannel {
         pluginID: String,
         displayName: String,
         rootMenu: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        authorizePick: () -> Bool = { true }
     ) async -> SlotPopupPluginClick? {
         var strategies: [String] = []
         strategies.append("slot_popup_direct_exact_leaf")
         if let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
            let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime) {
+           await clickPopupPluginLeaf(item, runtime: runtime, authorizePick: authorizePick) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_direct_exact_leaf",
                 path: [label],
@@ -4583,7 +4648,8 @@ extension AccessibilityChannel {
             menu: rootMenu,
             path: [],
             runtime: runtime,
-            maxDepth: 5
+            maxDepth: 5,
+            authorizePick: authorizePick
         ) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_recursive_exact_leaf",
@@ -4601,13 +4667,14 @@ extension AccessibilityChannel {
         menu: AXUIElement,
         path: [String],
         runtime: AXHelpers.Runtime,
-        maxDepth: Int
+        maxDepth: Int,
+        authorizePick: () -> Bool
     ) async -> [String]? {
         guard maxDepth >= 0 else { return nil }
 
         if let direct = directExactPopupMenuItem(displayName: displayName, in: menu, runtime: runtime),
            let label = popupMenuItemLabel(direct, runtime: runtime),
-           await clickPopupPluginLeaf(direct, runtime: runtime) {
+           await clickPopupPluginLeaf(direct, runtime: runtime, authorizePick: authorizePick) {
             return path + [label]
         }
 
@@ -4626,7 +4693,8 @@ extension AccessibilityChannel {
                 menu: submenu,
                 path: path + [label],
                 runtime: runtime,
-                maxDepth: maxDepth - 1
+                maxDepth: maxDepth - 1,
+                authorizePick: authorizePick
             ) {
                 return found
             }
@@ -4644,7 +4712,8 @@ extension AccessibilityChannel {
     /// would actuate a category. Refusing lets the caller keep looking instead.
     static func clickPopupPluginLeaf(
         _ item: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        authorizePick: () -> Bool = { true }
     ) async -> Bool {
         // A disabled entry cannot act, so pressing it produces a silent no-op that the caller then
         // has to distinguish from a real failure downstream. Refuse before touching it.
@@ -4654,9 +4723,11 @@ extension AccessibilityChannel {
                   let leaf = preferredFormatLeafByLabel(in: submenu, runtime: runtime) else {
                 return false
             }
+            guard authorizePick() else { return false }
             _ = AXHelpers.performAction(leaf, kAXPickAction as String, runtime: runtime)
             return true
         }
+        guard authorizePick() else { return false }
         _ = AXHelpers.performAction(item, kAXPickAction as String, runtime: runtime)
         return true
     }
