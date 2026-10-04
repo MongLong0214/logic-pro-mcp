@@ -43,6 +43,9 @@ struct RoutingAuditInvariantTests {
         "view.toggle_step_editor",        // logic_navigate.toggle_view view=step_editor
         "edit.duplicate",                 // logic_edit.duplicate
         "edit.normalize",                 // logic_edit.normalize
+        // #1029: the Q keystroke is removed (it applies Logic's held quantize value, not the requested
+        // grid), so only the key command is left, and it has the same limit (#1094).
+        "edit.quantize",                  // logic_edit.quantize
         "nav.goto_marker",                // logic_navigate.goto_marker (with index)
         // Channel-only router op — no public MCP tool command exposes it, but
         // it remains a real mappingTable/routingTable path if a future surface

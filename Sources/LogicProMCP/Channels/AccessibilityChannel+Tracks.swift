@@ -722,6 +722,17 @@ extension AccessibilityChannel {
                     "observed": selectedIndex as Any? ?? NSNull()
                 ]) { _, new in new }
             ))
+        case .notExclusive(let alsoSelected, let unreadable):
+            // #1097: the target is selected, and other rows are too or did not read. delete and
+            // duplicate refuse anything but State A, so they do not act on those rows as well.
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch,
+                extras: base.merging([
+                    "observed": index,
+                    "also_selected": alsoSelected,
+                    "selection_unreadable": unreadable,
+                ]) { _, new in new }
+            ))
         case .trackDisappeared:
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
@@ -1804,6 +1815,33 @@ extension AccessibilityChannel {
             ))
         }
 
+        // #1097: Logic renames every selected track. With rows [0, 1] selected, renaming track 0
+        // to "LPM-KDUP 55348" renamed track 1 to "LPM-KDUP 55349" (Korean, 2026-10-04,
+        // lpm-evidence/1029/probe-kc-ko.json). When the headers carry selection state and another
+        // row is not read as unselected, the target is selected alone before anything is written,
+        // under the rule the key rungs use; when that cannot be shown, nothing is renamed.
+        let selectionStates = AXLogicProElements.allTrackHeaders(runtime: runtime)
+            .map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
+        let otherRowsNotUnselected = selectionStates.enumerated()
+            .contains { $0.offset != index && $0.element != false }
+        if selectionStates.contains(where: { $0 != nil }) && otherRowsNotUnselected {
+            _ = ProcessUtils.activateLogicPro(runtime: processRuntime)
+            guard confirmExclusiveSelection(index: index, runtime: runtime) else {
+                let states = AXLogicProElements.allTrackHeaders(runtime: runtime)
+                    .map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
+                return .error(HonestContract.encodeStateC(
+                    error: .selectionNotExclusive,
+                    hint: "track \(index) could not be made the only selected track, and Logic renames every "
+                        + "selected track. Nothing was renamed. Deselect the other tracks and retry.",
+                    extras: baseExtras.merging([
+                        "also_selected": states.enumerated().compactMap { $0.offset != index && $0.element == true ? $0.offset : nil },
+                        "selection_unreadable": states.enumerated().compactMap { $0.offset != index && $0.element == nil ? $0.offset : nil },
+                        "write_attempted": false,
+                    ]) { _, new in new }
+                ))
+            }
+        }
+
         if let field = AXLogicProElements.findTrackNameField(trackIndex: index, runtime: runtime) {
             AXHelpers.performAction(field, kAXPressAction, runtime: runtime.ax)
             AXHelpers.setAttribute(field, kAXValueAttribute, truncatedName as CFTypeRef, runtime: runtime.ax)
@@ -2049,18 +2087,31 @@ extension AccessibilityChannel {
         return !sawSelectionMetadata
     }
 
-    enum TrackSelectionVerification {
+    enum TrackSelectionVerification: Equatable {
         case verified
         case selectionMetadataUnavailable
         case mismatch(selectedIndex: Int?)
+        /// #1097: the target reads selected, and `alsoSelected` read selected too or `unreadable`
+        /// did not read. A write that acts on the selection could act on those rows as well.
+        case notExclusive(alsoSelected: [Int], unreadable: [Int])
         case trackDisappeared
     }
 
+    /// Verified only when `selectionIsExclusive` holds: the target, and only the target, reads
+    /// selected, the rule the keyboard mute/solo/arm rungs already require before their key (#1097).
+    /// Before, a target selected alongside another row was verified: after the CGEvent rung's
+    /// Option-Command-S, Logic added the next AX selection to the one it had, select index 0 read
+    /// rows [0, 1] while answering State A, and a rename of track 0 then renamed track 1 as well
+    /// (Korean, 2026-10-04, lpm-evidence/1029/probe-kc-ko.json). The rows are read up to six
+    /// times, 100 ms apart, so a deselection Logic publishes late is waited for.
     static func verifyTrackSelection(
         index: Int,
         runtime: AXLogicProElements.Runtime
     ) async -> TrackSelectionVerification {
         var sawSelectionMetadata = false
+        var targetSelected = false
+        var alsoSelected: [Int] = []
+        var unreadable: [Int] = []
 
         for attempt in 0..<6 {
             let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
@@ -2068,15 +2119,16 @@ extension AccessibilityChannel {
                 return .trackDisappeared
             }
 
-            let selectionStates = headers.enumerated().map { offset, header in
-                (offset, AXValueExtractors.extractSelectedState(header, runtime: runtime.ax))
-            }
-            if selectionStates.contains(where: { $0.1 != nil }) {
+            let states = headers.map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
+            if states.contains(where: { $0 != nil }) {
                 sawSelectionMetadata = true
             }
-            if selectionStates[index].1 == true {
+            if selectionIsExclusive(index: index, runtime: runtime) {
                 return .verified
             }
+            targetSelected = states[index] == true
+            alsoSelected = states.enumerated().compactMap { $0.offset != index && $0.element == true ? $0.offset : nil }
+            unreadable = states.enumerated().compactMap { $0.offset != index && $0.element == nil ? $0.offset : nil }
 
             if attempt < 5 {
                 try? await Task.sleep(nanoseconds: 100_000_000)
@@ -2085,6 +2137,9 @@ extension AccessibilityChannel {
 
         guard sawSelectionMetadata else {
             return .selectionMetadataUnavailable
+        }
+        if targetSelected {
+            return .notExclusive(alsoSelected: alsoSelected, unreadable: unreadable)
         }
 
         let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)

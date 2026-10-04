@@ -354,7 +354,10 @@ actor CGEventChannel: Channel {
         "edit.select_all":            .cmd(0),          // Select All: Command-A
         "edit.split":                 .cmd(17),         // Split Regions/Events at Playhead Position: Command-T
         "edit.join":                  .cmd(38),         // Join Regions/Notes: Command-J
-        "edit.quantize":              .key(12),         // Quantize Selected Regions/Cells/Events: Q
+        // edit.quantize posts nothing: its `value` names a grid, and Apple's Q (Quantize Selected
+        // Regions/Cells/Events) applies whatever quantize value Logic holds, which no key can set.
+        // Measured 2026-10-03: Q changed the region's quantize parameter on one press in German
+        // and on no press after an undo, in either selection mode (#1029).
         "edit.bounce_in_place":       .control(11),     // Bounce Regions/Cells in Place: Control-B
 
         // Views
@@ -658,24 +661,69 @@ actor CGEventChannel: Channel {
         }
     }
 
-    /// Post a key-down/key-up pair to a specific PID.
+    /// One event `performKeyEvent` posts.
+    struct KeyEventSpec: Equatable {
+        enum Kind: Equatable {
+            case keyDown
+            case keyUp
+            case flagsChanged
+        }
+
+        let kind: Kind
+        let keyCode: CGKeyCode
+        let flags: CGEventFlags
+    }
+
+    static let chordModifiers: CGEventFlags = [.maskCommand, .maskShift, .maskAlternate, .maskControl]
+
+    /// The events one key posts: down and up carrying `flags`, then, when `flags` holds a modifier, a
+    /// flagsChanged carrying none.
+    ///
+    /// The modifiers ride on the key's own events, and no flagsChanged ever said they were released.
+    /// After Option-Command-S, Logic still treated the next track selection as a modifier-click and
+    /// added to the selection: `logic_tracks select` index 0 read rows [0, 1] selected, and a rename
+    /// of track 0 then renamed track 1 as well (Korean, 2026-10-04,
+    /// lpm-evidence/1029/probe-kc-ko.json). One flagsChanged with no flags posted to Logic before
+    /// the same select left row 0 alone selected. After Command-Delete alone the select replaced
+    /// the selection (probe-kd-ko.json). The system's own flag state read 0x20000000 throughout.
+    static func keyEventSequence(keyCode: CGKeyCode, flags: CGEventFlags) -> [KeyEventSpec] {
+        var events = [
+            KeyEventSpec(kind: .keyDown, keyCode: keyCode, flags: flags),
+            KeyEventSpec(kind: .keyUp, keyCode: keyCode, flags: flags),
+        ]
+        if !flags.intersection(chordModifiers).isEmpty {
+            events.append(KeyEventSpec(kind: .flagsChanged, keyCode: 0, flags: []))
+        }
+        return events
+    }
+
+    /// Post `keyEventSequence(keyCode:flags:)` to a specific PID.
     private static func performKeyEvent(keyCode: CGKeyCode, flags: CGEventFlags, pid: pid_t) -> Bool {
         guard let source = CGEventSource(stateID: .hidSystemState) else {
             Log.error("Failed to create CGEventSource", subsystem: "cgEvent")
             return false
         }
 
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
-            Log.error("Failed to create CGEvent for keyCode \(keyCode)", subsystem: "cgEvent")
-            return false
+        var events: [CGEvent] = []
+        for spec in keyEventSequence(keyCode: keyCode, flags: flags) {
+            let event: CGEvent?
+            switch spec.kind {
+            case .keyDown, .keyUp:
+                event = CGEvent(keyboardEventSource: source, virtualKey: spec.keyCode, keyDown: spec.kind == .keyDown)
+            case .flagsChanged:
+                event = CGEvent(source: source)
+                event?.type = .flagsChanged
+            }
+            guard let event else {
+                Log.error("Failed to create CGEvent for keyCode \(keyCode)", subsystem: "cgEvent")
+                return false
+            }
+            event.flags = spec.flags
+            events.append(event)
         }
-
-        keyDown.flags = flags
-        keyUp.flags = flags
-
-        keyDown.postToPid(pid)
-        keyUp.postToPid(pid)
+        for event in events {
+            event.postToPid(pid)
+        }
 
         Log.debug("Posted key \(keyCode) flags \(flags.rawValue) to PID \(pid)", subsystem: "cgEvent")
         return true

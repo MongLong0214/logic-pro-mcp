@@ -58,8 +58,6 @@ struct Issue1029CGEventKeystrokeTests {
               killsRestoring: ".cmdOption(35) Option-Command-P = New Session Player SI Track"),
         .init(operation: "project.close", keyCode: 13, flags: [.maskCommand, .maskAlternate],
               appleRow: "Close Project | Option-Command-W", killsRestoring: ".cmd(13) Command-W = Close Window"),
-        .init(operation: "edit.quantize", keyCode: 12, flags: [],
-              appleRow: "Quantize Selected Regions/Cells/Events | Q", killsRestoring: ".key(44) Slash = Go to Position"),
         .init(operation: "edit.bounce_in_place", keyCode: 11, flags: .maskControl,
               appleRow: "Bounce Regions/Cells in Place | Control-B",
               killsRestoring: ".cmdOption(11) Option-Command-B = Time Stretch Region Length to Nearest Bar"),
@@ -78,6 +76,8 @@ struct Issue1029CGEventKeystrokeTests {
               killsRestoring: "\"project.new\": .cmd(45)"),
         .init(operation: "project.save_as", why: "its chain is [.accessibility]; a keystroke cannot carry the path",
               killsRestoring: "\"project.save_as\": .cmdShift(1)"),
+        .init(operation: "edit.quantize", why: "Q applies the quantize value Logic holds; a keystroke cannot carry the requested grid",
+              killsRestoring: "\"edit.quantize\": .key(12)"),
         .init(operation: "nav.create_marker", why: "its chain is [.accessibility]; Create Marker is Option-Apostrophe",
               killsRestoring: "\"nav.create_marker\": .cmdOption(39)"),
     ]
@@ -102,6 +102,36 @@ struct Issue1029CGEventKeystrokeTests {
         #expect(!result.isSuccess)
         #expect(result.message.contains("No keyboard shortcut mapped"), "\(result.message)")
         #expect(recorder.snapshot().isEmpty, "\(entry.operation) posted a keystroke: \(entry.why)")
+    }
+
+    /// Kills: dropping the flagsChanged that releases a chord's modifiers. Without it, after the
+    /// CGEvent rung's Option-Command-S, Logic added the next AX track selection to the one it had:
+    /// select index 0 read rows [0, 1], and a rename of track 0 renamed track 1 too (Korean,
+    /// 2026-10-04, lpm-evidence/1029/probe-kc-ko.json).
+    @Test("every keyMap chord with a modifier ends with a flagsChanged that carries none")
+    func everyChordReleasesItsModifiers() {
+        for (operation, shortcut) in CGEventChannel.keyMap {
+            let events = CGEventChannel.keyEventSequence(keyCode: shortcut.keyCode, flags: shortcut.flags)
+            let pressed = events.count >= 2
+                && events[0] == .init(kind: .keyDown, keyCode: shortcut.keyCode, flags: shortcut.flags)
+                && events[1] == .init(kind: .keyUp, keyCode: shortcut.keyCode, flags: shortcut.flags)
+            #expect(pressed, "\(operation): \(events)")
+            let holdsModifier = !shortcut.flags.intersection(CGEventChannel.chordModifiers).isEmpty
+            let released = events.count == 3 && events[2].kind == .flagsChanged && events[2].flags.isEmpty
+            let plain = events.count == 2
+            #expect(holdsModifier ? released : plain, "\(operation) flags \(shortcut.flags.rawValue): \(events)")
+        }
+    }
+
+    @Test("Option-Command-S is released, a keypad key and a plain letter post no flagsChanged")
+    func theMeasuredChordIsReleased() {
+        let create = CGEventChannel.keyEventSequence(keyCode: 1, flags: [.maskCommand, .maskAlternate])
+        #expect(create.last == .init(kind: .flagsChanged, keyCode: 0, flags: []), "\(create)")
+        let keypad = CGEventChannel.keyEventSequence(keyCode: 82, flags: .maskNumericPad)
+        let keypadReleased = keypad.contains { $0.kind == .flagsChanged }
+        #expect(!keypadReleased, "\(keypad)")
+        let letter = CGEventChannel.keyEventSequence(keyCode: 15, flags: [])
+        #expect(letter.count == 2, "\(letter)")
     }
 
     /// Kills: a keyMap entry for an op whose routing chain never reaches `.cgEvent`, as
