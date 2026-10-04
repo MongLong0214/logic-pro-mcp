@@ -1,0 +1,2 @@
+Limit: whether `swift build` in a fresh .build rewrites the lock was not measured; if it does, the release build now stops instead of hiding it
+Provenance: inherited a3fde250a5e7391635affab6af05e4f6057c1fa0
