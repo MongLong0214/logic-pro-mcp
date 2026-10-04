@@ -4052,8 +4052,20 @@ extension AccessibilityChannel {
                 // Menu discovery can yield while the user changes the track or physical slot.
                 // Authorize the terminal AXPick from a fresh observation of the retained target,
                 // never from popup geometry or the earlier empty-slot snapshot alone.
-                guard let fresh = liveInsertSlot(track: track, insert: insert, runtime: runtime),
-                      fresh.isEmpty, CFEqual(fresh.element, slot.element) else {
+                trace.removeValue(forKey: "slot_commit_empty_observed")
+                trace.removeValue(forKey: "slot_commit_same_physical_element")
+                trace.removeValue(forKey: "slot_commit_read_status")
+                let fresh = liveInsertSlot(track: track, insert: insert, runtime: runtime)
+                trace["slot_commit_target_resolved"] = fresh != nil
+                guard let fresh else {
+                    commitTargetRefused = true
+                    return false
+                }
+                let sameElement = CFEqual(fresh.element, slot.element)
+                trace["slot_commit_read_status"] = fresh.readStatus.rawValue
+                trace["slot_commit_empty_observed"] = fresh.isEmpty
+                trace["slot_commit_same_physical_element"] = sameElement
+                guard fresh.isEmpty, sameElement else {
                     commitTargetRefused = true
                     return false
                 }

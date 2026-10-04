@@ -1364,6 +1364,27 @@ func testPlugin1108StablePostOpenerTargetStillPicksAndCertifies(_ branch: String
     if let category = fixture.categoryItemID { #expect(!fixture.actions.touched(elementID: category)) }
 }
 
+@Test(arguments: [nil, .nameReadFailure, .occupiedSlot, .replacementSlot] as [PostOpenerDrift?])
+private func testPlugin1108TerminalGuardReportsOnlyItsObservedSlotFacts(_ drift: PostOpenerDrift?) async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, postOpenerDrift: drift)
+    let obj = await run425Insert(fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction])
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let resolved = try #require(trace["slot_commit_target_resolved"] as? Bool)
+    if drift == .nameReadFailure {
+        #expect(!resolved)
+        #expect(trace["slot_commit_empty_observed"] == nil)
+        #expect(trace["slot_commit_same_physical_element"] == nil)
+        #expect(trace["slot_commit_read_status"] == nil)
+    } else {
+        #expect(resolved)
+        let empty = try #require(trace["slot_commit_empty_observed"] as? Bool)
+        let sameElement = try #require(trace["slot_commit_same_physical_element"] as? Bool)
+        #expect(trace["slot_commit_read_status"] as? String == (drift == .occupiedSlot ? "ok" : "empty"))
+        if drift == .occupiedSlot { #expect(!empty) } else { #expect(empty) }
+        if drift == .replacementSlot { #expect(!sameElement) } else { #expect(sameElement) }
+    }
+}
+
 @Test func testPlugin1107InsertWaitsForSameBindingAfterTransientSelectionRead() async throws {
     let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, failBindingReadOnceAfterSelection: true)
     let obj = await run425Insert(fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction])
