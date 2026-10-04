@@ -139,13 +139,14 @@ struct Issue1094QuantizeThroughTheRegionInspectorTests {
         #expect(!returned)
     }
 
-    @Test func noSelectedRegionPressesNothing() async {
+    @Test func noSelectedRegionPressesNothing() async throws {
         // Mutation killed: the empty-selection guard removed (the defaults for new regions get the grid).
         for selected in [0, nil] as [Int?] {
             let inspector = FakeInspector()
             let (result, object) = await quantize(inspector, grid: "1/16", selected: selected)
             #expect(!result.isSuccess, "\(String(describing: selected))")
-            #expect(object["write_attempted"] as? Bool == false)
+            let attempted = try #require(object["write_attempted"] as? Bool)
+            #expect(!attempted)
             #expect(inspector.presses.all.isEmpty, "\(String(describing: selected))")
             #expect(inspector.valueNow == "Off")
         }
@@ -172,21 +173,23 @@ struct Issue1094QuantizeThroughTheRegionInspectorTests {
         #expect(object["after"] as? String == "Off")
     }
 
-    @Test func theGridAlreadyShownIsUnchangedWithoutAPress() async {
+    @Test func theGridAlreadyShownIsUnchangedWithoutAPress() async throws {
         let inspector = FakeInspector(start: "1/16 Note")
         let (result, object) = await quantize(inspector, grid: "1/16")
         #expect(result.isSuccess)
-        #expect(object["changed"] as? Bool == false)
+        let changed = try #require(object["changed"] as? Bool)
+        #expect(!changed)
         #expect(inspector.presses.all.isEmpty)
     }
 
-    @Test func noRowOrTwoRowsPressNothing() async {
+    @Test func noRowOrTwoRowsPressNothing() async throws {
         // Mutation killed: the first of several Quantize rows used.
         for (rows, mode) in [(1, "Q-Swing"), (2, "Quantize")] {
             let inspector = FakeInspector(rows: rows, modeValue: mode)
             let (result, object) = await quantize(inspector, grid: "1/16")
             #expect(!result.isSuccess, "\(rows) \(mode)")
-            #expect(object["write_attempted"] as? Bool == false)
+            let attempted = try #require(object["write_attempted"] as? Bool)
+            #expect(!attempted)
             #expect(inspector.presses.all.isEmpty, "\(rows) \(mode)")
         }
     }
