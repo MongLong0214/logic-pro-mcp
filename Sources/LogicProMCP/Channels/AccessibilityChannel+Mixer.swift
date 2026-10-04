@@ -12,6 +12,10 @@ extension AccessibilityChannel {
         "The mixer's channel strips could not be read, so they are unknown, not absent. Retry the read."
     /// The same for one strip's insert chain, carried in `plugins_read_error`.
     static let stripChildrenUnreadMessage = "the strip's children did not read"
+    /// The children read, but the inserts could not be put in screen order or told apart from the
+    /// instrument slot, so no list is published rather than a wrong one.
+    static let stripInsertsUnclassifiedMessage =
+        "the strip's insert slots could not be told apart from its instrument slot or put in screen order"
 
     static func defaultGetMixerState(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
         let lookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
@@ -58,6 +62,8 @@ extension AccessibilityChannel {
         if let plugins = AXLogicProElements.pluginSlots(in: strip, runtime: runtime.ax) {
             state.plugins = plugins
             state.pluginsSource = "ax"
+        } else if AXLogicProElements.childrenIfRead(strip, runtime: runtime.ax) != nil {
+            state.pluginsReadError = stripInsertsUnclassifiedMessage
         } else {
             state.pluginsReadError = stripChildrenUnreadMessage
         }

@@ -42,6 +42,17 @@ private func addOccupiedSlot(_ b: FakeAXRuntimeBuilder, _ id: Int, name: String?
     return group
 }
 
+/// Inserts are numbered in screen order, so a chain of several needs frames: one row per slot,
+/// top-down in the order given. Single-slot fixtures stay frameless on purpose -- several tests
+/// here exercise the path a slot without a frame takes.
+private func framedRows(_ b: FakeAXRuntimeBuilder, _ slots: [AXUIElement]) -> [AXUIElement] {
+    for (row, slot) in slots.enumerated() {
+        b.setAttribute(slot, kAXPositionAttribute as String, axPoint(100, 300 + CGFloat(row) * 20))
+        b.setAttribute(slot, kAXSizeAttribute as String, axSize(58, 16))
+    }
+    return slots
+}
+
 private func addMenu(_ b: FakeAXRuntimeBuilder, _ id: Int, children: [AXUIElement] = []) -> AXUIElement {
     let menu = b.element(id)
     b.setAttribute(menu, kAXRoleAttribute as String, kAXMenuRole as String)
@@ -436,7 +447,7 @@ private func insertParams(
     // slot 0 empty, slot 1 empty; requesting insert 1 is no longer pre-rejected —
     // The insert driver runs for any empty readable slot; the gate compares the
     // observed slot against the requested one.
-    let runtime = makeMixerFixture(b) { b in [addEmptySlot(b, 945), addEmptySlot(b, 946)] }
+    let runtime = makeMixerFixture(b) { b in framedRows(b, [addEmptySlot(b, 945), addEmptySlot(b, 946)]) }
     let fake = FakeInsertDriver(
         outcome: .mounted(slot: 1, pluginID: "logic.stock.effect.gain", observedName: "Gain")
     )
@@ -450,7 +461,7 @@ private func insertParams(
     let b = FakeAXRuntimeBuilder()
     // slot 0 occupied, slot 1 empty; requesting insert 1 is OK.
     let runtime = makeMixerFixture(b) { b in
-        [addOccupiedSlot(b, 947, name: "Compressor"), addEmptySlot(b, 948)]
+        framedRows(b, [addOccupiedSlot(b, 947, name: "Compressor"), addEmptySlot(b, 948)])
     }
     let fake = FakeInsertDriver(
         outcome: .mounted(slot: 1, pluginID: "logic.stock.effect.gain", observedName: "Gain")
@@ -466,7 +477,7 @@ private func insertParams(
 @Test func testInsertVerifiedRefusesOccupiedSlot() async {
     let b = FakeAXRuntimeBuilder()
     let runtime = makeMixerFixture(b) { b in
-        [addEmptySlot(b, 910), addOccupiedSlot(b, 911, name: "Compressor")]
+        framedRows(b, [addEmptySlot(b, 910), addOccupiedSlot(b, 911, name: "Compressor")])
     }
     // insert 1 is occupied → slot_occupied, no silent replace.
     let obj = await runInsert(insertParams(insert: "1"), runtime: runtime)
@@ -501,7 +512,7 @@ private func insertParams(
     // target slot 0 is empty, but slot 1 is unreadable → complete:false →
     // incomplete_inventory even though the target itself is readable (fail-closed).
     let runtime = makeMixerFixture(b) { b in
-        [addEmptySlot(b, 930), addOccupiedSlot(b, 931, name: nil)]
+        framedRows(b, [addEmptySlot(b, 930), addOccupiedSlot(b, 931, name: nil)])
     }
     let obj = await runInsert(insertParams(insert: "0"), runtime: runtime)
     #expect(obj["error"] as? String == "incomplete_inventory")
@@ -529,7 +540,7 @@ func testInsertVerifiedRefusesUnreadChildrenAsUnread(mixerUnread: Bool, mixerByI
 @Test func testVerifiedDiffSnapshotRefusesUnreadableSlots() async {
     let b = FakeAXRuntimeBuilder()
     let runtime = makeMixerFixture(b) { b in
-        [addEmptySlot(b, 932), addOccupiedSlot(b, 933, name: nil)]
+        framedRows(b, [addEmptySlot(b, 932), addOccupiedSlot(b, 933, name: nil)])
     }
 
     let snapshot = AccessibilityChannel.fullStripInventory(track: 0, runtime: runtime)

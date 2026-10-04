@@ -4217,9 +4217,15 @@ private final class LockedFlag: @unchecked Sendable {
     builder.setAttribute(emptyAudioSlot, kAXRoleAttribute as String, kAXButtonRole as String)
     builder.setAttribute(emptyAudioSlot, kAXDescriptionAttribute as String, "오디오 플러그인")
     builder.setAttribute(emptyAudioSlot, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
+    builder.setAttribute(emptyAudioSlot, kAXPositionAttribute as String, axPoint(100, 120))
+    builder.setAttribute(emptyAudioSlot, kAXSizeAttribute as String, axSize(58, 18))
 
     builder.setAttribute(pluginGroup, kAXRoleAttribute as String, kAXGroupRole as String)
     builder.setAttribute(pluginGroup, kAXDescriptionAttribute as String, "Drum Machine Designer")
+    // This is the fixture's audio insert, above its empty insert. Screen order
+    // cannot be established from the deliberately reversed child enumeration.
+    builder.setAttribute(pluginGroup, kAXPositionAttribute as String, axPoint(100, 100))
+    builder.setAttribute(pluginGroup, kAXSizeAttribute as String, axSize(58, 18))
     builder.setChildren(pluginGroup, [bypass, open, menu])
     builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     builder.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
@@ -4237,8 +4243,9 @@ private final class LockedFlag: @unchecked Sendable {
     #expect(mixerResult.isSuccess)
     #expect(mixerResult.message.contains("\"plugins_source\":\"ax\""))
     let strips = try decoder.decode([ChannelStripState].self, from: Data(mixerResult.message.utf8))
+    try #require(strips.count == 1)
     #expect(strips[0].pluginsSource == "ax")
-    #expect(strips[0].plugins.count == 1)
+    try #require(strips[0].plugins.count == 1)
     #expect(strips[0].plugins[0].index == 0)
     #expect(strips[0].plugins[0].name == "Drum Machine Designer")
     #expect(!(strips[0].plugins[0].isBypassed))

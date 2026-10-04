@@ -135,7 +135,15 @@ struct Issue982UnreadChildrenTests {
         b.setAttribute(el, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(el, kAXDescriptionAttribute as String, "오디오 플러그인")
         b.setAttribute(el, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
+        frameSlotRow(b, el, id)
         return el
+    }
+
+    /// Inserts are numbered in screen order, so a chain of several needs frames: one row per
+    /// slot, top-down in the order the ids give them.
+    static func frameSlotRow(_ b: FakeAXRuntimeBuilder, _ el: AXUIElement, _ id: Int) {
+        b.setAttribute(el, kAXPositionAttribute as String, axPoint(100, 300 + CGFloat(id % 100) * 20))
+        b.setAttribute(el, kAXSizeAttribute as String, axSize(58, 16))
     }
 
     static func occupiedSlot(_ b: FakeAXRuntimeBuilder, _ id: Int, name: String) -> AXUIElement {
@@ -150,6 +158,7 @@ struct Issue982UnreadChildrenTests {
         b.setAttribute(bypass, kAXValueAttribute as String, 0)
         b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+        frameSlotRow(b, group, id)
         return group
     }
 

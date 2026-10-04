@@ -650,6 +650,10 @@ private final class LiveFixture: @unchecked Sendable {
         b.setAttribute(bypass, kAXValueAttribute as String, 0)
         b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+        // Inserts are numbered in screen order, so a chain of several needs frames: one row per
+        // slot, top-down in the order the ids give them (`id % 100` is the slot's position).
+        b.setAttribute(group, kAXPositionAttribute as String, axPoint(100, 300 + CGFloat(id % 100) * 20))
+        b.setAttribute(group, kAXSizeAttribute as String, axSize(58, 16))
         return group
     }
 
@@ -3317,6 +3321,8 @@ private final class OneShotStickyFixture: @unchecked Sendable {
             b.setAttribute(by, kAXValueAttribute as String, 0)
             b.setAttribute(op, kAXRoleAttribute as String, kAXButtonRole as String)
             b.setAttribute(op, kAXDescriptionAttribute as String, "열기")
+            b.setAttribute(g, kAXPositionAttribute as String, axPoint(100, 300 + CGFloat(s) * 20))
+            b.setAttribute(g, kAXSizeAttribute as String, axSize(58, 16))
             slots.append(g)
         }
         b.setChildren(strip, slots)

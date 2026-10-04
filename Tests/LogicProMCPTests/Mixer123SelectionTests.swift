@@ -76,15 +76,13 @@ struct Mixer123SelectionTests {
 
         let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: firstStrip, runtime: fixture.runtime.ax))
 
-        #expect(slots.count == 2)
-        #expect(slots.map(\.index) == [0, 1])
+        // The strip's one audio insert is the empty `audio plug-in` row; `E-Piano` above it is the
+        // instrument slot (#234 NG2) and is not an insert.
+        #expect(slots.count == 1)
+        #expect(slots.map(\.index) == [0])
         let firstSlot = try #require(slots.first)
-        let secondSlot = try #require(slots.dropFirst().first)
         #expect(firstSlot.readStatus == .empty)
         #expect(firstSlot.name == nil)
-        #expect(secondSlot.readStatus == .occupiedReadable)
-        #expect(secondSlot.name == "Gain")
-        let bypassed = secondSlot.isBypassed!
-        #expect(!bypassed)
+        #expect(!slots.contains { $0.name == "Gain" || $0.name == "E-Piano" })
     }
 }

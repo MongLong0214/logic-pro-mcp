@@ -3,35 +3,39 @@ import Foundation
 
 
 extension AXLogicProElements {
-    /// The occupied inserts of `strip`, or nil when the strip's children did not read (#982).
-    /// An empty list is a strip whose chain was read and holds nothing.
+    /// The occupied inserts of `strip`, or nil when the strip's children did not read (#982) or
+    /// its insert slots could not be classified. An empty list is a strip whose chain was read and
+    /// holds nothing.
+    ///
+    /// The list comes from `audioPluginInsertSlots`, so `logic://mixer` and `get_inventory` number
+    /// the same inserts the same way. It used to walk the children in AX order on its own, and so
+    /// listed a software instrument's instrument slot as an insert.
     static func pluginSlots(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> [PluginSlotState]? {
         guard let children = childrenIfRead(strip, runtime: runtime) else { return nil }
-        var plugins: [PluginSlotState] = []
-        for child in children {
-            guard let name = occupiedPluginSlotName(child, runtime: runtime) else {
-                continue
-            }
-            plugins.append(PluginSlotState(
-                index: plugins.count,
-                name: name,
-                isBypassed: pluginSlotBypassState(child, runtime: runtime) ?? false
-            ))
+        let slots = audioPluginInsertSlots(children: children, runtime: runtime)
+        guard !slots.contains(where: { $0.readStatus == .unclassified }) else { return nil }
+        return slots.compactMap { slot in
+            guard slot.readStatus == .occupiedReadable, let name = slot.name else { return nil }
+            return PluginSlotState(index: slot.index, name: name, isBypassed: slot.isBypassed ?? false)
         }
-        return plugins
     }
 
     /// Read state of an insert slot, kept SEPARATE from `name` so an occupied
     /// slot whose name could not be read is never mistaken for an empty one
     /// (rev-4 D4). Raw values double as the public `get_inventory.read_status`
-    /// strings ("empty"/"ok"/"unreadable") per requirements R3.
+    /// strings ("empty"/"ok"/"unreadable"/"unclassified") per requirements R3.
+    ///
+    /// `unclassified` marks every slot of a strip whose inserts could not be told apart from its
+    /// instrument slot or put in screen order. Such a slot is neither empty nor a write target, and
+    /// it makes the inventory incomplete.
     enum SlotReadStatus: String, Sendable, Equatable {
         case empty
         case occupiedReadable = "ok"
         case occupiedUnreadable = "unreadable"
+        case unclassified
     }
 
     struct PluginInsertSlot {
@@ -51,6 +55,13 @@ extension AXLogicProElements {
         /// `insert_plugin` occupied-slot guard cannot silently overwrite it
         /// (rev-4 D4 / AC21). Do NOT reduce this back to `name == nil`.
         var isEmpty: Bool { readStatus == .empty }
+
+        func numbered(_ index: Int, as status: SlotReadStatus? = nil) -> PluginInsertSlot {
+            PluginInsertSlot(
+                index: index, element: element, name: name, isBypassed: isBypassed,
+                readStatus: status ?? readStatus
+            )
+        }
     }
 
     /// Enumerate a strip's audio-plugin insert slots WITHOUT dropping any slot.
@@ -100,7 +111,133 @@ extension AXLogicProElements {
             }
             // else: not an insert slot — skip without consuming an index.
         }
-        return slots
+        return screenOrderedInsertSlots(slots, children: children, runtime: runtime)
+    }
+
+    /// Number the recognised slots from the top of the strip down, and take a software
+    /// instrument's instrument slot out of them.
+    ///
+    /// Measured on Logic 12.3.1 (German) at a software-instrument strip holding Channel EQ,
+    /// Compressor and ChromaVerb from the top: the strip lists its children bottom-up, ChromaVerb
+    /// first, and the instrument slot after the inserts. Its instrument slot is an AXGroup with the
+    /// same bypass/open/list children as an insert, so the enumeration above counts it as one. What
+    /// tells them apart is where they sit: every insert has a 1 px button directly above it, the
+    /// instrument slot has none, and it sits below the strip's MIDI effect slot and above every
+    /// insert.
+    ///
+    /// Anything that rule cannot account for makes every slot `unclassified`: a slot without a
+    /// readable frame, two slots at the same height, an instrument-family strip whose instrument
+    /// slot is not exactly one bare group between the MIDI effect slot and the inserts. Screen
+    /// order is not guessed from AX order, and an instrument slot is never offered as an insert.
+    static func screenOrderedInsertSlots(
+        _ found: [PluginInsertSlot],
+        children: [AXUIElement],
+        runtime: AXHelpers.Runtime
+    ) -> [PluginInsertSlot] {
+        guard !found.isEmpty else { return [] }
+        let unclassified = found.enumerated().map { $0.element.numbered($0.offset, as: .unclassified) }
+        let midiEffectSlot = midiEffectSlotFrame(children: children, runtime: runtime)
+        // One slot on a strip with no instrument slot has one order; nothing needs a frame.
+        if found.count == 1, case .absent = midiEffectSlot {
+            return [found[0].numbered(0)]
+        }
+
+        var framed: [(slot: PluginInsertSlot, frame: CGRect)] = []
+        for slot in found {
+            guard let frame = elementFrame(slot.element, runtime: runtime) else { return unclassified }
+            framed.append((slot, frame))
+        }
+        framed.sort { $0.frame.minY < $1.frame.minY }
+        for (upper, lower) in zip(framed, framed.dropFirst()) where lower.frame.minY - upper.frame.minY < 1 {
+            return unclassified
+        }
+
+        switch midiEffectSlot {
+        case .unreadable:
+            return unclassified
+        case .absent:
+            break
+        case .frame(let midiSlot):
+            let separators = children.compactMap { insertSeparatorFrame($0, runtime: runtime) }
+            let bare = framed.filter { entry in
+                entry.slot.occupied && !separators.contains { separator in
+                    abs(separator.minX - entry.frame.minX) <= 3
+                        && abs(separator.width - entry.frame.width) <= 3
+                        && abs(separator.maxY - entry.frame.minY) <= 1
+                }
+            }
+            guard bare.count == 1, let instrument = bare.first,
+                  instrument.frame.minY > midiSlot.minY else {
+                return unclassified
+            }
+            framed.removeAll { CFEqual($0.slot.element, instrument.slot.element) }
+            guard framed.allSatisfy({ $0.frame.minY > instrument.frame.minY }) else { return unclassified }
+        }
+        return framed.enumerated().map { $0.element.slot.numbered($0.offset) }
+    }
+
+    private enum MIDIEffectSlotReading {
+        case absent
+        case frame(CGRect)
+        case unreadable
+    }
+
+    /// The frame of the strip's MIDI effect slot, found by its help string. Only a software
+    /// instrument's (or drummer's) strip has one.
+    private static func midiEffectSlotFrame(
+        children: [AXUIElement],
+        runtime: AXHelpers.Runtime
+    ) -> MIDIEffectSlotReading {
+        var slots: [AXUIElement] = []
+        for child in children {
+            let reading: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                child, kAXHelpAttribute as String, runtime: runtime
+            )
+            switch reading {
+            case .success(nil):
+                continue
+            case .success(let value?):
+                guard let help = value as? String else { return .unreadable }
+                if AXLocalePolicy.midiEffectSlotHelpKeyword.containsAny(in: help) {
+                    slots.append(child)
+                }
+            case .failure(let error) where error.isDefinitiveAbsence:
+                continue
+            case .failure:
+                // A failed observation cannot establish that there is no MIDI
+                // slot; treating it as absent would expose the instrument as FX.
+                return .unreadable
+            }
+        }
+        guard !slots.isEmpty else { return .absent }
+        guard slots.count == 1, let frame = elementFrame(slots[0], runtime: runtime) else { return .unreadable }
+        return .frame(frame)
+    }
+
+    /// The frame of a 1 px button of the kind Logic draws directly above each insert, or nil.
+    private static func insertSeparatorFrame(
+        _ element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> CGRect? {
+        guard (AXHelpers.getRole(element, runtime: runtime) ?? "") == (kAXButtonRole as String),
+              let frame = elementFrame(element, runtime: runtime),
+              frame.height > 0, frame.height <= 2 else {
+            return nil
+        }
+        return frame
+    }
+
+    private static func elementFrame(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> CGRect? {
+        guard let position = AXHelpers.getPosition(element, runtime: runtime),
+              let size = AXHelpers.getSize(element, runtime: runtime),
+              position.x.isFinite, position.y.isFinite,
+              size.width.isFinite, size.height.isFinite,
+              size.width > 0, size.height > 0 else {
+            return nil
+        }
+        let frame = CGRect(origin: position, size: size)
+        guard frame.maxX.isFinite, frame.maxY.isFinite else { return nil }
+        return frame
     }
 
     // internal (not private): called cross-file from the +Mixer extension (WS3 AC1 split).

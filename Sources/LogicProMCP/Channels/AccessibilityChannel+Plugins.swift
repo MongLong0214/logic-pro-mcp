@@ -161,6 +161,16 @@ extension AccessibilityChannel {
                 extras: ["track": track, "slot": slotIndex, "visible_slots": slots.count]
             ))
         }
+        guard !slots.contains(where: { $0.readStatus == .unclassified }) else {
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "refusing insert_plugin: "
+                    + AccessibilityChannel.stripInsertsUnclassifiedMessage
+                    + ", so slot \(slotIndex) cannot be named.",
+                extras: ["track": track, "slot": slotIndex, "inserts_unclassified": true,
+                         "write_attempted": false]
+            ))
+        }
         let targetSlot = slots[slotIndex]
         guard targetSlot.isEmpty else {
             return .error(HonestContract.encodeStateC(
@@ -277,7 +287,8 @@ extension AccessibilityChannel {
                 if let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax),
                    track < strips.count,
                    let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax) {
-                    if slot < slots.count, let name = slots[slot].name {
+                    if slot < slots.count, slots[slot].readStatus == .occupiedReadable,
+                       let name = slots[slot].name {
                         return name
                     }
                 }

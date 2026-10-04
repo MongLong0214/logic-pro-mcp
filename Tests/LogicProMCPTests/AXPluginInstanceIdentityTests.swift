@@ -21,6 +21,9 @@ private func occupiedSlot(_ b: FakeAXRuntimeBuilder, _ id: Int, name: String) ->
     b.setAttribute(bypass, kAXValueAttribute as String, 0)
     b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
     b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+    // Inserts are numbered in screen order: one row per slot, top-down by `id % 100`.
+    b.setAttribute(group, kAXPositionAttribute as String, axPoint(100, 300 + CGFloat(id % 100) * 20))
+    b.setAttribute(group, kAXSizeAttribute as String, axSize(58, 16))
     return group
 }
 

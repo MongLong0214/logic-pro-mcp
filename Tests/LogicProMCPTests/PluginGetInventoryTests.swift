@@ -96,7 +96,15 @@ private func addEmptySlot(_ b: FakeAXRuntimeBuilder, _ id: Int) -> AXUIElement {
     b.setAttribute(el, kAXRoleAttribute as String, kAXButtonRole as String)
     b.setAttribute(el, kAXDescriptionAttribute as String, "오디오 플러그인")
     b.setAttribute(el, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
+    frameSlotRow(b, el, id)
     return el
+}
+
+/// Inserts are numbered in screen order, so a chain of several needs frames: one row per slot,
+/// top-down in the order the ids give them. A caller-supplied `size` replaces the default one.
+private func frameSlotRow(_ b: FakeAXRuntimeBuilder, _ el: AXUIElement, _ id: Int) {
+    b.setAttribute(el, kAXPositionAttribute as String, axPoint(100, 300 + CGFloat(id % 100) * 20))
+    b.setAttribute(el, kAXSizeAttribute as String, axSize(58, 16))
 }
 
 private func addEmptySlot(
@@ -124,6 +132,7 @@ private func addOccupiedSlot(_ b: FakeAXRuntimeBuilder, _ id: Int, name: String?
     b.setAttribute(bypass, kAXValueAttribute as String, 0)
     b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
     b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+    frameSlotRow(b, group, id)
     return group
 }
 
@@ -525,11 +534,12 @@ func testGetInventoryStateAImpliesNonEmptyPlugins(_ slotCount: Int) async {
     #expect(plugins.count >= 1, "State A always carries >= 1 enumerated slot")
 }
 
-@Test func testGetInventoryOverFull123WindowFixture() async {
+@Test func testGetInventoryOverFull123WindowFixture() async throws {
     // The full 12.3 window (outer wrapper + toolbar sibling + nested layout area)
-    // with a live-dump strip [empty audio row, occupied "Gain"]. Driving
-    // get_inventory with revealMixer wired to the REAL selection proves the toolbar
-    // no longer wins and both slots enumerate (AC-1.2, T1 regression pin).
+    // with the live-dump strip: an empty audio row under the `E-Piano` instrument slot. Driving
+    // get_inventory with revealMixer wired to the REAL selection proves the toolbar no longer
+    // wins and the strip's insert enumerates (AC-1.2, T1 regression pin); the instrument slot is
+    // not an insert (#234 NG2).
     let b = FakeAXRuntimeBuilder()
     let strip = makeLiveDumpStrip(b, id: 600)
     let fixture = make123MixerFixture(stripCount: 3, firstStrip: strip, builder: b)
@@ -543,12 +553,12 @@ func testGetInventoryStateAImpliesNonEmptyPlugins(_ slotCount: Int) async {
     #expect(obj["state"] as? String == "A")
     #expect(obj["plugins_unknown_reason"] is NSNull)
     let plugins = obj["plugins"] as! [[String: Any]]
-    #expect(plugins.count == 2)
-    #expect(plugins.map { $0["insert"] as! Int } == [0, 1])
-    #expect(plugins[0]["read_status"] as? String == "empty")
-    #expect(plugins[1]["read_status"] as? String == "ok")
-    #expect(plugins[1]["name"] as? String == "Gain")
-    #expect(plugins[1]["plugin_id"] as? String == "logic.stock.effect.gain")
+    let complete = try #require(obj["complete"] as? Bool)
+    #expect(complete)
+    #expect(plugins.count == 1)
+    #expect(plugins.map { $0["insert"] as? Int } == [0])
+    #expect(plugins.first?["read_status"] as? String == "empty")
+    #expect(!plugins.contains { ["Gain", "E-Piano"].contains($0["name"] as? String) })
 }
 
 @Test func testGetInventoryToolbarSelectedFlowsToStateB() async {

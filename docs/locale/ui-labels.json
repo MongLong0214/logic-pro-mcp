@@ -3162,7 +3162,7 @@
     "MIDI 效果插槽"
    ],
    "rationale": "Detects a channel strip's MIDI effect slot by its AXHelp string; read-only classifier.",
-   "match": "exact",
+   "match": "contains",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",

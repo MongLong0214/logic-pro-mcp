@@ -190,7 +190,9 @@ public enum AXPluginInstanceIdentity {
                         continue
                     }
                     let slots = AXLogicProElements.audioPluginInsertSlots(children: stripChildren, runtime: slotRuntime)
-                    if failedSlotReads.any || slots.contains(where: { $0.readStatus == .occupiedUnreadable }) {
+                    if failedSlotReads.any || slots.contains(where: {
+                        $0.readStatus == .occupiedUnreadable || $0.readStatus == .unclassified
+                    }) {
                         readWhole = false
                     }
                     let hits = slots.filter { slotNameMatches($0.name, pluginName: pluginName) }.map(\.index)

@@ -308,7 +308,7 @@ func makeLiveDumpStrip(_ builder: FakeAXRuntimeBuilder, id: Int) -> AXUIElement 
     let group = builder.element(id + 13)
     let output = builder.element(id + 14)
     let send = builder.element(id + 15)
-    let occupied = builder.element(id + 16)
+    let instrumentSlot = builder.element(id + 16)
     let bypass = builder.element(id + 17)
     let open = builder.element(id + 18)
     let list = builder.element(id + 19)
@@ -377,14 +377,17 @@ func makeLiveDumpStrip(_ builder: FakeAXRuntimeBuilder, id: Int) -> AXUIElement 
     builder.setButton(output, description: "Stereo Output", help: "Output slot. Click and hold to choose the channel strip output destination.", x: 699, y: 655, width: 58, height: 18)
     builder.setButton(send, description: "send button", help: "Send slot. Route the signal to an aux channel strip.", x: 699, y: 629, width: 40, height: 18)
 
-    builder.setNamedContainer(occupied, role: kAXGroupRole as String, description: "Gain", x: 699, y: 559, width: 58, height: 18)
+    // The instrument slot, as axdump234b.out reads it: `E-Piano`, between the MIDI effect slot and
+    // the audio effect slot. It carries an insert's bypass/open/list chrome but is not an audio
+    // insert (#234 NG2).
+    builder.setNamedContainer(instrumentSlot, role: kAXGroupRole as String, description: "E-Piano", x: 699, y: 559, width: 58, height: 18)
     builder.setRole(bypass, kAXCheckBoxRole as String)
     builder.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
     builder.setAttribute(bypass, kAXValueAttribute as String, 0)
     builder.setFrame(bypass, x: 699, y: 559, width: 20, height: 18)
     builder.setButton(open, description: "open", x: 719, y: 559, width: 21, height: 18)
     builder.setButton(list, description: "list", x: 740, y: 559, width: 17, height: 18)
-    builder.setChildren(occupied, [bypass, open, list])
+    builder.setChildren(instrumentSlot, [bypass, open, list])
 
     builder.setButton(
         emptyAudioPlugin,
@@ -414,7 +417,7 @@ func makeLiveDumpStrip(_ builder: FakeAXRuntimeBuilder, id: Int) -> AXUIElement 
         output,
         send,
         emptyAudioPlugin,
-        occupied,
+        instrumentSlot,
         midiPlugin,
         eq,
         gainReduction,

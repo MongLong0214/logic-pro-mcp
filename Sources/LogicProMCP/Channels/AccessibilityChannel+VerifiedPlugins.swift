@@ -92,6 +92,13 @@ extension AccessibilityChannel {
                 item["name"] = NSNull()
                 item["plugin_id"] = NSNull()
                 item["bypassed"] = NSNull()
+            case .unclassified:
+                // The strip's slots could not be put in screen order or told apart from its
+                // instrument slot: the name is shown, but nothing here is an addressable insert.
+                complete = false
+                item["name"] = slot.name ?? NSNull()
+                item["plugin_id"] = NSNull()
+                item["bypassed"] = NSNull()
             case .occupiedReadable:
                 let name = slot.name
                 item["name"] = name ?? NSNull()
@@ -4819,7 +4826,7 @@ extension AccessibilityChannel {
         guard track < strips.count else { return nil }
         // #982: a strip whose children did not read is not an empty chain.
         guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax),
-              !slots.contains(where: { $0.readStatus == .occupiedUnreadable }) else {
+              !slots.contains(where: { $0.readStatus == .occupiedUnreadable || $0.readStatus == .unclassified }) else {
             return nil
         }
         var result: [Int: InventoryEntry] = [:]

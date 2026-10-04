@@ -13,7 +13,15 @@ private func addEmptySlot(_ builder: FakeAXRuntimeBuilder, _ id: Int) -> AXUIEle
     builder.setAttribute(el, kAXRoleAttribute as String, kAXButtonRole as String)
     builder.setAttribute(el, kAXDescriptionAttribute as String, "오디오 플러그인")
     builder.setAttribute(el, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
+    frameSlotRow(builder, el, id)
     return el
+}
+
+/// Inserts are numbered in screen order, so a chain of several needs frames: one row per slot,
+/// top-down in the order the ids give them.
+private func frameSlotRow(_ builder: FakeAXRuntimeBuilder, _ el: AXUIElement, _ id: Int) {
+    builder.setAttribute(el, kAXPositionAttribute as String, axPoint(100, 300 + CGFloat(id % 100) * 20))
+    builder.setAttribute(el, kAXSizeAttribute as String, axSize(58, 16))
 }
 
 /// Occupied slot group: AXGroup + bypass + open children. `name == nil` makes
@@ -30,6 +38,7 @@ private func addOccupiedSlot(_ builder: FakeAXRuntimeBuilder, _ id: Int, name: S
     builder.setAttribute(bypass, kAXValueAttribute as String, 0)
     builder.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
     builder.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+    frameSlotRow(builder, group, id)
     return group
 }
 
