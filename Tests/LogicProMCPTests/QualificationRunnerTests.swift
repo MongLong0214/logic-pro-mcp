@@ -749,6 +749,637 @@ struct QualificationRunnerTests {
         ))
     }
 
+    /// Synthetic archived EN scopes, fake transport and existing fixture trust only. No candidate
+    /// executable or Logic is launched. A prior baseline version is intentionally still diffable.
+    @Test func atlasCurrentVersionMustMatchTheIndependentSignedHostVersion() async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        unsetenv(flag)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        let fixture = try trustedFixture()
+        defer { fixture.remove() }
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Fixtures/AX")
+        let documents = try ["logic-12.x-desktop-en-track-headers.json",
+                             "logic-12.x-desktop-en-control-bar.json"].map {
+            try JSONDecoder().decode(AXSnapshot.Document.self,
+                from: Data(contentsOf: directory.appendingPathComponent($0)))
+        }
+        #expect(Set(documents.map(\.scope)) == Set(["Tracks header", "Control Bar"]))
+        #expect(documents.allSatisfy { $0.logicVersion == "12.x" && $0.locale == "en" && $0.capturedFrom == "ax" })
+        let pairs = documents.map { baseline in
+            AtlasQualification.Pair(scope: baseline.scope, baseline: baseline,
+                current: AXSnapshot.Document(logicVersion: "11.2", locale: "en-US",
+                    scope: baseline.scope, capturedFrom: "ax", root: baseline.root))
+        }
+        let atlas = try #require(AtlasQualification.evidenceCaseFor(armed: true, pairs: pairs,
+            axis: .defaultAxis, binarySHA256: fixture.binarySHA256,
+            traceID: "controlled-atlas-current-version"))
+        #expect(atlas.qualificationCase.status == .passed)
+        #expect(atlas.qualificationCase.verified)
+        #expect(QualificationRunner.evidence(atlas.evidence, binds: atlas.qualificationCase))
+        #expect(QualificationRunner.evidenceShapeIsValid(atlas.evidence))
+        let evidencePath = try #require(atlas.qualificationCase.evidenceFiles.first)
+        let evidenceURL = fixture.directory.appendingPathComponent(evidencePath)
+        try FileManager.default.createDirectory(at: evidenceURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try JSONEncoder().encode(atlas.evidence).write(to: evidenceURL)
+        try JSONEncoder().encode(QualificationCaseManifest(schema: "qualification-case-manifest/v1",
+            binarySHA256: fixture.binarySHA256, cases: [atlas.qualificationCase]))
+            .write(to: fixture.externalCasesURL)
+        let qualification = await fixture.runner.run(arguments: ["LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
+            "--mutate-open-project", "--cases", fixture.externalCasesURL.path,
+            "--waivers", fixture.waiversURL.path])
+        // Expectations, not requires: a failing positive must not suppress the counterexample.
+        #expect(qualification.exitCode == 0, "\(qualification.stdout)\(qualification.stderr)")
+        let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL))
+        #expect(unsigned.logicVersion == "11.2")
+        #expect(unsigned.provenance?.schema == "qualification-provenance/v2")
+        #expect(unsigned.provenance?.logicVersion == "11.2")
+        #expect(unsigned.cases.filter { $0.id == "atlas.drift_diff" } == [atlas.qualificationCase])
+        let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, signingPrivateKeyData: fixture.signingKeyData)
+        #expect(signing.exitCode == 0, "\(signing.stdout)\(signing.stderr)")
+        let control = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
+        #expect(control.exitCode == 0, "\(control.stdout)\(control.stderr)")
+        let controlPromotable = try #require(try Self.resultObject(control)["promotable"] as? Bool)
+        #expect(controlPromotable)
+        let originalEvidenceData = try Data(contentsOf: evidenceURL)
+        let originalManifestData = try Data(contentsOf: fixture.manifestURL)
+        let originalAttestationData = try Data(contentsOf: fixture.attestationURL)
+        let originalCaseManifestData = try Data(contentsOf: fixture.caseManifestURL)
+        let originalCandidateData = try Data(contentsOf: fixture.executableURL)
+        let signed = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+            from: originalAttestationData)
+        #expect(signed.provenanceSignature != nil)
+        let originalEvidence = try JSONDecoder().decode(CaseEvidence.self, from: originalEvidenceData)
+        var expectedEvidence = try #require(JSONSerialization.jsonObject(with: originalEvidenceData) as? [String: Any])
+        var comparison = try #require(expectedEvidence["atlas_comparison"] as? [String: Any])
+        var changedPairs = try #require(comparison["pairs"] as? [[String: Any]])
+        try #require(changedPairs.count == 2)
+        var changedCurrent = try #require(changedPairs[0]["current"] as? [String: Any])
+        #expect(changedCurrent["logicVersion"] as? String == "11.2")
+        changedCurrent["logicVersion"] = "11.3"
+        changedPairs[0]["current"] = changedCurrent
+        comparison["pairs"] = changedPairs
+        expectedEvidence["atlas_comparison"] = comparison
+        try Self.mutateJSONObject(at: evidenceURL) { $0 = expectedEvidence }
+        let changedEvidenceData = try Data(contentsOf: evidenceURL)
+        #expect(try JSONSerialization.data(withJSONObject:
+            JSONSerialization.jsonObject(with: changedEvidenceData), options: [.sortedKeys])
+            == JSONSerialization.data(withJSONObject: expectedEvidence, options: [.sortedKeys]))
+        let changedEvidence = try JSONDecoder().decode(CaseEvidence.self, from: changedEvidenceData)
+        let originalComparison = try #require(originalEvidence.atlasComparison)
+        let changedComparison = try #require(changedEvidence.atlasComparison)
+        #expect(changedComparison.pairs.map(\.baseline) == originalComparison.pairs.map(\.baseline))
+        #expect(changedComparison.pairs.map(\.scope) == originalComparison.pairs.map(\.scope))
+        #expect(changedComparison.pairs.map { $0.current.root } == originalComparison.pairs.map { $0.current.root })
+        #expect(changedComparison.pairs.map { $0.current.logicVersion } == ["11.3", "11.2"])
+        // The diff and its local candidate/axis binding remain valid. Only the independent host
+        // version binding must reject this otherwise coherent passing comparison.
+        #expect(QualificationRunner.evidence(changedEvidence, binds: atlas.qualificationCase))
+        #expect(QualificationRunner.evidenceShapeIsValid(changedEvidence))
+        try Self.mutateJSONObject(at: fixture.manifestURL) { manifest in
+            var entries = try #require(manifest["files"] as? [[String: Any]])
+            let matching = entries.indices.filter { entries[$0]["path"] as? String == evidencePath }
+            try #require(matching.count == 1)
+            entries[matching[0]]["sha256"] = SupportBundleBuilder.sha256(changedEvidenceData)
+            manifest["files"] = entries
+        }
+        let changedManifestSHA = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
+        try Self.mutateJSONObject(at: fixture.attestationURL) { attestation in
+            attestation["evidenceManifestSHA256"] = changedManifestSHA
+            var provenance = try #require(attestation["provenance"] as? [String: Any])
+            provenance["evidenceManifestSHA256"] = changedManifestSHA
+            attestation["provenance"] = provenance
+        }
+        try fixture.forceSignForDiagnosticFixture()
+        let resealed = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL))
+        #expect(resealed.logicVersion == "11.2")
+        #expect(resealed.provenance?.schema == "qualification-provenance/v2")
+        #expect(resealed.provenance?.logicVersion == "11.2")
+        #expect(resealed.evidenceManifestSHA256 == changedManifestSHA)
+        #expect(resealed.provenance?.evidenceManifestSHA256 == changedManifestSHA)
+        #expect(resealed.cases == signed.cases)
+        #expect(try Data(contentsOf: fixture.caseManifestURL) == originalCaseManifestData)
+        #expect(try Data(contentsOf: fixture.executableURL) == originalCandidateData)
+        let refused = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
+        #expect(refused.exitCode == 1, "\(refused.stdout)\(refused.stderr)")
+        let refusal = try Self.resultObject(refused)
+        let refusedPromotable = try #require(refusal["promotable"] as? Bool)
+        #expect(!refusedPromotable)
+        let rejections = try #require(refusal["rejections"] as? [[String: Any]])
+        #expect(rejections.count == 1, "\(refused.stdout)")
+        #expect(rejections.first?["reason"] as? String == "evidenceBindingMismatch", "\(refused.stdout)")
+        #expect(rejections.first?["actual"] as? String == "atlas current Logic version binding", "\(refused.stdout)")
+        #expect(!rejections.contains { $0["reason"] as? String == "provenanceSignatureInvalid" })
+        try originalEvidenceData.write(to: evidenceURL, options: .atomic)
+        try originalManifestData.write(to: fixture.manifestURL, options: .atomic)
+        try originalAttestationData.write(to: fixture.attestationURL, options: .atomic)
+        let restored = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
+        #expect(restored.exitCode == 0, "\(restored.stdout)\(restored.stderr)")
+        let restoredPromotable = try #require(try Self.resultObject(restored)["promotable"] as? Bool)
+        #expect(restoredPromotable)
+        #expect(try Data(contentsOf: evidenceURL) == originalEvidenceData)
+        #expect(try Data(contentsOf: fixture.manifestURL) == originalManifestData)
+        #expect(try Data(contentsOf: fixture.attestationURL) == originalAttestationData)
+    }
+
+    /// AFTER-only producer controls. Archived roots and fake drive metadata, never live capture.
+    private static func atlasProducerVersionPairs(_ version: String) throws -> [AtlasQualification.Pair] {
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Fixtures/AX")
+        return try ["logic-12.x-desktop-en-track-headers.json",
+                    "logic-12.x-desktop-en-control-bar.json"].map { name in
+            let baseline = try JSONDecoder().decode(AXSnapshot.Document.self,
+                from: Data(contentsOf: directory.appendingPathComponent(name)))
+            #expect(baseline.logicVersion == "12.x")
+            return AtlasQualification.Pair(scope: baseline.scope, baseline: baseline,
+                current: AXSnapshot.Document(logicVersion: version, locale: "en-US",
+                    scope: baseline.scope, capturedFrom: "ax", root: baseline.root))
+        }
+    }
+
+    private static func assertAtlasProducerVersionResult(
+        _ result: QualificationCommandResult, fixture: Fixture, version: String
+    ) throws {
+        if version == "11.2" {
+            #expect(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
+            #expect(result.stderr.isEmpty)
+            let attestation = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+                from: Data(contentsOf: fixture.attestationURL))
+            #expect(attestation.logicVersion == "11.2")
+            #expect(attestation.provenance?.logicVersion == "11.2")
+            let atlas = try #require(attestation.cases.first { $0.id == "atlas.drift_diff" })
+            #expect(atlas.status == .passed)
+            #expect(atlas.verified)
+            let evidencePath = try #require(atlas.evidenceFiles.first)
+            let evidence = try JSONDecoder().decode(CaseEvidence.self,
+                from: Data(contentsOf: fixture.directory.appendingPathComponent(evidencePath)))
+            let comparison = try #require(evidence.atlasComparison)
+            #expect(comparison.pairs.count == 2)
+            #expect(comparison.pairs.allSatisfy {
+                $0.baseline.logicVersion == "12.x" && $0.current.logicVersion == "11.2"
+            })
+        } else {
+            #expect(result.exitCode == 1)
+            #expect(result.stderr ==
+                "Qualification failed: External evidence binding mismatch: atlas current Logic version binding\n")
+            #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
+        }
+    }
+
+    @Test(arguments: ["11.2", "11.3"])
+    func externalAtlasCurrentVersionBindsToFakeDriveHostVersion(version: String) async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        unsetenv(flag)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        #expect(!FeatureFlags.adr007SelectorAtlas)
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let fixture = try Fixture(specs: [spec])
+        defer { fixture.remove() }
+        let pairs = try Self.atlasProducerVersionPairs(version)
+        let atlas = try #require(AtlasQualification.evidenceCaseFor(armed: true, pairs: pairs,
+            axis: .defaultAxis, binarySHA256: fixture.binarySHA256,
+            traceID: "after-only-external-version"))
+        // The local diff is valid even with the mismatched version; the independent host binds it.
+        #expect(atlas.qualificationCase.status == .passed)
+        #expect(QualificationRunner.evidenceShapeIsValid(atlas.evidence))
+        let path = try #require(atlas.qualificationCase.evidenceFiles.first)
+        let evidenceURL = fixture.directory.appendingPathComponent(path)
+        try FileManager.default.createDirectory(at: evidenceURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try JSONEncoder().encode(atlas.evidence).write(to: evidenceURL)
+        try JSONEncoder().encode(QualificationCaseManifest(schema: "qualification-case-manifest/v1",
+            binarySHA256: fixture.binarySHA256, cases: [atlas.qualificationCase]))
+            .write(to: fixture.externalCasesURL)
+        let result = await fixture.runner.run(arguments: ["LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
+            "--cases", fixture.externalCasesURL.path])
+        try Self.assertAtlasProducerVersionResult(result, fixture: fixture, version: version)
+    }
+
+    @Test(arguments: ["11.2", "11.3"])
+    func armedAtlasCurrentVersionBindsToInjectedFakeDriveHostVersion(version: String) async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        setenv(flag, "1", 1)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        #expect(FeatureFlags.adr007SelectorAtlas)
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
+        let fixture = try Fixture(specs: specs)
+        defer { fixture.remove() }
+        let drive = Self.driveResult(specs: specs)
+        let pairs = try Self.atlasProducerVersionPairs(version)
+        // Spell every runtime closure: neither the transport nor AtlasCapture production path runs.
+        let runner = QualificationRunner(runtime: .init(
+            executableURL: { fixture.executableURL },
+            environment: { ["GIT_COMMIT": fixture.commitSHA] },
+            now: { Date(timeIntervalSince1970: 1_000) },
+            serverVersion: { "1.2.3" }, specs: { specs },
+            registryValidationErrors: { [] }, handlerValidationErrors: { [] },
+            handlerExists: { OperationHandlerRegistry.handler(tool: $0, command: $1) != nil },
+            beforeEvidenceRead: { _ in }, drive: { _ in drive },
+            atlasPairs: { (pairs: pairs, dropped: []) }
+        ))
+        let result = await runner.run(arguments: ["LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path, "--release-version", "1.2.3"])
+        try Self.assertAtlasProducerVersionResult(result, fixture: fixture, version: version)
+    }
+
+    @Test func requiredTrustedAtlasCannotDisappearWhenTheOptionalFlagIsOff() async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        unsetenv(flag)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        let specs = OperationRegistry.specs
+        let drive = Self.driveResult(specs: specs,
+            mutationRestoreRecords: [Self.recipeShapedRecord()])
+        let fixture = try Fixture(specs: specs, drive: { _ in drive })
+        defer { fixture.remove() }
+        let operationWaivers = specs.compactMap { spec in
+            drive.operationResults[spec.id.rawValue]?.status == .passed ? nil :
+                Self.waiver(caseID: "in-process/\(spec.id.rawValue)",
+                    affectedCapability: "operation:\(spec.id.rawValue)")
+        }
+        try JSONEncoder().encode(operationWaivers + Self.axisWaivers()).write(to: fixture.waiversURL)
+        let run = await fixture.runQualification(waiversURL: fixture.waiversURL)
+        #expect(run.exitCode == 0, "\(run.stdout)\(run.stderr)")
+        let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL))
+        #expect(!unsigned.cases.contains { $0.id == "atlas.drift_diff" })
+        #expect(!FileManager.default.fileExists(
+            atPath: fixture.directory.appendingPathComponent("evidence/atlas-drift-diff.json").path))
+        let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, signingPrivateKeyData: fixture.signingKeyData)
+        #expect(signing.exitCode == 1, "\(signing.stdout)")
+        let signingRejections = try #require(try Self.resultObject(signing)["rejections"] as? [[String: Any]])
+        #expect(signingRejections.contains {
+            $0["reason"] as? String == "missingArtifact"
+                && $0["name"] as? String == "evidence/atlas-drift-diff.json"
+        })
+        // Existing fixture signing deliberately constructs a coherent diagnostic packet even
+        // when the production signer refuses it; signature failure cannot mask this witness.
+        try fixture.forceSignForDiagnosticFixture()
+        let diagnostic = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(diagnostic.exitCode == 0, "\(diagnostic.stdout)")
+        let refused = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
+        #expect(refused.exitCode == 1, "\(refused.stdout)")
+        let rejections = try #require(try Self.resultObject(refused)["rejections"] as? [[String: Any]])
+        #expect(rejections.contains {
+            $0["reason"] as? String == "missingArtifact"
+                && $0["name"] as? String == "evidence/atlas-drift-diff.json"
+        })
+        #expect(!rejections.contains { $0["reason"] as? String == "provenanceSignatureInvalid" })
+    }
+
+    @Test func aNonAtlasCaseCannotSatisfyTheRequiredAtlasArtifactPath() async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        unsetenv(flag)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        let specs = OperationRegistry.specs
+        let drive = Self.driveResult(specs: specs,
+            mutationRestoreRecords: [Self.recipeShapedRecord()])
+        let fixture = try Fixture(specs: specs, drive: { _ in drive })
+        defer { fixture.remove() }
+        let operationWaivers = specs.compactMap { spec in
+            drive.operationResults[spec.id.rawValue]?.status == .passed ? nil :
+                Self.waiver(caseID: "in-process/\(spec.id.rawValue)",
+                    affectedCapability: "operation:\(spec.id.rawValue)")
+        }
+        try JSONEncoder().encode(operationWaivers + Self.axisWaivers()).write(to: fixture.waiversURL)
+        let path = "evidence/atlas-drift-diff.json"
+        let external = QualificationCase(id: "external/not-atlas", status: .failed,
+            tool: "external", command: "observe", traceID: "non-atlas-path-control", verified: false,
+            evidenceFiles: [path], reason: "controlled external refusal",
+            binarySHA256: fixture.binarySHA256, axis: .defaultAxis,
+            operationID: "qualification.external-control", verificationKind: .typedDeferral)
+        let evidence = CaseEvidence(schema: "qualification-case-evidence/v3",
+            caseID: external.id, operationID: external.operationID, tool: external.tool,
+            command: external.command, registrySpecFound: false, handlerBound: false,
+            traceStarted: false, traceCompleted: false, failureReason: external.reason,
+            binarySHA256: fixture.binarySHA256, axis: .defaultAxis,
+            status: .failed, verified: false, verificationKind: .typedDeferral)
+        #expect(QualificationRunner.evidence(evidence, binds: external))
+        #expect(QualificationRunner.evidenceShapeIsValid(evidence))
+        let evidenceURL = fixture.directory.appendingPathComponent(path)
+        try FileManager.default.createDirectory(at: evidenceURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try JSONEncoder().encode(evidence).write(to: evidenceURL)
+        try JSONEncoder().encode(QualificationCaseManifest(schema: "qualification-case-manifest/v1",
+            binarySHA256: fixture.binarySHA256, cases: [external])).write(to: fixture.externalCasesURL)
+        let run = await fixture.runner.run(arguments: ["LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
+            "--mutate-open-project", "--cases", fixture.externalCasesURL.path,
+            "--waivers", fixture.waiversURL.path])
+        #expect(run.exitCode == 1, "the optional external case failed: \(run.stdout)\(run.stderr)")
+        try fixture.forceSignForDiagnosticFixture()
+        let diagnostic = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(diagnostic.exitCode == 0, "\(diagnostic.stdout)")
+        let refused = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
+        #expect(refused.exitCode == 1, "\(refused.stdout)")
+        let rejections = try #require(try Self.resultObject(refused)["rejections"] as? [[String: Any]])
+        #expect(rejections.contains {
+            $0["reason"] as? String == "evidenceBindingMismatch"
+                && $0["actual"] as? String == "required atlas case binding"
+        })
+        #expect(!rejections.contains { $0["reason"] as? String == "provenanceSignatureInvalid" })
+    }
+
+    @Test(arguments: [QualificationLocale.enUS, .koKR])
+    func trustedRequiredAtlasAcceptsBothDeclaredSelectedScopeControls(locale: QualificationLocale) async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        unsetenv(flag)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        let specs = OperationRegistry.specs
+        let drive = Self.driveResult(specs: specs, observedLocale: locale.rawValue,
+            mutationRestoreRecords: [Self.recipeShapedRecord()])
+        let fixture = try Fixture(specs: specs, drive: { _ in drive })
+        defer { fixture.remove() }
+        let axis = QualificationAxis(variant: .desktop, locale: locale,
+            profile: .core, cache: .cold, fixture: .empty)
+        let operationWaivers = specs.compactMap { spec in
+            drive.operationResults[spec.id.rawValue]?.status == .passed ? nil :
+                Self.waiver(caseID: "in-process/\(spec.id.rawValue)",
+                    affectedCapability: "operation:\(spec.id.rawValue)")
+        }
+        try JSONEncoder().encode(operationWaivers + Self.axisWaivers(observedAxis: axis))
+            .write(to: fixture.waiversURL)
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Fixtures/AX")
+        let language = locale == .koKR ? "ko" : "en"
+        let documents = try ["track-headers", "control-bar"].map {
+            try JSONDecoder().decode(AXSnapshot.Document.self,
+                from: Data(contentsOf: directory.appendingPathComponent(
+                    "logic-12.x-desktop-\(language)-\($0).json")))
+        }
+        #expect(documents.allSatisfy { $0.logicVersion == "12.x" && $0.locale == language && $0.capturedFrom == "ax" })
+        let pairs = documents.map { baseline in AtlasQualification.Pair(scope: baseline.scope,
+            baseline: baseline, current: AXSnapshot.Document(logicVersion: "11.2",
+                locale: locale.rawValue, scope: baseline.scope, capturedFrom: "ax", root: baseline.root)) }
+        let atlas = try #require(AtlasQualification.evidenceCaseFor(armed: true, pairs: pairs,
+            axis: axis, binarySHA256: fixture.binarySHA256, traceID: "required-atlas-control"))
+        #expect(atlas.qualificationCase.status == .passed)
+        #expect(atlas.qualificationCase.verified)
+        let evidencePath = try #require(atlas.qualificationCase.evidenceFiles.first)
+        let evidenceURL = fixture.directory.appendingPathComponent(evidencePath)
+        try FileManager.default.createDirectory(at: evidenceURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try JSONEncoder().encode(atlas.evidence).write(to: evidenceURL)
+        try JSONEncoder().encode(QualificationCaseManifest(schema: "qualification-case-manifest/v1",
+            binarySHA256: fixture.binarySHA256, cases: [atlas.qualificationCase]))
+            .write(to: fixture.externalCasesURL)
+        let run = await fixture.runner.run(arguments: ["LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
+            "--locale", language, "--mutate-open-project", "--cases", fixture.externalCasesURL.path,
+            "--waivers", fixture.waiversURL.path])
+        #expect(run.exitCode == 0, "\(run.stdout)\(run.stderr)")
+        let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL))
+        #expect(unsigned.locale == locale)
+        #expect(unsigned.logicVersion == "11.2")
+        #expect(unsigned.cases.filter { $0.id == "atlas.drift_diff" } == [atlas.qualificationCase])
+        let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, signingPrivateKeyData: fixture.signingKeyData)
+        #expect(signing.exitCode == 0, "\(signing.stdout)")
+        let accepted = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
+        #expect(accepted.exitCode == 0, "\(accepted.stdout)")
+        let promotable = try #require(try Self.resultObject(accepted)["promotable"] as? Bool)
+        #expect(promotable)
+    }
+
+    /// AFTER-only arming controls: all capture and transport observations below are injected.
+    private enum RequiredAtlasCaptureShape: String, Sendable {
+        case complete, absent, partial, dropped
+    }
+
+    private final class RequiredAtlasCaptureCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var calls = 0
+        func record() { lock.withLock { calls += 1 } }
+        var count: Int { lock.withLock { calls } }
+    }
+
+    private func assertRequiredAtlasProducer(
+        locale: QualificationLocale, shape: RequiredAtlasCaptureShape, viaEntrypoint: Bool = false
+    ) async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        unsetenv(flag)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        #expect(!FeatureFlags.adr007SelectorAtlas)
+        let specs = OperationRegistry.specs
+        let drive = Self.driveResult(specs: specs, observedLocale: locale.rawValue,
+            mutationRestoreRecords: [Self.recipeShapedRecord()])
+        let fixture = try Fixture(specs: specs, drive: { _ in drive })
+        defer { fixture.remove() }
+        let axis = QualificationAxis(variant: .desktop, locale: locale,
+            profile: .core, cache: .cold, fixture: .empty)
+        let operationWaivers = specs.compactMap { spec in
+            drive.operationResults[spec.id.rawValue]?.status == .passed ? nil :
+                Self.waiver(caseID: "in-process/\(spec.id.rawValue)",
+                    affectedCapability: "operation:\(spec.id.rawValue)")
+        }
+        try JSONEncoder().encode(operationWaivers + Self.axisWaivers(observedAxis: axis))
+            .write(to: fixture.waiversURL)
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Fixtures/AX")
+        let language = locale == .koKR ? "ko" : "en"
+        let documents = try ["track-headers", "control-bar"].map {
+            try JSONDecoder().decode(AXSnapshot.Document.self,
+                from: Data(contentsOf: directory.appendingPathComponent(
+                    "logic-12.x-desktop-\(language)-\($0).json")))
+        }
+        let complete = documents.map { baseline in AtlasQualification.Pair(
+            scope: baseline.scope, baseline: baseline,
+            current: AXSnapshot.Document(logicVersion: drive.logicProVersion,
+                locale: locale.rawValue, scope: baseline.scope, capturedFrom: "ax", root: baseline.root)) }
+        let pairs: [AtlasQualification.Pair]
+        switch shape {
+        case .complete, .dropped: pairs = complete
+        case .absent: pairs = []
+        case .partial: pairs = Array(complete.prefix(1))
+        }
+        let dropped = shape == .dropped ? ["controlled unread selected baseline"] : []
+        let capture = RequiredAtlasCaptureCounter()
+        // Spell every closure: neither the production transport nor production AtlasCapture runs.
+        let runner = QualificationRunner(runtime: .init(
+            executableURL: { fixture.executableURL },
+            environment: { ["GIT_COMMIT": fixture.commitSHA] },
+            now: { Date(timeIntervalSince1970: 1_000) },
+            serverVersion: { "1.2.3" }, specs: { specs },
+            registryValidationErrors: { [] }, handlerValidationErrors: { [] },
+            handlerExists: { OperationHandlerRegistry.handler(tool: $0, command: $1) != nil },
+            beforeEvidenceRead: { _ in }, drive: { _ in drive },
+            atlasPairs: {
+                capture.record()
+                return (pairs: pairs, dropped: dropped)
+            }
+        ))
+        let arguments = ["LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
+            "--locale", language, "--mutate-open-project", "--require-atlas",
+            "--waivers", fixture.waiversURL.path]
+        let run: QualificationCommandResult
+        if viaEntrypoint {
+            var permissionCalls = 0
+            var serverCalls = 0
+            var approvalCalls = 0
+            var commandCalls = 0
+            var forwarded: [String] = []
+            var stdout = ""
+            var stderr = ""
+            var commandResult: QualificationCommandResult?
+            let approvalURL = fixture.directory.appendingPathComponent("unused-approvals.json")
+            let exit = await MainEntrypoint.run(
+                arguments: arguments,
+                permissionCheck: {
+                    permissionCalls += 1
+                    return .init(accessibility: false, automationLogicPro: false)
+                },
+                serverFactory: {
+                    serverCalls += 1
+                    return MockQualificationServer()
+                },
+                approvalStoreFactory: {
+                    approvalCalls += 1
+                    return ManualValidationStore(fileURL: approvalURL)
+                },
+                qualificationCommand: { actualArguments in
+                    commandCalls += 1
+                    forwarded = actualArguments
+                    let actual = await runner.run(arguments: actualArguments)
+                    commandResult = actual
+                    return actual
+                },
+                writeStdout: { stdout += $0 },
+                writeStderr: { stderr += $0 })
+            run = try #require(commandResult)
+            #expect(commandCalls == 1)
+            #expect(forwarded == arguments)
+            #expect(exit == run.exitCode)
+            #expect(stdout == run.stdout)
+            #expect(stderr == run.stderr)
+            #expect(permissionCalls == 0)
+            #expect(serverCalls == 0)
+            #expect(approvalCalls == 0)
+            #expect(!FileManager.default.fileExists(atPath: approvalURL.path))
+        } else {
+            run = await runner.run(arguments: arguments)
+        }
+        #expect(capture.count == 1)
+        #expect(!FeatureFlags.adr007SelectorAtlas)
+        let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL))
+        #expect(unsigned.logicVersion == drive.logicProVersion)
+        #expect(unsigned.locale == locale)
+        let atlasCases = unsigned.cases.filter { $0.id == "atlas.drift_diff" }
+        #expect(atlasCases.count == 1)
+        let atlas = try #require(atlasCases.first)
+        #expect(atlas.axis == axis)
+        #expect(atlas.verificationKind == .atlasComparison)
+        let path = try #require(atlas.evidenceFiles.first)
+        let evidence = try JSONDecoder().decode(CaseEvidence.self,
+            from: Data(contentsOf: fixture.directory.appendingPathComponent(path)))
+        let comparison = try #require(evidence.atlasComparison)
+        #expect(comparison.pairs == pairs)
+        #expect(comparison.dropped == dropped)
+        #expect(QualificationRunner.evidenceShapeIsValid(evidence))
+        let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, signingPrivateKeyData: fixture.signingKeyData)
+        if shape == .complete {
+            #expect(run.exitCode == 0, "\(run.stdout)")
+            #expect(run.stderr.isEmpty, "\(run.stderr)")
+            #expect(atlas.status == .passed)
+            #expect(atlas.verified)
+            #expect(signing.exitCode == 0, "\(signing.stdout)")
+        } else {
+            #expect(run.exitCode == 1, "\(run.stdout)")
+            #expect(unsigned.failed == 1)
+            #expect(run.stderr ==
+                "qualification: \(unsigned.failed) of \(unsigned.total) case(s) failed\n")
+            #expect(atlas.status == .failed)
+            #expect(!atlas.verified)
+            if shape == .dropped {
+                let reason = try #require(atlas.reason)
+                #expect(reason.contains("controlled unread selected baseline"))
+            } else {
+                #expect(atlas.reason ==
+                    "required atlas scopes missing or ambiguous: trackHeaderRail, controlBar")
+            }
+            #expect(signing.exitCode == 1, "\(signing.stdout)")
+            try Self.expectRejection(signing, reason: "atlasDriftRefused")
+            // Keep coherent diagnostic signatures so trusted refusal is not merely unsigned.
+            try fixture.forceSignForDiagnosticFixture()
+        }
+        let verification = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory, releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
+        let object = try Self.resultObject(verification)
+        let promotable = try #require(object["promotable"] as? Bool)
+        if shape == .complete {
+            #expect(verification.exitCode == 0, "\(verification.stdout)")
+            #expect(promotable)
+        } else {
+            #expect(verification.exitCode == 1, "\(verification.stdout)")
+            #expect(!promotable)
+            try Self.expectRejection(verification, reason: "atlasDriftRefused")
+            #expect(!Self.rejectionReasons(object).contains("provenanceSignatureInvalid"))
+        }
+    }
+
+    @Test(arguments: [QualificationLocale.enUS, .koKR])
+    func requireAtlasInvokesSelectedCaptureWithOptionalFlagOff(locale: QualificationLocale) async throws {
+        try await assertRequiredAtlasProducer(locale: locale, shape: .complete)
+    }
+
+    @Test(arguments: [RequiredAtlasCaptureShape.absent, .partial, .dropped])
+    private func requireAtlasRefusesIncompleteCaptureBeforeTrustedPromotion(shape: RequiredAtlasCaptureShape) async throws {
+        try await assertRequiredAtlasProducer(locale: .enUS, shape: shape)
+    }
+
+    /// AFTER-only MainEntrypoint composition with the real runner and entirely injected data.
+    @Test(arguments: [RequiredAtlasCaptureShape.complete, .absent])
+    private func mainEntrypointRequiredAtlasComposesWithInjectedRunner(shape: RequiredAtlasCaptureShape) async throws {
+        try await assertRequiredAtlasProducer(locale: .enUS, shape: shape, viaEntrypoint: true)
+    }
+
     @Test func trustedSignedProvenancePromotes() async throws {
         let fixture = try promotableFixture()
         defer { fixture.remove() }
@@ -2021,7 +2652,10 @@ struct QualificationRunnerTests {
 
         let result = await fixture.runQualification()
         #expect(result.exitCode != 0)
-        #expect(result.stderr.contains("Logic Pro variant mismatch"))
+        let cause = QualificationTransportError.requestTimeout(phase: "handshake")
+        #expect(result.stderr == "Qualification failed: \(cause.description)\n")
+        #expect(!result.stderr.contains("Logic Pro variant mismatch"))
+        #expect(!result.stderr.contains("Logic Pro UI locale mismatch"))
         #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
@@ -2033,7 +2667,10 @@ struct QualificationRunnerTests {
 
         let result = await fixture.runQualification()
         #expect(result.exitCode != 0)
-        #expect(result.stderr.contains("Logic Pro variant mismatch"))
+        let cause = QualificationTransportError.nonZeroExit(status: 17, stderr: "fixture exit")
+        #expect(result.stderr == "Qualification failed: \(cause.description)\n")
+        #expect(!result.stderr.contains("Logic Pro variant mismatch"))
+        #expect(!result.stderr.contains("Logic Pro UI locale mismatch"))
         #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
@@ -2045,7 +2682,10 @@ struct QualificationRunnerTests {
 
         let result = await fixture.runQualification()
         #expect(result.exitCode != 0)
-        #expect(result.stderr.contains("Logic Pro variant mismatch"))
+        let cause = QualificationTransportError.malformedFrame("not-json")
+        #expect(result.stderr == "Qualification failed: \(cause.description)\n")
+        #expect(!result.stderr.contains("Logic Pro variant mismatch"))
+        #expect(!result.stderr.contains("Logic Pro UI locale mismatch"))
         #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
@@ -2057,7 +2697,34 @@ struct QualificationRunnerTests {
 
         let result = await fixture.runQualification()
         #expect(result.exitCode != 0)
-        #expect(result.stderr.contains("Logic Pro variant mismatch"))
+        let cause = QualificationTransportError.closedPipe(phase: "handshake")
+        #expect(result.stderr == "Qualification failed: \(cause.description)\n")
+        #expect(!result.stderr.contains("Logic Pro variant mismatch"))
+        #expect(!result.stderr.contains("Logic Pro UI locale mismatch"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
+    }
+
+    @Test func genuineObservedVariantMismatchStopsBeforeAttestation() async throws {
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
+        let driveResult = Self.driveResult(
+            specs: specs,
+            observedVariant: "creator_studio",
+            observedLocale: "en-US"
+        )
+        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
+        defer { fixture.remove() }
+
+        let result = await fixture.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path,
+            "--variant", "desktop",
+            "--locale", "en",
+            "--release-version", "1.2.3",
+        ])
+
+        #expect(result.exitCode != 0)
+        #expect(result.stderr ==
+            "Qualification failed: Logic Pro variant mismatch: expected desktop, observed creator\n")
         #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
@@ -4417,6 +5084,43 @@ struct QualificationRunnerTests {
         }
     }
 
+    @Test func helpExplainsRequiredSelectedAtlasWithoutLosingSafetyWording() async {
+        var stdout = ""
+        var stderr = ""
+        let result = await MainEntrypoint.run(
+            arguments: ["LogicProMCP", "--help"],
+            permissionCheck: {
+                Issue.record("Help must not check permissions")
+                return .init(accessibility: false, automationLogicPro: false)
+            },
+            serverFactory: {
+                Issue.record("Help must not construct the server")
+                return MockQualificationServer()
+            },
+            approvalStoreFactory: {
+                Issue.record("Help must not construct the approval store")
+                return ManualValidationStore()
+            },
+            qualificationCommand: { _ in
+                Issue.record("Help must not run qualification")
+                return .init(exitCode: 1, stdout: "", stderr: "")
+            },
+            writeStdout: { stdout += $0 },
+            writeStderr: { stderr += $0 })
+        #expect(result == 0)
+        #expect(stdout == MainEntrypoint.usageText + "\n")
+        #expect(stderr.isEmpty)
+        #expect(stdout.contains(
+            "LogicProMCP --qualify --out <attestation.json> [--require-atlas] [--mutate-open-project]"))
+        #expect(stdout.contains(
+            "--require-atlas captures required Desktop en/ko scopes: trackHeaderRail and controlBar."))
+        #expect(stdout.contains(
+            "Set LOGIC_MCP_ATLAS_BASELINES to a matching locale directory containing both baselines."))
+        #expect(stdout.contains("--mutate-open-project WRITES TO THE PROJECT LOGIC HAS OPEN"))
+        #expect(stdout.contains(
+            "non-authoritative local diagnostic; emits a JSON decision with no promotion authority"))
+    }
+
     @Test func helpListsQualificationSubcommands() async {
         var stdout = ""
         let result = await MainEntrypoint.run(
@@ -4513,7 +5217,8 @@ struct QualificationRunnerTests {
     }
 
     private func trustedFixture(
-        candidateExecutionSentinelURL: URL? = nil
+        candidateExecutionSentinelURL: URL? = nil,
+        includeRequiredAtlas: Bool = true
     ) throws -> Fixture {
         let specs = OperationRegistry.specs
         let driveResult = Self.driveResult(
@@ -4533,6 +5238,7 @@ struct QualificationRunnerTests {
         let fixture = try Fixture(
             specs: specs,
             executableData: executableData,
+            qualificationIncludesExternalCases: includeRequiredAtlas,
             drive: { _ in driveResult }
         )
         let operationWaivers = specs.compactMap { spec in
@@ -4545,6 +5251,24 @@ struct QualificationRunnerTests {
         }
         try JSONEncoder().encode(operationWaivers + Self.axisWaivers())
             .write(to: fixture.waiversURL)
+        if includeRequiredAtlas {
+            // Controlled archived roots, not a native capture. Current version comes from
+            // the same injected drive that establishes this fixture's independent host.
+            let pairs = try Self.atlasProducerVersionPairs(driveResult.logicProVersion)
+            let atlas = try #require(AtlasQualification.evidenceCaseFor(armed: true,
+                pairs: pairs, axis: .defaultAxis, binarySHA256: fixture.binarySHA256,
+                traceID: "trusted-required-atlas-fixture"))
+            #expect(atlas.qualificationCase.status == .passed)
+            #expect(atlas.qualificationCase.verified)
+            let path = try #require(atlas.qualificationCase.evidenceFiles.first)
+            let evidenceURL = fixture.directory.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: evidenceURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            try JSONEncoder().encode(atlas.evidence).write(to: evidenceURL)
+            try JSONEncoder().encode(QualificationCaseManifest(schema: "qualification-case-manifest/v1",
+                binarySHA256: fixture.binarySHA256, cases: [atlas.qualificationCase]))
+                .write(to: fixture.externalCasesURL)
+        }
         return fixture
     }
 
@@ -5072,6 +5796,7 @@ struct QualificationRunnerTests {
         let trustedPublicKeyData: Data
         let requiredOperationIDs: Set<String>
         let runner: QualificationRunner
+        let qualificationIncludesExternalCases: Bool
 
         var binarySHA256: String { SupportBundleBuilder.sha256(executableData) }
 
@@ -5089,9 +5814,11 @@ struct QualificationRunnerTests {
             trustedPublicKeyData: Data? = nil,
             beforeEvidenceRead: @escaping @Sendable (URL) -> Void = { _ in },
             environmentAdditions: [String: String] = [:],
+            qualificationIncludesExternalCases: Bool = false,
             drive: (@Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult)? = nil
         ) throws {
             self.commitSHA = commitSHA
+            self.qualificationIncludesExternalCases = qualificationIncludesExternalCases
             signingKeyData = Data(repeating: 7, count: 32)
             requiredOperationIDs = Set(specs.map { $0.id.rawValue })
             self.executableData = executableData
@@ -5227,6 +5954,9 @@ struct QualificationRunnerTests {
             }
             if let waiversURL {
                 arguments.append(contentsOf: ["--waivers", waiversURL.path])
+            }
+            if qualificationIncludesExternalCases {
+                arguments.append(contentsOf: ["--cases", externalCasesURL.path])
             }
             return await runner.run(arguments: arguments)
         }

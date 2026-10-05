@@ -258,6 +258,11 @@ extension AXLogicProElements {
     /// etc. as AXCheckBox widgets.
     static func getControlBar(runtime: Runtime = .production) -> AXUIElement? {
         guard let window = mainWindow(runtime: runtime) else { return nil }
+        return getControlBar(in: window, runtime: runtime.ax)
+    }
+
+    /// The same discriminator, scoped to the window the caller actually acquired.
+    static func getControlBar(in window: AXUIElement, runtime: AXHelpers.Runtime) -> AXUIElement? {
 
         // #628: "Control Bar" is not a unique AXDescription. Measured on one arrange window, two
         // groups carry it — (10, 54, 1900, 58) with twenty direct checkboxes, and
@@ -269,15 +274,15 @@ extension AXLogicProElements {
         // search it for a checkbox, so a candidate holding none cannot be what they meant, whatever
         // it is called.
         let labelled = AXHelpers.findAllDescendants(
-            of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime.ax
+            of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime
         ).filter { group in
             AXLocalePolicy.controlBarGroupLabel.matches(
-                AXHelpers.getDescription(group, runtime: runtime.ax) ?? "", mode: .exactStrict
+                AXHelpers.getDescription(group, runtime: runtime) ?? "", mode: .exactStrict
             )
         }
         let withControls = labelled.filter { group in
-            AXHelpers.getChildren(group, runtime: runtime.ax).contains { child in
-                AXHelpers.getRole(child, runtime: runtime.ax) == kAXCheckBoxRole as String
+            AXHelpers.getChildren(group, runtime: runtime).contains { child in
+                AXHelpers.getRole(child, runtime: runtime) == kAXCheckBoxRole as String
             }
         }
         // Exactly one, or nothing. Two bars that both hold transport controls is a tree this code

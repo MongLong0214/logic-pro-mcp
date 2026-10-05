@@ -44,6 +44,67 @@ struct Issue290AtlasEvidenceTests {
         #expect(QualificationRunner.evidenceShapeIsValid(decoded))
     }
 
+    @Test(arguments: [QualificationLocale.enUS, .koKR])
+    func requiredSelectedScopesCannotBeReplacedByAWholeWindow(locale: QualificationLocale) throws {
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Fixtures/AX")
+        let language = locale == .koKR ? "ko" : "en"
+        let documents = try ["track-headers", "control-bar"].map {
+            try JSONDecoder().decode(AXSnapshot.Document.self,
+                from: Data(contentsOf: directory.appendingPathComponent(
+                    "logic-12.x-desktop-\(language)-\($0).json")))
+        }
+        let axis = QualificationAxis(variant: .desktop, locale: locale,
+            profile: .core, cache: .cold, fixture: .empty)
+        let pairs = documents.map { AtlasQualification.Pair(
+            scope: $0.scope, baseline: $0, current: $0) }
+        let positive = try #require(AtlasQualification.evidenceCaseFor(
+            armed: true, pairs: pairs, axis: axis,
+            binarySHA256: String(repeating: "a", count: 64), traceID: "selected-scopes"))
+        #expect(positive.qualificationCase.status == .passed)
+        #expect(positive.qualificationCase.verified)
+        #expect(QualificationRunner.evidenceShapeIsValid(positive.evidence))
+
+        // Keep both archived roots and all their controls. This is a synthetic composition,
+        // not another native observation. Raw unit count is not the required-scope authority.
+        let root = AXSnapshot.Node(role: "AXWindow", subrole: nil, description: nil,
+            help: nil, identifier: nil, valueRange: nil, children: documents.map(\.root))
+        let wholeWindow = AXSnapshot.Document(logicVersion: "12.x", locale: language,
+            scope: "window", capturedFrom: "ax", root: root)
+        let windowPair = AtlasQualification.Pair(scope: "window",
+            baseline: wholeWindow, current: wholeWindow)
+        // The existing ordinary diff can still reuse this unchanged tree.
+        if case let .diffed(verdict, _, unmeasured, dropped) =
+            AtlasQualification.outcome(armed: true, pairs: [windowPair]) {
+            #expect(verdict == .reuseFull)
+            #expect(unmeasured.isEmpty)
+            #expect(dropped.isEmpty)
+        } else {
+            Issue.record("the ordinary whole-window comparison must actually run")
+        }
+        let refused = try #require(AtlasQualification.evidenceCaseFor(
+            armed: true, pairs: [windowPair], axis: axis,
+            binarySHA256: String(repeating: "a", count: 64), traceID: "missing-selected-scopes"))
+        #expect(refused.qualificationCase.status == .failed)
+        #expect(!refused.qualificationCase.verified)
+        #expect(refused.qualificationCase.reason ==
+            "required atlas scopes missing or ambiguous: trackHeaderRail, controlBar")
+        #expect(refused.qualificationCase.evidenceFiles == ["evidence/atlas-drift-diff.json"])
+        #expect(QualificationRunner.evidenceShapeIsValid(refused.evidence))
+        // A surviving selected subset, or an extra whole-window packet, cannot replace
+        // the exact two declared comparison packets or contribute favorable coverage.
+        for incompleteOrExtra in [Array(pairs.prefix(1)), pairs + [windowPair]] {
+            let invalid = try #require(AtlasQualification.evidenceCaseFor(
+                armed: true, pairs: incompleteOrExtra, axis: axis,
+                binarySHA256: String(repeating: "a", count: 64), traceID: "scope-contract"))
+            #expect(invalid.qualificationCase.status == .failed)
+            #expect(!invalid.qualificationCase.verified)
+            #expect(invalid.qualificationCase.reason ==
+                "required atlas scopes missing or ambiguous: trackHeaderRail, controlBar")
+            #expect(QualificationRunner.evidenceShapeIsValid(invalid.evidence))
+        }
+    }
+
     @Test func missingComparisonCannotSupportAPassingCase() throws {
         let result = try retained()
         let missing = try altered(result.evidence) { $0.removeValue(forKey: "atlas_comparison") }

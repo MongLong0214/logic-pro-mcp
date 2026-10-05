@@ -52,6 +52,9 @@ package struct QualificationRunner: Sendable {
         /// Whether the run may drive Logic's write recipes against the operator's open project.
         /// Absent, every mutating spec is withheld and reported as `live_mutation_not_run`.
         let mutateOpenProject: Bool
+        /// This run must retain the selected atlas comparison; the optional runtime flag
+        /// cannot disarm it. Trusted promotion independently requires the artifact.
+        let requireAtlas: Bool
         let externalCasesURL: URL?
         let waiversURL: URL?
         let releaseVersion: String
@@ -298,35 +301,17 @@ package struct QualificationRunner: Sendable {
         let specs = options.mutateOpenProject
             ? allSpecs
             : allSpecs.filter { $0.mutability != .mutating }
-        let driveResult: QualificationDriveResult
-        do {
-            driveResult = try await runtime.drive(QualificationDriveRequest(
-                executableURL: executableURL,
-                environment: driveEnvironment,
-                // The REGISTRY's count, not the drive's. It is compared against the server's
-                // whole catalog (`catalogCountMatch`), so narrowing it to the specs this run
-                // happens to drive would make withholding the mutating half look like the
-                // server had lost half its operations.
-                expectedOperationCount: allSpecs.count,
-                operations: specs,
-                expectedExecutableSHA256: binarySHA256
-            ))
-        } catch {
-            driveResult = QualificationDriveResult(
-                handshake: nil,
-                health: nil,
-                catalog: nil,
-                // The REGISTRY's count, not the drive's. It is compared against the server's
-                // whole catalog (`catalogCountMatch`), so narrowing it to the specs this run
-                // happens to drive would make withholding the mutating half look like the
-                // server had lost half its operations.
-                expectedOperationCount: allSpecs.count,
-                traceList: nil,
-                negative: nil,
-                observedLocale: "unknown",
-                failureReason: String(describing: error)
-            )
-        }
+        let driveResult = try await runtime.drive(QualificationDriveRequest(
+            executableURL: executableURL,
+            environment: driveEnvironment,
+            // The REGISTRY's count, not the drive's. It is compared against the server's
+            // whole catalog (`catalogCountMatch`), so narrowing it to the specs this run
+            // happens to drive would make withholding the mutating half look like the
+            // server had lost half its operations.
+            expectedOperationCount: allSpecs.count,
+            operations: specs,
+            expectedExecutableSHA256: binarySHA256
+        ))
         let registryErrors = runtime.registryValidationErrors()
         let handlerErrors = runtime.handlerValidationErrors()
         guard let observedVariant = LogicVariant(rawValue: driveResult.observedVariant),
@@ -764,6 +749,10 @@ package struct QualificationRunner: Sendable {
                       Self.evidenceShapeIsValid(externalEvidence) else {
                     throw RunnerError.evidenceBindingMismatch("case/evidence mismatch for \(externalCase.id)")
                 }
+                if let comparison = externalEvidence.atlasComparison,
+                   comparison.pairs.contains(where: { $0.current.logicVersion != driveResult.logicProVersion }) {
+                    throw RunnerError.evidenceBindingMismatch("atlas current Logic version binding")
+                }
                 manifestEntries.append(.init(
                     path: relativePath,
                     sha256: SupportBundleBuilder.sha256(evidenceData),
@@ -859,8 +848,12 @@ package struct QualificationRunner: Sendable {
         // `runtime.atlasPairs()` as an argument evaluated it eagerly, so a run with the flag off
         // still walked the AX tree — work nobody asked for, and a claim in the PR ("the flag is the
         // only thing arming it") that the code did not keep. Named by review, 2026-08-29.
-        let atlasArmed = FeatureFlags.adr007SelectorAtlas
+        let atlasArmed = options.requireAtlas || FeatureFlags.adr007SelectorAtlas
         let atlasCaptured = atlasArmed ? runtime.atlasPairs() : (pairs: [], dropped: [])
+        if atlasArmed,
+           atlasCaptured.pairs.contains(where: { $0.current.logicVersion != driveResult.logicProVersion }) {
+            throw RunnerError.evidenceBindingMismatch("atlas current Logic version binding")
+        }
         if let atlas = AtlasQualification.evidenceCaseFor(
             armed: atlasArmed,
             pairs: atlasCaptured.pairs,
@@ -969,7 +962,8 @@ package struct QualificationRunner: Sendable {
         let values = try Self.optionValues(arguments, allowed: [
             "--out", "--cases", "--waivers", "--release-version", "--variant", "--locale", "--profile", "--cache",
             "--mutate-open-project",
-        ], valueless: ["--mutate-open-project"])
+            "--require-atlas",
+        ], valueless: ["--mutate-open-project", "--require-atlas"])
         guard let output = values["--out"] else { throw RunnerError.missingOption("--out") }
         let environment = runtime.environment()
         let variant = try Self.parseVariant(values["--variant"] ?? "desktop")
@@ -981,6 +975,7 @@ package struct QualificationRunner: Sendable {
             // Present at all -- with or without a value -- is consent. Absent, the mutating
             // specs never reach the drive.
             mutateOpenProject: values["--mutate-open-project"] != nil,
+            requireAtlas: values["--require-atlas"] != nil,
             externalCasesURL: values["--cases"].map(URL.init(fileURLWithPath:)),
             waiversURL: values["--waivers"].map(URL.init(fileURLWithPath:)),
             releaseVersion: values["--release-version"] ?? environment["RELEASE_VERSION"] ?? "unknown",
@@ -1070,6 +1065,19 @@ package struct QualificationRunner: Sendable {
             requiredOperationIDs: requiredOperationIDs
         )
         var rejections = decision.rejections
+        if requestedArtifacts.contains("evidence/atlas-drift-diff.json") {
+            let atlasCases = attestation.cases.filter { $0.id == "atlas.drift_diff" }
+            let hostAxis = QualificationAxis(
+                variant: attestation.logicVariant, locale: attestation.locale,
+                profile: attestation.profile, cache: attestation.cache, fixture: attestation.fixture)
+            if atlasCases.count != 1 || !atlasCases.allSatisfy({
+                $0.verificationKind == .atlasComparison && $0.axis == hostAxis
+                    && $0.binarySHA256 == attestation.binarySHA256
+                    && $0.evidenceFiles == ["evidence/atlas-drift-diff.json"]
+            }) {
+                rejections.append(.evidenceBindingMismatch(detail: "required atlas case binding"))
+            }
+        }
         // The SECOND digest comparison: published-vs-candidate, distinct from the gate's
         // attestation-vs-candidate check. Splitting the unparseable cause in `PromotionGate` and
         // not here left `--expected-binary-sha256 not-a-sha` still reporting `binarySHAMismatch`
@@ -1580,6 +1588,7 @@ package struct QualificationRunner: Sendable {
         rawTranscriptFilename,
         publicTranscriptFilename,
         mutationRestoreCompensationFilename,
+        "evidence/atlas-drift-diff.json",
     ]
 
     private static func loadWaivers(
@@ -1743,6 +1752,10 @@ package struct QualificationRunner: Sendable {
                   Self.evidence(evidence, binds: qualificationCase),
                   Self.evidenceShapeIsValid(evidence) else {
                 return "case evidence binding"
+            }
+            if let comparison = evidence.atlasComparison,
+               comparison.pairs.contains(where: { $0.current.logicVersion != attestation.logicVersion }) {
+                return "atlas current Logic version binding"
             }
             let responseEntries = entries.filter { $0.kind == .operationResponse }
             var responseArtifact: QualificationOperationResponseArtifact?

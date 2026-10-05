@@ -162,6 +162,16 @@ enum AtlasQualification {
             guard Set(pairs.map(\.scope)).count == pairs.count else {
                 return .noBaselines(reason: "duplicate atlas comparison scope")
             }
+            // The two adopted qualification scopes are fixed by Desktop en/ko policy,
+            // not inferred from surviving pairs or a favorable whole-window score.
+            guard pairs.count == 2,
+                  pairs.filter({ AXLocalePolicy.trackHeadersDescription.matches(
+                      $0.scope, mode: .exactStrict) }).count == 1,
+                  pairs.filter({ AXLocalePolicy.controlBarGroupLabel.matches(
+                      $0.scope, mode: .exactStrict) }).count == 1 else {
+                return .noBaselines(
+                    reason: "required atlas scopes missing or ambiguous: trackHeaderRail, controlBar")
+            }
             for pair in pairs {
                 guard pair.scope == pair.baseline.scope,
                       pair.scope == pair.current.scope,
