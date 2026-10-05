@@ -1,0 +1,4 @@
+Warn: Historical v1 provenance never signed the Logic version; copying unsigned host metadata does not establish v2 qualification binding.
+Unverified: HTTP publication, deployed trust-anchor, live/release and ten-locale qualification remain unmeasured. Refs #816; the issue remains open.
+Record-Id: r-1a517c15b825
+Provenance: inherited 4c701acd67ed042258294ade205a747d6ea60d7c
