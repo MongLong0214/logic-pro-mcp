@@ -216,40 +216,109 @@ private func makeLibraryPanelFixture(
 }
 
 @Test func libraryAccessorWaitForSegmentReturnsPromptlyWhenAlreadyVisible() {
-    // Already-visible row must not burn the full timeout. Counted rather than
-    // timed: with a 1 s timeout and a 20 ms poll, burning the deadline is ~50
-    // turns of the loop, and each turn re-reads the browser subtree. A loaded
-    // machine makes the loop turn *fewer* times, so it cannot cross this
-    // ceiling — which is what the wall clock this replaces could not say (#804).
+    // An already-visible row must return before sleeping or advancing the clock.
     let polls = MutableBox(0)
     let fixture = makeLibraryPanelFixture(browserChildrenReads: polls)
+    let clock = MutableBox(Date(timeIntervalSinceReferenceDate: 0))
+    let sleeps = MutableBox(0)
 
     LibraryAccessor.waitForSegmentVisible(
-        named: "Sub", timeout: 1.0, pollInterval: 0.02, runtime: fixture.runtime
+        named: "Sub", timeout: 1.0, pollInterval: 0.02, runtime: fixture.runtime,
+        now: { clock.value },
+        sleep: { interval in
+            sleeps.value += 1
+            clock.value = clock.value.addingTimeInterval(interval)
+        }
     )
 
     let returnedOnTheFirstLook = polls.value <= 4
     #expect(returnedOnTheFirstLook)
+    #expect(sleeps.value == 0)
+    #expect(clock.value.timeIntervalSinceReferenceDate == 0)
 }
 
 @Test func libraryAccessorWaitForRightmostSegmentIgnoresSameNamedLeftColumn() {
     // "Bass" exists, but only in the left column, so the rightmost-only wait
-    // must keep polling to its deadline instead of accepting it. Counting the
-    // browser censuses says the loop actually turned repeatedly; the elapsed
-    // time it replaces said only that the machine was not impossibly fast.
+    // must reach its deadline instead of accepting it. A real clock cannot
+    // promise a minimum census count: one delayed read can consume the deadline.
+    // Virtual time keeps the repeat-read witness without depending on scheduling.
     let polls = MutableBox(0)
     let fixture = makeLibraryPanelFixture(browserChildrenReads: polls)
+    let clock = MutableBox(Date(timeIntervalSinceReferenceDate: 0))
+    let sleeps = MutableBox(0)
 
     LibraryAccessor.waitForSegmentVisible(
         named: "Bass",
         timeout: 0.12,
         pollInterval: 0.02,
         rightmostColumnOnly: true,
-        runtime: fixture.runtime
+        runtime: fixture.runtime,
+        now: { clock.value },
+        sleep: { interval in
+            sleeps.value += 1
+            clock.value = clock.value.addingTimeInterval(interval)
+        }
     )
 
     let polledToTheDeadline = polls.value >= 3
     #expect(polledToTheDeadline)
+    #expect(sleeps.value == 6)
+    #expect(clock.value.timeIntervalSinceReferenceDate >= 0.12)
+}
+
+@Test func libraryAccessorWaitReturnsWhenTheRightmostRowArrivesBeforeTheDeadline() {
+    let fixture = makeLibraryPanelFixture()
+    let clock = MutableBox(Date(timeIntervalSinceReferenceDate: 0))
+    let sleeps = MutableBox(0)
+    LibraryAccessor.waitForSegmentVisible(
+        named: "Bass", timeout: 1, pollInterval: 0.02,
+        rightmostColumnOnly: true, runtime: fixture.runtime,
+        now: { clock.value },
+        sleep: { interval in
+            sleeps.value += 1
+            clock.value = clock.value.addingTimeInterval(interval)
+            if sleeps.value == 2 {
+                fixture.builder.setAttribute(
+                    fixture.builder.element(10_007), kAXValueAttribute as String, "Bass")
+            }
+        }
+    )
+    #expect(sleeps.value == 2)
+    #expect(clock.value.timeIntervalSinceReferenceDate == 0.04)
+    #expect(fixture.builder.actionCalls.isEmpty)
+    #expect(fixture.builder.setCalls.isEmpty)
+}
+
+@Test func libraryAccessorWaitStopsWhenOneReadConsumesTheDeadline() {
+    let fixture = makeLibraryPanelFixture()
+    let clock = MutableBox(Date(timeIntervalSinceReferenceDate: 0))
+    let sleeps = MutableBox(0)
+    // The AX getter advances virtual time during the census, modelling a slow
+    // read without sleeping on the host or demanding extra production polls.
+    let runtime = fixture.builder.makeLogicRuntime(
+        appElement: fixture.app,
+        childrenHandler: { element in
+            if CFEqual(element, fixture.browser) {
+                clock.value = Date(timeIntervalSinceReferenceDate: 0.2)
+            }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    LibraryAccessor.waitForSegmentVisible(
+        named: "Bass", timeout: 0.12, pollInterval: 0.02,
+        rightmostColumnOnly: true, runtime: runtime,
+        now: { clock.value },
+        sleep: { interval in
+            sleeps.value += 1
+            clock.value = clock.value.addingTimeInterval(interval)
+        }
+    )
+    #expect(sleeps.value == 1)
+    #expect(clock.value.timeIntervalSinceReferenceDate == 0.22)
+    #expect(fixture.builder.actionCalls.isEmpty)
+    #expect(fixture.builder.setCalls.isEmpty)
 }
 
 @Test func libraryAccessorSelectionUsesInjectedSetAttributeAndActionRuntime() {
