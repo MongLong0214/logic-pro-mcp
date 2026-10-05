@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import Foundation
 
@@ -15,6 +16,23 @@ import Foundation
 /// release, and letting it find its own baselines by searching would let the answer depend on where
 /// somebody happened to unpack it. The operator names the directory or the run has none.
 enum AtlasCapture {
+    /// Metadata of the running process, not an independently discovered installation or axis.
+    struct RunningTarget: Sendable, Equatable {
+        let pid: pid_t
+        let bundleID: String
+        let logicVersion: String
+    }
+
+    static func productionRunningTarget() -> RunningTarget? {
+        guard let application = LogicProTarget.runningApplication(),
+              !application.isTerminated,
+              let bundleID = application.bundleIdentifier,
+              LogicProVariant.from(bundleID: bundleID) == .desktop,
+              let version = application.bundleURL.flatMap(Bundle.init(url:))?
+                .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return nil }
+        return RunningTarget(pid: application.processIdentifier,
+                             bundleID: bundleID, logicVersion: version)
+    }
 
     /// The scope resolution a baseline's `scope` field asks for.
     ///
@@ -28,15 +46,7 @@ enum AtlasCapture {
         runtime: AXHelpers.Runtime = .production
     ) -> AXUIElement? {
         if AXLocalePolicy.controlBarGroupLabel.matches(scope, mode: .exactStrict) {
-            // NOTE, because the signature would otherwise imply more than happens: `getControlBar`
-            // resolves `mainWindow()` itself and takes its own runtime, so on THIS path the
-            // `window` and `runtime` given here are not used. `pairsForThisRun` passes
-            // `mainWindow()` too, so the two agree by construction there — but a caller handing
-            // `pairs(baselinesIn:window:)` some other window would get the control bar of the main
-            // one, silently. Naming that is cheaper than a signature nobody re-reads; closing it
-            // means teaching `getControlBar` to take a window, which is a change to a resolver
-            // several other call sites depend on. Named by review, 2026-08-29.
-            return AXLogicProElements.getControlBar()
+            return AXLogicProElements.getControlBar(in: window, runtime: runtime)
         }
         if scope == "window" { return window }
         return AXLocalePolicy.censusDescendant(
@@ -55,32 +65,50 @@ enum AtlasCapture {
     static func pairs(
         baselinesIn directory: URL,
         window: AXUIElement,
-        runtime: AXHelpers.Runtime = .production
+        runtime: AXHelpers.Runtime = .production,
+        runningTarget: @Sendable () -> RunningTarget? = { AtlasCapture.productionRunningTarget() }
     ) -> (pairs: [AtlasQualification.Pair], dropped: [String]) {
         let files = (try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil)) ?? []
+        let jsonFiles = files.filter { $0.pathExtension.lowercased() == "json" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        // Every fact comes from the observed process. Neither the baseline nor the expected
+        // qualification axis supplies metadata, and a window from another process cannot bind it.
+        guard let target = runningTarget(), target.pid > 0,
+              LogicProVariant.from(bundleID: target.bundleID) == .desktop else {
+            return ([], jsonFiles.map(\.lastPathComponent))
+        }
+        let version = target.logicVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let unknownVersions: Set<String> = ["", "observed", "unknown", "unspecified"]
+        let elements = AXLogicProElements.Runtime(logicProPID: { target.pid }, ax: runtime)
+        let app = AXHelpers.axApp(pid: target.pid, runtime: runtime)
+        guard !unknownVersions.contains(version.lowercased()),
+              case .success(.some(let role)) = AXHelpers.getAttributeResult(
+                window, kAXRoleAttribute as String, runtime: runtime
+              ) as Result<String?, AXHelpers.AXStatusError>, role == kAXWindowRole as String,
+              case .success(.elements(let windows)) = AXHelpers.getAXUIElementArrayRead(
+                app, kAXWindowsAttribute as String, runtime: runtime
+              ),
+              windows.allSatisfy({ CFGetTypeID($0) == AXUIElementGetTypeID() }),
+              windows.contains(where: { CFEqual($0, window) }),
+              case .locale(let locale) = AXLogicProElements.logicUILocaleIdentifierRead(runtime: elements)
+        else { return ([], jsonFiles.map(\.lastPathComponent)) }
         var out: [AtlasQualification.Pair] = []
         // What was NOT paired, by name. Dropping is right — an empty current would diff as "every
         // selector vanished", true-looking and about nothing — but dropping SILENTLY is not: with
         // one baseline unreadable and the rest covering every selector, the case passed while a
         // scope nobody could resolve went unmentioned. Named by review, 2026-08-29.
         var dropped: [String] = []
-        for url in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
-        where url.pathExtension.lowercased() == "json" {
+        for url in jsonFiles {
             guard let data = try? Data(contentsOf: url),
                   let baseline = try? JSONDecoder().decode(AXSnapshot.Document.self, from: data),
                   let root = resolveScope(baseline.scope, in: window, runtime: runtime)
             else { dropped.append(url.lastPathComponent); continue }
             let captured = AXSnapshot.capture(root, runtime: runtime)
-            // NOT the baseline's `logicVersion` and `locale`. Copying them made the live document
-            // assert what it was compared AGAINST rather than what it is, so a `ko` baseline read
-            // on an English Logic produced a "ko" current and the pair looked matched. Nothing here
-            // can read the running version or language, so the honest value is a name that says so
-            // — a reader seeing `observed` knows to look elsewhere for the axis, which is exactly
-            // what an empty-looking `ko` would have hidden. Named by review, 2026-08-29.
+            // Independently observed running-process metadata; never copy the compared baseline.
             let current = AXSnapshot.Document(
-                logicVersion: "observed",
-                locale: "observed",
+                logicVersion: version,
+                locale: locale,
                 scope: baseline.scope,
                 capturedFrom: "ax",
                 root: AXSnapshot.restorableRootDescription(
@@ -103,8 +131,12 @@ enum AtlasCapture {
     static func pairsForThisRun() -> (pairs: [AtlasQualification.Pair], dropped: [String]) {
         guard let path = ProcessInfo.processInfo.environment["LOGIC_MCP_ATLAS_BASELINES"],
               !path.isEmpty,
-              let window = AXLogicProElements.mainWindow()
+              let target = productionRunningTarget(),
+              let window = AXLogicProElements.mainWindow(runtime: .init(
+                logicProPID: { target.pid }, ax: .production
+              ))
         else { return ([], []) }
-        return pairs(baselinesIn: URL(fileURLWithPath: path), window: window)
+        return pairs(baselinesIn: URL(fileURLWithPath: path), window: window,
+                     runningTarget: { target })
     }
 }

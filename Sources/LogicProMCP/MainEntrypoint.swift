@@ -770,9 +770,11 @@ enum MainEntrypoint {
           LogicProMCP <install|update|uninstall> --dry-run [--json]
                                                Print a read-only lifecycle plan and exit
           LogicProMCP --check-permissions      Print macOS permission status and exit (non-zero if not ready)
-          LogicProMCP --qualify --out <attestation.json> [--mutate-open-project] [--cases <cases.json>] [--waivers <waivers.json>] [--release-version <version>] [--variant <desktop|creator>] [--locale <en|ko>] [--profile <core|full>] [--cache <cold|warm>]
+          LogicProMCP --qualify --out <attestation.json> [--require-atlas] [--mutate-open-project] [--cases <cases.json>] [--waivers <waivers.json>] [--release-version <version>] [--variant <desktop|creator>] [--locale <en|ko>] [--profile <core|full>] [--cache <cold|warm>]
                                                Drive the packaged binary over stdio and write a live qualification attestation.
                                                Exits non-zero if any case FAILED (a declared deferral is not a failure).
+                                               --require-atlas captures required Desktop en/ko scopes: trackHeaderRail and controlBar.
+                                               Set LOGIC_MCP_ATLAS_BASELINES to a matching locale directory containing both baselines.
                                                --mutate-open-project WRITES TO THE PROJECT LOGIC HAS OPEN: it renames a
                                                track, creates and deletes markers, sets the tempo and moves faders. Without
                                                it every mutating operation is withheld and reported live_mutation_not_run.
