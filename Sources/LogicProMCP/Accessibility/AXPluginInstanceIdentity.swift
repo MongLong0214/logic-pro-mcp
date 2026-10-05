@@ -274,7 +274,7 @@ public enum AXPluginInstanceIdentity {
         case .failure(let error) where error.isDefinitiveAbsence: children = []
         case .failure(let error): return .failure(error)
         }
-        var names = Set<String>()
+        var observedName: String?
         var missingName = false
         for field in children {
             let role: String?
@@ -304,16 +304,20 @@ public enum AXPluginInstanceIdentity {
             switch AXHelpers.getAttributeResult(field, kAXValueAttribute as String, runtime: runtime)
                 as Result<String?, AXHelpers.AXStatusError> {
             case .success(let text):
-                guard let name = text?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+                guard let name = text, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     missingName = true
                     continue
                 }
-                names.insert(name)
+                if let priorName = observedName {
+                    if !priorName.utf8.elementsEqual(name.utf8) { missingName = true }
+                } else {
+                    observedName = name
+                }
             case .failure(let error) where error.isDefinitiveAbsence: missingName = true
             case .failure(let error): return .failure(error)
             }
         }
-        return .success(!missingName && names.count == 1 ? names.first : nil)
+        return .success(missingName ? nil : observedName)
     }
 
     /// Depth-first search for the first descendant whose `kAXIdentifier` starts
