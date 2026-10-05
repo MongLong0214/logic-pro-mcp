@@ -1,0 +1,4 @@
+Warn: Matching MIDI-port tool/resource echo checks protocol consistency, not independent semantic readback; divergent or malformed raw results remain failures.
+Unverified: Real-host/release qualification and #373 acceptance remain unmeasured; this increment does not close #373.
+Record-Id: r-9a12c0d7f722
+Provenance: inherited 54b675d5fd1d11ae39b7ba7f6fc5d4b11be6400d
