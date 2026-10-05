@@ -80,7 +80,11 @@ struct PromotionGate {
               operationCase.readback?.verified == true else { return false }
         switch operationCase.verificationKind {
         case .semanticReadback:
-            return true
+            // Consult the same oracle declaration as the producer/verifier: coherent
+            // legacy claims cannot turn known same-handler echo into independent credit.
+            return QualificationSemanticReadbackValidator.independentReadbackDeferral(
+                for: operationCase.operationID
+            ) == nil
         case .verifiedWriteCycle:
             return operationCase.restore?.verified == true
         case .atlasComparison, .readResponse, .independentReadback, .protocolSmoke, .typedDeferral:

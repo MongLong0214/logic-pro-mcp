@@ -1268,20 +1268,39 @@ struct SemanticOracleMutationTests {
     /// read-only surface).
     @Test(arguments: SemanticOracleTable.all.map(\.operationID))
     func validatorRoutesEachOracleOperationToItsOracle(operationID: OperationID) throws {
+        let marked = Set(SemanticOracleTable.all
+            .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
+        #expect(marked == Set<OperationID>([.midiListPorts]))
         let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
-        let routed = try #require(QualificationSemanticReadbackValidator.validate(
+        let routed = QualificationSemanticReadbackValidator.validate(
             operationID: operationID.rawValue,
             responseData: fixture.responseData,
             readbackData: fixture.readbackData
-        ))
-        #expect(routed, "\(operationID.rawValue) is not routed to its oracle")
+        )
+        if marked.contains(operationID) {
+            // The raw oracle still checks protocol consistency; its declared same-handler
+            // agreement cannot establish independent semantic readback.
+            let rawOracle = try #require(SemanticOracleTable.byOperationID[operationID])
+            let rawVerdict: Bool = try #require(rawOracle.evaluate(
+                responseData: fixture.responseData, readbackData: fixture.readbackData) as Bool?)
+            #expect(rawVerdict)
+            let declined: Bool = routed == nil
+            #expect(declined)
+            let deferral = try #require(rawOracle.independentReadbackDeferral)
+            #expect(deferral.code == .semanticValidatorUnavailable)
+            #expect(QualificationSemanticReadbackValidator.independentReadbackDeferral(
+                for: operationID.rawValue) == deferral)
+        } else {
+            let accepted: Bool = try #require(routed as Bool?)
+            #expect(accepted, "\(operationID.rawValue) is not routed to its oracle")
+        }
         // And a corrupted payload must not be waved through as "no validator":
         // a nil here would silently downgrade the op to protocolSmoke.
-        let corrupt = try #require(QualificationSemanticReadbackValidator.validate(
+        let corrupt: Bool = try #require(QualificationSemanticReadbackValidator.validate(
             operationID: operationID.rawValue,
             responseData: Data(#"{"__corrupt__":true}"#.utf8),
             readbackData: fixture.readbackData
-        ))
+        ) as Bool?)
         #expect(!corrupt, "\(operationID.rawValue) passed a corrupt payload")
     }
 
