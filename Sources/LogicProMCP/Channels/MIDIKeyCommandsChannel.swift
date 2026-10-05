@@ -48,8 +48,7 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
         "edit.select_all":              35,
         "edit.bounce_in_place":         37,
 
-        // Piano roll / MIDI editing (CC 40-44)
-        "edit.quantize":                40,
+        // Piano roll / MIDI editing (CC 43-44). CC 40 cannot carry a quantize grid.
         "edit.join":                    43,
         "edit.toggle_step_input":       44,
 
@@ -555,7 +554,7 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
     static let manualValidationDetailSuffix =
         "Manual MIDI Learn required — see docs/SETUP.md §4. " +
         "Effectively keycmd-only (no working non-keycmd fallback on Logic 12.2): " +
-        "edit.delete, edit.duplicate, edit.normalize, edit.quantize, " +
+        "edit.delete, edit.duplicate, edit.normalize, " +
         "nav.goto_marker, transport.capture_recording, view.toggle_inspector, view.toggle_step_editor. " +
         "Other preset ops have an AX/MCU/AppleScript/CGEvent fallback and do not require keycmd binding. " +
         "Orphans (in mappingTable + routingTable but no MCP tool exposes a call path): " +

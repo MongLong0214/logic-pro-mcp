@@ -234,7 +234,7 @@ extension ChannelRouter {
         "edit.select_all":            [.midiKeyCommands, .cgEvent],
         "edit.split":                 [.midiKeyCommands, .cgEvent],
         "edit.join":                  [.midiKeyCommands, .cgEvent],
-        "edit.quantize":              [.midiKeyCommands, .cgEvent],
+        "edit.quantize":              [.accessibility],
         "edit.bounce_in_place":       [.midiKeyCommands, .cgEvent],
         "edit.normalize":             [.midiKeyCommands, .cgEvent],
         "edit.toggle_step_input":     [.accessibility, .midiKeyCommands, .cgEvent],

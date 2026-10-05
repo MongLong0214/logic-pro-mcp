@@ -32,7 +32,7 @@ struct EditDispatcher: OperationTraceDispatching {
         "move_to_playhead": .unverifiedIsError("region.move_to_playhead"),
     ]
 
-    private static let validQuantizeGrids = [
+    static let validQuantizeGrids = [
         "1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64", "1/4T", "1/8T", "1/16T",
     ]
 
