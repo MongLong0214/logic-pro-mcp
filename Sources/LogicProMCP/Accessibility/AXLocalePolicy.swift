@@ -2228,8 +2228,16 @@ enum AXLocalePolicy {
     /// Slider type hints (mutually exclusive groups in `sliderText`).
     static let sliderSendHint = LabelSet(
         canonical: "send",
-        variants: ["센드"],
+        variants: ["센드", "Send Level knob", "센드 레벨 노브", "センドレベルノブ", "Send-Drehregler",
+                   "Botón “Nivel de envío”", "Potentiomètre Niveau d’envoi\u{00A0}", "“发送电平”旋钮"],
         rationale: "Classifies a slider as a send control; read-only."
+            + " Derived from the send knob's own QuickHelp Title, whose prefix appears in archived"
+            + " EN/KO AXHelp (2026-09-27-send-slot-strip-dumps-ko-KR-en-US.json). The original"
+            + " send/센드 fragments and contains semantics remain. French's installed trailing"
+            + " NBSP is preserved in the variant; the existing LabelSet.labels getter trims it."
+            + " Italian, Portuguese and Traditional Chinese ship the English QuickHelp file;"
+            + " these values are not newly measured localized AX readings.",
+        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_011_SendLevelKnob#Title"
     )
     static let sliderZoomHint = LabelSet(
         canonical: "zoom",

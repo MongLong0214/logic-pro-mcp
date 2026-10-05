@@ -29,7 +29,11 @@ struct Issue60LocalePhase4Tests {
             // translation anybody wrote. The set stays EXACT here on purpose: that is what makes
             // this a drift guard, so a future addition still has to say where it came from.
             ("mixerNamedElement", AXLocalePolicy.mixerNamedElement.labels, ["mixer", "믹서", "ミキサー", "Mezclador", "Table de mixage", "混音器"]),
-            ("sliderSendHint", AXLocalePolicy.sliderSendHint.labels, ["send", "센드"]),
+            // Own send-knob QuickHelp Title values; legacy fragments remain. The French
+            // source value has a trailing NBSP, trimmed by the existing .labels getter.
+            ("sliderSendHint", AXLocalePolicy.sliderSendHint.labels,
+             ["send", "센드", "Send Level knob", "센드 레벨 노브", "センドレベルノブ", "Send-Drehregler",
+              "Botón “Nivel de envío”", "Potentiomètre Niveau d’envoi", "“发送电平”旋钮"]),
             ("sliderZoomHint", AXLocalePolicy.sliderZoomHint.labels, ["zoom", "확대"]),
             // Extended 2026-09-26 (#904) from the row in `derivedFrom` -- `Volume#acc`. Ten locales
             // add two strings: `Volume` is what seven of them ship and `볼륨`/`ボリューム` were already

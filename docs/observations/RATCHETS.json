@@ -369,7 +369,6 @@
         "projectPickerWindow",
         "settingPopupValue",
         "showMixerMenuItem",
-        "sliderSendHint",
         "tickSliderLabel",
         "trackContentGeneric",
         "transportRecordArmExclusion"
@@ -387,7 +386,6 @@
         "sendSlotHelpKeyword",
         "settingPopupValue",
         "showMixerMenuItem",
-        "sliderSendHint",
         "sliderZoomHint",
         "tickSliderLabel",
         "trackContentGeneric"
@@ -451,7 +449,6 @@
         "sendOrIOControlLabel",
         "settingPopupValue",
         "showMixerMenuItem",
-        "sliderSendHint",
         "sliderZoomHint",
         "trackContentGeneric",
         "trackTypeAux",

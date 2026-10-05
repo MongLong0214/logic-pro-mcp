@@ -26,6 +26,9 @@ QuickHelp	de	INS_005_LeftArrangeCS	Title#cit	380d4d07d216
 QuickHelp	de	INS_010_SendSlot	Title	18b9e272cb26
 QuickHelp	de	INS_010_SendSlot	Title#ci	d9d8d872f926
 QuickHelp	de	INS_010_SendSlot	Title#cit	d9d8d872f926
+QuickHelp	de	INS_011_SendLevelKnob	Text	055f3a06d1d1
+QuickHelp	de	INS_011_SendLevelKnob	Text#ci	cfb399f8383e
+QuickHelp	de	INS_011_SendLevelKnob	Text#cit	cfb399f8383e
 QuickHelp	de	INS_011_SendLevelKnob	Title	6104a06710fb
 QuickHelp	de	INS_011_SendLevelKnob	Title#ci	9521094734a4
 QuickHelp	de	INS_011_SendLevelKnob	Title#cit	9521094734a4
@@ -89,6 +92,9 @@ QuickHelp	en	INS_005_LeftArrangeCS	Title#cit	c89ae361c1ff
 QuickHelp	en	INS_010_SendSlot	Title	333be74368fe
 QuickHelp	en	INS_010_SendSlot	Title#ci	367c7dcade2f
 QuickHelp	en	INS_010_SendSlot	Title#cit	367c7dcade2f
+QuickHelp	en	INS_011_SendLevelKnob	Text	5795d76f78e7
+QuickHelp	en	INS_011_SendLevelKnob	Text#ci	03c9d0651505
+QuickHelp	en	INS_011_SendLevelKnob	Text#cit	03c9d0651505
 QuickHelp	en	INS_011_SendLevelKnob	Title	56d4a7373d7f
 QuickHelp	en	INS_011_SendLevelKnob	Title#ci	f71d2efe9e45
 QuickHelp	en	INS_011_SendLevelKnob	Title#cit	f71d2efe9e45
@@ -155,6 +161,9 @@ QuickHelp	es	INS_005_LeftArrangeCS	Title#cit	c7a34374a5db
 QuickHelp	es	INS_010_SendSlot	Title	6dfd567a525f
 QuickHelp	es	INS_010_SendSlot	Title#ci	77545b0d93b8
 QuickHelp	es	INS_010_SendSlot	Title#cit	77545b0d93b8
+QuickHelp	es	INS_011_SendLevelKnob	Text	443f278ffef1
+QuickHelp	es	INS_011_SendLevelKnob	Text#ci	d96231ed60f6
+QuickHelp	es	INS_011_SendLevelKnob	Text#cit	d96231ed60f6
 QuickHelp	es	INS_011_SendLevelKnob	Title	3e4710603530
 QuickHelp	es	INS_011_SendLevelKnob	Title#ci	0a414f66e84e
 QuickHelp	es	INS_011_SendLevelKnob	Title#cit	0a414f66e84e
@@ -218,6 +227,9 @@ QuickHelp	fr	INS_005_LeftArrangeCS	Title#cit	6db5f8dab5bb
 QuickHelp	fr	INS_010_SendSlot	Title	32bfea9600f0
 QuickHelp	fr	INS_010_SendSlot	Title#ci	ee08cc0898ae
 QuickHelp	fr	INS_010_SendSlot	Title#cit	53ed4c4f886e
+QuickHelp	fr	INS_011_SendLevelKnob	Text	7e57df58c049
+QuickHelp	fr	INS_011_SendLevelKnob	Text#ci	783d3e2dcb24
+QuickHelp	fr	INS_011_SendLevelKnob	Text#cit	783d3e2dcb24
 QuickHelp	fr	INS_011_SendLevelKnob	Title	d0d08d3ac6b4
 QuickHelp	fr	INS_011_SendLevelKnob	Title#ci	7794878917bb
 QuickHelp	fr	INS_011_SendLevelKnob	Title#cit	b8e54b77c9c1
@@ -281,6 +293,9 @@ QuickHelp	it	INS_005_LeftArrangeCS	Title#cit	not_localized
 QuickHelp	it	INS_010_SendSlot	Title	not_localized
 QuickHelp	it	INS_010_SendSlot	Title#ci	not_localized
 QuickHelp	it	INS_010_SendSlot	Title#cit	not_localized
+QuickHelp	it	INS_011_SendLevelKnob	Text	not_localized
+QuickHelp	it	INS_011_SendLevelKnob	Text#ci	not_localized
+QuickHelp	it	INS_011_SendLevelKnob	Text#cit	not_localized
 QuickHelp	it	INS_011_SendLevelKnob	Title	not_localized
 QuickHelp	it	INS_011_SendLevelKnob	Title#ci	not_localized
 QuickHelp	it	INS_011_SendLevelKnob	Title#cit	not_localized
@@ -344,6 +359,9 @@ QuickHelp	ja	INS_005_LeftArrangeCS	Title#cit	457aa44f02b3
 QuickHelp	ja	INS_010_SendSlot	Title	b16e9ce071c6
 QuickHelp	ja	INS_010_SendSlot	Title#ci	b16e9ce071c6
 QuickHelp	ja	INS_010_SendSlot	Title#cit	b16e9ce071c6
+QuickHelp	ja	INS_011_SendLevelKnob	Text	eb3333fc5aa6
+QuickHelp	ja	INS_011_SendLevelKnob	Text#ci	27397338c57d
+QuickHelp	ja	INS_011_SendLevelKnob	Text#cit	27397338c57d
 QuickHelp	ja	INS_011_SendLevelKnob	Title	9769f2f7fd80
 QuickHelp	ja	INS_011_SendLevelKnob	Title#ci	9769f2f7fd80
 QuickHelp	ja	INS_011_SendLevelKnob	Title#cit	9769f2f7fd80
@@ -410,6 +428,9 @@ QuickHelp	ko	INS_005_LeftArrangeCS	Title#cit	6d266203f0c0
 QuickHelp	ko	INS_010_SendSlot	Title	9a2a4084eb02
 QuickHelp	ko	INS_010_SendSlot	Title#ci	9a2a4084eb02
 QuickHelp	ko	INS_010_SendSlot	Title#cit	9a2a4084eb02
+QuickHelp	ko	INS_011_SendLevelKnob	Text	f43dd2df4fce
+QuickHelp	ko	INS_011_SendLevelKnob	Text#ci	090e92c9bb22
+QuickHelp	ko	INS_011_SendLevelKnob	Text#cit	090e92c9bb22
 QuickHelp	ko	INS_011_SendLevelKnob	Title	52396b50e1ff
 QuickHelp	ko	INS_011_SendLevelKnob	Title#ci	52396b50e1ff
 QuickHelp	ko	INS_011_SendLevelKnob	Title#cit	52396b50e1ff
@@ -473,6 +494,9 @@ QuickHelp	pt	INS_005_LeftArrangeCS	Title#cit	not_localized
 QuickHelp	pt	INS_010_SendSlot	Title	not_localized
 QuickHelp	pt	INS_010_SendSlot	Title#ci	not_localized
 QuickHelp	pt	INS_010_SendSlot	Title#cit	not_localized
+QuickHelp	pt	INS_011_SendLevelKnob	Text	not_localized
+QuickHelp	pt	INS_011_SendLevelKnob	Text#ci	not_localized
+QuickHelp	pt	INS_011_SendLevelKnob	Text#cit	not_localized
 QuickHelp	pt	INS_011_SendLevelKnob	Title	not_localized
 QuickHelp	pt	INS_011_SendLevelKnob	Title#ci	not_localized
 QuickHelp	pt	INS_011_SendLevelKnob	Title#cit	not_localized
@@ -536,6 +560,9 @@ QuickHelp	zh_CN	INS_005_LeftArrangeCS	Title#cit	8587179256f9
 QuickHelp	zh_CN	INS_010_SendSlot	Title	fc510e623fc2
 QuickHelp	zh_CN	INS_010_SendSlot	Title#ci	fc510e623fc2
 QuickHelp	zh_CN	INS_010_SendSlot	Title#cit	fc510e623fc2
+QuickHelp	zh_CN	INS_011_SendLevelKnob	Text	c0de2d8f2501
+QuickHelp	zh_CN	INS_011_SendLevelKnob	Text#ci	c0de2d8f2501
+QuickHelp	zh_CN	INS_011_SendLevelKnob	Text#cit	c0de2d8f2501
 QuickHelp	zh_CN	INS_011_SendLevelKnob	Title	6c6ff428adc3
 QuickHelp	zh_CN	INS_011_SendLevelKnob	Title#ci	6c6ff428adc3
 QuickHelp	zh_CN	INS_011_SendLevelKnob	Title#cit	6c6ff428adc3
@@ -599,6 +626,9 @@ QuickHelp	zh_TW	INS_005_LeftArrangeCS	Title#cit	not_localized
 QuickHelp	zh_TW	INS_010_SendSlot	Title	not_localized
 QuickHelp	zh_TW	INS_010_SendSlot	Title#ci	not_localized
 QuickHelp	zh_TW	INS_010_SendSlot	Title#cit	not_localized
+QuickHelp	zh_TW	INS_011_SendLevelKnob	Text	not_localized
+QuickHelp	zh_TW	INS_011_SendLevelKnob	Text#ci	not_localized
+QuickHelp	zh_TW	INS_011_SendLevelKnob	Text#cit	not_localized
 QuickHelp	zh_TW	INS_011_SendLevelKnob	Title	not_localized
 QuickHelp	zh_TW	INS_011_SendLevelKnob	Title#ci	not_localized
 QuickHelp	zh_TW	INS_011_SendLevelKnob	Title#cit	not_localized
