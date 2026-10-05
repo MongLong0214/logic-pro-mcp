@@ -719,6 +719,17 @@ enum AXLogicProElements {
         guard subrole == (kAXDialogSubrole as String)
                 || subrole == (kAXSystemDialogSubrole as String)
         else { return false }
+        // A dialog subrole names the window class, not its modality. Only an
+        // explicitly observed CFBoolean false can remove the class-based
+        // blocker; failed, absent and malformed reads retain the old refusal.
+        let modality: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+            window, kAXModalAttribute as String, runtime: runtime
+        )
+        if case .success(.some(let value)) = modality,
+           CFGetTypeID(value) == CFBooleanGetTypeID(),
+           (value as? Bool) == false {
+            return false
+        }
         return isBlockingModalWindow(window, observedSubrole: subrole, runtime: runtime)
     }
 
