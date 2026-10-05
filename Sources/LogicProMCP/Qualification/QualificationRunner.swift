@@ -923,7 +923,7 @@ package struct QualificationRunner: Sendable {
         let completedAt = runtime.now()
         let manifestSHA256 = SupportBundleBuilder.sha256(manifestData)
         let provenance = QualificationProvenanceRecord(
-            schema: "qualification-provenance/v1",
+            schema: "qualification-provenance/v2",
             binarySHA256: binarySHA256,
             commitSHA: commitSHA,
             releaseVersion: options.releaseVersion,
@@ -931,7 +931,8 @@ package struct QualificationRunner: Sendable {
             runID: UUID().uuidString.lowercased(),
             startedAt: startedAt,
             completedAt: completedAt,
-            evidenceManifestSHA256: manifestSHA256
+            evidenceManifestSHA256: manifestSHA256,
+            logicVersion: driveResult.logicProVersion
         )
         let counts = QualificationSummaryCounts(cases: cases)
         let attestation = ReleaseQualificationAttestation(
@@ -2430,7 +2431,11 @@ package struct QualificationRunner: Sendable {
             cache: attestation.cache,
             fixture: attestation.fixture
         )
-        guard provenance.schema == "qualification-provenance/v1",
+        // v1 remains readable historical evidence, but it never signed the Logic
+        // version. Do not upgrade or qualify it by copying unsigned host metadata.
+        guard provenance.schema == "qualification-provenance/v2",
+              let signedLogicVersion = provenance.logicVersion,
+              signedLogicVersion == attestation.logicVersion,
               provenance.binarySHA256 == attestation.binarySHA256,
               provenance.commitSHA == attestation.commitSHA,
               provenance.releaseVersion == attestation.serverVersion,

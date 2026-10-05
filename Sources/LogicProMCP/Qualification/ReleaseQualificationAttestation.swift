@@ -536,6 +536,9 @@ struct QualificationProvenanceRecord: Codable, Equatable, Sendable {
     let startedAt: Date
     let completedAt: Date
     let evidenceManifestSHA256: String
+    // Optional only so historical v1 records remain decodable; v2 qualification
+    // requires this signed observation and never fills it from the attestation.
+    let logicVersion: String?
 }
 
 struct QualificationProvenanceSignature: Codable, Equatable, Sendable {
