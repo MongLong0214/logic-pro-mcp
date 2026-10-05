@@ -188,9 +188,20 @@ def check(path):
     if not isinstance(host, dict):
         bad.append(f"{stem}: host must be an object")
     else:
-        for k in HOST_KEYS:
-            if not host.get(k):
-                bad.append(f"{stem}: host.{k} is required — drift is computed from it")
+        if "binding" in host and host["binding"] != "unknown":
+            bad.append(f"{stem}: host.binding must be 'unknown' when explicitly supplied")
+        if host.get("binding") == "unknown":
+            if not host.get("app"):
+                bad.append(f"{stem}: host.app is required")
+            for k in HOST_KEYS[1:]:
+                if k not in host or host[k] is not None:
+                    bad.append(f"{stem}: unknown host binding requires host.{k} to be present and null")
+            if not isinstance(host.get("reason"), str) or not host["reason"].strip():
+                bad.append(f"{stem}: unknown host binding requires a nonempty host.reason")
+        else:
+            for k in HOST_KEYS:
+                if not host.get(k):
+                    bad.append(f"{stem}: host.{k} is required — drift is computed from it")
         locales = known_locales()
         if locales and host.get("locale") and host["locale"] not in locales:
             bad.append(f"{stem}: host.locale {host['locale']!r} is not one of {sorted(locales)} — "
@@ -317,13 +328,16 @@ def main():
         # compared the two. A record naming a different build is not WRONG -- it is a reading of a
         # Logic this repository no longer targets -- so it is not refused here; it is counted by
         # `check-observation-ratchets.py`, where the count may only shrink. What IS refused is a
-        # record whose host block cannot be compared at all.
+        # record whose host block cannot be compared and does not explicitly declare unknown
+        # historical binding. Explicit unknowns remain gaps in the existing build ratchet.
         for p in paths:
             try:
                 with open(p, encoding="utf-8") as handle:
                     host = (json.load(handle).get("host") or {})
             except (OSError, ValueError):
                 continue          # the per-record check below reports a malformed record
+            if host.get("binding") == "unknown":
+                continue          # check() below requires every unknown axis to be present and null
             stem = os.path.basename(p)[:-5]
             for key in ("version", "build"):
                 if not str(host.get(key) or "").strip():
