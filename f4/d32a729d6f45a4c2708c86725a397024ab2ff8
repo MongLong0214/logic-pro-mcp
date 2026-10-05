@@ -1,0 +1,8 @@
+Warn: Frontmost diagnostic observations do not change the strict owner predicate; unavailable AX focus retains the legacy permissive window-based decision.
+Unverified: No Logic Pro 12.4 reproduction was performed for this diagnostic change.
+Record-Id: r-a57159b3a09b
+Provenance: inherited f88aa08d7e492add5c5da19a92060276650f35fa
+
+Warn: Legacy posting failures do not establish precise event delivery, write status or retry safety; retaining ownership diagnostics leaves the unknown post phase unknown.
+Record-Id: r-1c59d4e179af
+Provenance: inherited 8ea1aa5050bd3ee4a7e977b5f7512d416c432cee
