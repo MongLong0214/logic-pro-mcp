@@ -1,0 +1,101 @@
+{
+  "id": "2026-10-05-1084-readonly-dialog-modality",
+  "date": "2026-10-05",
+  "schema": 3,
+  "subject": "Historical same-owner dialog-class window has an explicit false modality reading",
+  "question": "Does the historical bounded structural read establish explicit false modality on a same-owner dialog-class window and sufficient evidence to certify absence of modal blockers?",
+  "verdict": "inconclusive",
+  "issues": [
+    1084
+  ],
+  "surface": "system.accessibility",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "With an independently identified running Logic process and exclusive read-only native lane, perform status-preserving AXWindows and AXUIElementGetPid reads. Retain each window role, subrole, AXModal CF type/value, AXMain, AXSheets and bounded AXChildren results, including failed/unread results. Distinguish CFBoolean from CFNumber in the bridge. Do not post actions or keys, change focus, dismiss windows, or infer descendant absence from failed reads. Collect contemporaneous installed metadata separately and state whether the running image was independently identified. Keep original titles, documents, project/session data and screen observations private.",
+    "expected": "An explicit CFBoolean false supports only the sampled class/modality fact. Unread descendants and unavailable sheet readings do not certify absence of blockers, keyboard ownership or operation availability. No operation or inverse-write result is expected from this read-only procedure.",
+    "cost": "About 2 minutes with Logic already running and an exclusive read-only native lane. The transient window tree and historical private probe are not a headless CI replay."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements.swift:isBlockingDialogWindow"
+  ],
+  "evidence": [
+    "evidence/2026-10-05-1084-readonly-dialog-modality.json"
+  ],
+  "method": "This record selects structural fields from an already existing private read-only probe performed on the record date; no new native probe or operation was run while preparing it. The probe identified one Logic process, enumerated its AXWindows, read window/child PIDs and attributes, and closed its AX client. Its client messaging timeout was a read setting, not an application mutation. The bridge converts CFBoolean before its separate CFNumber branch, so the retained JSON false is a boolean reading rather than numeric zero. The selected receipt identifies the unchanged private raw, probe script and bridge by SHA-256 without publishing private titles, documents or raw screen data. The host block was freshly generated later by Scripts/observation_host.py --json using plist/defaults reads; it is explicitly later installed metadata, not the historical running image or an atomic host binding.",
+  "canon_not_applicable": {
+    "reason": "The claim concerns status-preserving structural AX role, modality and owner readings, not the origin of any localized string shipped by Logic. No original UI title, help, document or label reading is published."
+  },
+  "observations": [
+    {
+      "what": "Historical returned owner window list",
+      "windows_status": 0,
+      "owner_window_count": 3,
+      "sampled_owner_pid": 74382,
+      "all_returned_windows_same_owner": true
+    },
+    {
+      "what": "First returned window and its direct child",
+      "array_index": 0,
+      "pid_status": 0,
+      "pid": 74382,
+      "role": {
+        "status": 0,
+        "value": "AXWindow"
+      },
+      "subrole": {
+        "status": 0,
+        "value": "AXDialog"
+      },
+      "modality": {
+        "status": 0,
+        "value": false
+      },
+      "main": {
+        "status": 0,
+        "value": false
+      },
+      "sheets": {
+        "status": -25205,
+        "value": null
+      },
+      "children_status": 0,
+      "children_count": 1,
+      "children_truncated": false,
+      "direct_child": {
+        "array_index": 0,
+        "pid_status": 0,
+        "pid": 74382,
+        "role": {
+          "status": 0,
+          "value": "AXButton"
+        },
+        "children_status": -25212,
+        "children": null
+      }
+    },
+    {
+      "what": "Host metadata was generated separately and later",
+      "generated_after_utc": "2026-10-05T05:04:55Z",
+      "generator": "Scripts/observation_host.py --json",
+      "historical_loaded_image_version_measured": false,
+      "atomic_host_binding_measured": false
+    }
+  ],
+  "conclusion": "The sampled same-owner dialog-class window returned an explicit false modality reading. Its child traversal and sheet reading were unavailable, so this bounded read does not certify absence of blockers or availability of an operation. It supports the structural modality distinction, not native success under the changed classifier.",
+  "limits": [
+    "The original probe did not record an exact wall-clock timestamp. The date identifies the historical measurement, not a new execution during documentation preparation.",
+    "The generated host block was collected later from installed plist/defaults metadata. It does not establish the historical running image version, locale or atomic host binding.",
+    "The first returned window is identified by its array position and structural readings, not by a public title or marker whitelist. Same-PID readings do not establish an owned fixture, keyboard ownership or platform layer classification.",
+    "The direct child AXChildren read returned -25212 and the window AXSheets read returned -25205. Neither is evidence of descendant or sheet absence; the bounded traversal does not exhaust the application tree.",
+    "No operation, actuation, successful gate execution, inverse write, keyboard ownership, release behavior, ten-locale campaign, reporter-machine reproduction or Logic 12.4 qualification was measured.",
+    "The historical private raw remains unchanged and private. This record neither supersedes nor relabels the earlier inconclusive positioning-preflight record."
+  ],
+  "supersedes": null
+}
