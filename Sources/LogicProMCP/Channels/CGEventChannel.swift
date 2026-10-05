@@ -428,12 +428,13 @@ actor CGEventChannel: Channel {
             let dialogObservation: [String: Any]
             switch openGotoPositionDialog(opener: sequence[0], pid: pid) {
             case .openerNotPosted:
-                return .error("Failed to post CGEvent sequence for \(operation)")
+                return Self.retainingFrontmostError(
+                    "Failed to post CGEvent sequence for \(operation)", from: observedPreparation)
             case let .refused(reason, openerPosted, reading):
-                return Self.gotoDialogRefusal(
+                return Self.retainingFrontmostError(Self.gotoDialogRefusal(
                     position: position, preparation: preparation, reason: reason,
                     openerPosted: openerPosted, reading: reading
-                )
+                ).message, from: observedPreparation)
             case let .open(polls, reading):
                 dialogObservation = ["polls": polls, "read": reading]
             }
@@ -454,7 +455,8 @@ actor CGEventChannel: Channel {
                     ].merging(observedPreparation.diagnosticExtras) { _, new in new }
                 ))
             } else {
-                return .error("Failed to post CGEvent sequence for \(operation)")
+                return Self.retainingFrontmostError(
+                    "Failed to post CGEvent sequence for \(operation)", from: observedPreparation)
             }
         }
 
@@ -491,14 +493,16 @@ actor CGEventChannel: Channel {
         var switched: (originalID: String, layoutID: String)?
         if shortcut.isPlainLetter {
             guard let source = runtime.currentInputSource() else {
-                return Self.inputSourceRefusal(operation: operation, source: nil)
+                return Self.retainingFrontmostError(
+                    Self.inputSourceRefusal(operation: operation, source: nil).message,
+                    from: observedPreparation)
             }
             if !source.isASCIICapable {
                 switch switchToASCIICapableLayout(from: source, keyCode: shortcut.keyCode) {
                 case let .refused(failure, restore):
-                    return Self.inputSourceRefusal(
+                    return Self.retainingFrontmostError(Self.inputSourceRefusal(
                         operation: operation, source: source, switchFailure: failure, restore: restore
-                    )
+                    ).message, from: observedPreparation)
                 case let .switched(originalID, layoutID):
                     switched = (originalID, layoutID)
                     runtime.sleepMicros(runtime.inputSourceSettleMicros)
@@ -543,8 +547,25 @@ actor CGEventChannel: Channel {
                         + "be selected back: it reads \(restore.after?.id ?? "unreadable"), not "
                         + "\(switched.originalID). Select \(switched.originalID) again."
             }
-            return .error(message)
+            return Self.retainingFrontmostError(message, from: observedPreparation)
         }
+    }
+
+    /// Keep the gate's actual snapshot on post-gate errors without probing again. Existing typed
+    /// refusals retain their fields; a legacy posting error gains only diagnostics and its original
+    /// message, not a State C, event count, write verdict or retry promise it never established.
+    private static func retainingFrontmostError(
+        _ message: String, from preparation: FrontmostGate.ObservedPreparation
+    ) -> ChannelResult {
+        guard preparation.observation != nil else { return .error(message) }
+        var object = message.data(using: .utf8).flatMap {
+            (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any]
+        } ?? ["message": message]
+        object["frontmost_preparation"] = preparation.preparation.rawValue
+        object.merge(preparation.diagnosticExtras) { _, new in new }
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+              let encoded = String(data: data, encoding: .utf8) else { return .error(message) }
+        return .error(encoded)
     }
 
     // MARK: - #1039 input-source switch
