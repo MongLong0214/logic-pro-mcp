@@ -1530,18 +1530,259 @@ struct QualificationRunnerTests {
         #expect(!fifoPromotable)
     }
 
+    /// #816 controlled directory representation, not a public live release or deployed anchor.
+    /// The consumer executable and synthetic trust input remain outside the copied bundle.
+    @Test(.timeLimit(.minutes(2)))
+    func controlledPublicationCopyVerifiesWithExistingDebugConsumer() async throws {
+        try #require(FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path))
+        let toolBytes = try Data(contentsOf: Self.trustedVerifierExecutableURL)
+        let sentinel = FileManager.default.temporaryDirectory.appendingPathComponent("issue816-candidate-executed-\(UUID().uuidString)")
+        let fixture = try await signedTrustedFixture(candidateExecutionSentinelURL: sentinel)
+        defer {
+            fixture.remove()
+            try? FileManager.default.removeItem(at: sentinel)
+        }
+        let original = try Self.runTrustedVerifierExecutable(fixture)
+        try #require(original.exitCode == 0, "\(original.stdout)\(original.stderr)")
+        let copy = try Self.copiedControlledPublication(fixture)
+        defer { try? FileManager.default.removeItem(at: copy.root) }
+        #expect(try Self.controlledPublicationFiles(copy.bundle)
+            == Self.controlledPublicationFiles(fixture.directory))
+        let result = try Self.runTrustedVerifierExecutable(
+            fixture,
+            candidateURL: copy.bundle.appendingPathComponent(fixture.executableURL.lastPathComponent),
+            bundleURL: copy.bundle
+        )
+        #expect(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
+        let promotable = try #require(try Self.resultObject(result)["promotable"] as? Bool)
+        #expect(promotable)
+        #expect(!FileManager.default.fileExists(atPath: sentinel.path))
+        #expect(try Data(contentsOf: Self.trustedVerifierExecutableURL) == toolBytes)
+    }
+
+    /// Existing security contract: repairing adjacent hashes cannot repair an old signature.
+    /// Whitespace changes a raw artifact's bytes without changing frames/schema/public hashes.
+    @Test(.timeLimit(.minutes(2)))
+    func debugConsumerRejectsPublishedFileAndCoherentAdjacentDigestReplacement() async throws {
+        try #require(FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path))
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let copy = try Self.copiedControlledPublication(fixture)
+        defer { try? FileManager.default.removeItem(at: copy.root) }
+        let candidateURL = copy.bundle.appendingPathComponent(fixture.executableURL.lastPathComponent)
+        let verify = {
+            try Self.runTrustedVerifierExecutable(fixture, candidateURL: candidateURL, bundleURL: copy.bundle)
+        }
+        let control = try verify()
+        try #require(control.exitCode == 0, "\(control.stdout)\(control.stderr)")
+        let rawURL = copy.bundle.appendingPathComponent("raw-transcript.json")
+        let manifestURL = copy.bundle.appendingPathComponent("evidence-manifest.json")
+        let attestationURL = copy.bundle.appendingPathComponent("release-qualification-attestation.json")
+        let originalRaw = try Data(contentsOf: rawURL)
+        let originalManifest = try Data(contentsOf: manifestURL)
+        let originalAttestation = try Data(contentsOf: attestationURL)
+        let signed = try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: originalAttestation)
+        let signature = try #require(signed.provenanceSignature)
+        var changedRaw = originalRaw
+        changedRaw.append(0x0a)
+        try changedRaw.write(to: rawURL, options: .atomic)
+        var manifest = try #require(JSONSerialization.jsonObject(with: originalManifest) as? [String: Any])
+        var entries = try #require(manifest["files"] as? [[String: Any]])
+        let index = try #require(entries.firstIndex { $0["path"] as? String == "raw-transcript.json" })
+        entries[index]["sha256"] = SupportBundleBuilder.sha256(changedRaw)
+        manifest["files"] = entries
+        let changedManifest = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
+        try changedManifest.write(to: manifestURL, options: .atomic)
+        let changedManifestDigest = SupportBundleBuilder.sha256(changedManifest)
+        try Self.mutateJSONObject(at: attestationURL) { object in
+            object["evidenceManifestSHA256"] = changedManifestDigest
+            var provenance = try #require(object["provenance"] as? [String: Any])
+            provenance["evidenceManifestSHA256"] = changedManifestDigest
+            object["provenance"] = provenance
+        }
+        let changed = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self, from: Data(contentsOf: attestationURL))
+        #expect(changed.provenanceSignature == signature)
+        let result = try verify()
+        #expect(result.exitCode != 0, "\(result.stdout)\(result.stderr)")
+        let promotable = try #require(try Self.resultObject(result)["promotable"] as? Bool)
+        #expect(!promotable)
+        let rejections = try #require(try Self.resultObject(result)["rejections"] as? [[String: Any]])
+        #expect(rejections.count == 1, "\(result.stdout)")
+        #expect(rejections.first?["reason"] as? String == "provenanceSignatureInvalid", "\(result.stdout)")
+        try originalRaw.write(to: rawURL, options: .atomic)
+        try originalManifest.write(to: manifestURL, options: .atomic)
+        try originalAttestation.write(to: attestationURL, options: .atomic)
+        let restored = try verify()
+        #expect(restored.exitCode == 0, "\(restored.stdout)\(restored.stderr)")
+        #expect(try Self.controlledPublicationFiles(copy.bundle)
+            == Self.controlledPublicationFiles(fixture.directory))
+    }
+
+    /// Separate metadata characterization; source suggests a gap, but no runtime RED is assumed.
+    /// The debug consumer's actual typed report must decide whether this becomes a repair lead.
+    @Test(.timeLimit(.minutes(2)))
+    func debugConsumerCharacterizesLogicVersionOnlyUnsignedMetadataMutation() async throws {
+        try #require(FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path))
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let copy = try Self.copiedControlledPublication(fixture)
+        defer { try? FileManager.default.removeItem(at: copy.root) }
+        let candidateURL = copy.bundle.appendingPathComponent(fixture.executableURL.lastPathComponent)
+        let verify = {
+            try Self.runTrustedVerifierExecutable(fixture, candidateURL: candidateURL, bundleURL: copy.bundle)
+        }
+        let control = try verify()
+        try #require(control.exitCode == 0, "\(control.stdout)\(control.stderr)")
+        let originalFiles = try Self.controlledPublicationFiles(copy.bundle)
+        let attestationURL = copy.bundle.appendingPathComponent("release-qualification-attestation.json")
+        let originalData = try Data(contentsOf: attestationURL)
+        let original = try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: originalData)
+        let originalSignature = try #require(original.provenanceSignature)
+        let originalObject = try #require(JSONSerialization.jsonObject(with: originalData) as? [String: Any])
+        let replacement = original.logicVersion == "999.0" ? "998.0" : "999.0"
+        try Self.mutateJSONObject(at: attestationURL) { $0["logicVersion"] = replacement }
+        let changedData = try Data(contentsOf: attestationURL)
+        let changed = try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: changedData)
+        #expect(changed.logicVersion == replacement)
+        #expect(changed.provenanceSignature == originalSignature)
+        var expectedObject = originalObject
+        expectedObject["logicVersion"] = replacement
+        #expect(try JSONSerialization.data(withJSONObject: expectedObject, options: [.sortedKeys])
+            == JSONSerialization.data(withJSONObject:
+                JSONSerialization.jsonObject(with: changedData), options: [.sortedKeys]))
+        var changedFiles = try Self.controlledPublicationFiles(copy.bundle)
+        changedFiles.removeValue(forKey: "release-qualification-attestation.json")
+        var unchangedFiles = originalFiles
+        unchangedFiles.removeValue(forKey: "release-qualification-attestation.json")
+        #expect(changedFiles == unchangedFiles)
+        let result = try verify()
+        print("#816 logicVersion-only characterization: \(result.stdout)")
+        let promotable = try #require(try Self.resultObject(result)["promotable"] as? Bool)
+        #expect(!promotable, "metadata changed under unchanged signature: \(result.stdout)")
+        #expect(result.exitCode != 0, "\(result.stdout)\(result.stderr)")
+        try originalData.write(to: attestationURL, options: .atomic)
+        let restored = try verify()
+        #expect(restored.exitCode == 0, "\(restored.stdout)\(restored.stderr)")
+        #expect(try Self.controlledPublicationFiles(copy.bundle) == originalFiles)
+    }
+
+    /// Historical v1 bytes remain readable, never silently upgraded to v2.
+    @Test func legacyV1ProvenanceRemainsDecodableWithoutInventedLogicVersion() async throws {
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let data = try Data(contentsOf: fixture.attestationURL)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var legacy = try #require(object["provenance"] as? [String: Any])
+        legacy["schema"] = "qualification-provenance/v1"
+        legacy.removeValue(forKey: "logicVersion")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacy, options: [.sortedKeys])
+        let decoded = try JSONDecoder().decode(QualificationProvenanceRecord.self, from: legacyData)
+        #expect(decoded.schema == "qualification-provenance/v1")
+        let roundTrip = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(decoded)) as? [String: Any])
+        #expect(roundTrip["logicVersion"] == nil)
+        #expect(try JSONSerialization.data(withJSONObject: roundTrip, options: [.sortedKeys]) == legacyData)
+    }
+
+    /// Force-signing is test-only: it proves legacy refusal is not an invalid-key artifact.
+    @Test func legacyV1ProvenanceCannotBeNewlySignedOrTrustedAsQualified() async throws {
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            var provenance = try #require(object["provenance"] as? [String: Any])
+            provenance["schema"] = "qualification-provenance/v1"
+            provenance.removeValue(forKey: "logicVersion")
+            object["provenance"] = provenance
+            object.removeValue(forKey: "provenanceSignature")
+        }
+        let sign = QualificationRunner.signTrusted(
+            candidateURL: fixture.executableURL, bundleURL: fixture.directory,
+            releaseVersion: "1.2.3", expectedCommitSHA: fixture.commitSHA,
+            signingPrivateKeyData: fixture.signingKeyData)
+        try Self.expectRejection(sign, reason: "provenanceSignatureInvalid")
+        let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL))
+        #expect(unsigned.provenanceSignature == nil)
+        try fixture.forceSignForDiagnosticFixture()
+        try Self.expectRejection(try Self.runTrustedVerifierExecutable(fixture),
+            reason: "provenanceSignatureInvalid")
+    }
+
+    /// Re-signed counterexamples isolate binding, not signature damage or missing trust.
+    @Test(arguments: ["missing", "different"])
+    func signedV2ProvenanceRequiresExactLogicVersionBinding(_ mutation: String) async throws {
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let original = try Data(contentsOf: fixture.attestationURL)
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            var provenance = try #require(object["provenance"] as? [String: Any])
+            try #require(provenance["schema"] as? String == "qualification-provenance/v2")
+            if mutation == "missing" {
+                provenance.removeValue(forKey: "logicVersion")
+            } else {
+                let version = try #require(object["logicVersion"] as? String)
+                provenance["logicVersion"] = version == "999.0" ? "998.0" : "999.0"
+            }
+            object["provenance"] = provenance
+        }
+        try fixture.forceSignForDiagnosticFixture()
+        try Self.expectRejection(try Self.runTrustedVerifierExecutable(fixture),
+            reason: "provenanceSignatureInvalid")
+        try original.write(to: fixture.attestationURL, options: .atomic)
+        let restored = try Self.runTrustedVerifierExecutable(fixture)
+        #expect(restored.exitCode == 0, "\(restored.stdout)\(restored.stderr)")
+    }
+
+    private static func copiedControlledPublication(_ fixture: Fixture) throws -> (root: URL, bundle: URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("issue816-consumer-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        let bundle = root.appendingPathComponent("bundle", isDirectory: true)
+        do {
+            try FileManager.default.copyItem(at: fixture.directory, to: bundle)
+            return (root, bundle)
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
+    }
+
+    /// Synthetic fixture census only, not a second public manifest or archive extraction policy.
+    private static func controlledPublicationFiles(_ directory: URL) throws -> [String: Data] {
+        let root = directory.standardizedFileURL.resolvingSymlinksInPath()
+        let prefix = root.path + "/"
+        let enumerator = try #require(FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]))
+        var files: [String: Data] = [:]
+        for case let url as URL in enumerator {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            let isSymbolicLink = try #require(values.isSymbolicLink)
+            #expect(!isSymbolicLink)
+            if values.isRegularFile ?? false {
+                let enumeratedPath = url.standardizedFileURL.resolvingSymlinksInPath().path
+                try #require(enumeratedPath.hasPrefix(prefix))
+                let relativePath = String(enumeratedPath.dropFirst(prefix.count))
+                files[relativePath] = try Data(contentsOf: url)
+            }
+        }
+        return files
+    }
+
     private static let trustedVerifierExecutableURL = URL(
         fileURLWithPath: FileManager.default.currentDirectoryPath,
         isDirectory: true
     ).appendingPathComponent(".build/debug/trusted-verifier")
 
-    private static func runTrustedVerifierExecutable(_ fixture: Fixture) throws -> QualificationCommandResult {
+    private static func runTrustedVerifierExecutable(
+        _ fixture: Fixture,
+        candidateURL: URL? = nil,
+        bundleURL: URL? = nil
+    ) throws -> QualificationCommandResult {
         let process = Process()
         process.executableURL = trustedVerifierExecutableURL
         process.arguments = [
             "verify",
-            "--candidate", fixture.executableURL.path,
-            "--bundle", fixture.directory.path,
+            "--candidate", (candidateURL ?? fixture.executableURL).path,
+            "--bundle", (bundleURL ?? fixture.directory).path,
             "--release-version", "1.2.3",
             "--expected-commit", fixture.commitSHA,
         ]
@@ -1597,6 +1838,10 @@ struct QualificationRunnerTests {
         )
         #expect(attestation.provenance != nil)
         #expect(attestation.provenanceSignature == nil)
+        let provenance = try #require(attestation.provenance)
+        #expect(provenance.schema == "qualification-provenance/v2")
+        #expect(provenance.logicVersion == attestation.logicVersion)
+        #expect(provenance.logicVersion == "11.2")
     }
 
     @Test func signingKeyIsNotForwardedToQualificationSubprocess() async throws {
@@ -3191,6 +3436,9 @@ struct QualificationRunnerTests {
         #expect(attestation.logicVersion == "11.2")
         #expect(attestation.locale == .koKR)
         #expect(attestation.profile == .full)
+        let provenance = try #require(attestation.provenance)
+        #expect(provenance.schema == "qualification-provenance/v2")
+        #expect(provenance.logicVersion == attestation.logicVersion)
         #expect(attestation.cache == .warm)
         #expect(attestation.fixture == .empty)
         #expect(json["cache"] as? String == "warm")
