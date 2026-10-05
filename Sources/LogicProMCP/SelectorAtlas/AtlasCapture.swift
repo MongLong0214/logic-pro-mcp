@@ -27,7 +27,7 @@ enum AtlasCapture {
         guard let application = LogicProTarget.runningApplication(),
               !application.isTerminated,
               let bundleID = application.bundleIdentifier,
-              LogicProVariant.from(bundleID: bundleID) != nil,
+              LogicProVariant.from(bundleID: bundleID) == .desktop,
               let version = application.bundleURL.flatMap(Bundle.init(url:))?
                 .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else { return nil }
         return RunningTarget(pid: application.processIdentifier,
@@ -75,7 +75,7 @@ enum AtlasCapture {
         // Every fact comes from the observed process. Neither the baseline nor the expected
         // qualification axis supplies metadata, and a window from another process cannot bind it.
         guard let target = runningTarget(), target.pid > 0,
-              LogicProVariant.from(bundleID: target.bundleID) != nil else {
+              LogicProVariant.from(bundleID: target.bundleID) == .desktop else {
             return ([], jsonFiles.map(\.lastPathComponent))
         }
         let version = target.logicVersion.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -105,6 +105,99 @@ struct Issue290AtlasEvidenceTests {
         }
     }
 
+    @Test(arguments: [QualificationLocale.enUS, .koKR])
+    func requiredScopeLabelsCannotAuthorizeRelabelledWindowRoots(locale: QualificationLocale) throws {
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Fixtures/AX")
+        let language = locale == .koKR ? "ko" : "en"
+        let documents = try ["track-headers", "control-bar"].map {
+            try JSONDecoder().decode(AXSnapshot.Document.self,
+                from: Data(contentsOf: directory.appendingPathComponent(
+                    "logic-12.x-desktop-\(language)-\($0).json")))
+        }
+        let axis = QualificationAxis(variant: .desktop, locale: locale,
+            profile: .core, cache: .cold, fixture: .empty)
+        let legitimate = documents.map { AtlasQualification.Pair(
+            scope: $0.scope, baseline: $0, current: $0) }
+        let positive = try #require(AtlasQualification.evidenceCaseFor(armed: true,
+            pairs: legitimate, axis: axis, binarySHA256: String(repeating: "a", count: 64),
+            traceID: "legitimate-selected-roots"))
+        #expect(positive.qualificationCase.status == .passed)
+        #expect(positive.qualificationCase.verified)
+        #expect(QualificationRunner.evidenceShapeIsValid(positive.evidence))
+
+        // All selector-compatible children survive; only their selected-root authority is lost.
+        let legitimateRail = try #require(legitimate.first { AXLocalePolicy.trackHeadersDescription
+            .matches($0.scope, mode: .exactStrict) })
+        for selector in AtlasDiff.selectors(for: legitimateRail.current) {
+            let path = try #require(AtlasDiff.unitPath(in: legitimateRail.current, for: selector))
+            #expect(path.isEmpty)
+        }
+        for wrapperRole in ["AXWindow", "AXGroup"] {
+            for replacedScopes in [Set([documents[0].scope]), Set([documents[1].scope]), Set(documents.map(\.scope))] {
+                for (changeBaseline, changeCurrent) in [(true, true), (true, false), (false, true)] {
+                    let relabelled = documents.map { original -> AtlasQualification.Pair in
+                        guard replacedScopes.contains(original.scope) else {
+                            return .init(scope: original.scope, baseline: original, current: original)
+                        }
+                        // A scope-compatible group name/shape still cannot move the rail's units
+                        // below a nested whole-window wrapper or supply nested transport controls.
+                        let description = wrapperRole == "AXWindow" ? nil :
+                            (AXLocalePolicy.controlBarGroupLabel.matches(original.scope, mode: .exactStrict)
+                                ? original.scope : AXSnapshot.shape(of: original.scope))
+                        let wrapper = AXSnapshot.Node(role: wrapperRole, subrole: nil, description: description,
+                            help: nil, identifier: nil, valueRange: nil, children: documents.map(\.root))
+                        let whole = AXSnapshot.Document(logicVersion: original.logicVersion,
+                            locale: original.locale, scope: original.scope, capturedFrom: "ax", root: wrapper)
+                        return .init(scope: original.scope,
+                            baseline: changeBaseline ? whole : original,
+                            current: changeCurrent ? whole : original)
+                    }
+                    if changeBaseline && changeCurrent {
+                        let scores = relabelled.flatMap { AtlasDiff.confidences(in: $0.current).values }
+                        #expect(scores.count == AtlasDiff.adoptedSelectors.count)
+                        #expect(scores.allSatisfy { $0 == 1.0 })
+                        let rail = try #require(relabelled.first { AXLocalePolicy.trackHeadersDescription
+                            .matches($0.scope, mode: .exactStrict) })
+                        if replacedScopes.contains(rail.scope) {
+                            for selector in AtlasDiff.selectors(for: rail.current) {
+                                let path = try #require(AtlasDiff.unitPath(in: rail.current, for: selector))
+                                #expect(!path.isEmpty)
+                            }
+                        }
+                        if case let .diffed(verdict, _, unmeasured, dropped) =
+                            AtlasQualification.outcome(armed: true, pairs: relabelled) {
+                            #expect(verdict == .reuseFull)
+                            #expect(unmeasured.isEmpty)
+                            #expect(dropped.isEmpty)
+                        } else {
+                            Issue.record("The relabelled whole-window ordinary diff must actually compare")
+                        }
+                    }
+                    let comparison = AtlasQualification.ComparisonEvidence(
+                        schema: "qualification-atlas-comparison/v1", binarySHA256: String(repeating: "a", count: 64),
+                        axis: axis, pairs: relabelled, dropped: [])
+                    if case let .noBaselines(reason) = comparison.outcome {
+                        #expect(!reason.isEmpty)
+                    } else {
+                        Issue.record("Invalid baseline/current selected roots must refuse before scoring")
+                    }
+                    let refused = try #require(AtlasQualification.evidenceCaseFor(armed: true,
+                        pairs: relabelled, axis: axis, binarySHA256: String(repeating: "a", count: 64),
+                        traceID: "relabelled-window-roots"))
+                    #expect(refused.qualificationCase.status == .failed)
+                    #expect(!refused.qualificationCase.verified)
+                    #expect(QualificationRunner.evidenceShapeIsValid(refused.evidence))
+                }
+            }
+        }
+        let restored = try #require(AtlasQualification.evidenceCaseFor(armed: true,
+            pairs: legitimate, axis: axis, binarySHA256: String(repeating: "a", count: 64),
+            traceID: "legitimate-selected-roots"))
+        #expect(restored.qualificationCase == positive.qualificationCase)
+        #expect(restored.qualificationCase.verified)
+    }
+
     @Test func missingComparisonCannotSupportAPassingCase() throws {
         let result = try retained()
         let missing = try altered(result.evidence) { $0.removeValue(forKey: "atlas_comparison") }

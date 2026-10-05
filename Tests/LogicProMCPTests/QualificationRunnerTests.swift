@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import Foundation
 import Darwin
 import CryptoKit
@@ -751,6 +752,243 @@ struct QualificationRunnerTests {
 
     /// Synthetic archived EN scopes, fake transport and existing fixture trust only. No candidate
     /// executable or Logic is launched. A prior baseline version is intentionally still diffable.
+    @Test func trustedAtlasRejectsCoherentlyResignedRelabelledWindowRoots() async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        unsetenv(flag)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        // Existing fixed synthetic key and in-process runner; no candidate process or real trust.
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        func verify() -> QualificationCommandResult {
+            QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
+                bundleURL: fixture.directory, releaseVersion: "1.2.3",
+                expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
+        }
+        let control = verify()
+        #expect(control.exitCode == 0, "\(control.stdout)\(control.stderr)")
+        let controlPromotable = try #require(try Self.resultObject(control)["promotable"] as? Bool)
+        #expect(controlPromotable)
+        let signedData = try Data(contentsOf: fixture.attestationURL)
+        let signed = try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: signedData)
+        let atlas = try #require(signed.cases.first { $0.id == "atlas.drift_diff" })
+        #expect(atlas.status == .passed)
+        #expect(atlas.verified)
+        let path = try #require(atlas.evidenceFiles.first)
+        let evidenceURL = fixture.directory.appendingPathComponent(path)
+        let evidenceData = try Data(contentsOf: evidenceURL)
+        let manifestData = try Data(contentsOf: fixture.manifestURL)
+        let caseManifestData = try Data(contentsOf: fixture.caseManifestURL)
+        let candidateData = try Data(contentsOf: fixture.executableURL)
+        let original = try JSONDecoder().decode(CaseEvidence.self, from: evidenceData)
+        let comparison = try #require(original.atlasComparison)
+        #expect(comparison.pairs.count == 2)
+        #expect(comparison.pairs.allSatisfy { $0.baseline.root.role == "AXGroup" && $0.current.root.role == "AXGroup" })
+        func windowObject(_ roots: [AXSnapshot.Node]) throws -> [String: Any] {
+            let root = AXSnapshot.Node(role: "AXWindow", subrole: nil, description: nil,
+                help: nil, identifier: nil, valueRange: nil, children: roots)
+            return try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(root)) as? [String: Any])
+        }
+        let baselineWindow = try windowObject(comparison.pairs.map { $0.baseline.root })
+        let currentWindow = try windowObject(comparison.pairs.map { $0.current.root })
+        try Self.mutateJSONObject(at: evidenceURL) { object in
+            var packet = try #require(object["atlas_comparison"] as? [String: Any])
+            var pairs = try #require(packet["pairs"] as? [[String: Any]])
+            for index in pairs.indices {
+                var baseline = try #require(pairs[index]["baseline"] as? [String: Any])
+                var current = try #require(pairs[index]["current"] as? [String: Any])
+                baseline["root"] = baselineWindow
+                current["root"] = currentWindow
+                pairs[index]["baseline"] = baseline
+                pairs[index]["current"] = current
+            }
+            packet["pairs"] = pairs
+            object["atlas_comparison"] = packet
+        }
+        let changedData = try Data(contentsOf: evidenceURL)
+        let changed = try JSONDecoder().decode(CaseEvidence.self, from: changedData)
+        let changedComparison = try #require(changed.atlasComparison)
+        #expect(changedComparison.pairs.map(\.scope) == comparison.pairs.map(\.scope))
+        #expect(changedComparison.pairs.map { $0.current.logicVersion } == comparison.pairs.map { $0.current.logicVersion })
+        #expect(changedComparison.pairs.allSatisfy { $0.baseline.root.role == "AXWindow" && $0.current.root.role == "AXWindow" })
+        #expect(QualificationRunner.evidence(changed, binds: atlas))
+        #expect(!QualificationRunner.evidenceShapeIsValid(changed))
+        // Bind the changed evidence and manifest into the ORIGINAL passing cases/provenance.
+        // Signature/digest/axis failures cannot substitute for selected-root rejection.
+        try Self.mutateJSONObject(at: fixture.manifestURL) { manifest in
+            var entries = try #require(manifest["files"] as? [[String: Any]])
+            let indices = entries.indices.filter { entries[$0]["path"] as? String == path }
+            try #require(indices.count == 1)
+            entries[indices[0]]["sha256"] = SupportBundleBuilder.sha256(changedData)
+            manifest["files"] = entries
+        }
+        let manifestSHA = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            object["evidenceManifestSHA256"] = manifestSHA
+            var provenance = try #require(object["provenance"] as? [String: Any])
+            provenance["evidenceManifestSHA256"] = manifestSHA
+            object["provenance"] = provenance
+        }
+        try fixture.forceSignForDiagnosticFixture()
+        let resealed = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL))
+        #expect(resealed.cases == signed.cases)
+        #expect(resealed.evidenceManifestSHA256 == manifestSHA)
+        #expect(try Data(contentsOf: fixture.caseManifestURL) == caseManifestData)
+        #expect(try Data(contentsOf: fixture.executableURL) == candidateData)
+        let signature = try #require(resealed.provenanceSignature)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: fixture.trustedPublicKeyData)
+        #expect(publicKey.isValidSignature(try #require(Data(base64Encoded: signature.value)),
+            for: try encoder.encode(try #require(resealed.provenance))))
+        let refused = verify()
+        #expect(refused.exitCode == 1, "\(refused.stdout)")
+        let object = try Self.resultObject(refused)
+        let promotable = try #require(object["promotable"] as? Bool)
+        #expect(!promotable)
+        let rejections = try #require(object["rejections"] as? [[String: Any]])
+        #expect(rejections.count == 1, "\(refused.stdout)")
+        #expect(rejections.contains { $0["reason"] as? String == "evidenceBindingMismatch"
+            && $0["actual"] as? String == "case evidence binding" }, "\(refused.stdout)")
+        #expect(!rejections.contains { $0["reason"] as? String == "provenanceSignatureInvalid" })
+        try evidenceData.write(to: evidenceURL, options: .atomic)
+        try manifestData.write(to: fixture.manifestURL, options: .atomic)
+        try signedData.write(to: fixture.attestationURL, options: .atomic)
+        let restored = verify()
+        #expect(restored.exitCode == 0, "\(restored.stdout)")
+        let restoredPromotable = try #require(try Self.resultObject(restored)["promotable"] as? Bool)
+        #expect(restoredPromotable)
+    }
+
+    @Test func desktopDriveCannotPassWithActualCreatorAtlasCapture() async throws {
+        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
+        let previous = getenv(flag).map { String(cString: $0) }
+        unsetenv(flag)
+        defer {
+            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        let specs = OperationRegistry.specs
+        let drive = Self.driveResult(specs: specs, mutationRestoreRecords: [Self.recipeShapedRecord()])
+        #expect(drive.observedVariant == "desktop")
+        let fixture = try Fixture(specs: specs, drive: { _ in drive })
+        defer { fixture.remove() }
+        let operationWaivers = specs.compactMap { spec in
+            drive.operationResults[spec.id.rawValue]?.status == .passed ? nil :
+                Self.waiver(caseID: "in-process/\(spec.id.rawValue)",
+                    affectedCapability: "operation:\(spec.id.rawValue)")
+        }
+        try JSONEncoder().encode(operationWaivers + Self.axisWaivers()).write(to: fixture.waiversURL)
+        let baselines = fixture.directory.appendingPathComponent("selected-baselines", isDirectory: true)
+        try FileManager.default.createDirectory(at: baselines, withIntermediateDirectories: false)
+        let documents = try Self.atlasProducerVersionPairs(drive.logicProVersion).map(\.baseline)
+        let b = FakeAXRuntimeBuilder()
+        let app = b.element(30_000)
+        let window = b.element(30_001)
+        let menu = b.element(30_002)
+        b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+        b.setAttribute(app, kAXWindowsAttribute as String, [window] as NSArray)
+        b.setAttribute(app, kAXMenuBarAttribute as String, menu)
+        b.setAttribute(menu, kAXRoleAttribute as String, kAXMenuBarRole as String)
+        var nextID = 30_010
+        // Materialize archived sanitized shapes as synthetic controls, not native observations.
+        func materialize(_ node: AXSnapshot.Node) -> AXUIElement {
+            nextID += 1
+            let element = b.element(nextID)
+            b.setAttribute(element, kAXRoleAttribute as String, node.role)
+            if let value = node.subrole { b.setAttribute(element, kAXSubroleAttribute as String, value) }
+            if let value = node.description { b.setAttribute(element, kAXDescriptionAttribute as String, value) }
+            if let value = node.help { b.setAttribute(element, kAXHelpAttribute as String, value) }
+            if let value = node.valueRange {
+                let bounds = value.components(separatedBy: "...").compactMap(Double.init)
+                if bounds.count == 2 {
+                    b.setAttribute(element, kAXMinValueAttribute as String, bounds[0])
+                    b.setAttribute(element, kAXMaxValueAttribute as String, bounds[1])
+                }
+            }
+            b.setChildren(element, node.children.map(materialize))
+            return element
+        }
+        let roots = documents.map { document -> AXUIElement in
+            let root = materialize(document.root)
+            b.setAttribute(root, kAXDescriptionAttribute as String, document.scope)
+            return root
+        }
+        b.setChildren(window, roots)
+        b.setChildren(menu, ["File", "Edit", "Track"].map { title in
+            nextID += 1
+            let item = b.element(nextID)
+            b.setAttribute(item, kAXRoleAttribute as String, kAXMenuBarItemRole as String)
+            b.setAttribute(item, kAXTitleAttribute as String, title)
+            return item
+        })
+        let ax = b.makeAXRuntime(appElement: app, setAttributeHandler: nil,
+            performActionHandler: nil, executeAppleScript: { _ in
+                Issue.record("Atlas capture must not execute AppleScript")
+                return .error("unexpected AppleScript")
+            })
+        // Both comparison halves are read from the fake controls, so re-redaction cannot
+        // manufacture drift. The normal Desktop capture below must prove the full positive.
+        for (index, document) in documents.enumerated() {
+            let captured = AXSnapshot.capture(roots[index], runtime: ax)
+            let root = AXLocalePolicy.controlBarGroupLabel.matches(document.scope, mode: .exactStrict)
+                ? AXSnapshot.scopedRoot(captured, readBackDescription: document.scope) : captured
+            let baseline = AXSnapshot.Document(logicVersion: drive.logicProVersion,
+                locale: "en-US", scope: document.scope, capturedFrom: "ax", root: root)
+            try JSONEncoder().encode(baseline).write(to: baselines.appendingPathComponent("scope-\(index).json"))
+        }
+        #expect(LogicProVariant.from(bundleID: "com.apple.mobilelogic") == .creatorStudio)
+        for bundleID in ["com.apple.logic10", "com.apple.mobilelogic", "com.apple.logic10"] {
+            let driveCalls = RequiredAtlasCaptureCounter()
+            let captures = RequiredAtlasCaptureCounter()
+            // All runtime closures and the AX transport are injected; no real executable,
+            // application discovery, global Control Bar, permissions or GUI writes run.
+            let runner = QualificationRunner(runtime: .init(
+                executableURL: { fixture.executableURL }, environment: { ["GIT_COMMIT": fixture.commitSHA] },
+                now: { Date(timeIntervalSince1970: 1_000) }, serverVersion: { "1.2.3" }, specs: { specs },
+                registryValidationErrors: { [] }, handlerValidationErrors: { [] },
+                handlerExists: { OperationHandlerRegistry.handler(tool: $0, command: $1) != nil },
+                beforeEvidenceRead: { _ in }, drive: { _ in driveCalls.record(); return drive },
+                atlasPairs: {
+                    #expect(driveCalls.count == 1)
+                    captures.record()
+                    return AtlasCapture.pairs(baselinesIn: baselines, window: window, runtime: ax,
+                        runningTarget: { .init(pid: 4242, bundleID: bundleID, logicVersion: drive.logicProVersion) })
+                }))
+            let run = await runner.run(arguments: ["LogicProMCP", "--qualify",
+                "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
+                "--variant", "desktop", "--locale", "en", "--mutate-open-project",
+                "--require-atlas", "--waivers", fixture.waiversURL.path])
+            #expect(driveCalls.count == 1)
+            #expect(captures.count == 1)
+            let attestation = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
+                from: Data(contentsOf: fixture.attestationURL))
+            #expect(attestation.logicVariant == .desktop)
+            #expect(attestation.logicVersion == drive.logicProVersion)
+            let atlas = try #require(attestation.cases.first { $0.id == "atlas.drift_diff" })
+            let evidence = try JSONDecoder().decode(CaseEvidence.self,
+                from: Data(contentsOf: fixture.directory.appendingPathComponent(try #require(atlas.evidenceFiles.first))))
+            let comparison = try #require(evidence.atlasComparison)
+            if bundleID == "com.apple.mobilelogic" {
+                #expect(run.exitCode == 1, "Creator capture must refuse: \(run.stdout)\(run.stderr)")
+                #expect(atlas.status == .failed)
+                #expect(!atlas.verified)
+                #expect(comparison.pairs.isEmpty)
+                #expect(comparison.dropped == ["scope-0.json", "scope-1.json"])
+            } else {
+                #expect(run.exitCode == 0, "\(run.stdout)\(run.stderr)")
+                #expect(atlas.status == .passed)
+                #expect(atlas.verified)
+                #expect(comparison.pairs.count == 2)
+                #expect(comparison.dropped.isEmpty)
+            }
+            #expect(b.setCalls.isEmpty)
+            #expect(b.actionCalls.isEmpty)
+        }
+    }
+
     @Test func atlasCurrentVersionMustMatchTheIndependentSignedHostVersion() async throws {
         let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
         let previous = getenv(flag).map { String(cString: $0) }

@@ -191,6 +191,27 @@ struct Issue290AtlasCaptureBindingTests {
         f.assertReadOnly()
     }
 
+    @Test func recognizedCreatorTargetCannotBecomeDesktopCapture() throws {
+        let f = Fixture()
+        let directory = try f.baselines()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let positive = f.capture(directory)
+        #expect(positive.pairs.count == 1)
+        #expect(positive.dropped.isEmpty)
+        let creator = AtlasCapture.RunningTarget(pid: f.target.pid,
+            bundleID: "com.apple.mobilelogic", logicVersion: f.target.logicVersion)
+        #expect(LogicProVariant.from(bundleID: creator.bundleID) == .creatorStudio)
+        // Same fake PID, actual window CF membership, observed menu locale and version.
+        // Recognition alone must not authorize the wrong qualification variant.
+        let wrongVariant = f.capture(directory, target: creator)
+        #expect(wrongVariant.pairs.isEmpty)
+        #expect(wrongVariant.dropped == ["window.json"])
+        let restored = f.capture(directory)
+        #expect(restored.pairs == positive.pairs)
+        #expect(restored.dropped.isEmpty)
+        f.assertReadOnly()
+    }
+
     @Test(arguments: ["AXWindows", "AXMenuBar", "AXTitle"])
     func failedOwnershipOrLocaleReadCannotEstablishMetadata(attribute: String) throws {
         let f = Fixture()

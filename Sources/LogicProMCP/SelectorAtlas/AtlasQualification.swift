@@ -178,6 +178,10 @@ enum AtlasQualification {
                       !AtlasDiff.selectors(for: pair.baseline).isEmpty else {
                     return .noBaselines(reason: "atlas capture scope does not match its pair")
                 }
+                guard Self.hasSelectedScopeRoot(pair.baseline),
+                      Self.hasSelectedScopeRoot(pair.current) else {
+                    return .noBaselines(reason: "atlas selected scope does not match its snapshot root")
+                }
                 guard pair.baseline.capturedFrom == "ax", pair.current.capturedFrom == "ax" else {
                     return .noBaselines(reason: "unsupported atlas capture source")
                 }
@@ -190,6 +194,24 @@ enum AtlasQualification {
                 }
             }
             return AtlasQualification.outcome(armed: true, pairs: pairs, dropped: dropped)
+        }
+
+        private static func hasSelectedScopeRoot(_ document: AXSnapshot.Document) -> Bool {
+            guard document.root.role == "AXGroup" else { return false }
+            // Rail descriptions are privacy-shaped; its existing selector repetitions must
+            // belong directly to this root, not to a nested rail in a relabelled whole window.
+            if AXLocalePolicy.trackHeadersDescription.matches(document.scope, mode: .exactStrict) {
+                return AtlasDiff.selectors(for: document).allSatisfy { selector in
+                    guard let path = AtlasDiff.unitPath(in: document, for: selector) else { return false }
+                    return path.isEmpty
+                }
+            }
+            if AXLocalePolicy.controlBarGroupLabel.matches(document.scope, mode: .exactStrict) {
+                let candidates = AtlasDiff.candidates(in: document.root).map(\.candidate)
+                return resolve(AXLogicProElements.controlBarSelector,
+                    in: candidates, locale: document.locale) == .exact(index: 0)
+            }
+            return false
         }
     }
 
