@@ -25,6 +25,42 @@ enum FrontmostGate {
         var isReady: Bool { self == .alreadyFrontmost || self == .activated }
     }
 
+    struct ObservedPreparation: Sendable {
+        let preparation: Preparation
+        let observation: ProcessUtils.KeyboardOwnershipObservation?
+        var diagnosticExtras: [String: Any] {
+            guard let observation else { return [:] }
+            return ["frontmost_observation": observation.diagnostic]
+        }
+    }
+
+    /// Run the original algorithm and retain its last actual observation. A Bool-only fake has
+    /// no ownership reading to report and never invokes a production probe on its behalf.
+    static func prepareObserved(
+        observe: (() -> ProcessUtils.KeyboardOwnershipObservation)? = nil,
+        isFrontmost: () -> Bool = { true },
+        activate: () -> Bool,
+        sleepMicros: (UInt32) -> Void
+    ) -> ObservedPreparation {
+        guard let observe else {
+            return ObservedPreparation(
+                preparation: prepare(isFrontmost: isFrontmost, activate: activate, sleepMicros: sleepMicros),
+                observation: nil
+            )
+        }
+        var lastObservation: ProcessUtils.KeyboardOwnershipObservation?
+        let preparation = prepare(
+            isFrontmost: {
+                let observation = observe()
+                lastObservation = observation
+                return observation.isReady
+            },
+            activate: activate,
+            sleepMicros: sleepMicros
+        )
+        return ObservedPreparation(preparation: preparation, observation: lastObservation)
+    }
+
     /// Consecutive frontmost observations required before acting. A single reading can catch the
     /// window server mid-switch, which is exactly the race that makes an actuation land nowhere.
     static let requiredObservations = 2

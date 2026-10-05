@@ -412,7 +412,8 @@ actor AccessibilityChannel: Channel {
             // pointless warm-up without reproducing that pair first.
             _ = runtime.transportState()
             return await AccessibilityChannel.gotoPositionViaBarSlider(
-                params: params, runtime: runtime.logicRuntime
+                params: params, runtime: runtime.logicRuntime,
+                observeFrontmost: runtime.logicRuntime.observeFrontmost
             )
 
         case "nav.set_zoom_level":

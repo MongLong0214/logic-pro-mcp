@@ -998,6 +998,7 @@ extension AccessibilityChannel {
         isFrontmost: @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost,
         activateLogic: @Sendable () -> Bool = ProcessUtils.Runtime.production.activateLogicPro,
         sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) },
+        observeFrontmost: (@Sendable () -> ProcessUtils.KeyboardOwnershipObservation)? = nil,
         executeDialogScript: (@Sendable (String) async -> ChannelResult)? = nil,
         reconcileAfterDialogExecutionFailure: (@Sendable () async -> Bool)? = nil,
         createDialogIssuanceLedger: @escaping @Sendable () -> DialogIssuanceLedger? = DialogIssuanceLedger.create,
@@ -1044,14 +1045,20 @@ extension AccessibilityChannel {
 
         // Refuse before touching anything: a non-ready result means nothing has been actuated, so
         // the caller can retry without wondering whether the playhead already moved.
-        let preparation = FrontmostGate.prepare(
-            isFrontmost: isFrontmost, activate: activateLogic, sleepMicros: sleepMicros
+        // Do not infer an observer from runtime here: a caller's explicit Bool seam owns its
+        // fake gate. Production dispatch passes its observer explicitly.
+        let observedPreparation = FrontmostGate.prepareObserved(
+            observe: observeFrontmost, isFrontmost: isFrontmost,
+            activate: activateLogic, sleepMicros: sleepMicros
         )
+        let preparation = observedPreparation.preparation
+        baseExtras.merge(observedPreparation.diagnosticExtras) { _, new in new }
         guard preparation.isReady else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "goto_position drives Logic's own UI; from the background it moves the playhead "
-                    + "to the wrong bar, so nothing was touched. Bring Logic Pro to the front and retry.",
+                    + "to the wrong bar, so nothing was touched. Bring Logic Pro to the front and retry. "
+                    + "The fixed ownership reason is in frontmost_observation.reason when observed.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "ax_goto_position_dialog",
@@ -1158,8 +1165,9 @@ extension AccessibilityChannel {
             // The dialog rung builds its own envelope, so without this the same operation reports
             // the frontmost gate on one path and stays silent on the other — a receipt field you
             // cannot rely on is worse than none.
-            return .success(mergingJSONField(
-                payload, key: "frontmost_preparation", value: preparation.rawValue
+            return .success(mergingJSONFields(
+                payload, fields: ["frontmost_preparation": preparation.rawValue]
+                    .merging(observedPreparation.diagnosticExtras) { _, new in new }
             ))
         }
         if case let .failed(classification) = dialogResult,
@@ -1276,13 +1284,13 @@ extension AccessibilityChannel {
     /// (Navigate → Go To → Position) dialog. Reliable because the dialog auto-
     /// extends project length; however the menu item is disabled when no
     /// regions exist yet, in which case the caller may use another position-capable channel.
-    /// Adds one field to an already-encoded JSON envelope, leaving it untouched if it cannot be
+    /// Adds diagnostic fields to an already-encoded JSON envelope, leaving it untouched if it cannot be
     /// parsed — a receipt is never worth corrupting to annotate.
-    private static func mergingJSONField(_ payload: String, key: String, value: String) -> String {
+    private static func mergingJSONFields(_ payload: String, fields: [String: Any]) -> String {
         guard let data = payload.data(using: .utf8),
               var obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         else { return payload }
-        obj[key] = value
+        obj.merge(fields) { _, new in new }
         guard let merged = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
               let text = String(data: merged, encoding: .utf8)
         else { return payload }

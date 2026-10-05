@@ -11,6 +11,101 @@ import Testing
 extension OperationTraceTests {
 @Suite("ADR-005 support bundle", .serialized)
 struct SupportBundleTests {
+    @Test("ownership diagnostics survive the actual privacy-safe bundle exporter")
+    func frontmostOwnershipFactsSurviveSupportBundleAllowlistWithoutPrivateFields() throws {
+        let privateValue = "/Users/private/secret.logicx"
+        let payload = HonestContract.encodeStateC(error: .axWriteFailed, hint: privateValue, extras: [
+            "frontmost_preparation": "activation_timed_out",
+            "frontmost_observation": [
+                "reason": "focused_application_mismatch", "focus_read": "read",
+                "keyboard_owner_pid": 4242, "focused_application_pid": 77,
+                "keyboard_window_layer": 8, "keyboard_owner_bundle_id": "com.apple.logic10",
+                "title": privateValue, "raw_error": privateValue, "unknown": privateValue,
+            ],
+        ])
+        let expected = ChannelRouter.frontmostTraceAttributes(from: payload)
+        let keys: Set<String> = [
+            "frontmost_preparation", "frontmost_reason", "frontmost_keyboard_owner_pid",
+            "frontmost_keyboard_owner_bundle_id", "frontmost_keyboard_window_layer",
+            "frontmost_focused_application_pid", "frontmost_focus_read",
+        ]
+        #expect(Set(expected.keys) == keys)
+        #expect(Set(OperationTraceStore.attributePrivacyClasses.keys.filter {
+            $0.hasPrefix("frontmost_")
+        }) == keys)
+        var attributes = expected
+        attributes["private_title"] = privateValue
+        attributes["raw_ax_error"] = privateValue
+        let trace = OperationTrace(
+            traceID: TraceID(rawValue: "lpmcp_00000000-0000-0000-0000-000000001084"),
+            operationID: "transport.goto_position", startedAt: .now,
+            events: [TraceEvent(
+                phase: .channelCompleted, timestamp: .now,
+                wallClock: Date(timeIntervalSince1970: 1_700_000_000),
+                attributes: attributes,
+                privacyClasses: Dictionary(uniqueKeysWithValues: attributes.keys.map {
+                    ($0, TracePrivacyClass.publicDiagnostic)
+                })
+            )], completedAt: .now
+        )
+        let hostileBundles = [
+            "sk-live-secret", "ghp_secret", "com.fake.sk-live-secret", "com.fake.ghp_secret",
+            "/Users/private/secret.logicx", "com.fake.\nsecret", String(repeating: "a", count: 256) + ".fake",
+        ]
+        var traceFixtures = [trace]
+        for (index, bundle) in hostileBundles.enumerated() {
+            let data = try JSONSerialization.data(withJSONObject: [
+                "frontmost_observation": [
+                    "reason": "keyboard_owner_not_logic", "focus_read": "unavailable",
+                    "keyboard_owner_bundle_id": bundle,
+                ],
+            ])
+            let projected = ChannelRouter.frontmostTraceAttributes(from: String(decoding: data, as: UTF8.self))
+            #expect(projected["frontmost_keyboard_owner_bundle_id"] == nil)
+            traceFixtures.append(OperationTrace(
+                traceID: TraceID(rawValue: "lpmcp_00000000-0000-0000-0000-" + String(format: "%012d", index + 1085)),
+                operationID: "transport.goto_position", startedAt: .now,
+                events: [TraceEvent(
+                    phase: .channelCompleted, timestamp: .now,
+                    wallClock: Date(timeIntervalSince1970: 1_700_000_000),
+                    attributes: projected,
+                    privacyClasses: Dictionary(uniqueKeysWithValues: projected.keys.map {
+                        ($0, TracePrivacyClass.publicDiagnostic)
+                    })
+                )], completedAt: .now
+            ))
+        }
+        let input = SupportBundleBuilder.Input(
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            serverVersion: "3.11.0", serverCommit: "unknown",
+            logic: .init(version: "12.3", variant: "desktop", locale: "en_US"),
+            qualificationReference: "not_available", traces: traceFixtures,
+            doctorReport: Self.hostileDoctorReport(privateValue: privateValue),
+            metadata: .init(process: .init(uptimeSec: 1, memoryMb: 1), channels: [])
+        )
+        let assembly = try SupportBundleBuilder().assemble(input)
+        let data = try #require(assembly.files["traces.json"])
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let traces = try #require(object["traces"] as? [[String: Any]])
+        let events = try #require(traces.first?["events"] as? [[String: Any]])
+        let exported = try #require(events.first?["attributes"] as? [String: String])
+        #expect(exported == expected)
+        #expect(traces.count == traceFixtures.count)
+        for record in traces.dropFirst() {
+            let hostileEvents = try #require(record["events"] as? [[String: Any]])
+            let hostileAttributes = try #require(hostileEvents.first?["attributes"] as? [String: String])
+            #expect(hostileAttributes == ["frontmost_reason": "keyboard_owner_not_logic",
+                                         "frontmost_focus_read": "unavailable"])
+        }
+        for key in keys {
+            #expect(OperationTraceStore.attributePrivacyClasses[key] == .publicDiagnostic)
+        }
+        let allText = assembly.files.values.map { String(decoding: $0, as: UTF8.self) }.joined()
+        #expect(!allText.contains(privateValue))
+        #expect(!allText.contains("sk-live-secret"))
+        #expect(!allText.contains("ghp_secret"))
+    }
+
     @Test("bundle is complete, readback-verifiable, and privacy safe")
     func completePrivacySafeBundle() async throws {
         let output = FileManager.default.temporaryDirectory

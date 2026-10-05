@@ -27,6 +27,8 @@ enum AXLogicProElements {
         /// read the live system: a test runtime that does not set it must not depend on whichever
         /// application the machine running the test has focused. `.production` sets it.
         let focusedApplicationPID: @Sendable () -> pid_t?
+        /// #1084: nil in ordinary fake runtimes; production explicitly supplies its live probe.
+        let observeFrontmost: (@Sendable () -> ProcessUtils.KeyboardOwnershipObservation)?
 
         init(
             logicProPID: @escaping @Sendable () -> pid_t?,
@@ -37,7 +39,8 @@ enum AXLogicProElements {
             executeAppleScriptWithTimeout: (@Sendable (String, TimeInterval) async -> ChannelResult)? = nil,
             onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = Runtime.liveOnScreenWindowList,
             postPopupMenuEscape: @escaping @Sendable () -> Void = Runtime.livePostPopupMenuEscape,
-            focusedApplicationPID: @escaping @Sendable () -> pid_t? = { nil }
+            focusedApplicationPID: @escaping @Sendable () -> pid_t? = { nil },
+            observeFrontmost: (@Sendable () -> ProcessUtils.KeyboardOwnershipObservation)? = nil
         ) {
             self.logicProPID = logicProPID
             self.ax = ax
@@ -48,6 +51,7 @@ enum AXLogicProElements {
             self.onScreenWindowList = onScreenWindowList
             self.postPopupMenuEscape = postPopupMenuEscape
             self.focusedApplicationPID = focusedApplicationPID
+            self.observeFrontmost = observeFrontmost
         }
 
         static let liveOnScreenWindowList: @Sendable () -> [[String: Any]]? = {
@@ -71,7 +75,8 @@ enum AXLogicProElements {
             executeAppleScriptWithTimeout: { script, timeout in
                 await AppleScriptChannel.executeAppleScript(script, timeout: timeout)
             },
-            focusedApplicationPID: { ProcessUtils.focusedApplicationPID() }
+            focusedApplicationPID: { ProcessUtils.focusedApplicationPID() },
+            observeFrontmost: { ProcessUtils.keyboardOwnershipObservation() }
         )
     }
 

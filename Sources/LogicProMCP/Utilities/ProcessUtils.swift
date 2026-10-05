@@ -140,36 +140,118 @@ enum ProcessUtils {
     /// A frontmost gate built on that reports `already_frontmost` for a backgrounded Logic — exactly
     /// the state it exists to refuse — so the question is put to the component that actually decides
     /// where keystrokes go.
-    static func logicOwnsTheKeyboard() -> Bool {
-        guard let infos = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
-        ) as? [[String: Any]] else { return false }
-        // The focused application is read after the window list: the system-wide read fails until
-        // this process has called the window server (`focusedApplicationPID`).
-        return logicOwnsTheKeyboard(
-            windows: infos, focusedApplicationPID: focusedApplicationPID(), bundleIDForPID: bundleIDForPID
-        )
+    struct KeyboardOwnershipObservation: Sendable, Equatable {
+        enum Reason: String, Sendable {
+            case windowListUnavailable = "window_list_unavailable"
+            case keyboardWindowAbsent = "keyboard_window_absent"
+            case keyboardOwnerUnavailable = "keyboard_owner_unavailable"
+            case keyboardBundleUnavailable = "keyboard_bundle_unavailable"
+            case keyboardOwnerNotLogic = "keyboard_owner_not_logic"
+            case focusedApplicationMismatch = "focused_application_mismatch"
+            case logicOwnsKeyboard = "logic_owns_keyboard"
+        }
+        enum FocusRead: String, Sendable {
+            case read, unavailable
+            case notAttempted = "not_attempted"
+        }
+        let reason: Reason
+        let keyboardOwnerPID: pid_t?
+        let keyboardOwnerBundleID: String?
+        let keyboardWindowLayer: Int?
+        let focusedApplicationPID: pid_t?
+        let focusRead: FocusRead
+        var isReady: Bool { reason == .logicOwnsKeyboard }
+
+        // Export only these structural facts. Sanitization never changes the ownership predicate.
+        var diagnostic: [String: Any] {
+            var result: [String: Any] = ["reason": reason.rawValue, "focus_read": focusRead.rawValue]
+            if let pid = keyboardOwnerPID, pid > 0 { result["keyboard_owner_pid"] = Int(pid) }
+            if let pid = focusedApplicationPID, pid > 0 { result["focused_application_pid"] = Int(pid) }
+            if let layer = keyboardWindowLayer, layer == 0 || layer == LogicOnScreenWindows.modalPanelLevel {
+                result["keyboard_window_layer"] = layer
+            }
+            if let bundle = Self.diagnosticBundleID(keyboardOwnerBundleID) {
+                result["keyboard_owner_bundle_id"] = bundle
+            }
+            return result
+        }
+
+        static func diagnosticBundleID(_ value: String?) -> String? {
+            guard let value, !value.isEmpty, value.utf8.count <= 255,
+                  value.split(separator: ".", omittingEmptySubsequences: false).allSatisfy({ !$0.isEmpty }),
+                  value.contains("."), !value.contains("sk-"), !value.contains("ghp_"),
+                  value.utf8.allSatisfy({ byte in
+                      (65...90).contains(byte) || (97...122).contains(byte)
+                          || (48...57).contains(byte) || byte == 46 || byte == 45 || byte == 95
+                  }) else { return nil }
+            return value
+        }
     }
 
-    /// The decision `logicOwnsTheKeyboard` takes, from what it read. The list is ordered front to
-    /// back; `keyboardWindow` names the window whose owner the keyboard belongs to, an alert at the
-    /// modal-panel level included, and that owner must be Logic. An application with no window on
-    /// screen holds the keyboard without being in the list, and the accessibility server names it
-    /// (`LogicOnScreenWindows.keyboardOwnerIsLogic`): when it answered, it must name that same
-    /// process. Unread, the window reading answers alone, as it did before.
-    ///
-    /// The owner must read as Logic by its bundle identifier. `isKnownLogicPID` answers true for a
-    /// pid whose bundle does not read, so a helper or command-line process that owned the front
-    /// window and held the focus passed, both readings naming it (review R2 of #1082; R1 had closed
-    /// the same hole for the focused application alone).
+    static func logicOwnsTheKeyboard() -> Bool {
+        keyboardOwnershipObservation().isReady
+    }
+
+    /// Preserve the existing predicate: first normal/modal owner, strict Logic bundle, and a
+    /// readable focus must match. Unread focus remains permissive. No PID conversion is changed.
     static func logicOwnsTheKeyboard(
         windows: [[String: Any]], focusedApplicationPID: pid_t?, bundleIDForPID: (pid_t) -> String?
     ) -> Bool {
-        guard let window = LogicOnScreenWindows.keyboardWindow(windows),
-              let pid = pidValue(from: window[kCGWindowOwnerPID as String]),
-              LogicProTarget.isLogicFrontmostBundleID(bundleIDForPID(pid)) else { return false }
-        guard let focusedApplicationPID else { return true }
-        return focusedApplicationPID == pid
+        keyboardOwnershipObservation(
+            windows: windows, focusedApplicationPID: focusedApplicationPID, bundleIDForPID: bundleIDForPID
+        ).isReady
+    }
+
+    static func keyboardOwnershipObservation() -> KeyboardOwnershipObservation {
+        keyboardOwnershipObservation(
+            windowList: {
+                CGWindowListCopyWindowInfo(
+                    [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+                ) as? [[String: Any]]
+            },
+            focusedPID: focusedApplicationPID,
+            bundleIDForPID: bundleIDForPID
+        )
+    }
+
+    /// Read the window server before AX focus, once each; AX focus may not answer before CG.
+    /// The result is the observation used by the gate, never a second diagnostic sample.
+    static func keyboardOwnershipObservation(
+        windowList: () -> [[String: Any]]?, focusedPID: () -> pid_t?,
+        bundleIDForPID: (pid_t) -> String?
+    ) -> KeyboardOwnershipObservation {
+        guard let windows = windowList() else {
+            return KeyboardOwnershipObservation(
+                reason: .windowListUnavailable, keyboardOwnerPID: nil, keyboardOwnerBundleID: nil,
+                keyboardWindowLayer: nil, focusedApplicationPID: nil, focusRead: .notAttempted
+            )
+        }
+        return keyboardOwnershipObservation(
+            windows: windows, focusedApplicationPID: focusedPID(), bundleIDForPID: bundleIDForPID
+        )
+    }
+
+    static func keyboardOwnershipObservation(
+        windows: [[String: Any]], focusedApplicationPID: pid_t?, bundleIDForPID: (pid_t) -> String?
+    ) -> KeyboardOwnershipObservation {
+        let window = LogicOnScreenWindows.keyboardWindow(windows)
+        let pid = pidValue(from: window?[kCGWindowOwnerPID as String])
+        let bundle = pid.flatMap(bundleIDForPID)
+        let layer = (window?[kCGWindowLayer as String] as? Int)
+            ?? (window?[kCGWindowLayer as String] as? NSNumber)?.intValue
+        let reason: KeyboardOwnershipObservation.Reason
+        if window == nil { reason = .keyboardWindowAbsent }
+        else if pid == nil { reason = .keyboardOwnerUnavailable }
+        else if bundle == nil { reason = .keyboardBundleUnavailable }
+        else if !LogicProTarget.isLogicFrontmostBundleID(bundle) { reason = .keyboardOwnerNotLogic }
+        else if let focusedApplicationPID, focusedApplicationPID != pid {
+            reason = .focusedApplicationMismatch
+        } else { reason = .logicOwnsKeyboard }
+        return KeyboardOwnershipObservation(
+            reason: reason, keyboardOwnerPID: pid, keyboardOwnerBundleID: bundle,
+            keyboardWindowLayer: layer, focusedApplicationPID: focusedApplicationPID,
+            focusRead: focusedApplicationPID == nil ? .unavailable : .read
+        )
     }
 
     /// The process the accessibility server names as the focused application, the one keystrokes

@@ -117,6 +117,12 @@ If `install.share_dir=warn`, packaged helper assets are missing from the resolve
 
 Open Logic Pro and create or open a project. Doctor does not launch or focus Logic for you.
 
+### Positioning refuses before writing
+
+When `goto_position` returns `ax_write_failed` with `frontmost_preparation` set to `activation_refused` or `activation_timed_out`, the channel could not establish that Logic owns the keyboard. `record_sequence` preserves this positioning failure before MIDI import; a router fallback can wrap it in `channels_exhausted`/`last_error`. Read `frontmost_observation.reason` and each channel's completed trace: `window_list_unavailable`, `keyboard_window_absent`, `keyboard_owner_unavailable`, `keyboard_bundle_unavailable`, `keyboard_owner_not_logic` or `focused_application_mismatch` distinguish the last gate observation. CG windows are read before AX focus; the first normal/modal window must have a readable Logic owner bundle, and readable focus must name that owner. An unavailable `focus_read` alone retains the window-based decision, rather than proving a permission failure. Titles, project paths and raw AX errors are not included.
+
+Bring the intended Logic project forward through a known Logic window or its Dock icon. Resolve or cancel only dialogs whose purpose and owner you recognize; do not send blind Escape, close unknown dialogs, disable the guard or bypass macOS permissions. If refusal continues, retain the sanitized support bundle and its separate channel observations. Passed permission checks do not prove keyboard ownership or recording success, and an activation timeout alone does not establish a Logic 12.4 incompatibility. The diagnostics describe the observation that decided that attempt, not a later resample or a guarantee that the next attempt is ready.
+
 ### `logic://tracks` shows placeholders
 
 Make the main Tracks area visible and wait for one refresh. Placeholder rows are treated as untrusted and should not be used for writes.
