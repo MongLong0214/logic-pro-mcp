@@ -91,11 +91,13 @@
       "2026-10-04-1107-ko-KR-plugin-arrange-binding",
       "2026-10-05-1107-en-US-plugin-terminal-guard-repair",
       "2026-10-05-1107-ko-KR-plugin-terminal-guard-repair",
-      "2026-10-05-1084-ko-KR-positioning-diagnostic-preflight"
+      "2026-10-05-1084-ko-KR-positioning-diagnostic-preflight",
+      "2026-10-05-1084-readonly-dialog-modality"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
-      "2026-09-23-973-en-US-header-mixer-fine-axvalue"
+      "2026-09-23-973-en-US-header-mixer-fine-axvalue",
+      "2026-10-05-1084-readonly-dialog-modality"
     ],
     "records_without_evidence": [
       "2026-09-03-sort-settle-witness-accepts-prescroll-order",
@@ -499,9 +501,9 @@
     "manual_reverify": {
       "date": "2026-10-05",
       "members": [
-        "2026-10-05-1084-ko-KR-positioning-diagnostic-preflight"
+        "2026-10-05-1084-readonly-dialog-modality"
       ],
-      "reason": "#1107: these four actual Korean/English observations require an owned disposable Logic project, independently named Arrange/Mixer targets, occupied-editor reads and inverse writes, safe empty-slot insertion, locale relaunch, and backup restoration. Their live GUI preparation and restoration are not a headless CI replay, so each retains its explicit manual reverify steps. The committed arrange-binding and terminal-guard-repair evidence receipts preserve the distinct immutable binaries, first-refusal/retry outcomes, failed description reads and restored projections. All four verdicts remain partial on Logic 12.3 build 6674; this records the manual-replay gap, not E-clean or Logic 12.4 qualification. #1084: the added Korean positioning smoke requires an exclusively owned disposable Logic fixture and live dialog/transport observation, so it retains manual replay steps. Both actual requests refused before the ownership gate; its inconclusive receipt establishes neither native ownership diagnostics nor a remedy on Logic 12.4."
+      "reason": "#1107: these four actual Korean/English observations require an owned disposable Logic project, independently named Arrange/Mixer targets, occupied-editor reads and inverse writes, safe empty-slot insertion, locale relaunch, and backup restoration. Their live GUI preparation and restoration are not a headless CI replay, so each retains its explicit manual reverify steps. The committed arrange-binding and terminal-guard-repair evidence receipts preserve the distinct immutable binaries, first-refusal/retry outcomes, failed description reads and restored projections. All four verdicts remain partial on Logic 12.3 build 6674; this records the manual-replay gap, not E-clean or Logic 12.4 qualification. #1084: the added Korean positioning smoke requires an exclusively owned disposable Logic fixture and live dialog/transport observation, so it retains manual replay steps. Both actual requests refused before the ownership gate; its inconclusive receipt establishes neither native ownership diagnostics nor a remedy on Logic 12.4. #1084 read-only modality: the new historical structural record needs an exclusive read-only Logic lane and a transient AXWindows/PID/modality/children snapshot, about 2 minutes. Its private historical probe is not a committed headless replay; only this new record is added to the manual set. Failed descendant and sheet readings remain unknown, later installed metadata is not atomic host binding, and no operation or release qualification is granted."
     },
     "records_without_evidence": {
       "date": "2026-09-19",
@@ -711,11 +713,11 @@
       "reason": "#291 R1, merged over #1028 (ADR-027 D6, audit B D1): zh_TW.lproj/QuickHelp.plist is the English file byte for byte, so the canon records it `not_localized` and neither the casefold ledger nor a derived LabelSet credits the English QuickHelp titles these two sets derive from (INS_010_SendSlot, INS_011_SendLevelKnob) as zh-TW. On this branch alone the cells were `derived` from that English; they were never credited as measured. The #291 live run in zh-TW (docs/observations/2026-09-27-zh-TW-endpoints-and-send-slots.json, raw evidence docs/observations/evidence/2026-09-27-zh-TW-endpoints-and-send-slots.json) found the send slots with these sets -- 19 before and 40 after one assignment, with one Send Level knob where the product and the independent walk both put the occupied slot, 11 checks passed -- but it records counts and the members it matched WITH (evidence tag 291e/label-sets), not the AXHelp string it read, so no row there can back a `measured` cell and the cells stay unmeasured until a reading that stores the string. The #1034 raise of the same date for this key named its own members; those are in the base now and remain in history."
     },
     "records_from_a_superseded_build": {
-      "date": "2026-09-24",
+      "date": "2026-10-05",
       "members": [
-        "2026-09-23-972-en-US-plugin-instance-identity"
+        "2026-10-05-1084-readonly-dialog-modality"
       ],
-      "reason": "#976: the record's host is Logic Pro 12.3.1 (6682), the desk it was measured on, while LOGIC-BUILD.json declares the corpus build. The record measures accessibility-tree behaviour (host-set identifiers, window titles, strip reachability, slot label truncation) and carries canon_not_applicable, so no label reading from the newer build enters the corpus; the host block states the drift rather than hiding it, as #974 does for its record."
+      "reason": "PR #1114 R1084-01: this existing historical structural probe never bound its running Logic version/build, UI locale or OS. Later installed metadata was previously copied into the record host and incorrectly credited the declared build. Correcting that provenance error admits exactly this unbound record into the existing build-gap set; it claims no new measurement or locale coverage. The two previously allowed different-build records remain unchanged."
     },
     "unmeasured_coverage.ko-KR": {
       "date": "2026-09-25",

@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "kind": "selected historical read-only AX structural readings",
+  "source": {
+    "raw_sha256": "94ef9dd54ddd7b15cdd91d1d7e028f6a50ae1f81a57ffaf973d5fdcdfee6f188",
+    "private_probe_script_sha256": "35a2d3a95b61b663f799eb4747bb346e1c4f41fc78e4389ff1b8ed439fcfdd01",
+    "cfbridge_sha256": "7209c68579afc1dddbcde6b6c999100dc89bdde763f23a1ef4029bc2d66826d6",
+    "probe_date": "2026-10-05",
+    "exact_wall_clock_timestamp_recorded": false
+  },
+  "selection": {
+    "raw_paths": [
+      "logic_pids.value[0]",
+      "windows_status",
+      "windows.length",
+      "windows[*].pid_status",
+      "windows[*].pid",
+      "windows[0].attributes.AXRole",
+      "windows[0].attributes.AXSubrole",
+      "windows[0].attributes.AXModal",
+      "windows[0].attributes.AXMain",
+      "windows[0].attributes.AXSheets",
+      "windows[0].children_status",
+      "windows[0].children_count",
+      "windows[0].children_truncated",
+      "windows[0].children[0].pid_status",
+      "windows[0].children[0].pid",
+      "windows[0].children[0].attributes.AXRole",
+      "windows[0].children[0].children_status",
+      "windows[0].children[0].children"
+    ],
+    "omitted": "Original titles, identifiers, AXDocuments, positions, sizes, project/session data, application inventory and raw screen observations are not projected."
+  },
+  "readings": {
+    "ownership": {
+      "windows_status": 0,
+      "owner_window_count": 3,
+      "sampled_owner_pid": 74382,
+      "all_returned_windows_same_owner": true
+    },
+    "first_window": {
+      "array_index": 0,
+      "pid_status": 0,
+      "pid": 74382,
+      "role": {
+        "status": 0,
+        "value": "AXWindow"
+      },
+      "subrole": {
+        "status": 0,
+        "value": "AXDialog"
+      },
+      "modality": {
+        "status": 0,
+        "value": false
+      },
+      "main": {
+        "status": 0,
+        "value": false
+      },
+      "sheets": {
+        "status": -25205,
+        "value": null
+      },
+      "children_status": 0,
+      "children_count": 1,
+      "children_truncated": false,
+      "direct_child": {
+        "array_index": 0,
+        "pid_status": 0,
+        "pid": 74382,
+        "role": {
+          "status": 0,
+          "value": "AXButton"
+        },
+        "children_status": -25212,
+        "children": null
+      }
+    }
+  },
+  "conversion": {
+    "boolean": "CFGetTypeID matches CFBooleanGetTypeID before CFBooleanGetValue is converted to Python bool.",
+    "number": "The separate CFNumber branch returns an integer or floating-point number, not a bool."
+  },
+  "later_host_metadata": {
+    "host": {
+      "app": "Logic Pro",
+      "version": "12.3",
+      "build": "6674",
+      "locale": "ko-KR",
+      "os": "macOS 26.3 (25D125)"
+    },
+    "generator": "Scripts/observation_host.py --json",
+    "generator_sha256": "cdfc1e21bb0ffc28db3f8ac68b311e016f767abff56d200163e3b9db1898e4c3",
+    "generated_after_utc": "2026-10-05T05:04:55Z",
+    "generated_json_sha256": "f5887429de5b55e9902f2e25f2e4af0b07dc496c15bae69b013719e843dd1c10",
+    "binding": "Generated later from installed plist/defaults metadata; not a historical loaded-image version or an atomic host/probe binding."
+  }
+}

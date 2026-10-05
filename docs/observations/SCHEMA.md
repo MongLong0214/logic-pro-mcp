@@ -107,6 +107,17 @@ true of a different application.
    field looks identical to a measured one. `locale` is recorded but is deliberately not a
    drift axis: a ko-KR record does not become untrue when the machine switches to en-US, it
    becomes a claim about a different host.
+
+   A retained historical reading whose host was not bound must not borrow metadata generated
+   later. Without changing the schema version, declare all required host keys, keep a nonempty
+   `app`, and set `version`, `build`, `os`, and `locale` to JSON `null`, with
+   `"binding": "unknown"` and a nonempty `reason`. Status readers report this as `unknown`, not
+   current or stale; it grants no build or locale coverage. The existing
+   `records_from_a_superseded_build` gap set also counts this unbound record. Keep any later
+   installed metadata separately in the cited evidence, labelled with its collection time and
+   limits; it cannot fill these historical fields. Known-host records retain the existing
+   nonempty-field and supported-locale requirements.
+
 6. **`reverify` is required**, because a claim nobody can re-run is a claim nobody can retire. Use
    `"kind": "manual"` with steps in `command` when no script exists yet — that is honest and still
    actionable; a missing field is neither.

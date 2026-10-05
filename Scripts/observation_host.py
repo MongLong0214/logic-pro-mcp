@@ -148,6 +148,9 @@ def check(paths):
             print(f"{path}: unreadable")
             continue
         recorded = doc.get("host") or {}
+        if recorded.get("binding") == "unknown":
+            print(f"{doc.get('id') or path}\n  historical host binding was not established")
+            continue
         diff = [f"{k}: record {recorded.get(k)!r} vs machine {here.get(k)!r}"
                 for k in axes if recorded.get(k) != here.get(k)]
         name = doc.get("id") or path

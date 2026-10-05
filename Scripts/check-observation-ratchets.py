@@ -176,7 +176,9 @@ def live_state(repo=REPO):
     if target != ("", ""):
         for r in records:
             host = r.get("host") or {}
-            if (str(host.get("version") or ""), str(host.get("build") or "")) != target:
+            # This existing gap also includes a reading not bound to any historical build.
+            if (host.get("binding") == "unknown"
+                    or (str(host.get("version") or ""), str(host.get("build") or "")) != target):
                 superseded_records.add(r.get("id"))
 
     surfaces = re.findall(r"\|\s*`([a-z_]+\.[a-z_]+)`",
@@ -184,7 +186,9 @@ def live_state(repo=REPO):
     # Per locale: a surface measured in ko-KR is not measured in ja-JP, and a global count said it was.
     bare = set()
     for loc in locales:
-        seen = {r.get("surface") for r in records if (r.get("host") or {}).get("locale") == loc}
+        seen = {r.get("surface") for r in records
+                if (r.get("host") or {}).get("binding") != "unknown"
+                and (r.get("host") or {}).get("locale") == loc}
         bare |= {f"{loc}\u2192{s}" for s in surfaces if s not in seen}
 
     return {

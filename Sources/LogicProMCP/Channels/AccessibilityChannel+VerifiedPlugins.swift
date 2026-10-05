@@ -5120,7 +5120,10 @@ extension AccessibilityChannel {
     /// Best-effort via AX + CGEvent only: click Cancel/close if present, otherwise
     /// Escape. Returns whether a matching dialog was found.
     @discardableResult
-    static func closeGoToPositionDialog(runtime: AXLogicProElements.Runtime) -> Bool {
+    static func closeGoToPositionDialog(
+        runtime: AXLogicProElements.Runtime,
+        escape: @Sendable () -> Void = { AXMouseHelper.pressEscape() }
+    ) -> Bool {
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return false }
         let windows: [AXUIElement] = AXHelpers.getAttribute(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
@@ -5175,7 +5178,7 @@ extension AccessibilityChannel {
                 // ADR-001 coordinate ban: AXPress only; no element-derived click.
                 _ = AXHelpers.performAction(close, kAXPressAction as String, runtime: runtime.ax)
             } else {
-                AXMouseHelper.pressEscape()
+                escape()
             }
         }
         return found

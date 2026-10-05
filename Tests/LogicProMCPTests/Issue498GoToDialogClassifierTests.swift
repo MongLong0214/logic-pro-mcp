@@ -62,16 +62,19 @@ func issue628AmbiguousCancelIsNotPressedByTreeOrder() {
         isModal: true,
         secondCancel: true
     )
-    // Still dismissed — the close-button and Escape routes are unchanged. What must NOT happen is
-    // pressing whichever Cancel the traversal reached first, which is what the old lookup did
-    // while recording nothing about there having been a choice.
-    _ = AccessibilityChannel.closeGoToPositionDialog(runtime: fixture.runtime)
+    // Record the terminal Escape fallback rather than sending a key to the running application.
+    // Dispatch is not evidence of dismissal. Neither ambiguous Cancel may be chosen by order.
+    let escapes = MutableBox(0)
+    _ = AccessibilityChannel.closeGoToPositionDialog(
+        runtime: fixture.runtime, escape: { escapes.value += 1 }
+    )
     let pressedTheFirstCancel = fixture.builder.actionCalls.contains {
         $0.elementID == fixture.builder.elementID(fixture.cancel)
             && $0.action == kAXPressAction as String
     }
     #expect(!pressedTheFirstCancel,
             "identity came from tree order: with two candidates neither is identified")
+    #expect(escapes.value == 1)
 }
 
 @Test("Issue498: standard non-modal project window is not touched")

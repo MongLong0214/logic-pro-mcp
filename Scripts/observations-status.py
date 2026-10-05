@@ -67,7 +67,7 @@ def load():
 
 
 def classify(records, host):
-    """current | stale | superseded, plus why. `host is None` means we cannot tell."""
+    """current | stale | superseded | unknown, plus why."""
     superseded = {d.get("supersedes") for _, d in records if d.get("supersedes")}
     rows = []
     for path, doc in records:
@@ -75,6 +75,9 @@ def classify(records, host):
         rec_host = doc.get("host") or {}
         if rid in superseded:
             rows.append((rid, "superseded", "a later record replaces it", doc))
+            continue
+        if rec_host.get("binding") == "unknown":
+            rows.append((rid, "unknown", "historical host binding was not established", doc))
             continue
         if host is None:
             rows.append((rid, "unknown", "Logic is not installed here, so drift cannot be computed", doc))
@@ -117,7 +120,9 @@ def coverage(records):
             continue
         print(f"  {surface}")
         for d in sorted(docs, key=lambda x: x["id"]):
-            loc = (d.get("host") or {}).get("locale") or "?"
+            rec_host = d.get("host") or {}
+            loc = ("? (host binding unknown)" if rec_host.get("binding") == "unknown"
+                   else rec_host.get("locale") or "?")
             print(f"      [{d['verdict']:12s}] [{loc}] {d['question']}")
     if empty:
         print("\nnot measured — nobody has looked at these, which is not the same as them working\n")
@@ -297,6 +302,7 @@ def main():
         json.dump({"installed_host": host,
                    "records": [{"id": r, "status": s, "reason": w,
                                 "verdict": d.get("verdict"),
+                                "host": d.get("host"),
                                 "issues": d.get("issues"),
                                 "depends": d.get("depends") or [],
                                 "reverify": d.get("reverify")}
