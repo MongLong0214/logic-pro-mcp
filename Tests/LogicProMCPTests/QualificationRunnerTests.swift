@@ -104,6 +104,126 @@ struct QualificationRunnerTests {
         #expect(readbackSources == ["logic://transport/state", "logic://mixer"])
     }
 
+    @Test func runnerVerifierRejectsCoherentLegacyMIDIPortSemanticBundle() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .midiListPorts })
+        let originalDrive = Self.driveResult(specs: [spec])
+        let captured = try #require(originalDrive.operationResults[spec.id.rawValue])
+        let ports = QualificationOperationResult(
+            operationID: captured.operationID, tool: captured.tool, command: captured.command,
+            mutability: captured.mutability, requestID: captured.requestID,
+            responseData: captured.responseData, isError: captured.isError,
+            state: nil, error: nil, hint: nil, writeAttempted: nil,
+            readbackSource: QualificationTransport.readbackSource(for: spec),
+            readbackRequestID: captured.readbackRequestID, readbackData: captured.readbackData,
+            verification: spec.verification, deadline: spec.deadline, failureReason: captured.failureReason
+        )
+        let drive = QualificationDriveResult(
+            handshake: originalDrive.handshake, health: originalDrive.health,
+            catalog: originalDrive.catalog, expectedOperationCount: originalDrive.expectedOperationCount,
+            traceList: originalDrive.traceList, traceDetail: originalDrive.traceDetail,
+            negative: originalDrive.negative, observedLocale: originalDrive.observedLocale,
+            operationResults: [spec.id.rawValue: ports], wireFrames: originalDrive.wireFrames,
+            mutationRestoreRecords: originalDrive.mutationRestoreRecords,
+            failureReason: originalDrive.failureReason
+        )
+        let fixture = try Fixture(specs: [spec], drive: { _ in drive })
+        defer { fixture.remove() }
+        let axisWaivers = Self.axisWaivers()
+        // A legitimate known limitation may be waived for this CONTROL only.
+        // Before the repair the producer calls it passed, so no operation waiver is supplied.
+        let controlWaivers = axisWaivers + (ports.status == .passed ? [] : [
+            Self.waiver(
+                caseID: "in-process/midi.list_ports", owningIssue: "#373",
+                affectedCapability: "operation:midi.list_ports"
+            )
+        ])
+        try JSONEncoder().encode(controlWaivers).write(to: fixture.waiversURL)
+        let baseline = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let control = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        try #require(control.exitCode == 0, "baseline must actually verify: \(control.stdout)")
+        let operationCase = try #require(baseline.cases.first { $0.id == "in-process/midi.list_ports" })
+        let evidencePath = try #require(operationCase.evidenceFiles.first)
+        let evidenceURL = fixture.directory.appendingPathComponent(evidencePath)
+        let originals = try [
+            evidenceURL, fixture.caseManifestURL, fixture.manifestURL, fixture.attestationURL
+        ].map { ($0, try Data(contentsOf: $0)) }
+
+        func claimLegacySemanticPass(_ object: inout [String: Any]) throws {
+            object["status"] = "passed"
+            object["verified"] = true
+            object["verification_kind"] = "semantic_readback"
+            object["deferral"] = nil
+            object["reason"] = nil
+            object["failure_reason"] = nil
+            var readback = try #require(object["readback"] as? [String: Any])
+            readback["verified"] = true
+            object["readback"] = readback
+        }
+        // Keep the exact port payloads, response/readback request IDs and digests.
+        // Only the producer's meaning/credit claim changes, not the observations.
+        try Self.mutateJSONObject(at: evidenceURL, claimLegacySemanticPass)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let axisWaiverJSON = try JSONSerialization.jsonObject(with: encoder.encode(axisWaivers))
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            var cases = try #require(object["cases"] as? [[String: Any]])
+            let index = try #require(cases.firstIndex { $0["id"] as? String == operationCase.id })
+            try claimLegacySemanticPass(&cases[index])
+            object["cases"] = cases
+            object["waivers"] = axisWaiverJSON // no operation waiver can mask the counterexample
+        }
+        let forged = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self, from: Data(contentsOf: fixture.attestationURL)
+        )
+        try Self.mutateJSONObject(at: fixture.caseManifestURL) { object in
+            object["cases"] = try JSONSerialization.jsonObject(with: encoder.encode(forged.cases))
+        }
+        // The existing rewritePassedAxisEvidence helper shows this exact digest chain.
+        // This operation witness additionally updates the CASE manifest and waiver binding.
+        let evidenceData = try Data(contentsOf: evidenceURL)
+        let caseManifestData = try Data(contentsOf: fixture.caseManifestURL)
+        try Self.mutateJSONObject(at: fixture.manifestURL) { object in
+            var entries = try #require(object["files"] as? [[String: Any]])
+            let index = try #require(entries.firstIndex { $0["path"] as? String == evidencePath })
+            entries[index]["sha256"] = SupportBundleBuilder.sha256(evidenceData)
+            object["files"] = entries
+            object["case_manifest_sha256"] = SupportBundleBuilder.sha256(caseManifestData)
+            object["waivers_sha256"] = SupportBundleBuilder.sha256(try encoder.encode(axisWaivers))
+        }
+        let manifestSHA256 = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
+        let counts = QualificationSummaryCounts(cases: forged.cases)
+        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            object["total"] = counts.total
+            object["passed"] = counts.passed
+            object["failed"] = counts.failed
+            object["waived"] = counts.waived
+            object["evidenceManifestSHA256"] = manifestSHA256
+            var provenance = try #require(object["provenance"] as? [String: Any])
+            provenance["evidenceManifestSHA256"] = manifestSHA256
+            object["provenance"] = provenance
+        }
+        try fixture.forceSignForDiagnosticFixture()
+        let refused = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(refused.exitCode != 0, "\(refused.stdout)")
+        let rejections = try #require(try Self.resultObject(refused)["rejections"] as? [[String: Any]])
+        #expect(rejections.count == 2, "\(refused.stdout)")
+        #expect(Self.rejectionReasons(try Self.resultObject(refused)) == [
+            "requiredOperationNotSatisfied", "evidenceBindingMismatch"
+        ], "\(refused.stdout)")
+        #expect(rejections.contains {
+            $0["reason"] as? String == "evidenceBindingMismatch"
+                && $0["actual"] as? String == "semantic readback binding"
+        }, "\(refused.stdout)")
+        #expect(rejections.contains {
+            $0["reason"] as? String == "requiredOperationNotSatisfied"
+                && $0["key"] as? String == "midi.list_ports"
+        }, "\(refused.stdout)")
+        // A signed original with the same fixture, axis and verifier still works after restoration.
+        for (url, data) in originals { try data.write(to: url, options: .atomic) }
+        let restored = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(restored.exitCode == 0, "\(restored.stdout)")
+    }
+
     @Test func operationQualificationSeparatesSemanticReadSmokeAndTypedDeferrals() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
@@ -111,22 +231,35 @@ struct QualificationRunnerTests {
         let attestation = try await fixture.qualify()
         let operationCases = attestation.cases.filter { $0.id.hasPrefix("in-process/") }
 
-        // #373 Phase A shifted these counts. Before: only system.health had a
-        // semantic validator, so the other 20 read-only ops were honestly
-        // recorded protocolSmoke ("transport worked, nobody checked meaning").
-        // Now every read-only spec has an oracle, so a read that returns its
-        // real payload qualifies: passed == the read-only count (the oracles + health's
-        // bespoke validator), protocolSmoke == 0. The mutating ops are all notQualified:
-        // they still defer to ADR-001-c for live mutation.
+        // Oracle presence is not independent readback. Only the table's declared same-handler
+        // MIDI-port check is withheld; all other read-only semantic checks remain passing.
         // DERIVED: one case per registry spec. It was `113` and read 114 the day main added
         // `system.setup_control_surface`.
         #expect(operationCases.count == OperationRegistry.specs.count)
-        // DERIVED: every read-only spec qualifies semantically (its oracle, or health's bespoke
-        // validator). It was the literal `23`, and read 24 the day #965 added the read-only
-        // project.inspect_session with its oracle.
         let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
-        #expect(operationCases.filter { $0.status == .passed }.count == readOnlyCount)
-        #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
+        let marked = Set(SemanticOracleTable.all
+            .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
+        #expect(marked == Set<OperationID>([.midiListPorts]))
+        let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
+        let markedIDs = Set(marked.map(\.rawValue))
+        let passed = operationCases.filter { $0.status == .passed }
+        #expect(passed.count == readOnlyCount - marked.count)
+        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(markedIDs))
+        let smoke = operationCases.filter { $0.status == .protocolSmoke }
+        #expect(smoke.count == marked.count)
+        #expect(Set(smoke.map(\.operationID)) == markedIDs)
+        for qualificationCase in smoke {
+            let declared = try #require(QualificationSemanticReadbackValidator.independentReadbackDeferral(
+                for: qualificationCase.operationID))
+            #expect(qualificationCase.status == .protocolSmoke)
+            #expect(!qualificationCase.verified)
+            #expect(qualificationCase.verificationKind == .protocolSmoke)
+            #expect(qualificationCase.deferral == declared)
+            #expect(declared.code == .semanticValidatorUnavailable)
+            let readback = try #require(qualificationCase.readback)
+            #expect(!readback.verified)
+            #expect(!PromotionGate.operationIsLiveCredited(qualificationCase))
+        }
         // DERIVED: everything the registry has, minus the read-only specs this fixture qualifies.
         // It was `90`, and the day main added `system.setup_control_surface` it read 91 -- a number
         // that tracks the registry turns every new operation into a failing test that says
@@ -350,11 +483,9 @@ struct QualificationRunnerTests {
         #expect(!v1)
     }
 
-    /// The structural consequence, pinned: with every read-only spec oracled,
-    /// no read-only operation can reach protocolSmoke. If a future read-only op
-    /// lands without an oracle the census test fails first — this one records
-    /// why that matters.
-    @Test func noReadOnlyOperationCanFallThroughToProtocolSmoke() {
+    /// Every supported read-only operation has an oracle or health's bespoke validator.
+    /// That structural census does not establish independence for a same-handler check.
+    @Test func readOnlyOperationsHaveAnOracleOrBespokeValidator() {
         let unoracled = OperationRegistry.specs
             .filter { $0.mutability == .readOnly && $0.availability != .unsupported }
             .filter { spec in
@@ -3122,21 +3253,28 @@ struct QualificationRunnerTests {
         // ship axis (desktop/ko-KR) is not qualified (no waiver supplied).
         #expect(aggregateCases.filter { $0.status == .failed }.count == 1)
         #expect(aggregateCases.filter { $0.status == .notQualified }.count == 1)
-        // #373 Phase A: the read-only surface now qualifies semantically.
-        // DERIVED, as in operationQualificationSeparatesSemanticReadSmokeAndTypedDeferrals: every
-        // read-only spec qualifies semantically. It was the literal `23` until #965.
+        // Derive credit from the declared independent-readback scope, not oracle presence alone.
         let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
-        #expect(operationCases.filter { $0.status == .passed }.count == readOnlyCount)
-        #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
+        let marked = Set(SemanticOracleTable.all
+            .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
+        #expect(marked == Set<OperationID>([.midiListPorts]))
+        let markedIDs = Set(marked.map(\.rawValue))
+        let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
+        let passed = operationCases.filter { $0.status == .passed }
+        #expect(passed.count == readOnlyCount - marked.count)
+        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(markedIDs))
+        let smoke = operationCases.filter { $0.status == .protocolSmoke }
+        #expect(smoke.count == marked.count)
+        #expect(Set(smoke.map(\.operationID)) == markedIDs)
         // DERIVED: everything the registry has, minus the read-only specs this fixture qualifies.
         // It was `90`, and the day main added `system.setup_control_surface` it read 91 -- a number
         // that tracks the registry turns every new operation into a failing test that says
         // nothing about the product.
         #expect(operationCases.filter { $0.status == .notQualified }.count
                     == OperationRegistry.specs.count - readOnlyCount)
-        // #373 Phase A: the oracled read-only ops + system.health's bespoke
-        // validator. The aggregate axes contribute no passes here.
-        #expect(attestation.passed == readOnlyCount)
+        // Other semantic reads + health's bespoke validator pass; the same-handler smoke
+        // and aggregate axes contribute no passes here.
+        #expect(attestation.passed == readOnlyCount - marked.count)
         #expect(attestation.failed == 1)
 
         for qualificationCase in operationCases {
@@ -3147,11 +3285,26 @@ struct QualificationRunnerTests {
             #expect(qualificationCase.id == "in-process/\(spec.id.rawValue)")
             #expect(OperationHandlerRegistry.handler(tool: qualificationCase.tool, command: qualificationCase.command) != nil)
             if spec.mutability == .readOnly {
-                // #373 Phase A: health via its bespoke validator, every other
-                // read-only spec via its oracle — both are semantic readbacks.
-                #expect(qualificationCase.status == .passed)
-                #expect(qualificationCase.verified)
-                #expect(qualificationCase.verificationKind == .semanticReadback)
+                if marked.contains(spec.id) {
+                    let declared = try #require(QualificationSemanticReadbackValidator.independentReadbackDeferral(
+                        for: spec.id.rawValue))
+                    #expect(qualificationCase.status == .protocolSmoke)
+                    #expect(!qualificationCase.verified)
+                    #expect(qualificationCase.verificationKind == .protocolSmoke)
+                    #expect(qualificationCase.deferral == declared)
+                    #expect(declared.code == .semanticValidatorUnavailable)
+                    let readback = try #require(qualificationCase.readback)
+                    #expect(!readback.verified)
+                    #expect(!PromotionGate.operationIsLiveCredited(qualificationCase))
+                } else {
+                    // Every other read-only operation retains semantic credit and evidence.
+                    #expect(qualificationCase.status == .passed)
+                    #expect(qualificationCase.verified)
+                    #expect(qualificationCase.verificationKind == .semanticReadback)
+                    #expect(qualificationCase.deferral == nil)
+                    let readback = try #require(qualificationCase.readback)
+                    #expect(readback.verified)
+                }
             } else {
                 #expect(qualificationCase.status == .notQualified)
                 #expect(!qualificationCase.verified)
@@ -4500,6 +4653,11 @@ struct QualificationRunnerTests {
                 ? stableHealth
                 : oracleFixture.map(\.readbackData)
                 ?? Data("{\"operation_readback\":\"\(spec.id.rawValue)\"}".utf8)
+            // MIDI ports returns raw inventory, without a typed state/write envelope.
+            // Preserve its actual scalar fields rather than fabricating response metadata.
+            let midiResponse = spec.id == .midiListPorts
+                ? (try? JSONSerialization.jsonObject(with: response)) as? [String: Any]
+                : nil
             return (
                 spec.id.rawValue,
                 QualificationOperationResult(
@@ -4510,10 +4668,12 @@ struct QualificationRunnerTests {
                     requestID: "fake-operation-\(spec.id.rawValue)",
                     responseData: response,
                     isError: isMutation || !readIsQualified,
-                    state: spec.id == nonObjectResponseOperationID ? nil : isMutation ? "C" : "A",
-                    error: isMutation ? "invalid_params" : nil,
+                    state: spec.id == .midiListPorts ? midiResponse?["state"] as? String
+                        : spec.id == nonObjectResponseOperationID ? nil : isMutation ? "C" : "A",
+                    error: spec.id == .midiListPorts ? midiResponse?["error"] as? String
+                        : isMutation ? "invalid_params" : nil,
                     hint: nil,
-                    writeAttempted: false,
+                    writeAttempted: spec.id == .midiListPorts ? midiResponse?["write_attempted"] as? Bool : false,
                     readbackSource: spec.tool == .logicTransport
                         ? "logic://transport/state"
                         : spec.tool == .logicMixer

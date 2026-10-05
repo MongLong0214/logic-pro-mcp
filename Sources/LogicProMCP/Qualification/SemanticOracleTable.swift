@@ -1175,7 +1175,12 @@ enum SemanticOracleTable {
             serialization damage between the two reads. No truly independent \
             MIDI probe exists today; Phase B may add a CoreMIDI-direct probe to \
             make this a real cross-check.
-            """
+            """,
+        independentReadbackDeferral: QualificationDeferral(
+            code: .semanticValidatorUnavailable,
+            detail: "midi.list_ports and logic://midi/ports invoke the same handler; "
+                + "agreement checks protocol consistency, not an independent MIDI port readback"
+        )
     ) { responseData, readbackData in
         guard let response = JSONInspector.parse(responseData) as? [String: Any],
               let readback = JSONInspector.parse(readbackData) as? [String: Any] else {

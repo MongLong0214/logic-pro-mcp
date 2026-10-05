@@ -686,6 +686,11 @@ struct QualificationOperationResult: Equatable, Sendable {
             if let reason = readbackFreshness.refusalReason {
                 return "independent readback was not admissible: \(reason)"
             }
+            if let deferred = QualificationSemanticReadbackValidator.independentReadbackDeferral(
+                for: operationID
+            ) {
+                return deferral?.detail ?? deferred.detail
+            }
             switch semanticReadbackValidated {
             case .some(false):
                 return "semantic readback mismatch: response did not match its independent readback"
@@ -753,6 +758,14 @@ struct QualificationOperationResult: Equatable, Sendable {
                 detail: "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
             )
         case .notQualified where isError == false && semanticReadbackValidated == false:
+            if let deferred = QualificationSemanticReadbackValidator.independentReadbackDeferral(
+                for: operationID
+            ) {
+                return QualificationDeferral(
+                    code: .semanticMismatch,
+                    detail: "response/readback protocol consistency check failed; \(deferred.detail)"
+                )
+            }
             return QualificationDeferral(
                 code: .semanticMismatch,
                 detail: "read-only response did not match its operation-specific independent readback"
@@ -783,6 +796,11 @@ struct QualificationOperationResult: Equatable, Sendable {
                 detail: Self.unavailableDetail(error: error, hint: hint)
             )
         case .protocolSmoke:
+            if let deferred = QualificationSemanticReadbackValidator.independentReadbackDeferral(
+                for: operationID
+            ) {
+                return deferred
+            }
             return QualificationDeferral(
                 code: .semanticValidatorUnavailable,
                 detail: "protocol transport succeeded without an operation-specific semantic validator"
@@ -979,6 +997,11 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 }
 
 enum QualificationSemanticReadbackValidator {
+    static func independentReadbackDeferral(for operationID: String) -> QualificationDeferral? {
+        guard let id = OperationID(rawValue: operationID) else { return nil }
+        return SemanticOracleTable.byOperationID[id]?.independentReadbackDeferral
+    }
+
     static func validate(
         operationID: String,
         responseData: Data,
@@ -989,12 +1012,17 @@ enum QualificationSemanticReadbackValidator {
             // Bespoke: full typed-payload equality against the independent read.
             return healthMatches(responseData, readbackData)
         case .some(let id):
-            // #373 Phase A: the read-only surface is covered by the data-driven
-            // oracle table. Only an operation with no oracle at all falls
-            // through to nil, which the runner honestly records as
-            // protocolSmoke rather than passing it.
+            // Preserve raw response/protocol checks, but do not promote a declared
+            // non-independent agreement to semantic readback. Malformed/divergent
+            // protocol evidence still fails rather than silently becoming smoke.
             guard let oracle = SemanticOracleTable.byOperationID[id] else { return nil }
-            return oracle.evaluate(responseData: responseData, readbackData: readbackData)
+            let verdict = oracle.evaluate(responseData: responseData, readbackData: readbackData)
+            switch verdict {
+            case .some(true) where oracle.independentReadbackDeferral != nil:
+                return nil
+            default:
+                return verdict
+            }
         case .none:
             return nil
         }

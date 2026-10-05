@@ -403,22 +403,28 @@ struct OperationOracle: Sendable {
     /// Escape hatch. Receives the raw response and the raw independent readback.
     /// Returns nil only if the oracle cannot render a verdict at all.
     let custom: (@Sendable (Data, Data) -> Bool?)?
+    /// A useful response/protocol check may not establish independent after-state.
+    /// Nil preserves the existing qualification policy; a declaration withholds that credit.
+    let independentReadbackDeferral: QualificationDeferral?
 
     init(
         _ operationID: OperationID,
         strength: OracleStrength,
-        constraints: [OracleConstraint]
+        constraints: [OracleConstraint],
+        independentReadbackDeferral: QualificationDeferral? = nil
     ) {
         self.operationID = operationID
         self.strength = strength
         self.constraints = constraints
         customReason = nil
         custom = nil
+        self.independentReadbackDeferral = independentReadbackDeferral
     }
 
     init(
         custom operationID: OperationID,
         reason: String,
+        independentReadbackDeferral: QualificationDeferral? = nil,
         evaluate: @escaping @Sendable (Data, Data) -> Bool?
     ) {
         self.operationID = operationID
@@ -426,6 +432,7 @@ struct OperationOracle: Sendable {
         constraints = []
         customReason = reason
         custom = evaluate
+        self.independentReadbackDeferral = independentReadbackDeferral
     }
 
     /// The oracle carries real meaning (not just presence checks).
