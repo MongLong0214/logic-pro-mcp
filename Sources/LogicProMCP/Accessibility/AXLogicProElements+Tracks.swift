@@ -32,6 +32,46 @@ extension AXLogicProElements {
         return AXLocalePolicy.projectPickerWindow.containsAny(in: title)
     }
 
+    /// Preserve the raw payload before typing it: a failed read or a present
+    /// malformed value cannot establish that a chooser has no document.
+    static func projectPickerDocumentRead(
+        _ window: AXUIElement,
+        runtime: Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        // Without the raw status seam, nil is a best-effort answer that also
+        // hides failures. It cannot establish the fact required by this read.
+        guard case .some = runtime.ax.attributeValueResult else {
+            return .failure(.malformedAttribute)
+        }
+        let raw: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+            window, kAXDocumentAttribute as String, runtime: runtime.ax
+        )
+        switch raw {
+        case .failure(let error) where error.isDefinitiveAbsence:
+            return .success(nil)
+        case .failure(let error):
+            return .failure(error)
+        case .success(nil):
+            return .success(nil)
+        case .success(let value?):
+            guard CFGetTypeID(value) == CFStringGetTypeID(), let document = value as? String else {
+                return .failure(.malformedAttribute)
+            }
+            return .success(document)
+        }
+    }
+
+    /// A real document can have a chooser-shaped title. Only an observed
+    /// document lets its rail through; absence or an unknown read retains the
+    /// existing refusal instead of exposing a chooser's template rows.
+    private static func projectPickerPreventsTrackRead(_ window: AXUIElement, runtime: Runtime) -> Bool {
+        guard isProjectPickerWindow(window, runtime: runtime) else { return false }
+        if case .success(let document?) = projectPickerDocumentRead(window, runtime: runtime) {
+            return document.isEmpty
+        }
+        return true
+    }
+
     /// Find the track header area containing individual track rows.
     /// v3.1.8 (Issue #7) — outline/table fallback restricted to elements
     /// whose direct children contain `kAXLayoutItemRole`. The unconditional
@@ -41,7 +81,7 @@ extension AXLogicProElements {
     /// `Loop:`, ...) as track names — the v3.1.4 regression reported in #3.
     static func getTrackHeaders(runtime: Runtime = .production) -> AXUIElement? {
         guard let window = mainWindow(runtime: runtime) else { return nil }
-        if isProjectPickerWindow(window, runtime: runtime) { return nil }
+        if projectPickerPreventsTrackRead(window, runtime: runtime) { return nil }
         // Contracted / test-path lookups first.
         if let area = AXHelpers.findDescendant(
             of: window, role: kAXListRole, identifier: "Track Headers", runtime: runtime.ax
@@ -219,7 +259,7 @@ extension AXLogicProElements {
         in window: AXUIElement,
         runtime: Runtime = .production
     ) -> TrackHeaderRead {
-        guard !isProjectPickerWindow(window, runtime: runtime) else {
+        guard !projectPickerPreventsTrackRead(window, runtime: runtime) else {
             return .unavailable
         }
 
@@ -238,7 +278,7 @@ extension AXLogicProElements {
         in window: AXUIElement,
         runtime: Runtime = .production
     ) -> VerifiedTrackHeaderRead {
-        guard !isProjectPickerWindow(window, runtime: runtime) else {
+        guard !projectPickerPreventsTrackRead(window, runtime: runtime) else {
             return .unavailable
         }
         switch verifiedTrackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax) {
