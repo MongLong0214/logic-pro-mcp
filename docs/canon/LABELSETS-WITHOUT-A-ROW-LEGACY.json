@@ -19,11 +19,6 @@
       "candidate": "0 candidate(s)",
       "members": 2
     },
-    "horizontalZoomSlider": {
-      "verdict": "value",
-      "candidate": "ControllerAssignments.strings aGM-qO-ZOT.title",
-      "members": 4
-    },
     "nonInsertButtonText": {
       "verdict": "namespace",
       "candidate": "Localizable.strings Record#mti via #mti",
