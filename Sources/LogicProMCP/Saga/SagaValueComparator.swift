@@ -45,9 +45,9 @@ struct SagaComparisonEvidence: Codable, Equatable, Sendable {
 
 /// The single decision point for saga value equality.
 ///
-/// Used by State-B/C classification and compensation verification ONLY. A
-/// State-A step is already live-verified by the dispatcher and is NOT
-/// re-decided here (see `MutationSaga.classifyVerifiedWrite`).
+/// Operation tolerance supports write classification and restore verification;
+/// inverse ownership instead compares actual observed states exactly. State-A
+/// dispatcher trust is handled by `MutationSaga.classifyVerifiedWrite`.
 enum SagaValueComparator {
     /// The declared tolerance for `op`. Unknown operations fall back to
     /// `exact` — fail-closed: an operation nobody declared a tolerance for
@@ -110,6 +110,26 @@ enum SagaValueComparator {
             delta: delta(observed: observed, expected: desired),
             equal: equal
         )
+    }
+
+    /// An actual owned after-state is not a requested value needing detent tolerance.
+    static func ownershipEvidence(observed: Value?, desired: Value?) -> SagaComparisonEvidence {
+        let equal: Bool
+        switch (observed, desired) {
+        case (.double(let observed)?, .double(let desired)?):
+            equal = observed.isFinite && desired.isFinite && observed == desired
+        case (.int(let observed)?, .int(let desired)?):
+            equal = observed == desired
+        case (.bool(let observed)?, .bool(let desired)?):
+            equal = observed == desired
+        case (.string(let observed)?, .string(let desired)?):
+            equal = observed == desired
+        default:
+            equal = false
+        }
+        return SagaComparisonEvidence(comparator: .exact, epsilon: nil,
+            desired: desired, observed: observed,
+            delta: delta(observed: observed, expected: desired), equal: equal)
     }
 
     private static func numeric(_ value: Value) -> Double? {
