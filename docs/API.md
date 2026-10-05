@@ -254,6 +254,8 @@ Common commands: `undo`, `redo`, `cut`, `copy`, `paste`, `delete`, `select_all`,
 
 `quantize` requires `{ value: String }` or `{ grid: String }` and accepts the dispatcher grids `1/1`, `1/2`, `1/4`, `1/8`, `1/16`, `1/32`, `1/64`, `1/4T`, `1/8T`, and `1/16T`.
 
+The Accessibility route chooses the requested grid in the Region inspector, not Q or a MIDI key command that applies Logic's existing grid. It requires a readable `AXSelectedChildren` aggregate agreeing by AX identity with a complete region census; a viewport count alone is not sufficient. Empty, unreadable, ambiguous or changed targets are refused. Once the value pop-up is pressed, `write_attempted` is true even if no grid item is chosen. State A requires the same selected regions, window and inspector controls through readback, an explicitly enabled matching item, and certified popup cleanup. Cleanup can cancel only the uniquely observed new menu still attached to the original pop-up, never other Logic menus or global Escape. Own-menu absence and zero Logic CG popup windows are checked again before success; a matching value alone cannot override target drift or unconfirmed cleanup. Cancellation is checked before the opener and grid choice and during polling; an already attempted grid choice is not blindly undone. These observations are not an atomic lock on Logic. The new aggregate requirement still needs live qualification; derived multilingual labels are not evidence of successful execution in those locales.
+
 ### `logic_navigate`
 
 Common commands: `goto_bar`, `goto_marker`, `create_marker`, `delete_marker`, `rename_marker`, `zoom_to_fit`, `set_zoom`, `toggle_view`.

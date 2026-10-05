@@ -356,6 +356,9 @@ actor AccessibilityChannel: Channel {
         case "edit.toggle_step_input":
             return runtime.toggleStepInputKeyboard()
 
+        case "edit.quantize":
+            return await AccessibilityChannel.quantizeSelectedRegions(params: params, runtime: runtime.logicRuntime)
+
         case "edit.undo":
             return await AccessibilityChannel.defaultUndoOrRedo(redo: false)
         case "edit.redo":

@@ -2903,7 +2903,7 @@ private actor SelectiveFailChannel: Channel {
 
 @Test func testEditDispatcherQuantizeRequiresExplicitGrid() async {
     let explicitRouter = ChannelRouter()
-    let explicitKeyCmd = MockChannel(id: .midiKeyCommands)
+    let explicitKeyCmd = MockChannel(id: .accessibility)
     await explicitRouter.register(explicitKeyCmd)
     let explicitCache = StateCache()
 
@@ -2921,7 +2921,7 @@ private actor SelectiveFailChannel: Channel {
     #expect(explicitOps[0].1["value"] == "1/8")
 
     let missingRouter = ChannelRouter()
-    let missingKeyCmd = MockChannel(id: .midiKeyCommands)
+    let missingKeyCmd = MockChannel(id: .accessibility)
     await missingRouter.register(missingKeyCmd)
     let missingCache = StateCache()
 
@@ -2953,6 +2953,12 @@ private actor SelectiveFailChannel: Channel {
         ]
     )
     await router.register(keyCmd)
+    await router.register(StaticResultChannel(
+        id: .accessibility,
+        results: ["edit.quantize": .success(HonestContract.encodeStateB(
+            reason: .readbackUnavailable, extras: ["method": "region_inspector"]
+        ))]
+    ))
     let cache = StateCache()
 
     let selectAllResult = await EditDispatcher.handle(
