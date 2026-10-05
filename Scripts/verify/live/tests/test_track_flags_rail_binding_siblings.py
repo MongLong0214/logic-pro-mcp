@@ -4,9 +4,14 @@
 The original three frozen RED functions remain unchanged in test_track_flags_rail_binding.py.
 """
 
+import os
+import sys
 import unittest
 
-import test_track_flags_rail_binding as rail_witness
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+
+from live.tests import test_track_flags_rail_binding as rail_witness
 from live import fixture, probes as readers
 
 
