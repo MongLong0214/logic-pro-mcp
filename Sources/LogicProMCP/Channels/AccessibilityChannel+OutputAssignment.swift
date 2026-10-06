@@ -250,30 +250,34 @@ extension AccessibilityChannel {
                 cleanup.merging(["menu_failure": "destination_entry_not_enabled", "menu_path": path]) { _, new in new })
         }
 
-        // The bus was checked before the popup opened, and a strip can change while it is open: if
-        // the last strip reading the bus is reassigned meanwhile, this press would create an aux.
-        // So the strips are read again from the Mixer the popup opened under, and the bus checked
-        // again, right before the press. AX has no compare-and-press: a change after this read is
-        // seen only afterwards, as a strip count that moved.
-        if case .bus(let number) = destination {
-            var refused: (HonestContract.FailureError, String, [String: Any])?
-            let fresh = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
-            if let fresh, fresh.unreadableChildren == 0, fresh.strips.count == strips.count {
-                switch busCheck(into: number, from: index, strips: fresh.strips, runtime: runtime.ax) {
-                case .receivers(let receivers): extras["bus_receivers_at_press"] = receivers
-                case .refused(let error, let hint, let more): refused = (error, hint, more)
+        // Opening the popup must not change which source owns it. Reuse one complete
+        // fresh census for this binding and the bus check immediately before selection.
+        // After the terminal press, legitimate element replacement still uses ordinal readback.
+        var refused: (HonestContract.FailureError, String, [String: Any])?
+        let fresh = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
+        if let fresh, fresh.unreadableChildren == 0, fresh.strips.count == strips.count {
+            if CFEqual(fresh.strips[index], strip),
+               let currentSlot = AXLogicProElements.outputSlotButton(in: fresh.strips[index], runtime: runtime.ax),
+               CFEqual(currentSlot, slotButton) {
+                if case .bus(let number) = destination {
+                    switch busCheck(into: number, from: index, strips: fresh.strips, runtime: runtime.ax) {
+                    case .receivers(let receivers): extras["bus_receivers_at_press"] = receivers
+                    case .refused(let error, let hint, let more): refused = (error, hint, more)
+                    }
                 }
             } else {
-                refused = (.unsupportedState, "The Mixer's strips did not read whole, or their count moved",
-                           ["strip_count_at_press": fresh?.strips.count ?? NSNull(),
-                            "unreadable_mixer_children": fresh?.unreadableChildren ?? NSNull()])
+                refused = (.unsupportedState, "The source strip or its output slot changed while the popup was open", [:])
             }
-            if let (error, hint, more) = refused {
-                let cleanup = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: false,
-                                                     cleaner: popupCleaner)
-                return refusal(error, hint + ", read again with the popup open; nothing was selected.",
-                    cleanup.merging(more.merging(["read_with_popup_open": true]) { _, new in new }) { _, new in new })
-            }
+        } else {
+            refused = (.unsupportedState, "The Mixer's strips did not read whole, or their count moved",
+                       ["strip_count_at_press": fresh?.strips.count ?? NSNull(),
+                        "unreadable_mixer_children": fresh?.unreadableChildren ?? NSNull()])
+        }
+        if let (error, hint, more) = refused {
+            let cleanup = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: false,
+                                                 cleaner: popupCleaner)
+            return refusal(error, hint + ", read again with the popup open; nothing was selected.",
+                cleanup.merging(more.merging(["read_with_popup_open": true]) { _, new in new }) { _, new in new })
         }
 
         extras["write_attempted"] = true

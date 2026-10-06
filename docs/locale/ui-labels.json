@@ -2717,7 +2717,13 @@
    "variants": [
     "가로 확대/축소",
     "가로 확대",
-    "横方向にズーム"
+    "横方向にズーム",
+    "수평 확대/축소",
+    "Horizontal-Zoom",
+    "Zoom horizontal",
+    "Zoom orizzontale",
+    "水平缩放",
+    "水平縮放"
    ],
    "rationale": "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the arrange horizontal-zoom slider.",
    "roles": [
@@ -2726,15 +2732,15 @@
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "unmeasured",
+    "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "importMenuItem": {

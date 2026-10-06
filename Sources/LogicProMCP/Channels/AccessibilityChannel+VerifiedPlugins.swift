@@ -1099,7 +1099,7 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime
     ) -> ChannelResult? {
         guard let expectedTrackName else { return nil }
-        let expected = expectedTrackName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expected = expectedTrackName
         guard let scannedNames = AXLogicProElements.trackNames(runtime: runtime) else {
             return .error(HonestContract.encodeV2StateC(
                 error: .staleTargetReference,
@@ -1115,9 +1115,9 @@ extension AccessibilityChannel {
                 ]
             ))
         }
-        let names = scannedNames.mapValues { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let names = scannedNames
         let live = names[track]
-        guard let live, live == expected else {
+        guard let live, live.utf8.elementsEqual(expected.utf8) else {
             return .error(HonestContract.encodeV2StateC(
                 error: .staleTargetReference,
                 extras: [
@@ -1134,7 +1134,7 @@ extension AccessibilityChannel {
             ))
         }
         let ambiguousIndices = names
-            .filter { $0.value == expected }
+            .filter { $0.value.utf8.elementsEqual(expected.utf8) }
             .map(\.key)
             .sorted()
         guard ambiguousIndices.count <= 1 else {
@@ -2575,7 +2575,7 @@ extension AccessibilityChannel {
         operation: String, identity: [String: Any]
     ) -> ChannelResult? {
         guard let expected = params["expected_track_name"],
-              target.trackName != expected.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+              !target.trackName.utf8.elementsEqual(expected.utf8) else { return nil }
         return .error(HonestContract.encodeV2StateC(error: .staleTargetReference, extras: [
             "operation": operation,
             "target_identity": identity,
@@ -2640,7 +2640,8 @@ extension AccessibilityChannel {
             track: track, mixer: mixer, runtime: runtime, onRefusal: onRefusal
         ) else { return nil }
         if let original = authorizedPluginTrack {
-            guard original.trackIndex == target.trackIndex, original.trackName == target.trackName else {
+            guard original.trackIndex == target.trackIndex,
+                  original.trackName.utf8.elementsEqual(target.trackName.utf8) else {
                 onRefusal?("retained_track_mismatch"); return nil
             }
             guard CFEqual(original.header, target.header) else {

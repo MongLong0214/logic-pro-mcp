@@ -1891,12 +1891,14 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tempo%23mti#value"
     )
 
-    /// #109: arrange Horizontal-Zoom slider (writable AXValue). EN canonical +
-    /// KO variant; matched by description substring.
+    /// #109: arrange Horizontal-Zoom slider (writable AXValue). Corpus row values +
+    /// two legacy KO tolerance spellings; matched by description substring.
     static let horizontalZoomSlider = LabelSet(
         canonical: "Horizontal Zoom",
-        variants: ["가로 확대/축소", "가로 확대", "横方向にズーム"],
+        variants: ["가로 확대/축소", "가로 확대", "横方向にズーム", "수평 확대/축소", "Horizontal-Zoom", "Zoom horizontal", "Zoom orizzontale", "水平缩放", "水平縮放"],
         rationale: "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the arrange horizontal-zoom slider."
+            + " Extended from the Logic 12.3 (6674) Localizable.strings Horizontal Zoom row to all ten corpus locales. Static horizontal-slider construction supports this row for its tooltip; archived en/ko/ja/de Arrange AXSlider descriptions and help corroborate the values. The two legacy Korean spellings remain tolerance, not row values. This derivation does not newly qualify ten-locale runtime behavior.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Horizontal%20Zoom#value"
     )
 
     // --- Track-header read-only locators ---

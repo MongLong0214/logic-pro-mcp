@@ -90,6 +90,7 @@ enum TrackSortVerifier {
     }
 
     enum Actuation: Equatable, Sendable {
+        case cancelled
         /// The action call was sent. AX's Boolean return is not used as an
         /// effect witness; both cases require post-write order readback.
         case actuated(ActuatedMenuItem)
@@ -104,6 +105,7 @@ enum TrackSortVerifier {
     }
 
     enum Refusal: Equatable, Sendable {
+        case cancelled
         case beforeOrderUnreadable
         case expectedOrderIsNotBeforeOrder
         case unmeasuredLocale(String)
@@ -151,6 +153,8 @@ enum TrackSortVerifier {
         }
 
         switch actuate() {
+        case .cancelled:
+            return .refused(.cancelled)
         case .actuated(let item), .pressReportedFailure(let item):
             guard item.criterion == criterion else {
                 return .refused(.criterionMismatch(

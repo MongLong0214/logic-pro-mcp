@@ -738,6 +738,32 @@ actor MutationSaga {
                 continue
             }
 
+            // Inverse authority comes from the observed owned after-state, not
+            // merely from a still-valid target or the original before-state.
+            let ownedAfterState = outcome.journal[index].verificationEvidence?.readback
+            let currentState = await executor.readState(inverse)
+            // A live read can consume the remaining lifecycle allowance.
+            if deadlineReached() {
+                markRemainingUncertain(appliedIndices, from: index, outcome: &outcome)
+                uncertain = true
+                break
+            }
+            let ownershipComparison = SagaValueComparator.ownershipEvidence(
+                observed: currentState?.value,
+                desired: ownedAfterState?.value
+            )
+            guard ownershipComparison.equal else {
+                outcome.journal[index].compensationEvidence = CompensationEvidence(
+                    disposition: .uncertain,
+                    executionResult: nil,
+                    readback: currentState,
+                    comparison: ownershipComparison
+                )
+                uncertain = true
+                sessions[outcome.idempotencyKey] = outcome
+                continue
+            }
+
             let compensationResult = await executor.run(inverse)
             let readback = await executor.readState(inverse)
             // LPMCP-PRD-004: the restore target is the LIVE before-state

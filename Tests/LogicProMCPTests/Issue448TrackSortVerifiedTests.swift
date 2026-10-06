@@ -36,6 +36,19 @@ private final class TrackSortActionProbe: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
     private var postPressRailReadCount = 0
+    private var enabledReadCallbacks = 0
+
+    func recordEnabledReadCallback() {
+        lock.lock()
+        enabledReadCallbacks += 1
+        lock.unlock()
+    }
+
+    var enabledReadCallbackCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return enabledReadCallbacks
+    }
 
     func recordPress() {
         lock.lock()
@@ -63,10 +76,16 @@ private let trackNameActuation = TrackSortVerifier.ActuatedMenuItem(
     criterion: .trackName
 )
 
-private struct TrackSortAXFixture {
+// Construction precedes child execution; parent reads follow await child.value. Counters use their own lock.
+// Builder access is sequential in these tests; no production AX reference is captured here.
+private struct TrackSortAXFixture: @unchecked Sendable {
     let runtime: AXLogicProElements.Runtime
     let expectedOrderJSON: String
     let actionProbe: TrackSortActionProbe
+    let arrangeWindow: AXUIElement
+    let headerRail: AXUIElement
+    let initialHeaders: [AXUIElement]
+    let initialNames: [String]
 
     init(
         orderAfterPress: [Int],
@@ -78,7 +97,8 @@ private struct TrackSortAXFixture {
         postPressOrders: [[Int]]? = nil,
         windowsReadStatus: AXHelpers.AXStatusError? = nil,
         railRoleReadStatus: AXHelpers.AXStatusError? = nil,
-        menuEnabledReadStatus: AXHelpers.AXStatusError? = nil
+        menuEnabledReadStatus: AXHelpers.AXStatusError? = nil,
+        onMenuEnabledRead: (@Sendable () -> Void)? = nil
     ) {
         precondition(names.count == 3)
         let builder = FakeAXRuntimeBuilder()
@@ -86,6 +106,7 @@ private struct TrackSortAXFixture {
         actionProbe = probe
         let app = builder.element(448_000)
         let arrange = builder.element(448_001)
+        arrangeWindow = arrange
         let rail = builder.element(448_002)
         let menuBar = builder.element(448_003)
         let file = builder.element(448_004)
@@ -115,6 +136,9 @@ private struct TrackSortAXFixture {
             return header
         }
         builder.setChildren(rail, headers)
+        headerRail = rail
+        initialHeaders = headers
+        initialNames = names
 
         builder.setAttribute(file, kAXTitleAttribute as String, "파일")
         builder.setAttribute(edit, kAXTitleAttribute as String, "편집")
@@ -143,6 +167,12 @@ private struct TrackSortAXFixture {
                    builder.elementID(element) == builder.elementID(sortByName),
                    attribute == (kAXEnabledAttribute as String) {
                     return .failure(menuEnabledReadStatus)
+                }
+                if let onMenuEnabledRead,
+                   builder.elementID(element) == builder.elementID(sortByName),
+                   attribute == (kAXEnabledAttribute as String) {
+                    probe.recordEnabledReadCallback()
+                    onMenuEnabledRead()
                 }
                 return nil
             },
@@ -701,5 +731,97 @@ struct Issue448TrackSortVerifiedTests {
             disabledWasRefused = false
         }
         #expect(disabledWasRefused)
+    }
+}
+
+@Suite("#969 cancelled sort must not dispatch the next criterion actuator")
+struct Issue969TrackSortCancellationTests {
+    private func assertRailOrder(_ fixture: TrackSortAXFixture, indices: [Int]) throws {
+        let actualRail = try #require(AXLogicProElements.getTrackHeaders(runtime: fixture.runtime))
+        #expect(CFEqual(actualRail, fixture.headerRail))
+        let headers: [AXUIElement]
+        switch AXLogicProElements.allTrackHeadersVerifiedRead(in: fixture.arrangeWindow, runtime: fixture.runtime) {
+        case .read(let observed):
+            headers = observed
+        case .unavailable, .unreadable:
+            Issue.record("The fake sort rail must remain fully readable")
+            return
+        }
+        try #require(headers.count == indices.count)
+        for (position, originalIndex) in indices.enumerated() {
+            #expect(CFEqual(headers[position], fixture.initialHeaders[originalIndex]))
+            let actualName = try #require(AXHelpers.getTitle(headers[position], runtime: fixture.runtime.ax))
+            #expect(Array(actualName.utf8) == Array(fixture.initialNames[originalIndex].utf8))
+        }
+    }
+
+    @Test("entry cancellation leaves the exact rail and names unchanged with no criterion press")
+    func alreadyCancelledChildDoesNotPressSortCriterion() async throws {
+        let fixture = TrackSortAXFixture(orderAfterPress: [1, 0, 2])
+        let child = Task {
+            withUnsafeCurrentTask { task in task?.cancel() }
+            #expect(Task.isCancelled)
+            return AccessibilityChannel.defaultSortTracks(
+                params: ["criterion": "track_name", "expected_order_json": fixture.expectedOrderJSON],
+                runtime: fixture.runtime
+            )
+        }
+        let result = await child.value
+        #expect(fixture.actionProbe.enabledReadCallbackCount == 0)
+        #expect(fixture.actionProbe.pressCount == 0)
+        #expect(!result.isSuccess, "\(result.message)")
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(body["state"] as? String == "C")
+        let written = try #require(body["write_attempted"] as? Bool)
+        #expect(!written)
+        try assertRailOrder(fixture, indices: [0, 1, 2])
+    }
+
+    @Test("cancellation in the exact enabled read prevents the still-enabled leaf from being pressed")
+    func cancellationDuringEnabledReadDoesNotPressSortCriterion() async throws {
+        let fixture = TrackSortAXFixture(orderAfterPress: [1, 0, 2], onMenuEnabledRead: {
+            withUnsafeCurrentTask { task in task?.cancel() }
+            #expect(Task.isCancelled)
+        })
+        let child = Task {
+            #expect(!Task.isCancelled)
+            return AccessibilityChannel.defaultSortTracks(
+                params: ["criterion": "track_name", "expected_order_json": fixture.expectedOrderJSON],
+                runtime: fixture.runtime
+            )
+        }
+        let result = await child.value
+        #expect(fixture.actionProbe.enabledReadCallbackCount == 1)
+        #expect(fixture.actionProbe.pressCount == 0)
+        #expect(!result.isSuccess, "\(result.message)")
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(body["state"] as? String == "C")
+        let written = try #require(body["write_attempted"] as? Bool)
+        #expect(!written)
+        try assertRailOrder(fixture, indices: [0, 1, 2])
+    }
+
+    @Test("uncancelled unique-name sort presses the measured leaf once and reads Bass Kick Piano")
+    func uncancelledAlphabeticSortStillPressesAndReadsExactRail() async throws {
+        let fixture = TrackSortAXFixture(orderAfterPress: [1, 0, 2])
+        let child = Task {
+            #expect(!Task.isCancelled)
+            return AccessibilityChannel.defaultSortTracks(
+                params: ["criterion": "track_name", "expected_order_json": fixture.expectedOrderJSON],
+                runtime: fixture.runtime
+            )
+        }
+        let result = await child.value
+        #expect(fixture.actionProbe.enabledReadCallbackCount == 0)
+        #expect(fixture.actionProbe.pressCount == 1)
+        #expect(result.isSuccess, "\(result.message)")
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(body["state"] as? String == "A")
+        #expect(body["actuated_criterion"] as? String == "track_name")
+        #expect(body["actuated_menu_item_label"] as? String == "트랙 이름")
+        #expect(body["after_order"] as? [String] == ["trk_1", "trk_0", "trk_2"])
+        let written = try #require(body["write_attempted"] as? Bool)
+        #expect(written)
+        try assertRailOrder(fixture, indices: [1, 0, 2])
     }
 }
