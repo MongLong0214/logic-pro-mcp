@@ -253,6 +253,10 @@ actor StatePoller {
         }
         try SessionPopulationObservation.requireOwnedAcquisition()
         let before = await cache.captureBoundary(watching: SessionPopulationObservation.watchedSections)
+        let navigationProject: TargetDescriptor?
+        if request.allowUINavigation, let reference = request.projectRef, let targetRegistry {
+            navigationProject = await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor
+        } else { navigationProject = nil }
         let population: SessionPopulationObservation.FreshPopulation
         if runtime.hasVisibleWindow() {
             let focus = runtime.keyboardFocus
@@ -260,6 +264,12 @@ actor StatePoller {
             population = try await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
                 try await axChannel.readFreshSessionPopulation(
                     request: request, fileReader: runtime.projectFileReader,
+                    navigationProject: navigationProject,
+                    navigationReferenceIsCurrent: {
+                        guard let reference = request.projectRef else { return true }
+                        guard let navigationProject, let targetRegistry else { return false }
+                        return await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor == navigationProject
+                    },
                     stoppingWhen: { stop() || guardian.stopped || Self.backgroundTickYields(to: focus()) }
                 )
             }

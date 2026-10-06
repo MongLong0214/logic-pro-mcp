@@ -310,6 +310,41 @@ actor AccessibilityChannel: Channel {
     func readFreshSessionPopulation(
         request: SessionPopulationObservation.Request,
         fileReader: LogicProjectFileReader.Runtime,
+        navigationProject: TargetDescriptor? = nil,
+        navigationReferenceIsCurrent: @escaping @Sendable () async -> Bool = { true },
+        stoppingWhen stop: @escaping @Sendable () -> Bool
+    ) async throws -> SessionPopulationObservation.FreshPopulation {
+        try SessionPopulationObservation.requireOwnedAcquisition()
+        var navigation: OwnedMixerObservationNavigation?
+        if request.allowUINavigation, request.needsStrips,
+           case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime) {
+            navigation = OwnedMixerObservationNavigation(
+                window: window, runtime: runtime.logicRuntime,
+                expectedProject: navigationProject, requiresProjectReference: request.projectRef != nil,
+                referenceIsCurrent: navigationReferenceIsCurrent)
+            await navigation?.reveal(stoppingWhen: stop)
+        }
+        do {
+            var population = try await readExposedSessionPopulation(request: request, fileReader: fileReader, stoppingWhen: stop)
+            if let navigation {
+                population.uiEffects = await navigation.restore(stoppingWhen: stop)
+                if population.uiEffects.navigationPerformed && population.uiEffects.restoration != "restored" {
+                    population.stable = false
+                }
+            } else if request.allowUINavigation && request.needsStrips {
+                population.uiEffects.reason = "navigation_baseline_unavailable"
+            }
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            return population
+        } catch {
+            let effects = await navigation?.restore(stoppingWhen: stop) ?? .init()
+            throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: effects)
+        }
+    }
+
+    private func readExposedSessionPopulation(
+        request: SessionPopulationObservation.Request,
+        fileReader: LogicProjectFileReader.Runtime,
         stoppingWhen stop: @escaping @Sendable () -> Bool
     ) async throws -> SessionPopulationObservation.FreshPopulation {
         let beganAt = Date()

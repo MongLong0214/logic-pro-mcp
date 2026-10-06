@@ -515,6 +515,192 @@ extension AccessibilityChannel {
         return .notFound
     }
 
+    /// A single inspection's temporary Mixer view, using the same menu policy and bound-window
+    /// reader as inventory. No activation, global Escape, key fallback or musical mutation.
+    /// Matching bookends cannot detect an intervening same-value human edit; this is not a host lock.
+    final class OwnedMixerObservationNavigation {
+        let runtime: AXLogicProElements.Runtime
+        let window: AXUIElement
+        let title: String
+        let document: String
+        let focus: AXUIElement
+        let headers: [AXUIElement]
+        let selected: [Bool]
+        let referenceIsCurrent: @Sendable () async -> Bool
+        var bar: AXUIElement?
+        var revealedMixer: AXUIElement?
+        var menuOpen = false
+        var effects = SessionPopulationObservation.UIEffects()
+
+        init?(
+            window: AXUIElement, runtime: AXLogicProElements.Runtime,
+            expectedProject: TargetDescriptor?, requiresProjectReference: Bool,
+            referenceIsCurrent: @escaping @Sendable () async -> Bool
+        ) {
+            guard let app = AXLogicProElements.appRoot(runtime: runtime),
+                  let title = AXHelpers.getTitle(window, runtime: runtime.ax),
+                  case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
+                  let url = URL(string: document), url.isFileURL,
+                  url.host == nil || url.host == "" || url.host == "localhost",
+                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute, runtime: runtime.ax),
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+            else { return nil }
+            if requiresProjectReference {
+                guard let expectedProject,
+                      expectedProject.projectName?.utf8.elementsEqual(AccessibilityChannel.projectName(fromWindowTitle: title).utf8) == true,
+                      expectedProject.projectFilePath?.utf8.elementsEqual(url.path.utf8) == true else { return nil }
+            }
+            let selected = headers.compactMap { AXHelpers.getAttribute($0, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? }
+            guard selected.count == headers.count else { return nil }
+            self.runtime = runtime; self.window = window; self.title = title; self.document = document
+            self.focus = focus; self.headers = headers; self.selected = selected
+            self.referenceIsCurrent = referenceIsCurrent
+        }
+
+        private func stillOwned(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  await referenceIsCurrent(),
+                  let app = AXLogicProElements.appRoot(runtime: runtime),
+                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: runtime.ax) as Bool? == true,
+                  let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute, runtime: runtime.ax),
+                  let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute, runtime: runtime.ax),
+                  CFEqual(main, window), CFEqual(focusedWindow, window),
+                  AXHelpers.getTitle(window, runtime: runtime.ax)?.utf8.elementsEqual(title.utf8) == true,
+                  case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
+                  currentDocument.utf8.elementsEqual(document.utf8),
+                  !AXLogicProElements.dialogPresent(runtime: runtime),
+                  case .read(let currentHeaders) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime),
+                  currentHeaders.count == headers.count,
+                  zip(headers, currentHeaders).allSatisfy({ CFEqual($0, $1) }),
+                  currentHeaders.map({ AXHelpers.getAttribute($0, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? }) == selected.map(Optional.some),
+                  !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+            else { return false }
+            return true
+        }
+
+        private func sameFocus() -> Bool {
+            guard let app = AXLogicProElements.appRoot(runtime: runtime),
+                  let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute, runtime: runtime.ax)
+            else { return false }
+            return CFEqual(current, focus)
+        }
+
+        private func ownedMenuFocus() -> Bool {
+            if sameFocus() { return true }
+            guard menuOpen, let bar, let app = AXLogicProElements.appRoot(runtime: runtime),
+                  var current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute, runtime: runtime.ax)
+            else { return false }
+            var visited: [AXUIElement] = []
+            for _ in 0..<8 {
+                if CFEqual(current, bar) { return true }
+                if visited.contains(where: { CFEqual($0, current) }) { return false }
+                visited.append(current)
+                guard let parent: AXUIElement = AXHelpers.getAttribute(current, kAXParentAttribute, runtime: runtime.ax) else { return false }
+                current = parent
+            }
+            return false
+        }
+
+        private func dismissOwnedMenu(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            guard menuOpen else { return true }
+            guard await stillOwned(stoppingWhen: stop), ownedMenuFocus(), let bar,
+                  runtime.ax.actionNames(bar).contains(kAXCancelAction as String),
+                  !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  AXHelpers.performAction(bar, kAXCancelAction as String, runtime: runtime.ax) else { return false }
+            menuOpen = false
+            return true
+        }
+
+        private func toggle(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            guard await stillOwned(stoppingWhen: stop), sameFocus(),
+                  let menuBar = AXLogicProElements.getMenuBar(runtime: runtime),
+                  case .success(let children) = AXHelpers.childrenResult(menuBar, runtime: runtime.ax) else { return false }
+            let bars = children.filter {
+                AXHelpers.getRole($0, runtime: runtime.ax) == kAXMenuBarItemRole as String &&
+                    AXLocalePolicy.elementMatches($0, AXLocalePolicy.viewMenuBar, runtime: runtime.ax)
+            }
+            guard bars.count == 1, let view = bars.first,
+                  runtime.ax.actionNames(view).contains(kAXPressAction as String),
+                  runtime.ax.actionNames(view).contains(kAXCancelAction as String),
+                  await stillOwned(stoppingWhen: stop), sameFocus() else { return false }
+            if let bar, !CFEqual(bar, view) { return false }
+            bar = view
+            guard AccessibilityChannel.openMenuBarItem(view, runtime: runtime.ax) else { return false }
+            menuOpen = true
+            effects.navigationPerformed = true
+            if !effects.changed.contains("view_menu") { effects.changed.append("view_menu") }
+            effects.restoration = "not_restored"
+            // Menus update their dynamic labels only after opening. The shared deadline and
+            // cancellation remain effective while waiting; no swallowed cancellation or retry key.
+            do { try await Task.sleep(for: .milliseconds(120)) } catch { return false }
+            guard await stillOwned(stoppingWhen: stop), ownedMenuFocus(),
+                  case .success(let census) = AXHelpers.censusDescendantResult(
+                    of: view, role: kAXMenuItemRole as String, maxDepth: 5, runtime: runtime.ax)
+            else { return false }
+            let matches = census.matches.filter {
+                AXLocalePolicy.elementMatches($0, AXLocalePolicy.showMixerMenuItem, runtime: runtime.ax)
+            }
+            guard matches.count == 1, let item = matches.first,
+                  AXHelpers.getAttribute(item, kAXEnabledAttribute as String, runtime: runtime.ax) as Bool? == true,
+                  runtime.ax.actionNames(item).contains(kAXPressAction as String),
+                  await stillOwned(stoppingWhen: stop), ownedMenuFocus() else { return false }
+            let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+            if let revealedMixer {
+                guard let current = lookup.mixer, CFEqual(current, revealedMixer) else { return false }
+            } else {
+                guard case .notFound = lookup,
+                      AXHelpers.getTitle(item, runtime: runtime.ax) != "Hide Mixer" else { return false }
+            }
+            guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            if !effects.changed.contains("mixer_visibility") { effects.changed.append("mixer_visibility") }
+            guard
+                  AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) else { return false }
+            menuOpen = false
+            return true
+        }
+
+        func reveal(stoppingWhen stop: @Sendable () -> Bool) async {
+            guard case .notFound = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime) else { return }
+            guard await toggle(stoppingWhen: stop) else { effects.reason = "mixer_reveal_refused"; return }
+            let end = min(OperationTraceContext.current?.deadline ?? ContinuousClock.now, ContinuousClock.now.advanced(by: .milliseconds(mixerRevealPollTimeoutMs)))
+            repeat {
+                guard await stillOwned(stoppingWhen: stop) else { effects.reason = "navigation_ownership_lost"; return }
+                let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+                if let mixer = lookup.mixer { revealedMixer = mixer; return }
+                if lookup.childrenUnread { effects.reason = "mixer_children_unread"; return }
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { effects.reason = "navigation_cancelled"; return }
+            } while ContinuousClock.now < end
+            effects.reason = "mixer_reveal_unverified"
+        }
+
+        func restore(stoppingWhen stop: @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
+            guard effects.navigationPerformed else { return effects }
+            guard await stillOwned(stoppingWhen: stop) else { effects.reason = "navigation_ownership_lost"; return effects }
+            if menuOpen {
+                // Cancel only the exact menu we opened, never a global Escape into another window.
+                guard await dismissOwnedMenu(stoppingWhen: stop) else {
+                    effects.reason = "menu_restoration_failed"; return effects
+                }
+                menuOpen = false
+            }
+            if revealedMixer != nil {
+                guard sameFocus(), await toggle(stoppingWhen: stop) else {
+                    _ = await dismissOwnedMenu(stoppingWhen: stop)
+                    effects.reason = "mixer_restoration_conflict"; return effects
+                }
+                guard await stillOwned(stoppingWhen: stop), sameFocus(),
+                      case .notFound = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime) else {
+                    effects.reason = "mixer_restoration_unverified"; return effects
+                }
+            } else if effects.changed.contains("mixer_visibility") {
+                effects.reason = "mixer_reveal_unverified"; return effects
+            }
+            effects.restoration = "restored"
+            effects.reason = nil
+            return effects
+        }
+    }
+
     // MARK: - Shared validation inputs
 
     /// Live front-document path provider for the project-identity gate. Defaults

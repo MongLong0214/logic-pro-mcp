@@ -20,7 +20,8 @@ enum SessionPopulationObservation {
         let fileTrackCount: Int?
         let beganAt: Date
         let endedAt: Date
-        let stable: Bool
+        var stable: Bool
+        var uiEffects: UIEffects = .init()
     }
 
     struct AcceptedPopulation: Sendable {
@@ -31,6 +32,11 @@ enum SessionPopulationObservation {
 
     enum AcquisitionError: Error {
         case cancelled, deadline, ownershipLost, pollerStopped, textEditing
+    }
+
+    struct NavigationAcquisitionError: Error {
+        let cause: Error
+        let effects: UIEffects
     }
 
     static func requireOwnedAcquisition() throws {
@@ -647,12 +653,16 @@ enum SessionPopulationObservation {
     }
 
     struct UIEffects: Encodable, Sendable {
-        let navigationPerformed = false
-        let restoration = "not_applicable"
+        var navigationPerformed = false
+        var restoration = "not_applicable"
+        var changed: [String] = []
+        var reason: String?
 
         enum CodingKeys: String, CodingKey {
             case navigationPerformed = "navigation_performed"
             case restoration
+            case changed
+            case reason
         }
     }
 
@@ -925,7 +935,7 @@ enum SessionPopulationObservation {
             routing: routing,
             color: color,
             overall: Overall(complete: incompleteDomains.isEmpty, incompleteDomains: incompleteDomains),
-            uiEffects: UIEffects()
+            uiEffects: capture.freshPopulation?.uiEffects ?? UIEffects()
         )
     }
 
