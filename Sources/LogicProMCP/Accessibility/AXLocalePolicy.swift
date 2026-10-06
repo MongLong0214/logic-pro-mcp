@@ -1852,6 +1852,14 @@ enum AXLocalePolicy {
         rationale: "Identifies the tick slider in the Playhead Position group; verbatim description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats."
     )
 
+    /// The current project-key popup; its observed value remains opaque and localized.
+    static let keySignaturePopupLabel = LabelSet(
+        canonical: "Key Signature",
+        variants: ["조표", "キー", "Tonart", "Armadura", "Armature", "Armatura", "调号", "調號"],
+        rationale: "Identifies the key-signature AXPopUpButton by its complete description under the already bound control bar; read-only. The archived 2026-09-12 en-US/de-DE navigation-free censuses place Key Signature and Tonart at the same nested control-bar popup path. Descriptions are derived from Apple's own Key Signature row in Logic.framework; other locales are not claimed as live readings. Spanish and Portuguese share Armadura, so only one member is carried.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Key%20Signature#value"
+    )
+
     /// The control bar's display-mode popup, and the mode whose Playhead Position group exposes all
     /// four position components. Read-only locator plus the item title a caller would pick.
     static let displayModePopupLabel = LabelSet(
@@ -3427,6 +3435,7 @@ enum AXLocalePolicy {
         beatSliderLabel,
         subdivisionSliderLabel,
         tickSliderLabel,
+        keySignaturePopupLabel,
         displayModePopupLabel,
         beatsDisplayModeItem,
         tempoSliderLabel,

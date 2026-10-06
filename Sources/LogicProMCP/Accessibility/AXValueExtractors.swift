@@ -544,11 +544,70 @@ enum AXValueExtractors {
         value.contains(":") || value.contains("\u{FF1A}")
     }
 
+    /// Read one current key popup, without opening it or borrowing a saved project value.
+    /// A partial scan cannot establish uniqueness. The bounds limit this added AX read, not the
+    /// existing transport readers; an unusually large/deep bar therefore reports no key.
+    private static func extractObservedKeySignature(
+        from transport: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> String? {
+        var visited: [AXUIElement] = []
+        var candidates: [AXUIElement] = []
+
+        func string(_ element: AXUIElement, _ attribute: String) -> Result<String?, AXHelpers.AXStatusError> {
+            let read: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                element, attribute, runtime: runtime
+            )
+            switch read {
+            case .success(nil): return .success(nil)
+            case let .success(value?):
+                guard let text = value as? String else { return .failure(.malformedAttribute) }
+                return .success(text)
+            case let .failure(error) where error.isDefinitiveAbsence: return .success(nil)
+            case let .failure(error): return .failure(error)
+            }
+        }
+
+        func visit(_ element: AXUIElement, remainingDepth: Int) -> Bool {
+            guard visited.count < 256, !visited.contains(where: { CFEqual($0, element) }) else { return false }
+            visited.append(element)
+            let children: [AXUIElement]
+            switch AXHelpers.childrenResult(element, runtime: runtime) {
+            case let .success(value): children = value
+            case let .failure(error) where error.isDefinitiveAbsence: children = []
+            case .failure: return false
+            }
+            guard remainingDepth > 0 else { return children.isEmpty }
+            for child in children {
+                guard case let .success(role?) = string(child, kAXRoleAttribute as String),
+                      !role.isEmpty else { return false }
+                if role == kAXPopUpButtonRole as String {
+                    guard case let .success(description) = string(child, kAXDescriptionAttribute as String) else {
+                        return false
+                    }
+                    if AXLocalePolicy.keySignaturePopupLabel.matches(description, mode: .exactStrict) {
+                        candidates.append(child)
+                        guard candidates.count == 1 else { return false }
+                    }
+                }
+                guard visit(child, remainingDepth: remainingDepth - 1) else { return false }
+            }
+            return true
+        }
+
+        guard visit(transport, remainingDepth: 8), candidates.count == 1,
+              case let .success(value?) = string(candidates[0], kAXValueAttribute as String),
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return value
+    }
+
     static func extractTransportState(
         from transport: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> TransportState {
         var state = TransportState()
+
+        state.keySignature = extractObservedKeySignature(from: transport, runtime: runtime)
 
         // Find and read transport button / checkbox states.
         let controls = AXHelpers.findAllDescendants(of: transport, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
