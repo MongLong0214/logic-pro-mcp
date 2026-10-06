@@ -371,6 +371,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         case "rename":
             let index: Int
             let resolvedReference: TargetReference?
+            let physical: AXTrackBinding.Binding?
             var resolvedFingerprint: String? = nil
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
@@ -388,17 +389,61 @@ struct TrackDispatcher: OperationTraceDispatching {
                 index = resolved.index
                 resolvedReference = resolved.reference
                 resolvedFingerprint = resolved.binding?.observedFingerprint
+                physical = resolved.binding?.physicalTrack
             case .failure(let result):
                 return result
             }
             let name = stringParam(params, "name")
             if let failure = renameNameFailure(name) { return failure }
+            var channelParams = ["index": String(index), "name": name]
+            var exactSnapshot: TargetRegistrySnapshot?
+            var exactBefore = params["expected_name"]?.stringValue
+            if params["expected_name"] != nil {
+                guard let exactBefore, let resolvedReference, let targetRegistry,
+                      liveTrackName != nil, liveTrackNames != nil,
+                      let rawProject = params["project_ref"]?.stringValue,
+                      let project = await targetRegistry.resolveCurrentProject(TargetReference(rawValue: rawProject)),
+                      let path = project.descriptor.projectFilePath,
+                      ExactTrackNameAdapter.operationPermitted() else {
+                    return toolInvalidParamsResult(
+                        "Exact rename requires current project_ref, target_ref and live readers",
+                        extras: ["write_attempted": false]
+                    )
+                }
+                exactSnapshot = await targetRegistry.currentSnapshot
+                guard let binding = await targetRegistry.resolve(resolvedReference),
+                      binding.descriptor.trackName.utf8.elementsEqual(exactBefore.utf8) else {
+                    return TargetRefResolver.staleTargetReferenceResult(resolvedReference.rawValue, operation: "track.rename")
+                }
+                channelParams["expected_name"] = exactBefore
+                // Derived only from the validated registry project, never a caller path assertion.
+                channelParams["expected_project_path"] = path
+            }
+            if let physical, params["expected_name"] == nil {
+                guard let resolvedReference, let targetRegistry,
+                      let binding = await targetRegistry.resolve(resolvedReference),
+                      let path = physical.projectPath else {
+                    return TargetRefResolver.staleTargetReferenceResult(resolvedReference?.rawValue, operation: "track.rename")
+                }
+                channelParams["expected_name"] = binding.descriptor.trackName
+                channelParams["expected_project_path"] = path
+                exactBefore = binding.descriptor.trackName
+                exactSnapshot = await targetRegistry.currentSnapshot
+            }
             let traceID = await startTraceIfEnabled(command: command)
+            let routedParams = channelParams
             let result = await withWriteBoundaryArmed(traceID) {
-                await router.route(
-                    operation: "track.rename",
-                    params: ["index": String(index), "name": name]
-                )
+                await AXTrackBinding.$current.withValue(physical) {
+                    await AXTrackBinding.$corroboratedIndex.withValue(
+                        ["index", "track"].contains(where: { params[$0] != nil }) ? index : nil
+                    ) {
+                        await AXTrackBinding.$ordinaryRenameAcquisition.withValue(
+                            physical != nil && params["expected_name"] == nil
+                        ) {
+                            await router.route(operation: "track.rename", params: routedParams)
+                        }
+                    }
+                }
             }
             guard result.isSuccess else {
                 return await finalizeTrace(
@@ -415,6 +460,41 @@ struct TrackDispatcher: OperationTraceDispatching {
                     traceID: traceID
                 )
             }
+            if let exactBefore {
+                let proof = decodedJSONObject(result.message)
+                guard proof?["state"] as? String == "A", proof?["verified"] as? Bool == true,
+                      let before = proof?["before"] as? String, before.utf8.elementsEqual(exactBefore.utf8),
+                      let observed = proof?["observed"] as? String, observed.utf8.elementsEqual(name.utf8),
+                      proof?["write_attempted"] is Bool,
+                      let resolvedReference, let targetRegistry, let exactSnapshot,
+                      await targetRegistry.currentSnapshot == exactSnapshot,
+                      await targetRegistry.resolve(resolvedReference) != nil,
+                      await TargetRefResolver.validateProjectReference(params, targetRegistry: targetRegistry,
+                                                                      operation: "track.rename") == nil,
+                      ExactTrackNameAdapter.operationPermitted(),
+                      (physical != nil || {
+                          guard let live = liveTrackName?(index), live.utf8.elementsEqual(observed.utf8),
+                                let names = liveTrackNames?(), names[index]?.utf8.elementsEqual(observed.utf8) == true else { return false }
+                          return names.values.filter({ $0.utf8.elementsEqual(observed.utf8) }).count == 1
+                      }()),
+                      (physical.map { binding in
+                          guard binding.currentIndex() != nil,
+                                case .success(let live?) = AXValueExtractors.extractTrackNameResult(
+                                    from: binding.header, runtime: binding.runtime.ax),
+                                live.utf8.elementsEqual(observed.utf8) else { return false }
+                          return binding.currentIndex() != nil
+                      } ?? true) else {
+                    // Preserve observations actually reported by the held writer, not the
+                    // desired request. A generic acknowledgement has no attempt/readback proof.
+                    var observedExtras: [String: Any] = [:]
+                    for key in ["before", "observed", "write_attempted"] {
+                        if let value = proof?[key] { observedExtras[key] = value }
+                    }
+                    return await finalizeTrace(toolTextResult(HonestContract.encodeStateB(
+                        reason: .readbackUnavailable, extras: observedExtras
+                    ), isError: true), traceID: traceID)
+                }
+            }
             if let resolvedReference {
                 // AX readback verified this rename, so `name` is ground truth.
                 // Commit it before rebind to close the stale-cache window; the
@@ -422,9 +502,20 @@ struct TrackDispatcher: OperationTraceDispatching {
                 // write between get/update may clobber other fields for one
                 // cycle, but the following poll self-heals them.
                 var tracks = await cache.getTracks()
-                if tracks.indices.contains(index) {
-                    let track = tracks[index]
-                    tracks[index] = TrackState(
+                let reboundIndex = physical?.currentIndex() ?? (physical == nil ? index : nil)
+                let cacheIndex = physical.flatMap { held in
+                    let matches = tracks.indices.filter { tracks[$0].physicalBinding?.matches(held) == true }
+                    return matches.count == 1 ? matches[0] : nil
+                } ?? (physical == nil && tracks.indices.contains(index) ? index : nil)
+                if physical != nil, reboundIndex == nil || cacheIndex == nil {
+                    let proof = decodedJSONObject(result.message) ?? [:]
+                    let observations = proof.filter { ["before", "observed", "write_attempted"].contains($0.key) }
+                    return await finalizeTrace(toolTextResult(HonestContract.encodeStateB(
+                        reason: .readbackUnavailable, extras: observations), isError: true), traceID: traceID)
+                }
+                if let cacheIndex {
+                    let track = tracks[cacheIndex]
+                    tracks[cacheIndex] = TrackState(
                         id: track.id,
                         name: name,
                         type: track.type,
@@ -438,6 +529,7 @@ struct TrackDispatcher: OperationTraceDispatching {
                         automationMode: track.automationMode,
                         color: track.color,
                         placeholder: track.placeholder,
+                        physicalBinding: track.physicalBinding,
                         isStackHeader: track.isStackHeader,
                         stackCollapsed: track.stackCollapsed
                     )
@@ -453,9 +545,9 @@ struct TrackDispatcher: OperationTraceDispatching {
                 // fail-closed via the unchanged drift check — see `TargetRegistry.rebind`.
                 await targetRegistry?.rebind(
                     resolvedReference,
-                    to: TargetDescriptor(trackIndex: index, trackName: name)
+                    to: TargetDescriptor(trackIndex: reboundIndex ?? index, trackName: name)
                 )
-                resolvedFingerprint = TargetDescriptor(trackIndex: index, trackName: name).fingerprint
+                resolvedFingerprint = TargetDescriptor(trackIndex: reboundIndex ?? index, trackName: name).fingerprint
             }
             return await finalizeTrace(
                 // legacyTrackRefAlias: rename shipped the `track_ref` echo before the
@@ -1038,7 +1130,8 @@ struct TrackDispatcher: OperationTraceDispatching {
             let reference = TargetReference(rawValue: rawReference)
             guard let binding = await targetRegistry.resolve(reference),
                   binding.kind == .track,
-                  binding.observedFingerprint == binding.descriptor.fingerprint else {
+                  binding.observedFingerprint == binding.descriptor.fingerprint,
+                  binding.physicalTrack.map({ $0.currentIndex() == binding.descriptor.trackIndex }) ?? true else {
                 missing.append(rawReference)
                 continue
             }

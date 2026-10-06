@@ -402,7 +402,7 @@ actor AccessibilityChannel: Channel {
             if wantsTracks,
                case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
                 headers = observed
-                tracks = Self.readTrackStates(from: observed, runtime: logic, stoppingWhen: stop).states
+                tracks = Self.readTrackStates(from: observed, in: window, runtime: logic, stoppingWhen: stop).states
             }
             try check()
             var mixer: AXUIElement?

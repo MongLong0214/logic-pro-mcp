@@ -55,7 +55,7 @@ enum TrackReferenceIssuance {
             }
             let descriptor = TargetDescriptor(trackIndex: row.id, trackName: row.name)
             // One line, so a line search for `bind(kind: .track` finds this sole issuer.
-            let bound = await registry.bind(kind: .track, descriptor: descriptor, fingerprint: descriptor.fingerprint, snapshot: snapshot, stoppingWhen: stop)
+            let bound = await registry.bind(kind: .track, descriptor: descriptor, fingerprint: descriptor.fingerprint, snapshot: snapshot, physicalTrack: row.physicalBinding, stoppingWhen: stop)
             guard let reference = bound else { return nil }
             byRow.append(reference)
         }

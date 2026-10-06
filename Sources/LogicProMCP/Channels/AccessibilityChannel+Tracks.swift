@@ -34,20 +34,29 @@ extension AccessibilityChannel {
         guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
               case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
         else { return (nil, false) }
-        return readTrackStates(from: headers, runtime: runtime, stoppingWhen: stop)
+        return readTrackStates(from: headers, in: window, runtime: runtime, stoppingWhen: stop)
     }
 
     /// Read the retained rail, rather than rediscovering a possibly different window.
     static func readTrackStates(
-        from headers: [AXUIElement], runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
+        from headers: [AXUIElement], in window: AXUIElement? = nil,
+        runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
     ) -> (states: [TrackState]?, yielded: Bool) {
+        let document: String?
+        if let window, case .success(let observed?) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime) {
+            document = observed
+        } else { document = nil }
         var states: [TrackState] = []
         states.reserveCapacity(headers.count)
         for (index, header) in headers.enumerated() {
             if stop() { return (nil, true) }
-            guard let state = AXValueExtractors.extractTrackState(
+            guard var state = AXValueExtractors.extractTrackState(
                 from: header, index: index, runtime: runtime.ax, stoppingBeforeHelp: stop
             ) else { return (nil, true) }
+            if let window, let document, state.liveIdentityBacked, state.placeholder != true {
+                let binding = AXTrackBinding.Binding(window: window, header: header, document: document, runtime: runtime)
+                if binding.projectPath != nil { state.physicalBinding = binding }
+            }
             states.append(state)
         }
         return (states, false)
@@ -1487,10 +1496,15 @@ extension AccessibilityChannel {
     /// until exclusivity is confirmed within a bounded settle budget.
     static func confirmExclusiveSelection(
         index: Int,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        heldHeader: AXUIElement? = nil,
+        permittingWrite: (() -> Bool)? = nil,
+        willWrite: (() -> Void)? = nil
     ) -> Bool {
-        _ = AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime)
+        _ = AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime,
+            heldHeader: heldHeader, permittingWrite: permittingWrite, willWrite: willWrite)
         for attempt in 0..<4 {
+            guard permittingWrite?() ?? true else { return false }
             if selectionIsExclusive(index: index, runtime: runtime) { return true }
             if attempt < 3 { usleep(80_000) }
         }
@@ -1801,6 +1815,12 @@ extension AccessibilityChannel {
         mouseRuntime: AXMouseHelper.Runtime = .production,
         processRuntime: ProcessUtils.Runtime = .production
     ) -> ChannelResult {
+        // #968: the exact-local adapter is additive; the legacy scalar/menu route below
+        // retains its existing behavior. Never retry an attempted exact write via a menu.
+        if params["expected_name"] != nil {
+            return exactRenameTrack(params: params, runtime: runtime,
+                mouseRuntime: mouseRuntime, processRuntime: processRuntime)
+        }
         guard let indexStr = params["index"], let index = Int(indexStr),
               let name = params["name"] else {
             return .error(HonestContract.encodeStateC(
@@ -1928,6 +1948,185 @@ extension AccessibilityChannel {
         ))
     }
 
+    private static func exactRenameTrack(
+        params: [String: String], runtime: AXLogicProElements.Runtime,
+        mouseRuntime: AXMouseHelper.Runtime, processRuntime: ProcessUtils.Runtime
+    ) -> ChannelResult {
+        let expected = params["expected_name"]
+        let physical = AXTrackBinding.current
+        let acquire = physical != nil && AXTrackBinding.ordinaryRenameAcquisition
+        var actualBefore: String?
+        var attempted = false
+        func refusal(_ hint: String) -> ChannelResult {
+            let extras: [String: Any] = [
+                "before": actualBefore as Any? ?? NSNull(),
+                "write_attempted": attempted,
+            ]
+            if attempted {
+                return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+            }
+            return .error(HonestContract.encodeStateC(error: .staleTargetReference, hint: hint, extras: extras))
+        }
+        guard let indexString = params["index"], let index = Int(indexString), index >= 0,
+              let desired = params["name"], let expected,
+              let projectPath = params["expected_project_path"],
+              TrackDispatcher.renameNameFailure(desired) == nil,
+              let window = physical?.window ?? AXLogicProElements.mainWindow(runtime: runtime),
+              let header = physical?.header ?? AXLogicProElements.findTrackHeader(at: index, runtime: runtime) else {
+            return refusal("Exact rename requires an observed project and a held track name field")
+        }
+        func nameField() -> AXUIElement? {
+            guard let candidate = AXLogicProElements.trackNameField(in: header, runtime: runtime),
+                  AXHelpers.getRole(candidate, runtime: runtime.ax) == kAXTextFieldRole as String else { return nil }
+            return candidate
+        }
+        var field = nameField()
+        guard acquire || field != nil else { return refusal("Exact rename requires a held track name field") }
+        let heldPID = acquire ? runtime.logicProPID() : nil
+        let heldApp = acquire ? AXLogicProElements.appRoot(runtime: runtime) : nil
+
+        func targetStillHeld(requiringExclusiveSelection: Bool = false) -> Bool {
+            let position = physical?.currentIndex() ?? (physical == nil ? index : nil)
+            guard ExactTrackNameAdapter.operationPermitted(),
+                  let position,
+                  AXTrackBinding.corroboratedIndex.map({ $0 == position }) ?? true,
+                  let currentWindow = AXLogicProElements.mainWindow(runtime: runtime), CFEqual(currentWindow, window),
+                  case .success(let document?) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
+                  let documentURL = URL(string: document), documentURL.isFileURL,
+                  documentURL.host == nil || documentURL.host == "" || documentURL.host == "localhost",
+                  documentURL.standardizedFileURL.path.utf8.elementsEqual(
+                    URL(fileURLWithPath: projectPath).standardizedFileURL.path.utf8),
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime),
+                  headers.indices.contains(position), CFEqual(headers[position], header),
+                  headers.filter({ CFEqual($0, header) }).count == 1 else { return false }
+            if let field, nameField().map({ CFEqual($0, field) }) != true { return false }
+            // Do not actuate selection, or authorize renaming other selected/unread rows.
+            if requiringExclusiveSelection {
+                guard headers.enumerated().allSatisfy({
+                    AXValueExtractors.extractSelectedState($0.element, runtime: runtime.ax) == ($0.offset == position)
+                }) else { return false }
+                // Current trk_ continuity cannot distinguish an intentional duplicate or swap.
+                // Expose that missing provider before actuation, not after creating the collision.
+                for (row, other) in headers.enumerated() where physical == nil && row != position {
+                    guard case .success(.some(let otherName)) = AXValueExtractors.extractTrackNameResult(
+                        from: other, runtime: runtime.ax), !otherName.utf8.elementsEqual(desired.utf8) else { return false }
+                }
+            }
+            return ExactTrackNameAdapter.operationPermitted()
+        }
+        func readHeldName() -> String? {
+            guard targetStillHeld(),
+                  case .success(let name?) = AXValueExtractors.extractTrackNameResult(from: header, runtime: runtime.ax),
+                  targetStillHeld() else { return nil }
+            return name
+        }
+        actualBefore = readHeldName()
+        guard let before = actualBefore, before.utf8.elementsEqual(expected.utf8) else {
+            return refusal("Observed track name no longer matches the exact expected-before bytes")
+        }
+        if before.utf8.elementsEqual(desired.utf8) {
+            return .success(HonestContract.encodeStateA(extras: [
+                "before": before, "observed": before, "via": "no-op", "write_attempted": false,
+            ]))
+        }
+        if acquire, !targetStillHeld(requiringExclusiveSelection: true) {
+            guard let position = physical?.currentIndex(), targetStillHeld() else {
+                return refusal("Ordinary rename lost its held target before selection")
+            }
+            guard confirmExclusiveSelection(index: position, runtime: runtime, heldHeader: header,
+                permittingWrite: {
+                    guard physical?.currentIndex() == position,
+                          let current = readHeldName(), current.utf8.elementsEqual(expected.utf8) else { return false }
+                    return true
+                }, willWrite: { attempted = true }) else {
+                    return refusal("Ordinary rename could not acquire exclusive held-track selection")
+                }
+        }
+        if acquire, field == nil { field = nameField() }
+        if acquire, field == nil {
+            // The legacy acquisition remains available, but its menu action is bound to the
+            // retained track before actuation; never retry after an uncertain name write.
+            let menu = clickTrackMenu(AXLocalePolicy.renameTrackMenuItem.labels, runtime: runtime,
+                permittingWrite: {
+                    guard targetStillHeld(requiringExclusiveSelection: true),
+                          let current = readHeldName(), current.utf8.elementsEqual(expected.utf8) else { return false }
+                    attempted = true
+                    return true
+                })
+            guard menu.isSuccess else { return refusal("Ordinary rename could not open its held name field") }
+            usleep(150_000)
+        }
+        if acquire, field == nil { field = nameField() }
+        if acquire, field == nil {
+            // The existing menu route may focus an editor outside the header. Keep its
+            // identity and owning window, not merely the fact that some text has focus.
+            guard let heldApp, let heldPID,
+                  let editor: AXUIElement = AXHelpers.getAttribute(
+                    heldApp, kAXFocusedUIElementAttribute, runtime: runtime.ax),
+                  let initialValue: String = AXHelpers.getAttribute(editor, kAXValueAttribute, runtime: runtime.ax),
+                  initialValue.utf8.elementsEqual(expected.utf8) else {
+                return refusal("Ordinary rename menu did not expose its observed name editor")
+            }
+            func editorIsHeld() -> Bool {
+                guard runtime.logicProPID() == heldPID, runtime.focusedApplicationPID() == heldPID,
+                      processRuntime.logicIsFrontmost(),
+                      let app = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, heldApp),
+                      let focused: AXUIElement = AXHelpers.getAttribute(
+                        app, kAXFocusedUIElementAttribute, runtime: runtime.ax), CFEqual(focused, editor),
+                      let editorWindow: AXUIElement = AXHelpers.getAttribute(editor, kAXWindowAttribute, runtime: runtime.ax),
+                      CFEqual(editorWindow, window), targetStillHeld(requiringExclusiveSelection: true),
+                      let current = readHeldName(), current.utf8.elementsEqual(expected.utf8),
+                      let finalFocus: AXUIElement = AXHelpers.getAttribute(
+                        app, kAXFocusedUIElementAttribute, runtime: runtime.ax), CFEqual(finalFocus, editor) else { return false }
+                return ExactTrackNameAdapter.operationPermitted()
+            }
+            let typing = typeRenameName(desired,
+                focus: {
+                    guard editorIsHeld() else { return .unreadable(.focusedElement) }
+                    let reading = readLogicKeyboardFocus(runtime: runtime)
+                    return editorIsHeld() ? reading : .unreadable(.focusedElement)
+                },
+                mouseRuntime: mouseRuntime,
+                permittingPost: {
+                    guard editorIsHeld(), case .textEditing = readLogicKeyboardFocus(runtime: runtime),
+                          editorIsHeld() else { return false }
+                    attempted = true
+                    return true
+                })
+            guard typing == .typed, targetStillHeld(requiringExclusiveSelection: true),
+                  let after = readHeldName(), after.utf8.elementsEqual(desired.utf8) else {
+                return refusal("Ordinary rename typing was attempted but its held-target readback is unavailable")
+            }
+            return .success(HonestContract.encodeStateA(extras: [
+                "before": before, "observed": after, "via": "track_menu", "write_attempted": true,
+                "track_index": physical?.currentIndex() ?? index,
+            ]))
+        }
+        guard let field, targetStillHeld(requiringExclusiveSelection: true) else {
+            return refusal("Held name field could not be opened")
+        }
+        attempted = true
+        guard AXHelpers.performAction(field, kAXPressAction, runtime: runtime.ax) else {
+            return refusal("Held name field opening was attempted but unverified")
+        }
+        // Opening the editor is not proof that its target or raw value survived.
+        // This deciding live read precedes the setter, including the early no-op path above.
+        guard let boundaryName = readHeldName(), boundaryName.utf8.elementsEqual(expected.utf8),
+              targetStillHeld(requiringExclusiveSelection: true) else { return refusal("Exact rename precondition changed before the setter") }
+        actualBefore = boundaryName
+        attempted = true
+        guard AXHelpers.setAttribute(field, kAXValueAttribute, desired as CFTypeRef, runtime: runtime.ax),
+              targetStillHeld(requiringExclusiveSelection: true),
+              AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax),
+              let after = readHeldName(), after.utf8.elementsEqual(desired.utf8) else {
+            return refusal("Exact rename was attempted but its held-target readback is unavailable")
+        }
+        return .success(HonestContract.encodeStateA(extras: [
+            "before": boundaryName, "observed": after, "via": "ax_set_value", "write_attempted": true,
+            "track_index": physical?.currentIndex() ?? index,
+        ]))
+    }
+
     /// How typing a name into Logic's rename field ended.
     enum RenameTypingOutcome: Equatable {
         /// Every code unit and the confirming Return were posted while a text field had the focus.
@@ -1962,7 +2161,8 @@ extension AccessibilityChannel {
         focus: () -> LogicKeyboardFocus,
         mouseRuntime: AXMouseHelper.Runtime,
         focusWaitAttempts: Int = 10,
-        focusWaitMicros: useconds_t = 50_000
+        focusWaitMicros: useconds_t = 50_000,
+        permittingPost: (() -> Bool)? = nil
     ) -> RenameTypingOutcome {
         func isTextEditing(_ reading: LogicKeyboardFocus) -> Bool {
             if case .textEditing = reading { return true }
@@ -1988,7 +2188,8 @@ extension AccessibilityChannel {
         for codeUnit in name.utf16 {
             let now = focus()
             guard isTextEditing(now) else { return .textFocusLost(sentCodeUnits: sent, focus: now) }
-            guard mouseRuntime.postUnicodeScalar(codeUnit) else { return .postFailed(sentCodeUnits: sent) }
+            guard permittingPost?() ?? true,
+                  mouseRuntime.postUnicodeScalar(codeUnit) else { return .postFailed(sentCodeUnits: sent) }
             sent += 1
             mouseRuntime.sleepMicros(12_000)
         }
@@ -2000,7 +2201,8 @@ extension AccessibilityChannel {
         }
         // The confirming Return is a post like the others: one that fails is not a typed name
         // (#1103 review R2, F2).
-        guard mouseRuntime.postKeyEvent(0x24) else { return .postFailed(sentCodeUnits: sent) }
+        guard permittingPost?() ?? true,
+              mouseRuntime.postKeyEvent(0x24) else { return .postFailed(sentCodeUnits: sent) }
         return .typed
     }
 
@@ -2946,7 +3148,8 @@ extension AccessibilityChannel {
     /// the LabelSet it shadowed now holds all ten languages Logic ships.
     private static func clickTrackMenu(
         _ menuItemTitles: [String],
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        permittingWrite: (() -> Bool)? = nil
     ) -> ChannelResult {
         // #519: the menu-bar spellings live in AXLocalePolicy now rather than in this array. The
         // Japanese `トラック` was measured on Logic 12.3 with `AppleLanguages=ja` and is a third
@@ -2962,6 +3165,7 @@ extension AccessibilityChannel {
                 guard let item = AXLogicProElements.menuItem(path: [menuTitle, itemTitle], runtime: runtime) else {
                     continue
                 }
+                guard permittingWrite?() ?? true else { return .error("Track menu target changed before actuation") }
                 guard AXHelpers.performAction(item, kAXPressAction, runtime: runtime.ax) else {
                     return .error("Failed to click menu item: \(itemTitle)")
                 }
