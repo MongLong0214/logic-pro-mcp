@@ -312,6 +312,7 @@ actor AccessibilityChannel: Channel {
         fileReader: LogicProjectFileReader.Runtime,
         navigationProject: TargetDescriptor? = nil,
         navigationReferenceIsCurrent: @escaping @Sendable () async -> Bool = { true },
+        stoppingBeforeAXRead stopBeforeAXRead: (@Sendable () -> Bool)? = nil,
         stoppingWhen stop: @escaping @Sendable () -> Bool
     ) async throws -> SessionPopulationObservation.FreshPopulation {
         try SessionPopulationObservation.requireOwnedAcquisition()
@@ -325,7 +326,10 @@ actor AccessibilityChannel: Channel {
             await navigation?.reveal(stoppingWhen: stop)
         }
         do {
-            var population = try await readExposedSessionPopulation(request: request, fileReader: fileReader, stoppingWhen: stop)
+            var population = try await readExposedSessionPopulation(
+                request: request, fileReader: fileReader,
+                stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop
+            )
             if let navigation {
                 population.uiEffects = await navigation.restore(stoppingWhen: stop)
                 if population.uiEffects.navigationPerformed && population.uiEffects.restoration != "restored" {
@@ -345,6 +349,7 @@ actor AccessibilityChannel: Channel {
     private func readExposedSessionPopulation(
         request: SessionPopulationObservation.Request,
         fileReader: LogicProjectFileReader.Runtime,
+        stoppingBeforeAXRead stopBeforeAXRead: @escaping @Sendable () -> Bool,
         stoppingWhen stop: @escaping @Sendable () -> Bool
     ) async throws -> SessionPopulationObservation.FreshPopulation {
         let beganAt = Date()
@@ -365,6 +370,12 @@ actor AccessibilityChannel: Channel {
         func check() throws {
             try SessionPopulationObservation.requireOwnedAcquisition()
             if stop() { throw SessionPopulationObservation.AcquisitionError.textEditing }
+        }
+        // The poller can separate cheap lifecycle/latch checks from full focus
+        // acquisition. Other callers retain their original per-read stop callback.
+        func checkAXRead() throws {
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            if stopBeforeAXRead() { throw SessionPopulationObservation.AcquisitionError.textEditing }
         }
         func read(in window: AXUIElement) throws -> Read {
             try check()
@@ -389,11 +400,11 @@ actor AccessibilityChannel: Channel {
             var strips: [ChannelStripState]?
             var presentation: AXLogicProElements.MixerPresentationRead?
             if wantsStrips {
-                let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic, checking: check)
+                let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic, checking: checkAXRead)
                 try check()
                 if let binding = lookup.binding {
                     mixer = binding.mixer
-                    presentation = try AXLogicProElements.mixerPresentationRead(binding: binding, runtime: logic.ax, checking: check)
+                    presentation = try AXLogicProElements.mixerPresentationRead(binding: binding, runtime: logic.ax, checking: checkAXRead)
                     try check()
                     if let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: binding.mixer, runtime: logic.ax) {
                         stripElements = enumeration.strips

@@ -10,6 +10,7 @@ struct Issue965MixerPresentationWitnessTests {
         private let lock = NSLock()
         private var value = 0
         func next() -> Int { lock.withLock { value += 1; return value } }
+        var count: Int { lock.withLock { value } }
     }
     private final class StopRead: @unchecked Sendable {
         private let lock = NSLock()
@@ -85,24 +86,28 @@ struct Issue965MixerPresentationWitnessTests {
     private func inspect(
         _ fixture: Fixture,
         attributes: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+        rawAttributes: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         children: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)? = nil,
+        keyboardFocus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus = { .notTextEditing },
+        gate: LogicMutationGate = LogicMutationGate(),
         expectSuccess: Bool = true
     ) async throws -> [String: Any] {
         let channel = AccessibilityChannel(runtime: .axBacked(
             isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true },
             logicRuntime: fixture.builder.makeLogicRuntime(
-                appElement: fixture.app, attributeValueResultHandler: attributes,
+                appElement: fixture.app, attributeValueHandler: rawAttributes,
+                attributeValueResultHandler: attributes,
                 childrenResultHandler: children,
                 setAttributeHandler: nil, performActionHandler: nil,
                 executeAppleScript: { _ in .error("fixture forbids AppleScript") }
             )
         ))
         let cache = StateCache()
-        let gate = LogicMutationGate()
         let dependencies = HandlerDependencies(
             router: ChannelRouter(), cache: cache, targetRegistry: TargetRegistry(),
             poller: StatePoller(axChannel: channel, cache: cache,
-                               runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable)),
+                               runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable,
+                                              keyboardFocus: keyboardFocus)),
             dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
             liveTrackNames: { [:] }, projectFileReader: .unavailable
         )
@@ -452,6 +457,144 @@ struct Issue965MixerPresentationWitnessTests {
             Issue.record("discovery must observe cancellation before selecting a legacy group")
         } catch Stop.requested {}
         #expect(reads.next() == 1)
+    }
+
+    @Test func registeredProducerDoesNotAmplifyFocusReadsForNonHelpMetadata() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            var readings: [(focus: Int, help: Int)] = []
+            for neutralCount in [0, 8] {
+                let fixture = Fixture()
+                let neutral = (0..<neutralCount).map { fixture.builder.element(966_100 + $0) }
+                for node in neutral {
+                    fixture.builder.setRole(node, kAXGroupRole as String)
+                    fixture.builder.setChildren(node, [])
+                }
+                fixture.builder.setChildren(fixture.window, [fixture.owner] + neutral)
+                let focusReads = Counter()
+                let helpReads = Counter()
+                let focus = actualFocusReader(fixture, reads: focusReads)
+                let observed = try await presentation(inspect(fixture, rawAttributes: { _, attribute in
+                    if attribute == kAXHelpAttribute as String { _ = helpReads.next() }
+                    return nil
+                }, keyboardFocus: focus))
+                #expect(observed["mode"] as? String == "all")
+                readings.append((focusReads.count, helpReads.count))
+            }
+            let addedFocusReads = readings[1].focus - readings[0].focus
+            let addedHelpReads = readings[1].help - readings[0].help
+            #expect(addedHelpReads > 0, "the real producer must traverse the added no-ID nodes")
+            #expect(addedFocusReads == addedHelpReads,
+                    "additional metadata must retain one focus check per AXHelp, without another focus acquisition before each non-Help read")
+        }
+    }
+
+    @Test(arguments: ["help", "stage"])
+    func registeredProducerKeepsHelpAndStageTextEditingChecks(boundary: String) async throws {
+        let fixture = Fixture()
+        let edited = StopRead()
+        let refused = StopRead()
+        let focusReads = Counter()
+        let focus = actualFocusReader(fixture, reads: focusReads, editing: {
+            let editing = edited.isStopped
+            if editing { refused.observe(stop: true) }
+            return editing
+        })
+        let body = try await inspect(fixture, rawAttributes: { element, attribute in
+            // Discovery asks for Help after these metadata. Presentation's last
+            // checkbox value instead has no Help before the next full stage check.
+            let trigger = boundary == "help"
+                ? CFEqual(element, fixture.owner) && attribute == kAXIdentifierAttribute as String
+                : CFEqual(element, fixture.filterControls[7]) && attribute == kAXValueAttribute as String
+            edited.observe(stop: trigger)
+            if refused.isStopped { refused.observe(stop: false) }
+            return nil
+        }, keyboardFocus: focus, expectSuccess: false)
+        #expect(edited.isStopped && refused.isStopped)
+        #expect(refused.laterReads == 0, "no checked AX read may follow a focus refusal")
+        #expect(body["error"] as? String == "readback_unavailable")
+        #expect(body["snapshot_id"] == nil)
+    }
+
+    @Test(arguments: ["cancel", "ownership"])
+    func registeredProducerStopsOnNonHelpLifecycleLoss(loss: String) async throws {
+        let fixture = Fixture()
+        let neutral = fixture.builder.element(966_120)
+        fixture.builder.setRole(neutral, kAXGroupRole as String)
+        fixture.builder.setChildren(neutral, [])
+        fixture.builder.setChildren(fixture.window, [fixture.owner, neutral])
+        let stopped = StopRead()
+        let gate = LogicMutationGate()
+        let body = try await inspect(fixture, rawAttributes: { element, attribute in
+            let trigger = CFEqual(element, neutral) && attribute == kAXIdentifierAttribute as String
+            stopped.observe(stop: trigger)
+            if trigger {
+                if loss == "cancel" { withUnsafeCurrentTask { $0?.cancel() } }
+                else {
+                    _ = gate.tryAcquire(operation: "test.successor", now: .distantFuture)
+                }
+            }
+            return nil
+        }, gate: gate, expectSuccess: false)
+        #expect(stopped.isStopped)
+        #expect(stopped.laterReads == 0, "lifecycle loss must be checked before the next non-Help metadata")
+        #expect(body["error"] as? String == (loss == "cancel" ? "cancelled" : "readback_unavailable"))
+        #expect(body["snapshot_id"] == nil)
+    }
+
+    @Test func omittedPerReadCallbackRetainsGenericStoppingWhenSemantics() async throws {
+        let fixture = Fixture()
+        let stopped = StopRead()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app, attributeValueHandler: { element, attribute in
+                stopped.observe(stop: CFEqual(element, fixture.owner) && attribute == kAXIdentifierAttribute as String)
+                return nil
+            }, setAttributeHandler: nil, performActionHandler: nil,
+            executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+        )
+        let channel = AccessibilityChannel(runtime: .axBacked(
+            isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true }, logicRuntime: runtime
+        ))
+        let context = OperationTraceContext(mutationGateAcquired: true)
+        await OperationTraceContext.$current.withValue(context) {
+            do {
+                _ = try await channel.readFreshSessionPopulation(
+                    request: .init(domains: [.strips]), fileReader: .unavailable,
+                    stoppingWhen: { stopped.isStopped }
+                )
+                Issue.record("the generic stop must still be asked before each checked metadata read")
+            } catch let error as SessionPopulationObservation.NavigationAcquisitionError {
+                switch error.cause {
+                case SessionPopulationObservation.AcquisitionError.textEditing: break
+                default: Issue.record("unexpected wrapped acquisition error: \(error.cause)")
+                }
+            } catch {
+                Issue.record("unexpected acquisition error: \(error)")
+            }
+        }
+        #expect(stopped.isStopped && stopped.laterReads == 0)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    private func actualFocusReader(
+        _ fixture: Fixture, reads: Counter,
+        editing: @escaping @Sendable () -> Bool = { false }
+    ) -> @Sendable () -> AccessibilityChannel.LogicKeyboardFocus {
+        let focused = fixture.builder.element(966_090)
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, focused)
+        fixture.builder.setRole(focused, kAXGroupRole as String)
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app, attributeValueHandler: { element, attribute in
+                if CFEqual(element, fixture.app), attribute == kAXFocusedUIElementAttribute as String {
+                    _ = reads.next()
+                }
+                if CFEqual(element, focused), attribute == kAXRoleAttribute as String, editing() {
+                    return .some(kAXTextFieldRole as NSString)
+                }
+                return nil
+            }, setAttributeHandler: nil, performActionHandler: nil,
+            executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+        )
+        return { AccessibilityChannel.readLogicKeyboardFocus(runtime: runtime) }
     }
 
     private func presentation(_ body: [String: Any]) throws -> [String: Any] {
