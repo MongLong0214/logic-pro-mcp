@@ -132,7 +132,7 @@ enum AXPluginTrackBinding {
     /// ordinal (even with the same name) is not the acquired target.
     static func isStable(_ original: Binding, runtime: AXLogicProElements.Runtime) -> Bool {
         guard let fresh = resolve(track: original.trackIndex, mixer: original.mixer, runtime: runtime),
-              fresh.trackName == original.trackName,
+              fresh.trackName.utf8.elementsEqual(original.trackName.utf8),
               CFEqual(fresh.header, original.header), CFEqual(fresh.strip, original.strip) else { return false }
         return true
     }

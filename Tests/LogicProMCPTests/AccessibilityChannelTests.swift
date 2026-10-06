@@ -2122,10 +2122,10 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     builder.setAttribute(header, kAXPositionAttribute as String, axPoint(10, 100))
     builder.setAttribute(header, kAXSizeAttribute as String, axSize(180, 40))
 
-    // Every AX action (AXPress on header/children) is rejected.
+    // Every AX setter and action is rejected, including the runtime-threaded first two rungs.
     let logicRuntime = builder.makeLogicRuntime(
         appElement: app,
-        setAttributeHandler: nil,
+        setAttributeHandler: { _, _, _ in false },
         performActionHandler: { _, _ in false }
     )
     let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: logicRuntime)
@@ -3188,8 +3188,20 @@ private func makeTempoSliderFixture(
         let current = (builder.attributeValue(muteButton, kAXValueAttribute as String) as? NSNumber)?.boolValue ?? false
         builder.setAttribute(muteButton, kAXValueAttribute as String, NSNumber(value: !current))
     }
+    // AXPress owns selection in this fixture; keep other attribute writes usable.
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: { element, attribute, value in
+            guard attribute != kAXSelectedChildrenAttribute as String,
+                  attribute != kAXSelectedAttribute as String else { return false }
+            builder.setAttribute(element, attribute, value)
+            return true
+        },
+        performActionHandler: nil
+    )
     let channel = makeAXBackedAccessibilityChannel(
-        builder: builder, app: app, trackToggleKeyRuntime: muteKeyRecorder.runtime()
+        builder: builder, app: app, logicRuntime: logicRuntime,
+        trackToggleKeyRuntime: muteKeyRecorder.runtime()
     )
 
     let tracksResult = await channel.execute(operation: "track.get_tracks", params: [:])
@@ -3259,7 +3271,9 @@ private func makeTempoSliderFixture(
 
     let logicRuntime = builder.makeLogicRuntime(
         appElement: app,
-        setAttributeHandler: nil,
+        // This fixture models selection through AXPress; the dedicated runtime ladder tests
+        // separately prove accepted AXSelectedChildren and AXSelected setter rungs.
+        setAttributeHandler: { _, _, _ in false },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == secondHeader {
@@ -3490,7 +3504,13 @@ private func makeTempoSliderFixture(
     let fixture = makeSetInstrumentFixture()
     let logicRuntime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: nil,
+        // The AXPress handler below owns the selected-header transition.
+        setAttributeHandler: { element, attribute, value in
+            guard attribute != kAXSelectedChildrenAttribute as String,
+                  attribute != kAXSelectedAttribute as String else { return false }
+            fixture.builder.setAttribute(element, attribute, value)
+            return true
+        },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == fixture.secondHeader {
@@ -3532,7 +3552,13 @@ private func makeTempoSliderFixture(
     fixture.builder.setAttribute(fixture.preset, kAXValueAttribute as String, "Sub Bass ")
     let logicRuntime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: nil,
+        // AXPress owns selection; other writes retain the default fake behavior.
+        setAttributeHandler: { element, attribute, value in
+            guard attribute != kAXSelectedChildrenAttribute as String,
+                  attribute != kAXSelectedAttribute as String else { return false }
+            fixture.builder.setAttribute(element, attribute, value)
+            return true
+        },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == fixture.secondHeader {
@@ -3612,7 +3638,11 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     // selection verification) is reached: mark the target selected on AXPress.
     let runtimeWithSelect = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: { _, _, _ in true },
+        // Selection is modeled by AXPress below, not an inert accepted setter.
+        setAttributeHandler: { _, attribute, _ in
+            attribute != kAXSelectedChildrenAttribute as String
+                && attribute != kAXSelectedAttribute as String
+        },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == secondHeader {
@@ -3651,7 +3681,11 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let fixture = makeSetInstrumentFixture()
     let logicRuntime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: { _, _, _ in true },
+        // Selection is modeled by AXPress below, not an inert accepted setter.
+        setAttributeHandler: { _, attribute, _ in
+            attribute != kAXSelectedChildrenAttribute as String
+                && attribute != kAXSelectedAttribute as String
+        },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == fixture.secondHeader {
@@ -3693,7 +3727,11 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let fixture = makeSetInstrumentFixture()
     let logicRuntime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: { _, _, _ in true },
+        // Selection is modeled by AXPress below, not an inert accepted setter.
+        setAttributeHandler: { _, attribute, _ in
+            attribute != kAXSelectedChildrenAttribute as String
+                && attribute != kAXSelectedAttribute as String
+        },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == fixture.secondHeader {
@@ -3726,7 +3764,11 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let fixture = makeSetInstrumentFixture()
     let logicRuntime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: { _, _, _ in true },
+        // Selection is modeled by AXPress below, not an inert accepted setter.
+        setAttributeHandler: { _, attribute, _ in
+            attribute != kAXSelectedChildrenAttribute as String
+                && attribute != kAXSelectedAttribute as String
+        },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == fixture.secondHeader {
@@ -3781,7 +3823,11 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     fixture.builder.setAttribute(fixture.preset, kAXValueAttribute as String, "Bass")
     let logicRuntime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: { _, _, _ in true },
+        // Selection is modeled by AXPress below, not an inert accepted setter.
+        setAttributeHandler: { _, attribute, _ in
+            attribute != kAXSelectedChildrenAttribute as String
+                && attribute != kAXSelectedAttribute as String
+        },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == fixture.secondHeader {
@@ -3855,7 +3901,11 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let fixture = makeSetInstrumentFixture()
     let logicRuntime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: { _, _, _ in true },
+        // Selection is modeled by AXPress below, not an inert accepted setter.
+        setAttributeHandler: { _, attribute, _ in
+            attribute != kAXSelectedChildrenAttribute as String
+                && attribute != kAXSelectedAttribute as String
+        },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == fixture.secondHeader {
@@ -3896,7 +3946,11 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let fixture = makeSetInstrumentFixture()
     let logicRuntime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: { _, _, _ in true },
+        // Selection is modeled by AXPress below, not an inert accepted setter.
+        setAttributeHandler: { _, attribute, _ in
+            attribute != kAXSelectedChildrenAttribute as String
+                && attribute != kAXSelectedAttribute as String
+        },
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
             if element == fixture.secondHeader {
@@ -4012,7 +4066,8 @@ private final class LockedFlag: @unchecked Sendable {
 
     let failingRuntime = builder.makeLogicRuntime(
         appElement: app,
-        setAttributeHandler: nil,
+        // This failure fixture rejects setters as well as AXPress.
+        setAttributeHandler: { _, _, _ in false },
         performActionHandler: { _, _ in false }
     )
     let failingChannel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: failingRuntime)

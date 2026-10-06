@@ -186,6 +186,38 @@ func pluginTrackBindingWaitRefusesSameNameElementReplacement(_ stage: String) as
     #expect(!AXPluginTrackBinding.isStable(binding, runtime: f.runtime))
 }
 
+@Test(arguments: [
+    ("q\u{0301}\u{0323}", "q\u{0323}\u{0301}"),
+    ("q\u{0323}\u{0301}", "q\u{0301}\u{0323}"),
+    (" Bass ", "Bass "),
+])
+func pluginTrackBindingRetainedElementsDoNotHideRawNameDrift(_ names: (String, String)) throws {
+    try #require(!names.0.utf8.elementsEqual(names.1.utf8))
+    let f = PluginBindingFixture(headerNames: [names.0], stripNames: [names.0])
+    let runtime = f.readOnlyRuntime
+    let binding = try #require(AXPluginTrackBinding.resolve(track: 0, mixer: f.mixer, runtime: runtime))
+    #expect(binding.trackName.utf8.elementsEqual(names.0.utf8))
+    #expect(AXPluginTrackBinding.isStable(binding, runtime: runtime), "unchanged raw bytes remain stable")
+
+    // Change the displayed names on the acquired elements, not their CF identities or positions.
+    f.builder.setAttribute(f.builder.element(30200), kAXDescriptionAttribute as String, names.1)
+    f.builder.setAttribute(f.builder.element(30400), kAXValueAttribute as String, names.1)
+    let fresh = try #require(AXPluginTrackBinding.resolve(track: 0, mixer: f.mixer, runtime: runtime))
+    #expect(CFEqual(fresh.header, binding.header) && CFEqual(fresh.strip, binding.strip))
+    #expect(fresh.trackName.utf8.elementsEqual(names.1.utf8))
+    #expect(!AXPluginTrackBinding.isStable(binding, runtime: runtime),
+            "retained AX identities cannot substitute canonically equivalent or normalized-equal name bytes")
+    #expect(AXPluginTrackBinding.isStable(fresh, runtime: runtime))
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+
+    let collision = PluginBindingFixture(headerNames: [names.0, names.1], stripNames: [names.0])
+    let first = AXPluginTrackBinding.resolve(track: 0, mixer: collision.mixer, runtime: collision.readOnlyRuntime)
+    let second = AXPluginTrackBinding.resolve(track: 1, mixer: collision.mixer, runtime: collision.readOnlyRuntime)
+    let ambiguous = first == nil && second == nil
+    #expect(ambiguous, "the raw stability check must not weaken conservative normalized sibling refusal")
+    #expect(collision.builder.setCalls.isEmpty && collision.builder.actionCalls.isEmpty)
+}
+
 @Test(arguments: [" Bass ", "\tBass\n", "Bass "], [false, true])
 func pluginTrackBindingKeepsNormalizedSiblingCollisionAmbiguous(_ rawName: String, reverse: Bool) {
     let names = reverse ? ["Bass", rawName] : [rawName, "Bass"]
