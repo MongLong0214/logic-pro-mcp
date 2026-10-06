@@ -601,7 +601,10 @@ extension AccessibilityChannel {
             return false
         }
 
-        private func dismissOwnedMenu(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+        private func dismissOwnedMenu(
+            permittingActuation: (() async -> Bool)? = nil,
+            stoppingWhen stop: @Sendable () -> Bool
+        ) async -> Bool {
             guard menuOpen else { return true }
             guard await stillOwned(stoppingWhen: stop), ownedMenuFocus(), let bar else { return false }
             if AXHelpers.getAttribute(bar, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? == false,
@@ -611,6 +614,8 @@ extension AccessibilityChannel {
             }
             guard
                   runtime.ax.actionNames(bar).contains(kAXCancelAction as String),
+                  await stillOwned(stoppingWhen: stop), ownedMenuFocus(),
+                  await permittingActuation?() ?? true,
                   !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   AXHelpers.performAction(bar, kAXCancelAction as String, runtime: runtime.ax) else { return false }
             guard await stillOwned(stoppingWhen: stop), sameFocus(),
@@ -676,16 +681,27 @@ extension AccessibilityChannel {
                   AXHelpers.getAttribute(item, kAXEnabledAttribute as String, runtime: runtime.ax) as Bool? == true,
                   runtime.ax.actionNames(item).contains(kAXPressAction as String),
                   await stillOwned(stoppingWhen: stop), ownedMenuFocus() else { return false }
-            let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
-            if desiredVisibility == false,
-               AXHelpers.getTitle(item, runtime: runtime.ax) == AXLocalePolicy.showMixerMenuItem.canonical {
-                return false
+            let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime,
+                requiresCompleteAbsence: desiredVisibility != nil)
+            if desiredVisibility == false {
+                // Discovery accepts the same folded title OR description. Direction
+                // cannot discard that evidence by rereading only a verbatim title.
+                guard case .success(false) = AXLocalePolicy.elementMatchesResult(
+                    item, AXLocalePolicy.showMixerMenuItem.canonicalOnly, runtime: runtime.ax)
+                else { return false }
             }
             if let revealedMixer {
                 guard let current = lookup.mixer, CFEqual(current, revealedMixer) else { return false }
             } else {
-                guard case .notFound = lookup,
-                      AXHelpers.getTitle(item, runtime: runtime.ax) != "Hide Mixer" else { return false }
+                guard case .notFound = lookup else { return false }
+                if desiredVisibility != nil {
+                    guard case .success(false) = AXLocalePolicy.elementMatchesResult(
+                        item, AXLocalePolicy.mixerMenuHideDirection, runtime: runtime.ax)
+                    else { return false }
+                } else {
+                    // Preserve the temporary inspection path's historical default.
+                    guard AXHelpers.getTitle(item, runtime: runtime.ax) != "Hide Mixer" else { return false }
+                }
             }
             // The final-state caller checks retained custody AFTER the deciding Mixer read.
             // Temporary inspection retains its original default-nil behavior.
@@ -786,7 +802,7 @@ extension AccessibilityChannel {
                 return true
             }
             guard await owned() else { return result(verified: false, reason: "navigation_ownership_lost") }
-            let initial = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+            let initial = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime, requiresCompleteAbsence: true)
             guard await owned() else { return result(verified: false, reason: "navigation_ownership_lost") }
             switch initial {
             case .found(let mixer): before = true; revealedMixer = mixer
@@ -817,7 +833,7 @@ extension AccessibilityChannel {
                     menuRestored = !effects.navigationPerformed
                     return result(verified: false, reason: "navigation_ownership_lost")
                 }
-                let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+                let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime, requiresCompleteAbsence: true)
                 guard await owned() else {
                     menuRestored = !effects.navigationPerformed
                     return result(verified: false, reason: "navigation_ownership_lost")
@@ -826,13 +842,14 @@ extension AccessibilityChannel {
                 if after == desired || !acknowledged || !effects.attempted.contains("mixer_visibility") { break }
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { break }
             } while ContinuousClock.now < end
-            menuRestored = await dismissOwnedMenu(stoppingWhen: stop)
+            menuRestored = await dismissOwnedMenu(permittingActuation: { await owned() }, stoppingWhen: stop)
             guard menuRestored, await owned(), sameFocus(),
                   !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
                 return result(verified: false, reason: "menu_restoration_failed")
             }
-            let finalLookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
-            guard await owned(), sameFocus() else {
+            let finalLookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime, requiresCompleteAbsence: true)
+            guard await owned(), sameFocus(),
+                  !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
                 return result(verified: false, reason: "navigation_ownership_lost")
             }
             observe(finalLookup)

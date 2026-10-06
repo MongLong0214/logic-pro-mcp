@@ -21,12 +21,23 @@ struct Issue969MixerVisibilitySetterTests {
         var leafChangesVisibility = true
         var leafLeavesMenuOpen = false
         var contradictoryShow = false
+        var contradictoryHide = false
         var unknownWindowChildren = false
         var cancelLeavesMenuOpen = false
         var gateOwned = true
         var cancelled = false
+        var logicPID: pid_t = 4242
+        var currentApp: AXUIElement?
+        var unreadNestedGroup: AXUIElement?
+        var failedMetadata: (AXUIElement, String)?
+        var finalMixerReads = 0
+        var finalFocusReads = 0
+        var finalFocusArmed = false
+        var focusReadAtLoss: Int?
+        var afterFinalFocusRead: (@Sendable () -> Void)?
         var afterCancel: (@Sendable () -> Void)?
         var afterDecisiveMixerRead: (@Sendable () -> Void)?
+        var afterCleanupActionNames: (@Sendable () -> Void)?
 
         init(showing: Bool) {
             self.showing = showing
@@ -81,16 +92,46 @@ struct Issue969MixerVisibilitySetterTests {
 
         func channel() -> AccessibilityChannel {
             let ax = builder.makeAXRuntime(appElement: app,
+                appElementProvider: { [self] _ in currentApp ?? app },
                 attributeValueHandler: { [self] element, attribute in
                     observeDecisiveMixerRead(element, attribute)
+                    if afterFinalFocusRead != nil {
+                        if CFEqual(element, mixer), attribute == kAXIdentifierAttribute as String {
+                            finalMixerReads += 1
+                        }
+                        if CFEqual(element, app), attribute == kAXFocusedUIElementAttribute as String,
+                           finalMixerReads == 2 {
+                            finalFocusReads += 1
+                            if finalFocusArmed, let callback = afterFinalFocusRead {
+                                focusReadAtLoss = finalFocusReads
+                                afterFinalFocusRead = nil
+                                callback()
+                            }
+                        }
+                    }
                     return nil
                 },
                 attributeValueResultHandler: { [self] element, attribute in
                     observeDecisiveMixerRead(element, attribute)
+                    if let failedMetadata, CFEqual(element, failedMetadata.0), attribute == failedMetadata.1 {
+                        return .failure(.init(raw: Int32(AXError.cannotComplete.rawValue)))
+                    }
                     return nil
                 }, childrenResultHandler: { [self] element in
                     if unknownWindowChildren, CFEqual(element, window) {
                         return .failure(.init(raw: Int32(AXError.cannotComplete.rawValue)))
+                    }
+                    if let unreadNestedGroup, CFEqual(element, unreadNestedGroup) {
+                        return .failure(.init(raw: Int32(AXError.cannotComplete.rawValue)))
+                    }
+                    return nil
+                },
+                actionNamesHandler: { [self] element in
+                    if CFEqual(element, view), showing,
+                       builder.attributeValue(view, kAXSelectedAttribute as String) as? Bool == true,
+                       let callback = afterCleanupActionNames {
+                        afterCleanupActionNames = nil
+                        callback()
                     }
                     return nil
                 },
@@ -112,7 +153,7 @@ struct Issue969MixerVisibilitySetterTests {
                         }
                     }
                     if CFEqual(element, toggle), action == kAXPressAction as String {
-                        if leafChangesVisibility { showing = contradictoryShow ? true : !showing }
+                        if leafChangesVisibility { showing = contradictoryShow ? true : contradictoryHide ? false : !showing }
                         events.append(showing ? "show_mixer" : "hide_mixer")
                         updateVisibility()
                         builder.setAttribute(view, kAXSelectedAttribute as String, leafLeavesMenuOpen)
@@ -120,11 +161,11 @@ struct Issue969MixerVisibilitySetterTests {
                     }
                     events.append("unexpected_action"); Issue.record("unexpected visibility action"); return false
                 }, executeAppleScript: { _ in Issue.record("AppleScript forbidden"); return .error("forbidden") })
-            let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax,
+            let logic = AXLogicProElements.Runtime(logicProPID: { [self] in logicPID }, ax: ax,
                 executeAppleScript: { _ in Issue.record("AppleScript forbidden"); return .error("forbidden") },
                 onScreenWindowList: { [] },
                 postPopupMenuEscape: { Issue.record("global Escape forbidden") },
-                focusedApplicationPID: { 4242 }, observeFrontmost: nil)
+                focusedApplicationPID: { [self] in logicPID }, observeFrontmost: nil)
             // Every unrelated channel callback is inert; no axBacked/native ancillary defaults.
             return AccessibilityChannel(runtime: .init(
                 isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true }, appRoot: { [self] in app },
@@ -329,6 +370,25 @@ struct Issue969MixerVisibilitySetterTests {
         #expect(fixture.events == ["open_view", "show_mixer", "cancel_view"])
     }
 
+    @Test func documentLossAtCleanupActionNamesCannotCancelTheUnownedMenu() async throws {
+        let fixture = Fixture(showing: false)
+        fixture.leafLeavesMenuOpen = true
+        fixture.afterCleanupActionNames = {
+            fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+        }
+        let body = try await set(fixture, visible: true)
+        #expect(fixture.afterCleanupActionNames == nil, "the final successful cleanup action-names read must execute the interference")
+        #expect(body["state"] as? String == "B")
+        let attempted = try #require(body["write_attempted"] as? Bool)
+        #expect(attempted)
+        let restored = try #require(body["menu_restored"] as? Bool)
+        #expect(!restored)
+        #expect(fixture.events == ["open_view", "show_mixer"])
+        let selected = try #require(fixture.builder.attributeValue(fixture.view, kAXSelectedAttribute as String) as? Bool)
+        #expect(selected)
+        #expect(fixture.showing)
+    }
+
     @Test func aSameLabelMixerReplacementDuringCleanupDoesNotVerifyTheHeldMixer() async throws {
         let fixture = Fixture(showing: false)
         fixture.leafLeavesMenuOpen = true
@@ -394,5 +454,181 @@ struct Issue969MixerVisibilitySetterTests {
         numeric["write_attempted"] = 1
         let numericAccepted = try #require(oracle.evaluate(responseData: JSONSerialization.data(withJSONObject: numeric), readbackData: readback))
         #expect(!numericAccepted)
+    }
+
+    @Test(arguments: ["trimmed", "uppercase", "description_only"])
+    func acceptedShowDirectionFormsCannotAuthorizeAnExplicitHide(form: String) async throws {
+        let fixture = Fixture(showing: true)
+        fixture.contradictoryShow = true
+        switch form {
+        case "trimmed": fixture.builder.setAttribute(fixture.toggle, kAXTitleAttribute as String, " show mixer ")
+        case "uppercase": fixture.builder.setAttribute(fixture.toggle, kAXTitleAttribute as String, "SHOW MIXER")
+        default:
+            fixture.builder.removeAttribute(fixture.toggle, kAXTitleAttribute as String)
+            fixture.builder.setAttribute(fixture.toggle, kAXDescriptionAttribute as String, AXLocalePolicy.showMixerMenuItem.canonical)
+        }
+        let body = try await set(fixture, visible: false)
+        #expect(body["state"] as? String != "A")
+        #expect(fixture.events == ["open_view", "cancel_view"])
+        #expect(fixture.showing)
+    }
+
+    @Test(arguments: ["focus", "window", "pid", "app", "healthy"])
+    func cleanupActionNamesCannotSubstituteRetainedAuthority(loss: String) async throws {
+        let fixture = Fixture(showing: false)
+        fixture.leafLeavesMenuOpen = true
+        fixture.afterCleanupActionNames = {
+            switch loss {
+            case "focus":
+                let foreignFocus = fixture.builder.element(969_031)
+                fixture.builder.setRole(foreignFocus, kAXListRole as String)
+                fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, foreignFocus)
+            case "window": fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.builder.element(969_032))
+            case "pid": fixture.logicPID = 4243
+            case "app":
+                let otherApp = fixture.builder.element(969_033)
+                fixture.builder.setAttribute(otherApp, kAXFrontmostAttribute as String, true)
+                fixture.builder.setAttribute(otherApp, kAXMainWindowAttribute as String, fixture.window)
+                fixture.builder.setAttribute(otherApp, kAXFocusedWindowAttribute as String, fixture.window)
+                fixture.builder.setAttribute(otherApp, kAXFocusedUIElementAttribute as String, fixture.rail)
+                fixture.currentApp = otherApp
+            default: break
+            }
+        }
+        let body = try await set(fixture, visible: true)
+        #expect(fixture.afterCleanupActionNames == nil)
+        #expect(body["state"] as? String == (loss == "healthy" ? "A" : "B"))
+        let attempted = try #require(body["write_attempted"] as? Bool)
+        #expect(attempted)
+        #expect(fixture.events == (loss == "healthy" ? ["open_view", "show_mixer", "cancel_view"] : ["open_view", "show_mixer"]))
+        let selected = try #require(fixture.builder.attributeValue(fixture.view, kAXSelectedAttribute as String) as? Bool)
+        if loss == "healthy" { #expect(!selected) } else { #expect(selected) }
+    }
+
+    @Test(arguments: ["gate", "cancel", "deadline", "healthy"])
+    func theLastFinalFocusReadCannotPublishAfterAuthorityLoss(loss: String) async throws {
+        let fixture = Fixture(showing: false)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        fixture.afterFinalFocusRead = {
+            switch loss {
+            case "gate": fixture.gateOwned = false
+            case "cancel": fixture.cancelled = true
+            case "deadline":
+                // Model a successful AX read that returns only after the operation's
+                // actual monotonic deadline. This is not a latency/SLA assertion.
+                while ContinuousClock.now < deadline { Thread.sleep(forTimeInterval: 0.001) }
+            default: break
+            }
+        }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: {
+            // The final lookup's second retained-Mixer ID read is followed by owned():
+            // its two stop focus reads, ownedMenuFocus, and last stop focus read. Arm
+            // only after its trailing gate corroboration, so the next read is the
+            // final standalone sameFocus(), not an earlier deciding guard.
+            if fixture.finalMixerReads == 2, fixture.finalFocusReads == 4 {
+                fixture.finalFocusArmed = true
+            }
+            return fixture.gateOwned
+        }, deadline: deadline, cancellationRequested: { fixture.cancelled })
+        let body = try await set(fixture, visible: true, context: context)
+        #expect(fixture.afterFinalFocusRead == nil)
+        #expect(fixture.focusReadAtLoss == 5)
+        if loss == "gate" { #expect(!fixture.gateOwned) }
+        if loss == "cancel" { #expect(fixture.cancelled) }
+        if loss == "deadline" { #expect(ContinuousClock.now >= deadline) }
+        #expect(body["state"] as? String == (loss == "healthy" ? "A" : "B"))
+        let attempted = try #require(body["write_attempted"] as? Bool)
+        #expect(attempted)
+        #expect(fixture.events == ["open_view", "show_mixer"])
+    }
+
+    @Test(arguments: [true, false])
+    func anUnreadUnnamedSubtreeDoesNotProveMixerAbsence(unread: Bool) async throws {
+        let fixture = Fixture(showing: false)
+        let group = fixture.builder.element(969_040)
+        fixture.builder.setRole(group, kAXGroupRole as String)
+        fixture.builder.setChildren(group, [])
+        fixture.builder.setChildren(fixture.window, [fixture.rail, group])
+        if unread { fixture.unreadNestedGroup = group }
+        let body = try await set(fixture, visible: false)
+        #expect(body["state"] as? String == (unread ? "C" : "A"))
+        if unread { #expect(body["before_visible"] == nil) }
+        else {
+            let before = try #require(body["before_visible"] as? Bool)
+            #expect(!before)
+        }
+        #expect(fixture.events.isEmpty)
+    }
+
+    @Test(arguments: ["role", "identifier", "description", "title", "help", "depth", "cycle", "node_budget", "visible"])
+    func incompleteMixerDiscoveryCannotProveAbsence(shape: String) async throws {
+        let fixture = Fixture(showing: shape == "visible")
+        let group = fixture.builder.element(969_050)
+        fixture.builder.setRole(group, kAXGroupRole as String)
+        fixture.builder.setChildren(group, [])
+        fixture.builder.setChildren(fixture.window, fixture.showing ? [fixture.rail, fixture.mixer, group] : [fixture.rail, group])
+        switch shape {
+        case "depth":
+            var parent = group
+            for index in 0..<13 {
+                let child = fixture.builder.element(970_000 + index)
+                fixture.builder.setRole(child, kAXGroupRole as String)
+                fixture.builder.setChildren(child, [])
+                fixture.builder.setChildren(parent, [child])
+                parent = child
+            }
+            fixture.builder.setChildren(parent, [fixture.mixer])
+        case "cycle": fixture.builder.setChildren(group, [group])
+        case "node_budget":
+            let children = (0..<4096).map { index in
+                let child = fixture.builder.element(980_000 + index)
+                fixture.builder.setRole(child, kAXGroupRole as String)
+                fixture.builder.setChildren(child, [])
+                return child
+            }
+            fixture.builder.setChildren(group, children)
+        case "visible": fixture.unreadNestedGroup = group
+        default:
+            let attributes = ["role": kAXRoleAttribute as String, "identifier": kAXIdentifierAttribute as String,
+                              "description": kAXDescriptionAttribute as String, "title": kAXTitleAttribute as String,
+                              "help": kAXHelpAttribute as String]
+            fixture.failedMetadata = (group, try #require(attributes[shape]))
+        }
+        let body = try await set(fixture, visible: fixture.showing)
+        #expect(body["state"] as? String == (fixture.showing ? "A" : "C"))
+        if !fixture.showing { #expect(body["before_visible"] == nil) }
+        #expect(fixture.events.isEmpty)
+    }
+
+    @Test(arguments: ["canonical", "trimmed", "uppercase", "description_only"])
+    func acceptedHideDirectionFormsCannotAuthorizeAnExplicitShow(form: String) async throws {
+        let fixture = Fixture(showing: false)
+        fixture.contradictoryHide = true
+        switch form {
+        case "trimmed": fixture.builder.setAttribute(fixture.toggle, kAXTitleAttribute as String, " hide mixer ")
+        case "uppercase": fixture.builder.setAttribute(fixture.toggle, kAXTitleAttribute as String, "HIDE MIXER")
+        case "description_only":
+            fixture.builder.removeAttribute(fixture.toggle, kAXTitleAttribute as String)
+            fixture.builder.setAttribute(fixture.toggle, kAXDescriptionAttribute as String, "Hide Mixer")
+        default: fixture.builder.setAttribute(fixture.toggle, kAXTitleAttribute as String, "Hide Mixer")
+        }
+        let body = try await set(fixture, visible: true)
+        #expect(body["state"] as? String != "A")
+        #expect(fixture.events == ["open_view", "cancel_view"])
+        #expect(!fixture.showing)
+    }
+
+    @Test func unknownAbsenceCannotAuthorizeAnExplicitShow() async throws {
+        let fixture = Fixture(showing: false)
+        let group = fixture.builder.element(969_041)
+        fixture.builder.setRole(group, kAXGroupRole as String)
+        fixture.builder.setChildren(group, [])
+        fixture.builder.setChildren(fixture.window, [fixture.rail, group])
+        fixture.unreadNestedGroup = group
+        let body = try await set(fixture, visible: true)
+        #expect(body["state"] as? String == "C")
+        #expect(body["before_visible"] == nil)
+        #expect(fixture.events.isEmpty)
+        #expect(!fixture.showing)
     }
 }
