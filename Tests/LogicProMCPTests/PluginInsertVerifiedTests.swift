@@ -757,14 +757,14 @@ private let slotPopupOpenCustomAction = AccessibilityChannel.slotPopupOpenCustom
 /// tests run sequentially, so this deliberately lightweight recorder is safe.
 private final class AXActionRecorder: @unchecked Sendable {
     private(set) var calls: [(elementID: Int, action: String)] = []
-    private(set) var attributeWrites: [(elementID: Int, attribute: String)] = []
+    private(set) var attributeWrites: [(elementID: Int, attribute: String, popupWasOpen: Bool)] = []
 
     func record(elementID: Int, action: String) {
         calls.append((elementID, action))
     }
 
-    func recordAttributeWrite(elementID: Int, attribute: String) {
-        attributeWrites.append((elementID, attribute))
+    func recordAttributeWrite(elementID: Int, attribute: String, popupWasOpen: Bool = false) {
+        attributeWrites.append((elementID, attribute, popupWasOpen))
     }
 
     func contains(elementID: Int, action: String) -> Bool {
@@ -868,6 +868,7 @@ private final class SelectionBindingReadFailure: @unchecked Sendable {
             return true
         }
     }
+    var wasConsumed: Bool { lock.withLock { consumed } }
 }
 
 private enum PostOpenerDrift: String, Sendable {
@@ -886,6 +887,7 @@ private struct SlotPopupInsertFixture {
     let runtime: AXLogicProElements.Runtime
     let ownerWindowID: Int
     let otherWindowID: Int
+    let trackHeadersGroupID: Int
     let slotItemID: Int
     let categoryItemID: Int?
     let nonMatchingLeafItemID: Int?
@@ -893,6 +895,7 @@ private struct SlotPopupInsertFixture {
     let formatNamedCategoryItemID: Int?
     let leafItemID: Int
     let actions: AXActionRecorder
+    let selectionBindingReadFailure: SelectionBindingReadFailure
     let slotOccupier: SlotOccupier
     let slotReplacer: SlotOccupier
     let replacementSlotID: Int
@@ -1135,6 +1138,7 @@ private func makeSlotPopupInsertFixture(
     }
     let bindingReadFailure = SelectionBindingReadFailure()
     let popupOpened = SlotPopupOpenedState()
+    if popupInitiallyVisible { popupOpened.markOpened() }
     let runtime = b.makeLogicRuntime(
         appElement: app,
         attributeValueResultHandler: { element, attribute in
@@ -1149,8 +1153,16 @@ private func makeSlotPopupInsertFixture(
             }
             return nil
         },
-        setAttributeHandler: { element, attribute, _ in
-            actions.recordAttributeWrite(elementID: b.elementID(element), attribute: attribute)
+        setAttributeHandler: { element, attribute, value in
+            actions.recordAttributeWrite(
+                elementID: b.elementID(element), attribute: attribute,
+                popupWasOpen: popupOpened.isOpened
+            )
+            if CFEqual(element, headersGroup), attribute == kAXSelectedChildrenAttribute as String,
+               let selectedHeaders = value as? [AXUIElement], selectedHeaders.count == 1,
+               CFEqual(selectedHeaders[0], headerRow) {
+                bindingReadFailure.markSelected()
+            }
             return true
         },
         performActionHandler: { element, action in
@@ -1201,6 +1213,7 @@ private func makeSlotPopupInsertFixture(
         runtime: runtime,
         ownerWindowID: b.elementID(window),
         otherWindowID: b.elementID(otherWindow),
+        trackHeadersGroupID: b.elementID(headersGroup),
         slotItemID: slotKey,
         categoryItemID: categoryKey,
         nonMatchingLeafItemID: nonMatchingLeafKey,
@@ -1208,6 +1221,7 @@ private func makeSlotPopupInsertFixture(
         formatNamedCategoryItemID: formatNamedCategoryKey,
         leafItemID: leafKey,
         actions: actions,
+        selectionBindingReadFailure: bindingReadFailure,
         slotOccupier: slotOccupier,
         slotReplacer: slotReplacer,
         replacementSlotID: b.elementID(replacementSlot),
@@ -1216,6 +1230,7 @@ private func makeSlotPopupInsertFixture(
         searchFieldID: b.elementID(searchField),
         leftoverMenuItemID: leftoverItem.map(b.elementID),
         coordinateFallbackClick: {
+            popupOpened.markOpened()
             b.setChildren(app, leftoverMenu.map { [window, $0, popupMenu] } ?? [window, popupMenu])
             return true
         }
@@ -1394,6 +1409,7 @@ private func testPlugin1108TerminalGuardReportsOnlyItsObservedSlotFacts(_ drift:
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let bindingStable = try #require(trace["target_binding_stable_after_selection"] as? Bool)
     #expect(bindingStable)
+    #expect(fixture.selectionBindingReadFailure.wasConsumed)
 }
 
 @Test func testPlugin1107InsertRaisesAcquiredMixerWindowNotAnotherMixer() async throws {
@@ -1660,7 +1676,15 @@ private func testPlugin1108TerminalGuardReportsOnlyItsObservedSlotFacts(_ drift:
     }
     #expect(try #require(obj["state"] as? String) == "A")
     #expect(!fixture.actions.touched(elementID: fixture.searchFieldID))
-    #expect(fixture.actions.attributeWrites.isEmpty)
+    // Selection precedes the popup and uses AXSelectedChildren on the acquired track rail.
+    // Keep every write in the recorder: no other target/attribute, and no write after the
+    // opener, is permitted. In particular, this must still catch writes to popup elements.
+    #expect(!fixture.actions.attributeWrites.isEmpty)
+    for write in fixture.actions.attributeWrites {
+        #expect(write.elementID == fixture.trackHeadersGroupID)
+        #expect(write.attribute == kAXSelectedChildrenAttribute as String)
+        #expect(!write.popupWasOpen)
+    }
 }
 
 @Test func testPlugin425NeverPicksAFormatLabelledEntryThatOwnsItsOwnMenu() async throws {
