@@ -545,6 +545,19 @@ class TheEntryPointRefuses(unittest.TestCase):
                 self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
                 self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
 
+    def test_concatenated_terminating_builtins_are_refused_at_the_entry_point(self):
+        for prefix in ["'ex'\"it\" 0", "'ex'it 0", '"ex"\'it\' 0', "'exe'c true"]:
+            with self.subTest(prefix=prefix):
+                run = f"{prefix}; python3 -u Scripts/run-repo-guards.py"
+                shell = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", run],
+                                       capture_output=True, text=True)
+                self.assertEqual(shell.returncode, 0, shell.stderr)
+                self.assertEqual(shell.stdout, "")
+                proc = self._run_required_command_mutation(
+                    lambda step: step.update(run=run))
+                self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
+
     def test_heredoc_command_is_refused_at_the_entry_point(self):
         proc = self._run_required_command_mutation(
             lambda step: step.update(run="cat <<'EOF'\npython3 -u Scripts/run-repo-guards.py\nEOF"))

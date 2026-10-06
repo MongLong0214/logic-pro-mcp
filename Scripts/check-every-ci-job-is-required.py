@@ -180,6 +180,10 @@ def workflow_runs_command(text: str, command: str) -> bool:
             # than counting their data as commands; quotes stay intact across lines.
             if "<<" in run:
                 continue
+            # The narrow lexer does not assemble adjacent quoted word fragments.
+            # Refuse that unsupported form instead of missing a disguised exit/exec.
+            if re.search(r'''(?:'[^']*'|"(?:\\.|[^"\\])*")(?=[^\s;&|()<>])''', run):
+                continue
             # Keep whole quoted arguments intact until after boundary detection.
             # POSIX tokenization would turn the argument ';' into an operator.
             lexer = shlex.shlex(run, posix=False, punctuation_chars=";&|()\n<>")
