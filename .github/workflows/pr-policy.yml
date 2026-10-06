@@ -126,10 +126,8 @@ jobs:
         # description says about itself. Without the file list the opt-out is one sentence anybody
         # can type, and review walked through it three ways.
         #
-        # Split across two lines on purpose: `.github/ci/CI-GATE.json` pins this invocation by the
-        # continuation, which is the spelling it had in `ci.yml` before the body check moved here.
-        # That list may only grow, so the pin follows the command rather than being deleted with
-        # the old job -- a migration that removes the requirement is a deletion wearing its name.
+        # The required-command check recognizes this invocation across line continuations;
+        # deleting the body check must still fail the offline CI checker.
         run: |
           python3 Scripts/check-canon-citations.py \
             --text pr-body.md --changed pr-changed.txt

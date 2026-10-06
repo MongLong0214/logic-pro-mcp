@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import sys
 import unittest
+from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUARD = os.path.join(REPO, "Scripts", "check-every-ci-job-is-required.py")
@@ -485,6 +486,18 @@ class TheEntryPointRefuses(unittest.TestCase):
         self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
         self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
 
+    def test_multiline_quoted_command_is_refused_at_the_entry_point(self):
+        proc = self._run_required_command_mutation(
+            lambda step: step.update(run="echo '\npython3 -u Scripts/run-repo-guards.py\n'"))
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
+
+    def test_heredoc_command_is_refused_at_the_entry_point(self):
+        proc = self._run_required_command_mutation(
+            lambda step: step.update(run="cat <<'EOF'\npython3 -u Scripts/run-repo-guards.py\nEOF"))
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
+
     def test_a_step_name_is_not_a_required_command_at_the_entry_point(self):
         proc = self._run_required_command_mutation(
             lambda step: step.update(name="python3 Scripts/run-repo-guards.py", run="true"))
@@ -651,6 +664,14 @@ class TheMigrationsOwnMutations(unittest.TestCase):
         self._edit("ci.yml", "run: bash Scripts/ci-coverage-gate.sh", "run: true")
         self._append_step("pr-policy.yml", "bash Scripts/ci-coverage-gate.sh")
         self.assertEqual(self._check(), [])
+
+    def test_deleting_the_body_invocation_is_refused_at_the_entry_point(self):
+        with mock.patch.object(guard, "WORKFLOW", self._path("ci.yml")):
+            self.assertEqual(guard.main(), 0)
+            self._edit("pr-policy.yml",
+                       "python3 Scripts/check-canon-citations.py \\\n            --text pr-body.md --changed pr-changed.txt",
+                       "true")
+            self.assertEqual(guard.main(), 1)
 
     def test_deleting_the_coverage_gate_from_both_gates_fails(self):
         """G03b. The same edit as above without the destination: a move with nowhere to move to."""

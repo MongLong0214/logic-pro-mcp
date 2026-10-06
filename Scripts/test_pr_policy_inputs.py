@@ -14,7 +14,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HELPER = os.path.join(REPO, "Scripts", "read-pr-policy-inputs.py")
 
 
-def pr(body: Optional[str] = "No Logic facts.", *, head="head-sha", base="base-sha", merge="merge-sha",
+def pr(body: Optional[str] = "No Logic facts.", *, head="head-sha", base="base-sha", merge: Optional[str] = "merge-sha",
        head_ref="feature", base_ref="main", count=2):
     return {
         "number": 42, "body": body, "changed_files": count,
@@ -33,7 +33,7 @@ def event_for(value, action="opened"):
 
 class PRPolicyInputs(unittest.TestCase):
     def run_helper(self, metadata, pages, *, event=None, checkout="merge-sha",
-                   parents="head-sha base-sha", runs=None, gh_exit=0):
+                   parents="base-sha head-sha", runs=None, gh_exit=0):
         with tempfile.TemporaryDirectory() as directory:
             metadata = list(metadata)
             event = event or event_for(metadata[0])
@@ -97,6 +97,27 @@ fi
         self.assertEqual(body, "한국어\n\nNo Logic facts.".encode())
         self.assertEqual(files, b"a\nb\n")
 
+    def test_null_event_merge_sha_does_not_replace_checkout_identity(self):
+        snapshot = pr()
+        event = event_for(pr(merge=None))
+        result, body, files = self.run_helper([snapshot, snapshot],
+            [[{"filename": "a"}], [{"filename": "b"}]], event=event)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(files, b"a\nb\n")
+
+    def test_null_api_merge_sha_is_bound_by_actual_checkout_parents(self):
+        snapshot = pr(merge=None)
+        result, body, files = self.run_helper([snapshot, snapshot],
+            [[{"filename": "a"}], [{"filename": "b"}]])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(files, b"a\nb\n")
+
+    def test_nonnull_api_merge_sha_must_match_actual_checkout(self):
+        snapshot = pr(merge="other-merge")
+        result, body, files = self.run_helper([snapshot, snapshot],
+            [[{"filename": "a"}], [{"filename": "b"}]])
+        self.assert_refused(result, body, files, "checkout")
+
     def test_null_body_is_valid_empty_body(self):
         snapshot = pr(None)
         result, body, files = self.run_helper([snapshot, snapshot],
@@ -141,7 +162,7 @@ fi
     def test_refuses_checkout_that_is_not_the_exact_merge_of_source_and_base(self):
         snapshot = pr()
         result, body, files = self.run_helper([snapshot, snapshot], [[{"filename": "a"}], [{"filename": "b"}]],
-                                              parents="base-sha head-sha")
+                                              parents="head-sha base-sha")
         self.assert_refused(result, body, files, "checkout")
 
     def test_refuses_malformed_or_error_api_responses_without_outputs(self):

@@ -130,20 +130,20 @@ jobs:
 
       - name: Install guard dependencies
         run: |
-          python3 -m venv .venv-ci
-          source .venv-ci/bin/activate
+          python3 -m venv "$RUNNER_TEMP/logic-pro-ci-venv"
+          source "$RUNNER_TEMP/logic-pro-ci-venv/bin/activate"
           python3 -m pip install --disable-pip-version-check -r Scripts/requirements-ci.txt
           python3 -c "import yaml; print('PyYAML', yaml.__version__)"
 
       - name: Offline guards and standalone drives
         run: |
-          source .venv-ci/bin/activate
+          source "$RUNNER_TEMP/logic-pro-ci-venv/bin/activate"
           set -o pipefail
           python3 -u Scripts/run-repo-guards.py 2>&1 | tee guard-run.log
 
       - name: Non-executable bounce test libraries (#896)
         run: |
-          source .venv-ci/bin/activate
+          source "$RUNNER_TEMP/logic-pro-ci-venv/bin/activate"
           python3 Scripts/run-helper-suites.py
 
       - name: Keep guard log on failure

@@ -173,11 +173,28 @@ def workflow_runs_command(text: str, command: str) -> bool:
             if not isinstance(run, str):
                 continue
             run = re.sub(r"\\\s*\n\s*", " ", run)
-            for statement in re.split(r"[\n;]", run):
-                statement = re.sub(r"\s+", " ", statement).strip()
-                if statement.startswith("echo "):
-                    continue
-                actual = words(statement)
+            # Heredocs are not an execution witness. Reject unsupported forms rather
+            # than counting their data as commands; quotes stay intact across lines.
+            if "<<" in run:
+                continue
+            lexer = shlex.shlex(run, posix=True, punctuation_chars=";&|()\n")
+            lexer.whitespace = " \t\r"
+            lexer.whitespace_split = True
+            try:
+                tokens = list(lexer)
+            except ValueError:
+                continue
+            statements, current = [], []
+            for token in tokens:
+                if token and all(char in ";&|()\n" for char in token):
+                    statements.append(current)
+                    current = []
+                else:
+                    current.append(token)
+            statements.append(current)
+            for actual in statements:
+                if actual[:2] == ["python3", "-u"]:
+                    actual = [actual[0], *actual[2:]]
                 for index in range(len(actual) - len(wanted) + 1):
                     if actual[index:index + len(wanted)] != wanted:
                         continue

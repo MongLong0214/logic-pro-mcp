@@ -126,8 +126,8 @@ The offline CI guards use Python 3.11 and `Scripts/requirements-ci.txt`. To run 
 changing your system Python:
 
 ```bash
-python3.11 -m venv .venv-ci
-source .venv-ci/bin/activate
+python3.11 -m venv "${TMPDIR:-$HOME/.cache}/logic-pro-ci-venv"
+source "${TMPDIR:-$HOME/.cache}/logic-pro-ci-venv/bin/activate"
 python -m pip install -r Scripts/requirements-ci.txt
 python -u Scripts/run-repo-guards.py
 ```

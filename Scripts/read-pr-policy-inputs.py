@@ -53,8 +53,11 @@ def snapshot(value):
         fail("PR metadata body is not text")
     head_sha, head_ref, head_repo = branch(value.get("head"), "head")
     base_sha, base_ref, base_repo = branch(value.get("base"), "base")
+    merge = value.get("merge_commit_sha")
+    if merge is not None:
+        merge = required_string(merge, "merge_commit_sha")
     return (number, head_sha, head_ref, head_repo, base_sha, base_ref, base_repo,
-            required_string(value.get("merge_commit_sha"), "merge_commit_sha"), changed_files, body)
+            merge, changed_files, body)
 
 
 def event_snapshot(path):
@@ -66,7 +69,8 @@ def event_snapshot(path):
     if not isinstance(event, dict) or not isinstance(event.get("pull_request"), dict):
         fail("pull request event has no pull_request object")
     data = snapshot({**event["pull_request"], "changed_files": 1, "body": ""})
-    return event.get("action"), data[:8]
+    # Webhook merge_commit_sha is optional/transient, not checkout identity.
+    return event.get("action"), data[:7]
 
 
 def command_json(command):
@@ -187,10 +191,12 @@ def main(argv=None):
     action, event = event_snapshot(event_path)
     endpoint = f"repos/{repository}/pulls/{event[0]}"
     before = metadata(arguments.gh, endpoint)
-    if before[:8] != event or before[6] != repository:
+    if before[:7] != event or before[6] != repository:
         fail("event and API pull request identity differ")
     revision, parents = checkout_identity(arguments.git)
-    if revision != expected_checkout or expected_checkout != before[7] or parents != (before[1], before[4]):
+    if (revision != expected_checkout
+            or (before[7] is not None and expected_checkout != before[7])
+            or parents != (before[4], before[1])):
         fail("checkout identity does not match the pull request merge")
     if action == "edited" and not has_validated_current_merge(arguments.gh, repository, before[:8]):
         fail("no completed code validation matches this edited pull request merge")
