@@ -393,11 +393,35 @@ struct TrackDispatcher: OperationTraceDispatching {
             }
             let name = stringParam(params, "name")
             if let failure = renameNameFailure(name) { return failure }
+            var channelParams = ["index": String(index), "name": name]
+            var exactSnapshot: TargetRegistrySnapshot?
+            let exactBefore = params["expected_name"]?.stringValue
+            if params["expected_name"] != nil {
+                guard let exactBefore, let resolvedReference, let targetRegistry,
+                      liveTrackName != nil, liveTrackNames != nil,
+                      let rawProject = params["project_ref"]?.stringValue,
+                      let project = await targetRegistry.resolveCurrentProject(TargetReference(rawValue: rawProject)),
+                      let path = project.descriptor.projectFilePath,
+                      ExactTrackNameAdapter.operationPermitted() else {
+                    return toolInvalidParamsResult(
+                        "Exact rename requires current project_ref, target_ref and live readers",
+                        extras: ["write_attempted": false]
+                    )
+                }
+                exactSnapshot = await targetRegistry.currentSnapshot
+                guard let binding = await targetRegistry.resolve(resolvedReference),
+                      binding.descriptor.trackName.utf8.elementsEqual(exactBefore.utf8) else {
+                    return TargetRefResolver.staleTargetReferenceResult(resolvedReference.rawValue, operation: "track.rename")
+                }
+                channelParams["expected_name"] = exactBefore
+                // Derived only from the validated registry project, never a caller path assertion.
+                channelParams["expected_project_path"] = path
+            }
             let traceID = await startTraceIfEnabled(command: command)
             let result = await withWriteBoundaryArmed(traceID) {
                 await router.route(
                     operation: "track.rename",
-                    params: ["index": String(index), "name": name]
+                    params: channelParams
                 )
             }
             guard result.isSuccess else {
@@ -414,6 +438,32 @@ struct TrackDispatcher: OperationTraceDispatching {
                     toolTextResult(result.message, isError: true),
                     traceID: traceID
                 )
+            }
+            if let exactBefore {
+                let proof = decodedJSONObject(result.message)
+                guard proof?["state"] as? String == "A", proof?["verified"] as? Bool == true,
+                      let before = proof?["before"] as? String, before.utf8.elementsEqual(exactBefore.utf8),
+                      let observed = proof?["observed"] as? String, observed.utf8.elementsEqual(name.utf8),
+                      proof?["write_attempted"] is Bool,
+                      let resolvedReference, let targetRegistry, let exactSnapshot,
+                      await targetRegistry.currentSnapshot == exactSnapshot,
+                      await targetRegistry.resolve(resolvedReference) != nil,
+                      await TargetRefResolver.validateProjectReference(params, targetRegistry: targetRegistry,
+                                                                      operation: "track.rename") == nil,
+                      ExactTrackNameAdapter.operationPermitted(),
+                      let live = liveTrackName?(index), live.utf8.elementsEqual(observed.utf8),
+                      let names = liveTrackNames?(), names[index]?.utf8.elementsEqual(observed.utf8) == true,
+                      names.values.filter({ $0.utf8.elementsEqual(observed.utf8) }).count == 1 else {
+                    // Preserve observations actually reported by the held writer, not the
+                    // desired request. A generic acknowledgement has no attempt/readback proof.
+                    var observedExtras: [String: Any] = [:]
+                    for key in ["before", "observed", "write_attempted"] {
+                        if let value = proof?[key] { observedExtras[key] = value }
+                    }
+                    return await finalizeTrace(toolTextResult(HonestContract.encodeStateB(
+                        reason: .readbackUnavailable, extras: observedExtras
+                    ), isError: true), traceID: traceID)
+                }
             }
             if let resolvedReference {
                 // AX readback verified this rename, so `name` is ground truth.
