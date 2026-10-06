@@ -1801,7 +1801,7 @@ extension AccessibilityChannel {
         }
 
         func verifiedResult(via: String) -> ChannelResult? {
-            guard let observed = observedTrackName(), observed == truncatedName else { return nil }
+            guard let observed = observedTrackName(), observed.utf8.elementsEqual(truncatedName.utf8) else { return nil }
             return .success(HonestContract.encodeStateA(
                 extras: baseExtras.merging([
                     "observed": observed,
@@ -1810,7 +1810,7 @@ extension AccessibilityChannel {
             ))
         }
 
-        if let currentName = observedTrackName(), currentName == truncatedName {
+        if let currentName = observedTrackName(), currentName.utf8.elementsEqual(truncatedName.utf8) {
             return .success(HonestContract.encodeStateA(
                 extras: baseExtras.merging([
                     "observed": currentName,

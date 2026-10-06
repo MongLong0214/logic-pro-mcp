@@ -532,10 +532,49 @@ private func readDirectStripNameValues(
     }
     b.setChildren(channel, fields)
     let runtime = b.makeAXRuntime(
-        setAttributeHandler: { _, _, _ in false },
-        performActionHandler: { _, _ in false }
+        setAttributeHandler: { _, _, _ in
+            Issue.record("reading strip names attempted an AX write")
+            return false
+        },
+        performActionHandler: { _, _ in
+            Issue.record("reading strip names attempted an AX action")
+            return false
+        }
     )
-    return AXPluginInstanceIdentity.stripNameResult(channel, runtime: runtime)
+    let result = AXPluginInstanceIdentity.stripNameResult(channel, runtime: runtime)
+    #expect(b.setCalls.isEmpty)
+    #expect(b.actionCalls.isEmpty)
+    return result
+}
+
+@Test(arguments: [" Bass ", "\tBass\n", "Caf\u{0065}\u{0301}", "0"])
+func semanticStripNamePreservesObservedBytes(_ expected: String) throws {
+    let observed = try #require(try readDirectStripNameValues([expected]).get())
+    #expect(observed.utf8.elementsEqual(expected.utf8))
+}
+
+@Test(arguments: [
+    ["Caf\u{00E9}", "Caf\u{0065}\u{0301}"],
+    ["Caf\u{0065}\u{0301}", "Caf\u{00E9}"],
+    [" Bass", "Bass "],
+    ["Bass ", " Bass"],
+])
+func semanticStripNameRefusesByteDistinctReadings(_ values: [String]) throws {
+    #expect(!values[0].utf8.elementsEqual(values[1].utf8))
+    #expect(try readDirectStripNameValues(values).get() == nil)
+}
+
+@Test(arguments: [" Bass ", "Caf\u{0065}\u{0301}"])
+func semanticStripNameAcceptsParameterizedByteIdenticalDuplicateReadings(_ expected: String) throws {
+    let observed = try #require(try readDirectStripNameValues([expected, expected]).get())
+    #expect(observed.utf8.elementsEqual(expected.utf8))
+}
+
+@Test(arguments: ["", " \t\n", "\u{00A0}"])
+func semanticStripNameKeepsBlankReadingsUnknown(_ blank: String) throws {
+    for values in [[blank], ["Bass", blank], [blank, "Bass"]] {
+        #expect(try readDirectStripNameValues(values).get() == nil)
+    }
 }
 
 @Test func semanticStripNamePreservesSurroundingWhitespaceBytes() throws {

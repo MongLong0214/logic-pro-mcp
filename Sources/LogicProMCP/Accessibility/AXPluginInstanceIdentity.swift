@@ -264,7 +264,9 @@ public enum AXPluginInstanceIdentity {
     /// Only a direct, semantically labelled Name text field supplies a strip name. Archived
     /// Logic 12.3 EN/KO/JA/DE censuses expose it directly under the strip; nested plug-in controls
     /// are not channel-strip name authority. Numeric user names are valid; decorated fader
-    /// values and opaque AXDescription/title metadata are not names.
+    /// values and opaque AXDescription/title metadata are not names. Preserve nonblank AXValue
+    /// bytes; byte-distinct readings are ambiguous even when Swift considers them equivalent.
+    /// This observes the displayed field, not a layout-independent DAW name.
     static func stripNameResult(
         _ strip: AXUIElement, runtime: AXHelpers.Runtime
     ) -> Result<String?, AXHelpers.AXStatusError> {

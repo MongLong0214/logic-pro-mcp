@@ -27,7 +27,9 @@ enum TrackReferenceIssuance {
     /// focus: three or more rows whose names all end in `:`. The threshold keeps a single real track
     /// named "MyMix:" from being dropped.
     static func isInspectorContaminated(_ tracks: [TrackState]) -> Bool {
-        tracks.count >= 3 && tracks.allSatisfy { $0.name.hasSuffix(":") }
+        tracks.count >= 3 && tracks.allSatisfy {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(":")
+        }
     }
 
     static func liveInventory(_ cached: [TrackState]) -> [TrackState] {

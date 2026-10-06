@@ -161,6 +161,10 @@ extension TrackState {
 /// Mixer channel strip state (extends track with routing info).
 struct ChannelStripState: Sendable, Codable {
     var trackIndex: Int
+    /// Original bytes from the strip's displayed semantic Name field, when observed.
+    var name: String?
+    /// An attempted name read was unidentified, ambiguous, or failed; nil with no name is not read.
+    var nameReadError: String?
     var volume: Double = 0.0
     var pan: Double = 0.0
     /// The strip's sends, when they have been READ (#291).
@@ -199,7 +203,8 @@ struct ChannelStripState: Sendable, Codable {
     var pluginsReadError: String?
 
     enum CodingKeys: String, CodingKey {
-        case trackIndex, volume, pan, sends, input, output, eqEnabled, plugins
+        case trackIndex, name, volume, pan, sends, input, output, eqEnabled, plugins
+        case nameReadError = "name_read_error"
         case sendSlots = "send_slots"
         case pluginsSource = "plugins_source"
         case pluginsReadError = "plugins_read_error"

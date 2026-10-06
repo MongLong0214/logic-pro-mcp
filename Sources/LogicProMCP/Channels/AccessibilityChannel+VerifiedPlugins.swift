@@ -1085,8 +1085,8 @@ extension AccessibilityChannel {
     /// ADR-002 F1 — live track-identity cross-check for `target_ref`-resolved
     /// verified mutations. `expectedTrackName` is the reference's bound track
     /// name, threaded down only on the `target_ref` path. Reads the LIVE AX track
-    /// header at the positional `track` index and requires an exact (trimmed)
-    /// match. A mismatch — or an unreadable live name — fails closed with
+    /// header at the positional `track` index and requires matching raw UTF-8
+    /// bytes. A mismatch — or an unreadable live name — fails closed with
     /// `stale_target_reference` and no write, making the live AX read authoritative
     /// over a possibly-stale state cache (closes the out-of-band-reorder window).
     /// Returns nil (proceed) when `expectedTrackName` is absent, so the

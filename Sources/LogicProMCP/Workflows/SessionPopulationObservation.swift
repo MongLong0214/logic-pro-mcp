@@ -498,7 +498,9 @@ enum SessionPopulationObservation {
 
     struct StripRow: Encodable, Sendable {
         let stripIndex: Int
-        let nameStatus = "not_read"
+        let name: String?
+        let nameReadError: String?
+        var nameStatus: String { name != nil ? "observed" : (nameReadError != nil ? "unknown" : "not_read") }
         let output: String?
         let input: String?
         let pluginCount: Int
@@ -508,19 +510,24 @@ enum SessionPopulationObservation {
             case stripIndex = "strip_index"
             case name
             case nameStatus = "name_status"
+            case nameReadError = "name_read_error"
             case output
             case input
             case pluginCount = "plugin_count"
             case pluginsSource = "plugins_source"
         }
 
-        // `name` is written as an explicit null beside `name_status`: the poller never reads a
-        // strip's name, and a strip with no `name` key would read as one that has none.
+        // Unknown and legacy not-read names remain explicit nulls, never empty names.
         func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(stripIndex, forKey: .stripIndex)
-            try container.encodeNil(forKey: .name)
+            if let name {
+                try container.encode(name, forKey: .name)
+            } else {
+                try container.encodeNil(forKey: .name)
+            }
             try container.encode(nameStatus, forKey: .nameStatus)
+            try container.encodeIfPresent(nameReadError, forKey: .nameReadError)
             try container.encodeIfPresent(output, forKey: .output)
             try container.encodeIfPresent(input, forKey: .input)
             try container.encode(pluginCount, forKey: .pluginCount)
@@ -736,7 +743,7 @@ enum SessionPopulationObservation {
             stripsCoverage = .partial
             stripsReasons = [.mixerCacheStale]
         } else {
-            // A fresh poll still has not read the strip names or the mixer's filter state.
+            // Reading names does not establish the mixer's filter state or a complete population.
             stripsCoverage = .partial
             stripsReasons = [.mixerFiltersUnread]
         }
@@ -747,6 +754,8 @@ enum SessionPopulationObservation {
             rows: capture.channelStrips.map { strip in
                 StripRow(
                     stripIndex: strip.trackIndex,
+                    name: strip.name,
+                    nameReadError: strip.nameReadError,
                     output: strip.output,
                     input: strip.input,
                     pluginCount: strip.plugins.count,

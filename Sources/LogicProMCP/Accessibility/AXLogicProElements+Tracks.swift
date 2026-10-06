@@ -167,20 +167,16 @@ extension AXLogicProElements {
         // action on the track header is a no-op for selection purposes.
         if let headersGroup = getTrackHeaders(runtime: runtime) {
             let arr = [header] as CFArray
-            let r = AXUIElementSetAttributeValue(
-                headersGroup,
-                kAXSelectedChildrenAttribute as CFString,
-                arr
-            )
-            if r == .success { return true }
+            if AXHelpers.setAttribute(headersGroup, kAXSelectedChildrenAttribute, arr, runtime: runtime.ax) {
+                return true
+            }
         }
 
         // Step 2 — NSTableRow-style AXSelected=true (test-double path).
-        var isSettable: DarwinBoolean = false
-        AXUIElementIsAttributeSettable(header, "AXSelected" as CFString, &isSettable)
-        if isSettable.boolValue {
-            let r = AXUIElementSetAttributeValue(header, "AXSelected" as CFString, kCFBooleanTrue)
-            if r == .success { return true }
+        if AXHelpers.isAttributeSettable(header, kAXSelectedAttribute, runtime: runtime.ax) == true {
+            if AXHelpers.setAttribute(header, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax) {
+                return true
+            }
         }
 
         // Step 3 — AXPress on the header itself (test doubles that expose it).
