@@ -716,6 +716,126 @@ struct Issue971ApprovedMixerSagaTests {
         var replacementReads = 0
     }
 
+    private final class PublishedMixerReplacement: @unchecked Sendable {
+        var replaced = false
+        var replacementReads = 0
+        var readsBeforeCancellation = 0
+    }
+
+    @Test
+    func aPostVerificationReplacementCannotBecomeOwnedInverseCustody() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let replacement = f.view.builder.element(971_602)
+                f.view.builder.setRole(replacement, kAXGroupRole as String)
+                f.view.builder.setAttribute(replacement, kAXIdentifierAttribute as String, "Mixer")
+                f.view.builder.setChildren(replacement, [])
+                let probe = PublishedMixerReplacement()
+                f.view.afterVisibilityChange = {
+                    guard f.view.events == ["open_view", "show_mixer"] else { return }
+                    // Start at the actual Show effect. The setter next reads M1
+                    // in its poll and final lookup, with the acquired menu closed.
+                    f.view.afterFinalFocusRead = {
+                        probe.replaced = true
+                        f.view.builder.setChildren(f.view.window,
+                            f.view.extraWindowChildren + [f.view.rail, replacement])
+                    }
+                }
+                f.view.attributeReadObserver = { element, attribute in
+                    if CFEqual(element, f.view.app), attribute == kAXFocusedUIElementAttribute as String,
+                       f.view.finalMixerReads == 2, f.view.finalFocusReads == 4 {
+                        // The existing final-focus fixture identifies the setter's
+                        // last sameFocus after owned() and its retained final M1 lookup.
+                        f.view.finalFocusArmed = true
+                    }
+                    if probe.replaced, CFEqual(element, replacement),
+                       attribute == kAXIdentifierAttribute as String {
+                        probe.replacementReads += 1
+                    }
+                }
+                let channel = AfterVerifiedSetterChannel(base: f.view.channel(), journal: f.journal,
+                    cancel: true, afterVerified: {
+                        // This runs only after the real base setter returned A and
+                        // perform completed its separate ownership-publication read.
+                        probe.readsBeforeCancellation = probe.replacementReads
+                    })
+                await f.router.register(channel)
+                let plan = try await f.plan(desired: true)
+                let outcome = try await f.call("apply_session_repair",
+                    params: f.applyParameters(plan, key: "cancel-approved-view"))
+                #expect(probe.replaced)
+                #expect(f.view.afterFinalFocusRead == nil)
+                #expect(f.view.focusReadAtLoss == 5)
+                #expect(f.view.finalMixerReads == 2)
+                #expect(probe.readsBeforeCancellation > 0, "the post-result ownership read must actually observe M2 before cancellation")
+                #expect(await channel.verifiedForwards == 1)
+                #expect(await channel.cancelResult == .requested)
+                #expect(!f.view.events.contains("hide_mixer"))
+                #expect(f.view.events == ["open_view", "show_mixer"])
+                #expect(f.view.showing)
+                let children = try AXHelpers.childrenResult(f.view.window, runtime: f.view.builder.makeAXRuntime()).get()
+                #expect(children.contains { CFEqual($0, replacement) })
+                #expect(!children.contains { CFEqual($0, f.view.mixer) })
+                #expect(outcome["state"] as? String == "B")
+                #expect(outcome["saga_state"] as? String == "compensationFailed")
+                #expect(f.view.builder.attributeValue(f.view.window, kAXDocumentAttribute as String) as? String == f.bundle.absoluteString)
+                #expect(f.view.builder.attributeValue(f.view.window, kAXTitleAttribute as String) as? String == "Visibility fixture - Tracks")
+                #expect(f.view.logicPID == 4242)
+                let focus: AXUIElement? = AXHelpers.getAttribute(f.view.app,
+                    kAXFocusedUIElementAttribute as String, runtime: f.view.builder.makeAXRuntime())
+                #expect(CFEqual(try #require(focus), f.view.rail))
+                #expect(f.view.builder.attributeValue(f.play, kAXValueAttribute as String) as? Int == 0)
+                #expect(f.view.builder.attributeValue(f.record, kAXValueAttribute as String) as? Int == 0)
+                #expect(try AXHelpers.childrenResult(f.view.rail, runtime: f.view.builder.makeAXRuntime()).get().isEmpty)
+            }
+        }
+    }
+
+    @Test
+    func healthyVerifiedHideRetainsItsConditionalShowInverse() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: true)
+                let channel = AfterVerifiedSetterChannel(base: f.view.channel(), journal: f.journal, cancel: true)
+                await f.router.register(channel)
+                let plan = try await f.plan(desired: false)
+                let outcome = try await f.call("apply_session_repair",
+                    params: f.applyParameters(plan, key: "cancel-approved-view"))
+                #expect(await channel.verifiedForwards == 1)
+                #expect(await channel.cancelResult == .requested)
+                #expect(f.view.events == ["open_view", "hide_mixer", "open_view", "show_mixer"])
+                #expect(f.view.showing)
+                #expect(outcome["saga_state"] as? String == "fullyCompensated")
+                let steps = try #require(outcome["steps"] as? [[String: Any]])
+                let result = try #require(steps.first?["result"] as? [String: Any])
+                #expect(result["state"] as? String == "A")
+                let crossed = try #require(result["write_boundary_crossed"] as? Bool)
+                #expect(crossed)
+                let compensation = try #require(steps.first?["compensation"] as? [String: Any])
+                #expect(compensation["disposition"] as? String == "verified")
+                let readback = try #require(compensation["readback"] as? [String: Any])
+                let visible = try #require(readback["observed"] as? Bool)
+                #expect(visible)
+                #expect(readback["read_source"] as? String == SagaReadSource.axProjectMixerVisibility.rawValue)
+                let children = try AXHelpers.childrenResult(f.view.window, runtime: f.view.builder.makeAXRuntime()).get()
+                #expect(children.contains { CFEqual($0, f.view.mixer) })
+                #expect(f.view.builder.attributeValue(f.view.window, kAXDocumentAttribute as String) as? String == f.bundle.absoluteString)
+                #expect(f.view.builder.attributeValue(f.view.window, kAXTitleAttribute as String) as? String == "Visibility fixture - Tracks")
+                #expect(f.view.logicPID == 4242)
+                let focus: AXUIElement? = AXHelpers.getAttribute(f.view.app,
+                    kAXFocusedUIElementAttribute as String, runtime: f.view.builder.makeAXRuntime())
+                #expect(CFEqual(try #require(focus), f.view.rail))
+                #expect(f.view.builder.attributeValue(f.play, kAXValueAttribute as String) as? Int == 0)
+                #expect(f.view.builder.attributeValue(f.record, kAXValueAttribute as String) as? Int == 0)
+                #expect(try AXHelpers.childrenResult(f.view.rail, runtime: f.view.builder.makeAXRuntime()).get().isEmpty)
+                guard case .cancelled(_, verified: true)? = await f.journal.record(for: "cancel-approved-view") else {
+                    Issue.record("the healthy Hide inverse must retain verified cancellation evidence"); return
+                }
+            }
+        }
+    }
+
     @Test(arguments: ["forward_hide", "owned_inverse_hide"])
     func replacementObservedByTheFinalPermissionCannotAuthorizeHide(kind: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {

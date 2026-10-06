@@ -154,6 +154,10 @@ final class ApprovedSessionRepair: @unchecked Sendable {
            body["after_visible"] as? Bool == desired,
            let observed = await navigation.approvedVisibility(expectedTransport: binding.transport,
                stoppingWhen: { [self] in stop(runtime: runtime) }), observed.0 == desired {
+            if desired {
+                guard let mixer = observed.1, let verifiedMixer = navigation.revealedMixer,
+                      CFEqual(mixer, verifiedMixer) else { return result }
+            }
             ownedVisibility = desired; ownedMixer = observed.1
         }
         return result
