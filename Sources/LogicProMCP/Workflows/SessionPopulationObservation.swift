@@ -22,6 +22,23 @@ enum SessionPopulationObservation {
         let endedAt: Date
         var stable: Bool
         var uiEffects: UIEffects = .init()
+        var mixerPresentation: MixerPresentation? = nil
+    }
+
+    /// Presentation is independent of population coverage: All plus enabled type filters
+    /// does not establish hidden/stacked membership or a traversal end.
+    struct MixerPresentation: Encodable, Equatable, Sendable {
+        var mode: String? = nil
+        var typeFilters: [String: Bool?] = Dictionary(uniqueKeysWithValues:
+            ["audio", "instrument", "aux", "bus", "input", "output", "master_vca", "midi"].map { ($0, nil) })
+
+        enum CodingKeys: String, CodingKey { case mode; case typeFilters = "type_filters" }
+        func encode(to encoder: Encoder) throws {
+            var values = encoder.container(keyedBy: CodingKeys.self)
+            if let mode { try values.encode(mode, forKey: .mode) }
+            else { try values.encodeNil(forKey: .mode) }
+            try values.encode(typeFilters, forKey: .typeFilters)
+        }
     }
 
     struct AcceptedPopulation: Sendable {
@@ -101,6 +118,7 @@ enum SessionPopulationObservation {
         case mixerNotVisible = "mixer_not_visible"
         case mixerCacheStale = "mixer_cache_stale"
         case mixerFiltersUnread = "mixer_filters_unread"
+        case mixerPresentationFiltered = "mixer_presentation_filtered"
         case noObservedAssociationEvidence = "no_observed_association_evidence"
         case parentDepthNotObserved = "parent_depth_not_observed"
         case routingGraphPartial = "routing_graph_partial"
@@ -618,6 +636,7 @@ enum SessionPopulationObservation {
 
     struct StripWitnesses: Encodable, Sendable {
         let count: Int
+        var presentation: MixerPresentation? = nil
     }
 
     struct StripsSection: Encodable, Sendable {
@@ -849,14 +868,21 @@ enum SessionPopulationObservation {
             stripsCoverage = .partial
             stripsReasons = [.mixerCacheStale]
         } else {
-            // Reading names does not establish the mixer's filter state or a complete population.
+            // Known presentation removes an unread-filter claim, not missing independent
+            // population/end evidence. Restricted views remain explicit.
             stripsCoverage = .partial
-            stripsReasons = [.mixerFiltersUnread]
+            if let presentation = capture.freshPopulation?.mixerPresentation,
+               let mode = presentation.mode, presentation.typeFilters.count == 8,
+               presentation.typeFilters.values.allSatisfy({ $0 != nil }) {
+                stripsReasons = mode == "all" && presentation.typeFilters.values.allSatisfy({ $0 == true })
+                    ? [.countIsTheOnlyEndWitness] : [.mixerPresentationFiltered, .countIsTheOnlyEndWitness]
+            } else { stripsReasons = [.mixerFiltersUnread] }
         }
         let strips = StripsSection(
             coverage: stripsCoverage,
             reasons: stripsReasons,
-            witnesses: StripWitnesses(count: capture.channelStrips.count),
+            witnesses: StripWitnesses(count: capture.channelStrips.count,
+                                     presentation: capture.freshPopulation?.mixerPresentation),
             rows: capture.channelStrips.map { strip in
                 StripRow(
                     stripIndex: strip.trackIndex,

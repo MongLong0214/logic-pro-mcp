@@ -229,6 +229,9 @@ PROTOCOL_EXPRESSIONS = (
     ('r["kind"] == "output"', "output",
      ("Scripts/livekit/live_291_input_slot_is_read.py", "Scripts/livekit/live_291_output_slot_is_read.py"),
      "for r in witness"),
+    # The same harness-owned witness key for an input slot, not the Mixer Input filter label.
+    ('r["kind"] == "input"', "input", ("Scripts/livekit/live_291_input_slot_is_read.py",),
+     "for r in witness"),
     # `observed_position_components` is the reply's list of position-component raw values
     # (TransportDispatcher), `bar` among them, not the localised bar slider. No line pattern saw this
     # one: the parenthesised operand kept `in` from being followed by a word character. Reading the
@@ -254,6 +257,10 @@ PROTOCOL_EXPRESSIONS = (
      "for e in self.server.transcript"),  # transcript message direction
     ('"read" in step', "read", ("Scripts/verify/engine.py", "Scripts/verify/runner.py"),
      ("def reading_of(step: dict) -> tuple", "def _take(ctx: dict, step: dict) -> str")),  # a step's kind
+    ('locales == "all"', "all", ("Scripts/verify/engine.py",),
+     "def locale_problems(locales) -> list"),  # the verify spec's locale-scope sentinel
+    ('spec["locales"] == "all"', "all", ("Scripts/verify/engine.py",),
+     "def required_locales(spec: dict) -> list"),  # the same sentinel when expanding that scope
     ('"delete" in op', "delete", ("Scripts/verify/selftest.py",),
      "for op in ops"),  # a fixture-mutation op's kind
     ('"move" in op', "move", ("Scripts/verify/selftest.py",),
