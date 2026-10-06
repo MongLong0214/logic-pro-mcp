@@ -3352,7 +3352,14 @@ private func makeTempoSliderFixture(
 
     let logicRuntime = builder.makeLogicRuntime(
         appElement: app,
-        setAttributeHandler: nil,
+        // This fixture commits selection through AXPress, not an accepted but inert setter.
+        setAttributeHandler: { element, attribute, value in
+            if attribute == kAXSelectedChildrenAttribute as String || attribute == kAXSelectedAttribute as String {
+                return false
+            }
+            builder.setAttribute(element, attribute, value)
+            return true
+        },
         performActionHandler: { element, action in
             if builder.elementID(element) == builder.elementID(header), action == kAXPressAction as String {
                 builder.setAttribute(header, kAXSelectedAttribute as String, true)
@@ -3425,7 +3432,14 @@ private func makeTempoSliderFixture(
     let session = TrackRenameSession()
     let logicRuntime = builder.makeLogicRuntime(
         appElement: app,
-        setAttributeHandler: nil,
+        // Retain the same AXPress-owned selection rung as the positive rename control.
+        setAttributeHandler: { element, attribute, value in
+            if attribute == kAXSelectedChildrenAttribute as String || attribute == kAXSelectedAttribute as String {
+                return false
+            }
+            builder.setAttribute(element, attribute, value)
+            return true
+        },
         performActionHandler: { element, action in
             if builder.elementID(element) == builder.elementID(header), action == kAXPressAction as String {
                 builder.setAttribute(header, kAXSelectedAttribute as String, true)
