@@ -1,15 +1,51 @@
 import Foundation
 
-/// #965 O1, first increment: what populates the open session, read from the poll cache alone.
+/// #965 session-population report shared by fresh request acquisition and the existing audit.
 ///
-/// The report answers "what is in this session?" without an AX call, without navigating and
-/// without restoring anything. Every domain carries a `coverage` and the reasons it is not
+/// The registered inspection acquires AX values under the existing poll-cycle exclusion.
+/// The audit and explicit cache-only callers keep their previous readings. Every domain carries
+/// a `coverage` and the reasons it is not
 /// `complete`, so a consumer can tell a rail that was read from one that was not, an empty read
 /// from a failed read, and a count that happens to match from a row set that is actually known.
 /// The cache cannot see hidden tracks, stack children behind a collapsed header, strip names, or
 /// which strip belongs to which track, and the report says so instead of leaving those absent.
 enum SessionPopulationObservation {
     static let schema = "logic_pro_mcp_session_population.v1"
+
+    /// Native values from this request, never a fallback to an earlier poll's rows.
+    struct FreshPopulation: Sendable {
+        let project: ProjectInfo?
+        let tracks: [TrackState]?
+        let strips: [ChannelStripState]?
+        let fileTrackCount: Int?
+        let beganAt: Date
+        let endedAt: Date
+        let stable: Bool
+    }
+
+    struct AcceptedPopulation: Sendable {
+        let reading: Reading
+        let boundary: StateCache.CaptureBoundary
+        let population: FreshPopulation
+    }
+
+    enum AcquisitionError: Error {
+        case cancelled, deadline, ownershipLost, pollerStopped, textEditing
+    }
+
+    static func requireOwnedAcquisition() throws {
+        let context = OperationTraceContext.current
+        if Task.isCancelled || context?.cancellationRequested() == true {
+            throw AcquisitionError.cancelled
+        }
+        guard let context,
+              context.mutationGateAcquired, context.ownsGate() else {
+            throw AcquisitionError.ownershipLost
+        }
+        if let deadline = context.deadline, ContinuousClock.now >= deadline {
+            throw AcquisitionError.deadline
+        }
+    }
 
     enum Domain: String, CaseIterable, Sendable, Encodable {
         case tracks
@@ -64,6 +100,10 @@ enum SessionPopulationObservation {
         case routingGraphPartial = "routing_graph_partial"
         case routingGraphUnavailable = "routing_graph_unavailable"
         case colorDeferredToIssue970 = "color_deferred_to_issue_970"
+        case livePopulationMoved = "live_population_moved"
+        case freshTrackReadUnavailable = "fresh_track_read_unavailable"
+        case freshStripReadUnavailable = "fresh_strip_read_unavailable"
+        case domainNotRequested = "domain_not_requested"
     }
 
     struct Request: Sendable {
@@ -73,6 +113,9 @@ enum SessionPopulationObservation {
         var domains: [Domain]
         var allowUINavigation: Bool
         var projectRef: String?
+
+        var needsTracks: Bool { domains.contains { [.tracks, .hierarchy, .associations].contains($0) } }
+        var needsStrips: Bool { domains.contains { [.strips, .routing, .associations].contains($0) } }
 
         init(
             scope: Scope = .wholeProject,
@@ -125,6 +168,7 @@ enum SessionPopulationObservation {
         let endedAt: Date
         /// An opaque capture identity, independent of revision counters and session state.
         let captureID: String
+        let freshPopulation: FreshPopulation?
 
         init(
             before: StateCache.CaptureBoundary,
@@ -144,7 +188,8 @@ enum SessionPopulationObservation {
             projectIssuance: ProjectIssuance?,
             beganAt: Date,
             endedAt: Date,
-            captureID: String = "snap_" + UUID().uuidString
+            captureID: String = "snap_" + UUID().uuidString,
+            freshPopulation: FreshPopulation? = nil
         ) {
             self.before = before
             self.after = after
@@ -164,6 +209,7 @@ enum SessionPopulationObservation {
             self.beganAt = beganAt
             self.endedAt = endedAt
             self.captureID = captureID
+            self.freshPopulation = freshPopulation
         }
 
     }
@@ -218,16 +264,32 @@ enum SessionPopulationObservation {
         targetRegistry: TargetRegistry?,
         fileReader: LogicProjectFileReader.Runtime,
         requestedProjectRef: String? = nil,
-        now: @Sendable () -> Date = Date.init
+        now: @Sendable () -> Date = Date.init,
+        accepted: AcceptedPopulation? = nil,
+        stoppingWhen stop: @Sendable () -> Bool = { false }
     ) async -> Capture {
-        let beganAt = now()
-        let before = await cache.captureBoundary(watching: watchedSections)
-        let observed = await observe(cache: cache, fileReader: fileReader)
+        let beganAt = accepted?.population.beganAt ?? now()
+        let before: StateCache.CaptureBoundary
+        let observed: Reading
+        if let accepted {
+            before = accepted.boundary
+            observed = accepted.reading
+        } else {
+            before = await cache.captureBoundary(watching: watchedSections)
+            observed = await observe(cache: cache, fileReader: fileReader)
+        }
         let snapshot = observed.state
 
         let targetSnapshot: TargetRegistrySnapshot?
-        if FeatureFlags.adr002TargetRef, let targetRegistry {
-            targetSnapshot = await targetRegistry.currentSnapshot
+        if !stop(), FeatureFlags.adr002TargetRef, let targetRegistry {
+            let current = await targetRegistry.currentSnapshot
+            if accepted != nil, accepted?.population.stable == true {
+                targetSnapshot = await targetRegistry.snapshotForObservedProject(
+                    snapshot.project, ifCurrent: current, stoppingWhen: stop
+                )
+            } else {
+                targetSnapshot = current
+            }
         } else {
             targetSnapshot = nil
         }
@@ -253,17 +315,23 @@ enum SessionPopulationObservation {
 
         var issued: IssuedTrackReferences?
         var projectIssuance: ProjectIssuance?
-        if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot, requestedProjectMatches != false {
+        if !stop(), accepted?.population.stable != false,
+           FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot, requestedProjectMatches != false {
             issued = await TrackReferenceIssuance.issue(
-                for: TrackReferenceIssuance.liveInventory(snapshot.tracks),
+                for: accepted != nil && !StateCache.sessionReportHasBoundPath(snapshot.project.filePath)
+                    ? [] : TrackReferenceIssuance.liveInventory(snapshot.tracks),
                 registry: targetRegistry,
-                snapshot: targetSnapshot
+                snapshot: targetSnapshot,
+                stoppingWhen: stop
             )
-            projectIssuance = await ProjectReferenceIssuance.issue(
-                cached: snapshot.project,
-                registry: targetRegistry,
-                snapshot: targetSnapshot
-            )
+            if !stop() {
+                projectIssuance = await ProjectReferenceIssuance.issue(
+                    cached: snapshot.project,
+                    registry: targetRegistry,
+                    snapshot: targetSnapshot,
+                    stoppingWhen: stop
+                )
+            }
             // The registry can move between the comparison and the bind; the bind must hand back
             // the very reference the caller named.
             if let requestedProjectRef {
@@ -295,7 +363,8 @@ enum SessionPopulationObservation {
             issued: issued,
             projectIssuance: projectIssuance,
             beganAt: beganAt,
-            endedAt: endedAt
+            endedAt: endedAt,
+            freshPopulation: accepted?.population
         )
     }
 
@@ -587,6 +656,12 @@ enum SessionPopulationObservation {
         }
     }
 
+    /// Live instability and cache movement are different witnesses of an unusable baseline.
+    static func captureMovementReason(capture: Capture) -> Reason? {
+        if capture.freshPopulation?.stable == false { return .livePopulationMoved }
+        return capture.before != capture.after ? .cacheMovedDuringCapture : nil
+    }
+
     /// Why the rows in `capture` cannot stand for a track's CURRENT name, however complete the
     /// rail is. Each is a tracks-domain reason `build` gives about the rows that WERE read when it
     /// is the capture's only failure. Every one that holds is returned, where `build` reports only
@@ -597,7 +672,7 @@ enum SessionPopulationObservation {
     /// observation of that name (#966).
     static func trackRowReadbackReasons(capture: Capture) -> [Reason] {
         var reasons: [Reason] = []
-        if capture.before != capture.after { reasons.append(.cacheMovedDuringCapture) }
+        if let movement = captureMovementReason(capture: capture) { reasons.append(movement) }
         if !capture.before.hasDocument { reasons.append(.noDocument) }
         if capture.tracksFetchedAt == .distantPast {
             reasons.append(.noLiveTrackReadYet)
@@ -616,7 +691,8 @@ enum SessionPopulationObservation {
 
     /// Pure: the same capture and request always produce the same report.
     static func build(request: Request, capture: Capture) -> Report {
-        let moved = capture.before != capture.after
+        let movementReason = captureMovementReason(capture: capture)
+        let moved = movementReason != nil
 
         // The rail as `logic://tracks` sees it: an Inspector-contaminated walk is dropped whole.
         let live = TrackReferenceIssuance.liveInventory(capture.tracks)
@@ -650,9 +726,15 @@ enum SessionPopulationObservation {
         // for a selection, adds the one reason the rail cannot answer.
         let tracksCoverage: Coverage
         var tracksReasons: [Reason] = []
-        if moved {
+        if capture.freshPopulation != nil && !request.needsTracks {
+            tracksCoverage = .unavailable
+            tracksReasons = [.domainNotRequested]
+        } else if let movementReason {
             tracksCoverage = .unstable
-            tracksReasons = [.cacheMovedDuringCapture]
+            tracksReasons = [movementReason]
+        } else if let population = capture.freshPopulation, population.tracks == nil {
+            tracksCoverage = .unavailable
+            tracksReasons = [.freshTrackReadUnavailable]
         } else if !capture.before.hasDocument {
             tracksCoverage = .unavailable
             tracksReasons = [.noDocument]
@@ -733,9 +815,15 @@ enum SessionPopulationObservation {
         let stripSource = ResourceHandlers.mixerDataSource(fetchedAt: capture.mixerFetchedAt, now: capture.endedAt)
         let stripsCoverage: Coverage
         let stripsReasons: [Reason]
-        if moved {
+        if capture.freshPopulation != nil && !request.needsStrips {
+            stripsCoverage = .unavailable
+            stripsReasons = [.domainNotRequested]
+        } else if let movementReason {
             stripsCoverage = .unstable
-            stripsReasons = [.cacheMovedDuringCapture]
+            stripsReasons = [movementReason]
+        } else if let population = capture.freshPopulation, population.strips == nil {
+            stripsCoverage = .unavailable
+            stripsReasons = [.freshStripReadUnavailable]
         } else if stripSource == "mixer_not_visible" {
             stripsCoverage = .unavailable
             stripsReasons = [.mixerNotVisible]
@@ -765,9 +853,10 @@ enum SessionPopulationObservation {
         )
 
         func deferred(_ reason: Reason) -> DomainSection {
-            moved
-                ? DomainSection(coverage: .unstable, reasons: [.cacheMovedDuringCapture])
-                : DomainSection(coverage: .unavailable, reasons: [reason])
+            if let movementReason {
+                return DomainSection(coverage: .unstable, reasons: [movementReason])
+            }
+            return DomainSection(coverage: .unavailable, reasons: [reason])
         }
         // An ordinal or name join between a strip and a track is not evidence of association.
         let associations = deferred(.noObservedAssociationEvidence)
@@ -820,7 +909,15 @@ enum SessionPopulationObservation {
                 beganAt: ISO8601DateFormatter.cacheFormatter.string(from: capture.beganAt),
                 endedAt: ISO8601DateFormatter.cacheFormatter.string(from: capture.endedAt)
             ),
-            sources: Sources(tracks: "ax_poll_cache", strips: stripSource, expectedCount: "project_file"),
+            sources: Sources(
+                tracks: capture.freshPopulation == nil ? "ax_poll_cache"
+                    : !request.needsTracks ? "not_requested"
+                    : capture.freshPopulation?.tracks == nil ? "ax_request_unavailable" : "ax_request_read",
+                strips: capture.freshPopulation == nil ? stripSource
+                    : !request.needsStrips ? "not_requested"
+                    : capture.freshPopulation?.strips == nil ? "ax_request_unavailable" : "ax_request_read",
+                expectedCount: "project_file"
+            ),
             tracks: tracks,
             strips: strips,
             associations: associations,
@@ -859,7 +956,7 @@ enum SessionPopulationObservation {
         let reasons: [Reason]
         if moved {
             coverage = .unstable
-            reasons = [.cacheMovedDuringCapture]
+            reasons = [captureMovementReason(capture: capture) ?? .cacheMovedDuringCapture]
         } else if graph.coverage.domains.contains(where: { $0.state == .unstable }) {
             coverage = .unstable
             reasons = [.targetSnapshotStale]

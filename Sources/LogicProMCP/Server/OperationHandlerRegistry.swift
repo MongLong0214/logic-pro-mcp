@@ -347,7 +347,10 @@ enum OperationHandlerRegistry {
                         targetRegistry: dependencies.targetRegistry,
                         executeLifecycleScript: lifecycle,
                         dialogPresent: dependencies.dialogPresent,
-                        cleanupAuditFileReader: dependencies.projectFileReader
+                        cleanupAuditFileReader: dependencies.projectFileReader,
+                        acquireSessionPopulation: { request in
+                            try await dependencies.poller.acquireSessionPopulation(request: request, targetRegistry: dependencies.targetRegistry)
+                        }
                     )
                 }
                 return await ProjectDispatcher.handle(
@@ -357,7 +360,10 @@ enum OperationHandlerRegistry {
                     cache: dependencies.cache,
                     targetRegistry: dependencies.targetRegistry,
                     dialogPresent: dependencies.dialogPresent,
-                    cleanupAuditFileReader: dependencies.projectFileReader
+                    cleanupAuditFileReader: dependencies.projectFileReader,
+                    acquireSessionPopulation: { request in
+                        try await dependencies.poller.acquireSessionPopulation(request: request, targetRegistry: dependencies.targetRegistry)
+                    }
                 )
             }
         case .logicMidi:

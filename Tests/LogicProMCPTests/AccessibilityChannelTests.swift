@@ -4029,11 +4029,18 @@ private final class LockedFlag: @unchecked Sendable {
     let emptyChannel = makeAXBackedAccessibilityChannel(builder: emptyBuilder, app: emptyApp)
 
     let noHeaders = await emptyChannel.execute(operation: "track.get_tracks", params: [:])
-    // Contract change: empty track list is a valid steady state (picker front /
-    // no project). Returning `.error` caused StatePoller to skip updates and
-    // retain ghost tracks from prior sessions, breaking rename/mute/arm on idx 0.
-    #expect(noHeaders.isSuccess)
-    #expect(noHeaders.message == "[]")
+    // No rail was observed: this cannot establish a successfully read empty project.
+    #expect(!noHeaders.isSuccess)
+    #expect(noHeaders.message.contains("Track population unavailable"))
+
+    let emptyRail = emptyBuilder.element(222)
+    emptyBuilder.setAttribute(emptyRail, kAXRoleAttribute as String, kAXListRole as String)
+    emptyBuilder.setAttribute(emptyRail, kAXIdentifierAttribute as String, "Track Headers")
+    emptyBuilder.setChildren(emptyRail, [])
+    emptyBuilder.setChildren(emptyWindow, [emptyRail])
+    let observedEmpty = await emptyChannel.execute(operation: "track.get_tracks", params: [:])
+    #expect(observedEmpty.isSuccess)
+    #expect(observedEmpty.message == "[]")
 
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(230)
@@ -4116,6 +4123,9 @@ private final class LockedFlag: @unchecked Sendable {
     builder.setAttribute(window, kAXTitleAttribute as String, "Song.logicx")
     builder.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
     builder.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+    // A readable physical strip exposes its role. Missing role is acquisition
+    // failure, not permission to publish a shifted strip population.
+    builder.setRole(strip, kAXLayoutItemRole as String)
     builder.setChildren(mixer, [strip])
     builder.setChildren(strip, [fader, pan])
     // Named, because Logic names them. This fixture carried role and value only, so the strip
@@ -4563,6 +4573,12 @@ private final class LockedFlag: @unchecked Sendable {
     builder.setAttribute(fader, kAXRoleAttribute as String, kAXSliderRole as String)
     builder.setAttribute(fader, kAXValueAttribute as String, 0.9)
 
+    let unreadStrip = await channel.execute(operation: "mixer.get_channel_strip", params: ["index": "2"])
+    #expect(!unreadStrip.isSuccess)
+    #expect(unreadStrip.message == AccessibilityChannel.mixerChildrenUnreadMessage,
+            "an unread strip role cannot establish the population's index range")
+
+    builder.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     let stripOutOfRange = await channel.execute(operation: "mixer.get_channel_strip", params: ["index": "2"])
     #expect(!stripOutOfRange.isSuccess)
     #expect(stripOutOfRange.message.contains("out of range"))

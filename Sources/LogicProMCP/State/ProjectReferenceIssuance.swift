@@ -33,13 +33,15 @@ enum ProjectReferenceIssuance {
     static func issue(
         cached project: ProjectInfo,
         registry: TargetRegistry,
-        snapshot: TargetRegistrySnapshot
+        snapshot: TargetRegistrySnapshot,
+        stoppingWhen stop: @Sendable () -> Bool = { false }
     ) async -> ProjectIssuance {
+        guard !Task.isCancelled, !stop() else { return .stale }
         guard let descriptor = descriptor(name: project.name, filePath: project.filePath, epoch: snapshot.projectEpoch) else {
             return .unobserved(reason: unobservedReason)
         }
         // One line, so a line search for `bind(kind: .project` finds this sole issuer.
-        let bound = await registry.bind(kind: .project, descriptor: descriptor, fingerprint: descriptor.fingerprint, snapshot: snapshot)
+        let bound = await registry.bind(kind: .project, descriptor: descriptor, fingerprint: descriptor.fingerprint, snapshot: snapshot, stoppingWhen: stop)
         guard let reference = bound else { return .stale }
         return .issued(reference)
     }

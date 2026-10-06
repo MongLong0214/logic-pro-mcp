@@ -305,6 +305,137 @@ actor AccessibilityChannel: Channel {
         runtime.trackStates()
     }
 
+    /// Request-owned, read-only population collection. The bound window and physical rows,
+    /// not cache counts or equal display names, bracket each attempt.
+    func readFreshSessionPopulation(
+        request: SessionPopulationObservation.Request,
+        fileReader: LogicProjectFileReader.Runtime,
+        stoppingWhen stop: @escaping @Sendable () -> Bool
+    ) async throws -> SessionPopulationObservation.FreshPopulation {
+        let beganAt = Date()
+        let logic = runtime.logicRuntime
+        let wantsTracks = request.needsTracks
+        let wantsStrips = request.needsStrips
+        struct Read {
+            let title: String?
+            let document: String?
+            let documentReadable: Bool
+            let headers: [AXUIElement]?
+            let mixer: AXUIElement?
+            let stripElements: [AXUIElement]?
+            let tracks: [TrackState]?
+            let strips: [ChannelStripState]?
+        }
+        func check() throws {
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            if stop() { throw SessionPopulationObservation.AcquisitionError.textEditing }
+        }
+        func read(in window: AXUIElement) throws -> Read {
+            try check()
+            let title = AXHelpers.getTitle(window, runtime: logic.ax)
+            let document: String?
+            let documentReadable: Bool
+            switch AXLogicProElements.projectPickerDocumentRead(window, runtime: logic) {
+            case .success(let value): document = value; documentReadable = true
+            case .failure: document = nil; documentReadable = false
+            }
+            try check()
+            var headers: [AXUIElement]?
+            var tracks: [TrackState]?
+            if wantsTracks,
+               case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
+                headers = observed
+                tracks = Self.readTrackStates(from: observed, runtime: logic, stoppingWhen: stop).states
+            }
+            try check()
+            var mixer: AXUIElement?
+            var stripElements: [AXUIElement]?
+            var strips: [ChannelStripState]?
+            if wantsStrips,
+               case .found(let found) = AXLogicProElements.mixerAreaLookup(in: window, runtime: logic),
+               let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: found, runtime: logic.ax) {
+                mixer = found
+                stripElements = enumeration.strips
+                strips = Self.readChannelStrips(from: enumeration.strips, runtime: logic, stoppingWhen: stop)
+            }
+            try check()
+            return Read(title: title, document: document, documentReadable: documentReadable,
+                        headers: headers, mixer: mixer, stripElements: stripElements, tracks: tracks, strips: strips)
+        }
+        func sameElements(_ lhs: [AXUIElement]?, _ rhs: [AXUIElement]?) -> Bool {
+            switch (lhs, rhs) {
+            case (nil, nil): return true
+            case (.some(let a), .some(let b)):
+                return a.count == b.count && zip(a, b).allSatisfy { CFEqual($0, $1) }
+            default: return false
+            }
+        }
+        func sameBytes(_ lhs: String?, _ rhs: String?) -> Bool {
+            switch (lhs, rhs) {
+            case (nil, nil): return true
+            case (.some(let a), .some(let b)): return a.utf8.elementsEqual(b.utf8)
+            default: return false
+            }
+        }
+        func sameValues<T: Encodable>(_ lhs: T?, _ rhs: T?) -> Bool {
+            switch (lhs, rhs) {
+            case (nil, nil): return true
+            case (.some(let a), .some(let b)):
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys]
+                guard let encodedA = try? encoder.encode(a), let encodedB = try? encoder.encode(b) else { return false }
+                return encodedA == encodedB
+            default: return false
+            }
+        }
+        var last = SessionPopulationObservation.FreshPopulation(
+            project: nil, tracks: nil, strips: nil, fileTrackCount: nil,
+            beganAt: beganAt, endedAt: beganAt, stable: false
+        )
+        for _ in 0..<3 {
+            try check()
+            guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: logic) else {
+                return .init(project: nil, tracks: nil, strips: nil, fileTrackCount: nil,
+                             beganAt: beganAt, endedAt: Date(), stable: true)
+            }
+            let before = try read(in: window)
+            var path: String?
+            if let document = before.document, let url = URL(string: document), url.isFileURL,
+               url.host == nil || url.host == "" || url.host == "localhost",
+               let validated = LogicProjectFileReader.validatePath(url.path) {
+                path = validated.bundle.path
+            }
+            let metadata: LogicProjectMetadata?
+            if let path { metadata = await LogicProjectFileReader.readPath(path, runtime: fileReader) }
+            else { metadata = nil }
+            try check()
+            let after = try read(in: window)
+            let sameWindow: Bool
+            if case .found(let current) = AXLogicProElements.arrangeWindowRead(runtime: logic) {
+                sameWindow = CFEqual(window, current)
+            } else { sameWindow = false }
+            let stable = sameWindow && before.title != nil && before.documentReadable && after.documentReadable
+                && sameBytes(before.title, after.title) && sameBytes(before.document, after.document)
+                && sameElements(before.headers, after.headers)
+                && sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] })
+                && sameElements(before.stripElements, after.stripElements)
+                && before.tracks?.map(\.liveIdentityBacked) == after.tracks?.map(\.liveIdentityBacked)
+                && sameValues(before.tracks, after.tracks) && sameValues(before.strips, after.strips)
+            let project = before.title.map {
+                ProjectInfo(name: Self.projectName(fromWindowTitle: $0), filePath: path, source: "ax_request_read")
+            }
+            let candidate = SessionPopulationObservation.FreshPopulation(
+                project: project, tracks: before.tracks, strips: before.strips,
+                fileTrackCount: metadata?.trackCount, beganAt: beganAt, endedAt: Date(), stable: stable
+            )
+            if stable { return candidate }
+            last = candidate
+        }
+        try check()
+        // Three attempts are the existing contract, not evidence of atomic host state.
+        return last
+    }
+
     /// #1079: `readTrackStates` for the background poll, which stops before the next header once
     /// `stop` answers true (`AccessibilityChannel.Runtime.trackStatesStopping`).
     func readTrackStates(
