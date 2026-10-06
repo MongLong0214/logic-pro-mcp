@@ -253,6 +253,10 @@ actor StatePoller {
         }
         try SessionPopulationObservation.requireOwnedAcquisition()
         let before = await cache.captureBoundary(watching: SessionPopulationObservation.watchedSections)
+        let navigationProject: TargetDescriptor?
+        if request.allowUINavigation, let reference = request.projectRef, let targetRegistry {
+            navigationProject = await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor
+        } else { navigationProject = nil }
         let population: SessionPopulationObservation.FreshPopulation
         if runtime.hasVisibleWindow() {
             let focus = runtime.keyboardFocus
@@ -260,6 +264,12 @@ actor StatePoller {
             population = try await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
                 try await axChannel.readFreshSessionPopulation(
                     request: request, fileReader: runtime.projectFileReader,
+                    navigationProject: navigationProject,
+                    navigationReferenceIsCurrent: {
+                        guard let reference = request.projectRef else { return true }
+                        guard let navigationProject, let targetRegistry else { return false }
+                        return await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor == navigationProject
+                    },
                     stoppingWhen: { stop() || guardian.stopped || Self.backgroundTickYields(to: focus()) }
                 )
             }
@@ -268,17 +278,23 @@ actor StatePoller {
             population = .init(project: nil, tracks: nil, strips: nil, fileTrackCount: nil,
                                beganAt: now, endedAt: now, stable: true)
         }
-        try SessionPopulationObservation.requireOwnedAcquisition()
-        guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: before, stoppingWhen: stop) else {
+        do {
             try SessionPopulationObservation.requireOwnedAcquisition()
-            throw SessionPopulationObservation.AcquisitionError.ownershipLost
+            guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: before, stoppingWhen: stop) else {
+                try SessionPopulationObservation.requireOwnedAcquisition()
+                throw SessionPopulationObservation.AcquisitionError.ownershipLost
+            }
+            let capture = await SessionPopulationObservation.capture(
+                cache: cache, targetRegistry: targetRegistry, fileReader: runtime.projectFileReader,
+                requestedProjectRef: request.projectRef, accepted: accepted, stoppingWhen: stop
+            )
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            return capture
+        } catch {
+            // Acquisition has already returned a UI receipt. Later refusal must retain
+            // that observation, even when no capture can be accepted or published.
+            throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: population.uiEffects)
         }
-        let capture = await SessionPopulationObservation.capture(
-            cache: cache, targetRegistry: targetRegistry, fileReader: runtime.projectFileReader,
-            requestedProjectRef: request.projectRef, accepted: accepted, stoppingWhen: stop
-        )
-        try SessionPopulationObservation.requireOwnedAcquisition()
-        return capture
     }
 
     private func beginPopulationCycle() async -> Bool {

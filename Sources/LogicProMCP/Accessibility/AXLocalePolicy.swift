@@ -3259,10 +3259,12 @@ enum AXLocalePolicy {
         ))
     }
 
-    private static func elementMatchesResult(
+    /// Status-preserving single-candidate matching. Action callers proving uniqueness
+    /// must check every possible competitor, including failures beside a readable hit.
+    static func elementMatchesResult(
         _ element: AXUIElement,
         _ labels: LabelSet,
-        mode: MatchMode,
+        mode: MatchMode = .exact,
         runtime: AXHelpers.Runtime
     ) -> Result<Bool, AXHelpers.AXStatusError> {
         var firstReadFailure: AXHelpers.AXStatusError?

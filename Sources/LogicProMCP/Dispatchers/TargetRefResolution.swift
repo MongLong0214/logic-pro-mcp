@@ -359,16 +359,17 @@ enum TargetRefResolver {
         _ rawReference: String?,
         operation: String,
         referenceKey: String = "target_ref",
-        hint: String = "target_ref is stale or does not identify the requested current track"
+        hint: String = "target_ref is stale or does not identify the requested current track",
+        extras: [String: Any] = [:]
     ) -> CallTool.Result {
         toolStateCResult(
             .staleTargetReference,
             hint: hint,
-            extras: [
+            extras: extras.merging([
                 "operation": operation,
                 referenceKey: rawReference ?? "",
                 "write_attempted": false,
-            ]
+            ]) { _, authoritative in authoritative }
         )
     }
 
