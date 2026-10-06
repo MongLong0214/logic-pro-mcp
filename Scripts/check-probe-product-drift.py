@@ -134,10 +134,13 @@ def drift_problems(root: str = None) -> list:
     # `LabelSet.containsNormalized`, so the rule lives in `LabelSet.normalize` and both halves are
     # anchored: the call site that routes through it, and the body that says what it does.
     PRODUCT_RULE = re.compile(r"AXLocalePolicy\.mixerNamedElement\.containsNormalized\(")
-    if product and not PRODUCT_RULE.search(product):
+    RAW_PRODUCT_RULE = re.compile(r"AXLocalePolicy\s*\.\s*mixerNamedElement\s*\.\s*labels\s*\.\s*contains\s*\(")
+    # A normalized comparator elsewhere cannot excuse a checked, ordinary or toolbar comparator
+    # using raw membership; one bad call can drift even while the remaining calls stay correct.
+    if product and (not PRODUCT_RULE.search(product) or RAW_PRODUCT_RULE.search(product)):
         problems.append(
             "AXLogicProElements+Mixer.swift no longer matches through "
-            "AXLocalePolicy.mixerNamedElement.containsNormalized — the rule this probe mirrors has "
+            "AXLocalePolicy.mixerNamedElement.containsNormalized at every comparator — the rule this probe mirrors has "
             "changed, so update both and this check together"
         )
     NORMALIZE_RULE = re.compile(

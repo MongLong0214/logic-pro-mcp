@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import Foundation
 import MCP
 import Testing
@@ -166,7 +167,19 @@ struct ADR002BProjectTargetTests {
     @Test
     func projectEpochBumpRejectsProjectTrackMixerPluginRefsBeforeWrite() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
-            let cache = await cache()
+            let fixture = try Issue291PhysicalStripReferenceTests.Fixture(aux: true)
+            // The existing cache helper installs the project before tracks: updateProject clears
+            // prior rows. Keep the three Arrange rows, but acquire Mixer authority independently.
+            let cache = await cache(path: fixture.bundle.path)
+            let nameField = fixture.b.makeAXRuntime().children(fixture.strips[2])[0]
+            fixture.b.setAttribute(nameField, kAXValueAttribute as String, "Bass")
+            let physicalRows = try #require(AccessibilityChannel.defaultGetMixerStates(
+                runtime: fixture.logic, stoppingWhen: { false }
+            ).states)
+            #expect(physicalRows.count == 3)
+            let physical = try #require(physicalRows[2].physicalBinding)
+            #expect(physical.currentIndex(runtime: fixture.logic) == 2)
+            await cache.updateChannelStrips([physicalRows[2]])
             let registry = TargetRegistry()
             let readRouter = ChannelRouter()
             let projectInfo = try await ResourceHandlers.read(
@@ -205,6 +218,18 @@ struct ADR002BProjectTargetTests {
                 descriptor: descriptor,
                 fingerprint: "(descriptor.fingerprint)|insert=1|plugin=Gain"
             )
+            let mixerBinding = try #require(await registry.resolve(TargetReference(rawValue: mixerReference)))
+            #expect(try #require(mixerBinding.physicalMixerStrip).matches(physical))
+            for (reference, kind) in [
+                (TargetReference(rawValue: projectReference), TargetKind.project),
+                (TargetReference(rawValue: trackReference), .track),
+                (TargetReference(rawValue: mixerReference), .mixerStrip),
+                (pluginReference, .pluginInsert),
+            ] {
+                let binding = try #require(await registry.resolve(reference))
+                #expect(binding.kind == kind)
+            }
+            #expect(fixture.mutations.isEmpty)
             await registry.bumpProjectEpoch()
 
             let (projectRouter, projectChannel) = await router(id: .appleScript)
@@ -250,7 +275,7 @@ struct ADR002BProjectTargetTests {
                     "target_ref": .string(pluginReference.rawValue),
                     "plugin": .string("Gain"),
                     "mode": .string("duplicate_applyback"),
-                    "project_expected_path": .string("/tmp/Slice B.logicx"),
+                    "project_expected_path": .string(fixture.bundle.path),
                 ],
                 router: pluginRouter,
                 cache: cache,
@@ -259,6 +284,7 @@ struct ADR002BProjectTargetTests {
             let pluginBody = try requireStateC(pluginResult)
             #expect(try #require(pluginBody["error"] as? String) == "stale_target_reference")
             #expect(await pluginChannel.executedOps.isEmpty)
+            #expect(fixture.mutations.isEmpty)
         }
     }
 

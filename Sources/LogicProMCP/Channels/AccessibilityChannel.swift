@@ -322,6 +322,7 @@ actor AccessibilityChannel: Channel {
         fileReader: LogicProjectFileReader.Runtime,
         navigationProject: TargetDescriptor? = nil,
         navigationReferenceIsCurrent: @escaping @Sendable () async -> Bool = { true },
+        stoppingBeforeAXRead stopBeforeAXRead: (@Sendable () -> Bool)? = nil,
         stoppingWhen stop: @escaping @Sendable () -> Bool
     ) async throws -> SessionPopulationObservation.FreshPopulation {
         try SessionPopulationObservation.requireOwnedAcquisition()
@@ -335,7 +336,10 @@ actor AccessibilityChannel: Channel {
             await navigation?.reveal(stoppingWhen: stop)
         }
         do {
-            var population = try await readExposedSessionPopulation(request: request, fileReader: fileReader, stoppingWhen: stop)
+            var population = try await readExposedSessionPopulation(
+                request: request, fileReader: fileReader,
+                stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop
+            )
             if let navigation {
                 population.uiEffects = await navigation.restore(stoppingWhen: stop)
                 if population.uiEffects.navigationPerformed && population.uiEffects.restoration != "restored" {
@@ -355,6 +359,7 @@ actor AccessibilityChannel: Channel {
     private func readExposedSessionPopulation(
         request: SessionPopulationObservation.Request,
         fileReader: LogicProjectFileReader.Runtime,
+        stoppingBeforeAXRead stopBeforeAXRead: @escaping @Sendable () -> Bool,
         stoppingWhen stop: @escaping @Sendable () -> Bool
     ) async throws -> SessionPopulationObservation.FreshPopulation {
         let beganAt = Date()
@@ -370,10 +375,17 @@ actor AccessibilityChannel: Channel {
             let stripElements: [AXUIElement]?
             let tracks: [TrackState]?
             let strips: [ChannelStripState]?
+            let presentation: AXLogicProElements.MixerPresentationRead?
         }
         func check() throws {
             try SessionPopulationObservation.requireOwnedAcquisition()
             if stop() { throw SessionPopulationObservation.AcquisitionError.textEditing }
+        }
+        // The poller can separate cheap lifecycle/latch checks from full focus
+        // acquisition. Other callers retain their original per-read stop callback.
+        func checkAXRead() throws {
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            if stopBeforeAXRead() { throw SessionPopulationObservation.AcquisitionError.textEditing }
         }
         func read(in window: AXUIElement) throws -> Read {
             try check()
@@ -396,16 +408,25 @@ actor AccessibilityChannel: Channel {
             var mixer: AXUIElement?
             var stripElements: [AXUIElement]?
             var strips: [ChannelStripState]?
-            if wantsStrips,
-               case .found(let found) = AXLogicProElements.mixerAreaLookup(in: window, runtime: logic),
-               let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: found, runtime: logic.ax) {
-                mixer = found
-                stripElements = enumeration.strips
-                strips = Self.readChannelStrips(from: enumeration.strips, runtime: logic, window: window, mixer: found, stoppingWhen: stop)
+            var presentation: AXLogicProElements.MixerPresentationRead?
+            if wantsStrips {
+                let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic, checking: checkAXRead)
+                try check()
+                if let binding = lookup.binding {
+                    mixer = binding.mixer
+                    presentation = try AXLogicProElements.mixerPresentationRead(binding: binding, runtime: logic.ax, checking: checkAXRead)
+                    try check()
+                    if let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: binding.mixer, runtime: logic.ax) {
+                        stripElements = enumeration.strips
+                        strips = Self.readChannelStrips(from: enumeration.strips, runtime: logic,
+                            window: window, mixer: binding.mixer, stoppingWhen: stop)
+                    }
+                }
             }
             try check()
             return Read(title: title, document: document, documentReadable: documentReadable,
-                        headers: headers, mixer: mixer, stripElements: stripElements, tracks: tracks, strips: strips)
+                        headers: headers, mixer: mixer, stripElements: stripElements, tracks: tracks, strips: strips,
+                        presentation: presentation)
         }
         func sameElements(_ lhs: [AXUIElement]?, _ rhs: [AXUIElement]?) -> Bool {
             switch (lhs, rhs) {
@@ -464,6 +485,8 @@ actor AccessibilityChannel: Channel {
                 && sameElements(before.headers, after.headers)
                 && sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] })
                 && sameElements(before.stripElements, after.stripElements)
+                && sameElements(before.presentation?.elements, after.presentation?.elements)
+                && before.presentation?.presentation == after.presentation?.presentation
                 && before.tracks?.map(\.liveIdentityBacked) == after.tracks?.map(\.liveIdentityBacked)
                 && zip(before.strips ?? [], after.strips ?? []).allSatisfy {
                     switch ($0.physicalBinding, $1.physicalBinding) {
@@ -478,7 +501,8 @@ actor AccessibilityChannel: Channel {
             }
             let candidate = SessionPopulationObservation.FreshPopulation(
                 project: project, tracks: before.tracks, strips: before.strips,
-                fileTrackCount: metadata?.trackCount, beganAt: beganAt, endedAt: Date(), stable: stable
+                fileTrackCount: metadata?.trackCount, beganAt: beganAt, endedAt: Date(), stable: stable,
+                mixerPresentation: before.presentation?.presentation
             )
             if stable { return candidate }
             last = candidate
