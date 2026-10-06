@@ -6262,7 +6262,14 @@
   "sliderSendHint": {
    "canonical": "send",
    "variants": [
-    "센드"
+    "센드",
+    "Send Level knob",
+    "센드 레벨 노브",
+    "センドレベルノブ",
+    "Send-Drehregler",
+    "Botón “Nivel de envío”",
+    "Potentiomètre Niveau d’envoi ",
+    "“发送电平”旋钮"
    ],
    "rationale": "Classifies a slider as a send control; read-only.",
    "match": "contains",
@@ -6271,11 +6278,11 @@
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
+    "es-ES": "derived",
+    "fr-FR": "derived",
     "it-IT": "unmeasured",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "unmeasured"
    }
   },

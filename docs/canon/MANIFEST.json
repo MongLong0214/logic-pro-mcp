@@ -107,13 +107,13 @@
     "index/plugin_names.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/pluginsettings.tsv": "827154b12becb1b89cf36a9cd5bc43c1d8ca952a370fea6b9dcafde2ac1a6eb9",
     "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/quickhelp.tsv": "b5f991422533beb898382ead18d863b9c782855bdb95c016fe5cf6b24476c69e",
+    "index/quickhelp.tsv": "d1f97be3a324c18b05512624bf6d740fb124f8b126f9ec006f235d920e2518bc",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "114332ca65d657f2ad82323367d42d6d18ed9ad0b36b9d9a9afd926cad0785fa",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "ledger/casefold.tsv": "e70b3326266e0b18ead166fe9afcc1da326686b4a271c1436f65b85a555314e9",
+    "ledger/casefold.tsv": "54f66ebe562b13118c1335f38a7cd8b4dcc54f890ffdb3941fffbb6665f23866",
     "ledger/presence.tsv": "532bab8543c9718c9ae26204393cd0a6c5ff73ecb346bb48fedd63449801cf8e"
   },
   "extractor_version": 3,
@@ -138,13 +138,13 @@
       "en": 98
     },
     "quickhelp": {
-      "de": 48,
-      "en": 61,
-      "es": 49,
-      "fr": 4,
-      "ja": 60,
-      "ko": 64,
-      "zh_CN": 38
+      "de": 49,
+      "en": 62,
+      "es": 50,
+      "fr": 5,
+      "ja": 61,
+      "ko": 65,
+      "zh_CN": 39
     },
     "strings": {
       "-": 2,
@@ -618,7 +618,7 @@
         "zh_CN": 4.791887e-06,
         "zh_TW": 4.812842e-06
       },
-      "cited_rows": 636,
+      "cited_rows": 666,
       "cited_values": 0,
       "corpus_digest": "21cc7dce8e354afa1ab3de915762a9b01054735823bd32c99114cd8fa5b2cadb",
       "english_equal_rows_in_translated_units": {

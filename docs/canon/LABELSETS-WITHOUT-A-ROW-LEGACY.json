@@ -54,11 +54,6 @@
       "candidate": "2 candidate(s)",
       "members": 3
     },
-    "sliderSendHint": {
-      "verdict": "ambiguous",
-      "candidate": "10 candidate(s)",
-      "members": 2
-    },
     "sliderZoomHint": {
       "verdict": "value",
       "candidate": "SongSettingsScore.strings 101232.title",
