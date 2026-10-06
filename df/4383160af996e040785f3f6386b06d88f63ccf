@@ -1,0 +1,15 @@
+Unverified: This raw Mixer Name-field reader repair does not qualify native AX behavior, layout-independent DAW name identity, byte-exact Arrange binding, or whole #965 completion.
+Record-Id: r-7d06a799ebaa
+Provenance: inherited 55d5a4e93733eef50808feb67d63e0a10b2d8f2b
+
+Unverified: Native Logic qualification and whole-issue #965 acceptance were not performed for this displayed-name propagation increment.
+Record-Id: r-cabb2698d2df
+Provenance: inherited 6aa6b8b2156953db0b15cc96a55fc53ca77ffdc9
+
+Unverified: This raw Arrange track-name reference increment does not qualify native behavior, the separate unchanged plug-in F1 follow-up, full CI, or whole #965 completion.
+Record-Id: r-1a5b7b3e1503
+Provenance: inherited 88abd1e35048ae95dee30bcecc8ee302fc92b920
+
+Unverified: Native Logic behavior and full CI remain unqualified; broad regression controls include existing native activation attempts.
+Record-Id: r-1127a77fda81
+Provenance: inherited 0de642c52935d21fe0cab378c032be680e17a359
