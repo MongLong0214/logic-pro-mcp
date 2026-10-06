@@ -40,6 +40,7 @@ extension AccessibilityChannel {
                 volume: volume,
                 pan: pan
             )
+            readStripName(of: strip, into: &state, runtime: runtime)
             readPluginChain(of: strip, into: &state, runtime: runtime)
             // #291: `output` has been on this model since it was written and nothing ever set it, so
             // `logic://mixer` published a field that was always null. It is read now; `nil` still
@@ -52,6 +53,19 @@ extension AccessibilityChannel {
             channelStrips.append(state)
         }
         return encodeResult(channelStrips)
+    }
+
+    private static func readStripName(
+        of strip: AXUIElement, into state: inout ChannelStripState, runtime: AXLogicProElements.Runtime
+    ) {
+        switch AXPluginInstanceIdentity.stripNameResult(strip, runtime: runtime.ax) {
+        case .success(.some(let name)):
+            state.name = name
+        case .success(nil):
+            state.nameReadError = "the strip's Name field was not identified or was ambiguous"
+        case .failure(let error):
+            state.nameReadError = "the strip's Name field could not be read: \(error.diagnosticLabel)"
+        }
     }
 
     /// `plugins_source: "ax"` says the chain was read and an empty list is an honest empty chain,
@@ -95,6 +109,7 @@ extension AccessibilityChannel {
             ?? 0.0
 
         var state = ChannelStripState(trackIndex: index, volume: volume, pan: pan)
+        readStripName(of: strip, into: &state, runtime: runtime)
         readPluginChain(of: strip, into: &state, runtime: runtime)
         state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
         state.input = AXLogicProElements.inputSlotSource(in: strip, runtime: runtime.ax)
