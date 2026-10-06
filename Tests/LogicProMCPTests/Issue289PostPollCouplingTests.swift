@@ -34,6 +34,34 @@ import Testing
 @Suite("Issue289PostPollCoupling")
 struct Issue289PostPollCouplingTests {
 
+    /// The callback is emitted only after a readable section is committed. A
+    /// production channel with no Logic document cannot supply that precondition.
+    private static func channel() -> AccessibilityChannel {
+        let builder = FakeAXRuntimeBuilder()
+        return AccessibilityChannel(runtime: .init(
+            isTrusted: { true }, isLogicProRunning: { true }, appRoot: { nil },
+            transportState: { .success("{}") },
+            toggleTransportButton: { _ in .error("unused mutation") },
+            setTempo: { _ in .error("unused mutation") },
+            setCycleRange: { _ in .error("unused mutation") },
+            tracks: { .success("[]") },
+            trackStates: { [] },
+            selectedTrack: { .error("unused read") },
+            selectTrack: { _ in .error("unused mutation") },
+            setTrackToggle: { _, _ in .error("unused mutation") },
+            renameTrack: { _ in .error("unused mutation") },
+            mixerState: { .success("[]") },
+            channelStrip: { _ in .error("unused read") },
+            setMixerValue: { _, _ in .error("unused mutation") },
+            projectInfo: { .error("unavailable") },
+            confirmNewTrackDialog: {}, canPostEvents: { false },
+            logicRuntime: builder.makeLogicRuntime(
+                setAttributeHandler: nil, performActionHandler: nil,
+                executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+            )
+        ))
+    }
+
     /// Generous, and deliberately not calibrated to anything: in the awaited design no amount of
     /// waiting lets the call return, because the gate downstream is still shut. It only has to
     /// exceed the time a *non*-waiting implementation needs to return, and that work is already
@@ -47,7 +75,7 @@ struct Issue289PostPollCouplingTests {
         let returned = Flag()
 
         let poller = StatePoller(
-            axChannel: AccessibilityChannel(),
+            axChannel: Self.channel(),
             cache: StateCache(),
             runtime: .init(hasVisibleWindow: { true }),
             postPoll: { _, _ in
@@ -58,7 +86,17 @@ struct Issue289PostPollCouplingTests {
         )
 
         let refresh = Task { _ = await poller.refreshNow(); returned.set() }
-        await entered.wait()
+        let entryDeadline = ContinuousClock.now + .seconds(10)
+        while !entered.isSet(), ContinuousClock.now < entryDeadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        guard entered.isSet() else {
+            release.open()
+            refresh.cancel()
+            _ = await refresh.value
+            Issue.record("the controlled readable poll never entered postPoll")
+            return
+        }
         // postPoll is now inside and cannot progress: `release` stays shut until after the check.
         // So if the refresh has completed, it did not wait for the subscriber.
         try? await Task.sleep(for: Self.settleWindow)
@@ -116,6 +154,8 @@ private final class Gate: @unchecked Sendable {
     private var isOpen = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private let lock = NSLock()
+
+    func isSet() -> Bool { lock.lock(); defer { lock.unlock() }; return isOpen }
 
     func open() {
         lock.lock()
