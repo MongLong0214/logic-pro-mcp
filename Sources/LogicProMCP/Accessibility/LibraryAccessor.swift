@@ -1132,17 +1132,19 @@ enum LibraryAccessor {
         timeout: TimeInterval,
         pollInterval: TimeInterval = 0.05,
         rightmostColumnOnly: Bool = false,
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        now: () -> Date = { Date() },
+        sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
     ) {
-        let deadline = Date().addingTimeInterval(timeout)
+        let deadline = now().addingTimeInterval(timeout)
         repeat {
             if segmentIsVisible(
                 named: name,
                 rightmostColumnOnly: rightmostColumnOnly,
                 runtime: runtime
             ) { return }
-            Thread.sleep(forTimeInterval: pollInterval)
-        } while Date() < deadline
+            sleep(pollInterval)
+        } while now() < deadline
     }
 
     /// Read-only check: is an AXStaticText whose value equals `name` present in
