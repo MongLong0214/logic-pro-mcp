@@ -179,15 +179,15 @@ actor StatePoller {
 
     /// Stop the polling loop and wait for the current poll cycle to finish.
     func stop() async {
-        guard let task = pollingTask else { return }
+        let task = pollingTask
         // Before anything else: no new cycle and no new drain may start from here on. Cancelling
         // the loop does not cover a cycle owned by an external `refreshNow`, and that cycle would
         // otherwise hand off a fresh drain -- uncancelled, because it did not exist when stop ran.
         stopped = true
-        task.cancel()
+        task?.cancel()
         pollingTask = nil
         // Wait for the cancelled task to complete its current cycle
-        await task.value
+        await task?.value
         // The drain runs as its own task so the caller that starts a cycle is not billed for
         // everyone else's; without awaiting it, AX polling outlives a `stop()` that documents
         // itself as waiting for the current cycle. Cancel first, or a steady stream of nudges
@@ -205,9 +205,8 @@ actor StatePoller {
     }
 
     func stopImmediately() {
-        guard let task = pollingTask else { return }
         stopped = true
-        task.cancel()
+        pollingTask?.cancel()
         pollingTask = nil
         drainTask?.cancel()
         Log.info("StatePoller stop requested without awaiting current AX poll", subsystem: "poller")

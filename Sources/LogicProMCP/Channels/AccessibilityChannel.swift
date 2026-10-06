@@ -419,6 +419,7 @@ actor AccessibilityChannel: Channel {
                 && sameElements(before.headers, after.headers)
                 && sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] })
                 && sameElements(before.stripElements, after.stripElements)
+                && before.tracks?.map(\.liveIdentityBacked) == after.tracks?.map(\.liveIdentityBacked)
                 && sameValues(before.tracks, after.tracks) && sameValues(before.strips, after.strips)
             let project = before.title.map {
                 ProjectInfo(name: Self.projectName(fromWindowTitle: $0), filePath: path, source: "ax_request_read")

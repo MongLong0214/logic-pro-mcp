@@ -864,6 +864,10 @@ actor LogicProServer {
         // Retained snapshot lookup never reads Logic or generates a replacement.
         let freshPopulationRead = tool == "logic_project" && command == "inspect_session"
             && commandParams["snapshot_id"] == nil
+        if freshPopulationRead && Task.isCancelled {
+            return toolStateCResult(.cancelled,
+                extras: ["write_attempted": false, "navigation_performed": false])
+        }
         if (isMutatingCommand(tool: tool, command: command) || freshPopulationRead), let mutationGate {
             guard let claim = mutationGate.tryAcquire(operation: operation) else {
                 return mutationInProgressResult(
@@ -878,69 +882,97 @@ actor LogicProServer {
             heldMutationGate = nil
             heldClaim = nil
         }
-        return await withCheckedContinuation { continuation in
-            let race = DeadlineRace()
-            let timeoutHandle = DeadlineTimeoutHandle()
-            // ADR-005: the trace context scope must open INSIDE the detached
-            // task — Task.detached severs TaskLocal inheritance, so a scope
-            // opened in the caller would be invisible to the dispatcher and
-            // every seam below it.
-            let traceContext = OperationTraceContext(
-                mutationGateAcquired: heldClaim != nil,
-                // #413: expose live gate ownership to deep mutating seams. Task
-                // cancellation already flips at the deadline instant — ≥ the reclaim
-                // grace before any successor can acquire — so this is the explicit
-                // ownership invariant and an independently testable seam, not a
-                // behavior change. Returns true when no gate is held.
-                ownsGate: { [heldMutationGate, heldClaim] in
-                    guard let heldMutationGate, let heldClaim else { return true }
-                    return heldMutationGate.stillOwns(heldClaim)
-                },
-                deadline: operationDeadline
-            )
-            let workTask = Task.detached(priority: .userInitiated) {
-                let result = await OperationTraceContext.$current.withValue(traceContext) {
-                    await work()
-                }
-                if let heldClaim { heldMutationGate?.release(heldClaim) }
-                let didWin = race.resume(continuation, returning: result)
-                if didWin {
-                    timeoutHandle.cancel()
-                }
-            }
-            let timeoutTask = DispatchWorkItem {
-                let didWin = race.resume(
-                    continuation,
-                    returning: Self.deadlineTimeoutResult(
-                        tool: tool,
-                        command: command,
-                        seconds: deadline,
-                        mutationMayStillBeRunning: heldMutationGate != nil
-                            || externallyManagedMutation,
-                        mutationGateReclaimableAfterGrace: !externallyManagedMutation,
-                        readOnlyPopulationRead: freshPopulationRead
-                            && commandParams["allow_ui_navigation"]?.boolValue != true
-                    )
+        let callerCancellation = PopulationCancellationHandle()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let race = DeadlineRace()
+                let timeoutHandle = DeadlineTimeoutHandle()
+                // ADR-005: the trace context scope must open INSIDE the detached
+                // task — Task.detached severs TaskLocal inheritance, so a scope
+                // opened in the caller would be invisible to the dispatcher and
+                // every seam below it.
+                let traceContext = OperationTraceContext(
+                    mutationGateAcquired: heldClaim != nil,
+                    // #413: expose live gate ownership to deep mutating seams. Task
+                    // cancellation already flips at the deadline instant — ≥ the reclaim
+                    // grace before any successor can acquire — so this is the explicit
+                    // ownership invariant and an independently testable seam, not a
+                    // behavior change. Returns true when no gate is held.
+                    ownsGate: { [heldMutationGate, heldClaim] in
+                        guard let heldMutationGate, let heldClaim else { return true }
+                        return heldMutationGate.stillOwns(heldClaim)
+                    },
+                    deadline: operationDeadline
                 )
-                if didWin {
-                    workTask.cancel()
-                    // #201: the deadline has abandoned this op. Start the gate's
-                    // bounded reclaim grace so a successor mutation recovers
-                    // without waiting for the (possibly wedged) work to return or
-                    // for the multi-minute stale-holder TTL. Epoch-guarded: if the
-                    // work later returns and releases, that wins harmlessly first.
-                    if let heldMutationGate, let heldClaim {
-                        heldMutationGate.markTimedOut(heldClaim)
+                let workTask = Task.detached(priority: .userInitiated) {
+                    if freshPopulationRead && callerCancellation.isCancelled {
+                        withUnsafeCurrentTask { $0?.cancel() }
+                    }
+                    let result = await OperationTraceContext.$current.withValue(traceContext) {
+                        await work()
+                    }
+                    callerCancellation.clear()
+                    if let heldClaim { heldMutationGate?.release(heldClaim) }
+                    let didWin = race.resume(continuation, returning: result)
+                    if didWin {
+                        timeoutHandle.cancel()
                     }
                 }
+                if freshPopulationRead { callerCancellation.set(workTask) }
+                let timeoutTask = DispatchWorkItem {
+                    let didWin = race.resume(
+                        continuation,
+                        returning: Self.deadlineTimeoutResult(
+                            tool: tool,
+                            command: command,
+                            seconds: deadline,
+                            mutationMayStillBeRunning: heldMutationGate != nil
+                                || externallyManagedMutation,
+                            mutationGateReclaimableAfterGrace: !externallyManagedMutation,
+                            readOnlyPopulationRead: freshPopulationRead
+                                && commandParams["allow_ui_navigation"]?.boolValue != true
+                        )
+                    )
+                    if didWin {
+                        workTask.cancel()
+                        // #201: the deadline has abandoned this op. Start the gate's
+                        // bounded reclaim grace so a successor mutation recovers
+                        // without waiting for the (possibly wedged) work to return or
+                        // for the multi-minute stale-holder TTL. Epoch-guarded: if the
+                        // work later returns and releases, that wins harmlessly first.
+                        if let heldMutationGate, let heldClaim {
+                            heldMutationGate.markTimedOut(heldClaim)
+                        }
+                    }
+                }
+                timeoutHandle.set(timeoutTask)
+                let scheduleAfter = Self.secondsFromNow(until: operationDeadline)
+                DispatchQueue.global(qos: .userInitiated).asyncAfter(
+                    deadline: .now() + scheduleAfter,
+                    execute: timeoutTask
+                )
             }
-            timeoutHandle.set(timeoutTask)
-            let scheduleAfter = Self.secondsFromNow(until: operationDeadline)
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(
-                deadline: .now() + scheduleAfter,
-                execute: timeoutTask
-            )
+        } onCancel: {
+            // Other commands retain their existing mutation/deadline semantics.
+            if freshPopulationRead { callerCancellation.cancel() }
         }
+    }
+
+    /// Remembers cancellation even when it arrives before the detached task is installed.
+    private final class PopulationCancellationHandle: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+        private var task: Task<Void, Never>?
+        var isCancelled: Bool { lock.withLock { cancelled } }
+        func set(_ task: Task<Void, Never>) {
+            let shouldCancel = lock.withLock { self.task = task; return cancelled }
+            if shouldCancel { task.cancel() }
+        }
+        func cancel() {
+            let pending = lock.withLock { cancelled = true; return task }
+            pending?.cancel()
+        }
+        func clear() { lock.withLock { task = nil } }
     }
 
     // MARK: - #199 resource-read deadline (resources had NO backstop)

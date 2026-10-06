@@ -6,6 +6,22 @@ import Testing
 
 @Suite("#965 inspect_session reaches fresh population acquisition", .serialized)
 struct Issue965FreshPopulationAcquisitionTests {
+    private actor SuspendedRead {
+        private var entered = false
+        private var entryWaiter: CheckedContinuation<Void, Never>?
+        private var readWaiter: CheckedContinuation<Void, Never>?
+        func suspend() async {
+            entered = true
+            entryWaiter?.resume()
+            entryWaiter = nil
+            await withCheckedContinuation { readWaiter = $0 }
+        }
+        func waitForEntry() async {
+            if !entered { await withCheckedContinuation { entryWaiter = $0 } }
+        }
+        func release() { readWaiter?.resume(); readWaiter = nil }
+    }
+
     private final class Reads: @unchecked Sendable {
         private let lock = NSLock()
         private var attributes: [String] = []
@@ -61,6 +77,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture: Fixture, unreadableRail: Bool = false, cancelBeforeRead: Bool = false,
         hasVisibleWindow: Bool = true,
         domains: [String] = ["tracks", "strips"],
+        stopBeforeRead: Bool? = nil,
         keyboardFocus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus = { .notTextEditing }
     ) async throws -> CallTool.Result {
         let cache = StateCache()
@@ -68,11 +85,16 @@ struct Issue965FreshPopulationAcquisitionTests {
         await cache.updateTracks([TrackState(id: 0, name: "Old cached track", type: .audio)])
         await cache.updateChannelStrips([ChannelStripState(trackIndex: 0, name: "Old cached strip")])
         let gate = LogicMutationGate()
+        let poller = StatePoller(axChannel: fixture.channel(unreadableRail: unreadableRail), cache: cache,
+                                 runtime: .init(hasVisibleWindow: { hasVisibleWindow }, projectFileReader: .unavailable,
+                                                keyboardFocus: keyboardFocus))
+        if let awaitStop = stopBeforeRead {
+            if awaitStop { await poller.stop() }
+            else { await poller.stopImmediately() }
+        }
         let dependencies = HandlerDependencies(
             router: ChannelRouter(), cache: cache, targetRegistry: TargetRegistry(),
-            poller: StatePoller(axChannel: fixture.channel(unreadableRail: unreadableRail), cache: cache,
-                                runtime: .init(hasVisibleWindow: { hasVisibleWindow }, projectFileReader: .unavailable,
-                                               keyboardFocus: keyboardFocus)),
+            poller: poller,
             dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
             liveTrackNames: { [:] }, projectFileReader: .unavailable
         )
@@ -202,6 +224,66 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
     }
 
+    @Test func cancelledCallerCannotStartDetachedAcquisition() async throws {
+        let reads = Reads()
+        let gate = LogicMutationGate()
+        let caller = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return await LogicProServer.runWithDeadline(
+                tool: "logic_project", command: "inspect_session", mutationGate: gate
+            ) {
+                reads.record("detached_work")
+                return toolTextResult("replacement report")
+            }
+        }
+        let result = await caller.value
+        let isError = result.isError ?? false
+        #expect(isError)
+        #expect(reads.count == 0)
+        #expect(gate.currentOperation() == nil)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(body["error"] as? String == "cancelled")
+    }
+
+    @Test func callerCancellationReachesAnAlreadyStartedAcquisition() async throws {
+        let suspended = SuspendedRead()
+        let gate = LogicMutationGate()
+        let caller = Task {
+            await LogicProServer.runWithDeadline(
+                tool: "logic_project", command: "inspect_session", mutationGate: gate
+            ) {
+                await suspended.suspend()
+                return Task.isCancelled
+                    ? toolStateCResult(.cancelled, extras: ["write_attempted": false])
+                    : toolTextResult("{\"replacement_published\":true}")
+            }
+        }
+        await suspended.waitForEntry()
+        caller.cancel()
+        await suspended.release()
+        let result = await caller.value
+        let isError = result.isError ?? false
+        #expect(isError)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(body["error"] as? String == "cancelled")
+        #expect(body["replacement_published"] == nil)
+        #expect(gate.currentOperation() == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func stoppedPollerCannotAcquireWithoutABackgroundLoop(awaitStop: Bool) async throws {
+        let fixture = Fixture()
+        let result = try await inspect(fixture: fixture, stopBeforeRead: awaitStop)
+        let isError = result.isError ?? false
+        #expect(isError)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(body["error"] as? String == "readback_unavailable")
+        #expect(body["snapshot_id"] == nil)
+        #expect(fixture.reads.count == 0,
+                "stop must close explicit request cycles even when no background loop was started")
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
     @Test func unstableLivePopulationIsNotACurrentRepairBaseline() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let cache = StateCache()
@@ -234,6 +316,38 @@ struct Issue965FreshPopulationAcquisitionTests {
                         "live instability must not be misreported as a cache movement")
             }
         }
+    }
+
+    @Test func disappearingNameWitnessIsNotAStablePopulation() async throws {
+        let fixture = Fixture()
+        let titleReads = Reads()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueHandler: { element, attribute in
+                guard CFEqual(element, fixture.header), attribute == kAXTitleAttribute as String else { return nil }
+                titleReads.record(attribute)
+                // A genuine name and the extractor's fallback have identical wire bytes.
+                return titleReads.count.isMultiple(of: 2) ? .some(nil) : .some("Untitled" as NSString)
+            },
+            setAttributeHandler: nil, performActionHandler: nil,
+            executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+        )
+        let channel = AccessibilityChannel(runtime: .axBacked(
+            isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true }, logicRuntime: runtime
+        ))
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await channel.readFreshSessionPopulation(
+                request: .init(domains: [.tracks]), fileReader: .unavailable, stoppingWhen: { false }
+            )
+        }
+        #expect(!population.stable,
+                "wire equality cannot hide loss of the live name witness needed to issue a target")
+        #expect(titleReads.count == 18, "all three bounded attempts must reject before/after identity disagreement")
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
     }
 
     @Test func cancelledTasksCannotMintTrackOrProjectReferences() async throws {
@@ -271,6 +385,66 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
         #expect(!(await task.value))
         #expect(await cache.retainedSessionReport(id: "cancelled-report") == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func finalPublicationPreservesTheActualRefusalReason(deadlineExpired: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let cache = StateCache()
+            await cache.updateProject(ProjectInfo(name: "Session", filePath: "/tmp/Session.logicx"))
+            let capture = await SessionPopulationObservation.capture(
+                cache: cache, targetRegistry: nil, fileReader: .unavailable
+            )
+            let context = OperationTraceContext(
+                mutationGateAcquired: true, ownsGate: { deadlineExpired },
+                deadline: deadlineExpired ? ContinuousClock.now.advanced(by: .seconds(-1)) : nil
+            )
+            let result = await OperationTraceContext.$current.withValue(context) {
+                await ProjectDispatcher.handle(
+                    command: "inspect_session", params: [:], router: ChannelRouter(), cache: cache,
+                    dialogPresent: { false }, cleanupAuditFileReader: .unavailable,
+                    acquireSessionPopulation: { _ in capture }
+                )
+            }
+            let isError = result.isError ?? false
+            #expect(isError)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(body["error"] as? String == (deadlineExpired ? "operation_timeout" : "readback_unavailable"))
+            #expect(body["snapshot_id"] == nil)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func interruptedRetentionIsNotMisreportedAsAStaleSnapshot(cancelDuringRetention: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let cache = StateCache()
+            await cache.updateProject(ProjectInfo(name: "Session", filePath: "/tmp/Session.logicx"))
+            let capture = await SessionPopulationObservation.capture(
+                cache: cache, targetRegistry: nil, fileReader: .unavailable
+            )
+            let ownershipChecks = Reads()
+            let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: {
+                ownershipChecks.record("ownership")
+                if ownershipChecks.count == 1 { return true }
+                if cancelDuringRetention { withUnsafeCurrentTask { $0?.cancel() } }
+                return false
+            })
+            let publication = Task {
+                await OperationTraceContext.$current.withValue(context) {
+                    await ProjectDispatcher.handle(
+                        command: "inspect_session", params: [:], router: ChannelRouter(), cache: cache,
+                        dialogPresent: { false }, cleanupAuditFileReader: .unavailable,
+                        acquireSessionPopulation: { _ in capture }
+                    )
+                }
+            }
+            let result = await publication.value
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(body["error"] as? String == (cancelDuringRetention ? "cancelled" : "readback_unavailable"))
+            #expect(body["snapshot_id"] == nil)
+            #expect(ownershipChecks.count >= 2, "the refusal must happen inside actor-owned retention")
+            #expect(await cache.retainedSessionReport(id: capture.captureID) == nil)
+        }
     }
 
     @Test func unboundFreshRowsCannotIssueProjectScopedTargets() async throws {

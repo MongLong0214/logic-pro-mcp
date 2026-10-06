@@ -483,19 +483,22 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 )
             }
             let capture: SessionPopulationObservation.Capture
+            func acquisitionFailure(_ error: Error) -> CallTool.Result {
+                let failure: HonestContract.FailureError
+                switch error {
+                case SessionPopulationObservation.AcquisitionError.cancelled: failure = .cancelled
+                case SessionPopulationObservation.AcquisitionError.deadline: failure = .operationTimeout
+                default: failure = .readbackUnavailable
+                }
+                return toolStateCResult(failure,
+                    hint: "Fresh population acquisition could not finish under its owned deadline; no replacement report was published.",
+                    extras: ["write_attempted": false, "navigation_performed": false])
+            }
             if let acquireSessionPopulation {
                 do {
                     capture = try await acquireSessionPopulation(request)
                 } catch {
-                    let failure: HonestContract.FailureError
-                    switch error {
-                    case SessionPopulationObservation.AcquisitionError.cancelled: failure = .cancelled
-                    case SessionPopulationObservation.AcquisitionError.deadline: failure = .operationTimeout
-                    default: failure = .readbackUnavailable
-                    }
-                    return toolStateCResult(failure,
-                        hint: "Fresh population acquisition could not finish under its owned deadline; no replacement report was published.",
-                        extras: ["write_attempted": false, "navigation_performed": false])
+                    return acquisitionFailure(error)
                 }
             } else {
                 // Explicit legacy/headless seam: the registered server handler supplies the real producer.
@@ -522,7 +525,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 let json = try encodeJSONStrict(report, compact: true)
                 if acquireSessionPopulation != nil {
                     do { try SessionPopulationObservation.requireOwnedAcquisition() }
-                    catch { return toolStateCResult(.cancelled, extras: ["write_attempted": false]) }
+                    catch { return acquisitionFailure(error) }
                 }
                 // Keep incomplete/cold reads available, but do not create a name-bound handle.
                 if !bound { return toolTextResult(json) }
@@ -535,6 +538,10 @@ struct ProjectDispatcher: OperationTraceDispatching {
                             (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
                     }
                 ) else {
+                    if acquireSessionPopulation != nil {
+                        do { try SessionPopulationObservation.requireOwnedAcquisition() }
+                        catch { return acquisitionFailure(error) }
+                    }
                     return toolStateCResult(.staleSnapshot,
                         hint: "capture could not be retained (project changed, document closed, or report exceeds 2 MiB); no reusable snapshot was issued",
                         extras: ["write_attempted": false])
