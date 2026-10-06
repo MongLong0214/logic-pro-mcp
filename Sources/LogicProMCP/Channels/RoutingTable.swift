@@ -263,6 +263,8 @@ extension ChannelRouter {
         "project.quit":               [.appleScript],
 
         // Views — MIDIKeyCommands primary
+        // An explicit final state is AX-only: a blind key fallback cannot express it.
+        "view.set_mixer_visibility":  [.accessibility],
         "view.toggle_mixer":          [.midiKeyCommands, .cgEvent],
         "view.toggle_piano_roll":     [.midiKeyCommands, .cgEvent],
         "view.toggle_score_editor":   [.midiKeyCommands, .cgEvent],

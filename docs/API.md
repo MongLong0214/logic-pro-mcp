@@ -272,6 +272,8 @@ The Accessibility route chooses the requested grid in the Region inspector, not 
 
 Common commands: `goto_bar`, `goto_marker`, `create_marker`, `delete_marker`, `rename_marker`, `zoom_to_fit`, `set_zoom`, `toggle_view`.
 
+`toggle_view` accepts `{ view: "mixer", visible: Bool }` to request an explicit final Mixer visibility through Accessibility. Already observed desired state sends no action; unreadable visibility is not assumed hidden. The operation retains the current project/window, selection and focus, uses the owned View menu, and verifies the final Mixer after cleaning up only that menu. It leaves the approved final view in place, unlike temporary `inspect_session` reveal/restore. `view.set_mixer_visibility` receipts include Boolean `requested_visible`, `before_visible`, `after_visible` when observed, `write_attempted`, `menu_restored`, and `visibility_source: "ax_bound_mixer"`. Attempted but unverified operations return State B `readback_unavailable` with a separate `navigation_reason` diagnostic; custody loss does not authorize cleanup in another window. These observations are not an atomic host lock or native qualification. `visible` for other views is refused; omitting it preserves the legacy blind toggle and its unverified result.
+
 `delete_marker` and indexed `goto_marker` require explicit indices. `rename_marker` is not implemented on Logic 12.x and returns State C `not_implemented`. `set_zoom` accepts `in`, `out`, `fit`, or integer levels `1..10` and uses the writable Accessibility zoom slider when present.
 
 ### `logic_project`

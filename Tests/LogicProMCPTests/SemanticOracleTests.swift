@@ -468,8 +468,8 @@ struct SemanticOracleCensusTests {
                 )
             }
         }
-        // 49 through B4, plus two registered after the inventory closed (#575, #448).
-        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 51)
+        // 49 through B4, plus #575, #448 and the explicit Mixer mode of #969.
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 52)
     }
 
     /// #373 B4 — the mutating oracle inventory is CLOSED. Every supported
@@ -537,10 +537,11 @@ struct SemanticOracleCensusTests {
         let exclusions = SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs
         #expect(!exclusions.isEmpty)
         #expect(exclusions[.mixerSetPluginParam] != nil)
-        // The four B2 send-only ops that structurally cannot reach State A.
+        // These B2 send-only ops still cannot reach State A. toggle_view now has
+        // a separate explicit Mixer mode; its legacy omitted mode remains send-only.
         for id in [
             OperationID.transportRewind, .transportFastForward,
-            .navigateZoomToFit, .navigateToggleView,
+            .navigateZoomToFit,
         ] {
             #expect(exclusions[id] != nil, "\(id.rawValue) missing its send-only exclusion reason")
         }

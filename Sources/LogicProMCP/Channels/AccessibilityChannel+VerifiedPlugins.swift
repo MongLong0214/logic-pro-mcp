@@ -640,7 +640,11 @@ extension AccessibilityChannel {
             return target
         }
 
-        private func toggle(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+        private func toggle(
+            desiredVisibility: Bool? = nil,
+            permittingActuation: (() async -> Bool)? = nil,
+            stoppingWhen stop: @Sendable () -> Bool
+        ) async -> Bool {
             guard await stillOwned(stoppingWhen: stop), sameFocus(),
                   let menuBar = AXLogicProElements.getMenuBar(runtime: runtime),
                   case .success(let children) = AXHelpers.childrenResult(menuBar, runtime: runtime.ax) else { return false }
@@ -651,6 +655,7 @@ extension AccessibilityChannel {
                   await stillOwned(stoppingWhen: stop), sameFocus() else { return false }
             if let bar, !CFEqual(bar, view) { return false }
             bar = view
+            guard await permittingActuation?() ?? true else { return false }
             // An AX error is not proof that the attempted native action had no effect.
             menuOpen = true
             effects.navigationPerformed = true
@@ -672,13 +677,20 @@ extension AccessibilityChannel {
                   runtime.ax.actionNames(item).contains(kAXPressAction as String),
                   await stillOwned(stoppingWhen: stop), ownedMenuFocus() else { return false }
             let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+            if desiredVisibility == false,
+               AXHelpers.getTitle(item, runtime: runtime.ax) == AXLocalePolicy.showMixerMenuItem.canonical {
+                return false
+            }
             if let revealedMixer {
                 guard let current = lookup.mixer, CFEqual(current, revealedMixer) else { return false }
             } else {
                 guard case .notFound = lookup,
                       AXHelpers.getTitle(item, runtime: runtime.ax) != "Hide Mixer" else { return false }
             }
-            guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            // The final-state caller checks retained custody AFTER the deciding Mixer read.
+            // Temporary inspection retains its original default-nil behavior.
+            guard await permittingActuation?() ?? true,
+                  !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             if !effects.attempted.contains("mixer_visibility") { effects.attempted.append("mixer_visibility") }
             guard
                   AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) else { return false }
@@ -735,6 +747,119 @@ extension AccessibilityChannel {
             effects.reason = nil
             return effects
         }
+
+        /// Leave the caller's approved Mixer state in place. Only the menu acquired here is
+        /// cleaned up; unlike temporary inspection, this never compensates the final view.
+        func setFinalVisibility(_ desired: Bool, stoppingWhen stop: @escaping @Sendable () -> Bool) async -> ChannelResult {
+            let operation = "view.set_mixer_visibility"
+            var before: Bool?
+            var after: Bool?
+            var menuRestored = true
+            func result(verified: Bool, reason: String? = nil) -> ChannelResult {
+                var extras: [String: Any] = [
+                    "operation": operation, "requested_visible": desired,
+                    "write_attempted": effects.navigationPerformed,
+                    "menu_restored": menuRestored,
+                    "visibility_source": "ax_bound_mixer",
+                ]
+                if let before { extras["before_visible"] = before }
+                if let after { extras["after_visible"] = after }
+                if let reason { extras["navigation_reason"] = reason }
+                if verified { return .success(HonestContract.encodeStateA(extras: extras)) }
+                if effects.navigationPerformed {
+                    extras["hint"] = "The attempted view operation was not verified; do not blindly repeat it."
+                    // Preserve the attempted-effects envelope through the router. The dispatcher
+                    // marks this unverified result as an error without replacing it with State C.
+                    return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+                }
+                return .error(HonestContract.encodeStateC(error: .readbackUnavailable,
+                    hint: "Mixer visibility or its retained UI custody could not be observed; no action was sent.", extras: extras))
+            }
+            guard let pid = runtime.logicProPID(), let app = AXLogicProElements.appRoot(runtime: runtime) else {
+                return result(verified: false)
+            }
+            func owned() async -> Bool {
+                guard await stillOwned(stoppingWhen: stop), ownedMenuFocus(),
+                      runtime.logicProPID() == pid,
+                      let currentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, currentApp),
+                      !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                return true
+            }
+            guard await owned() else { return result(verified: false, reason: "navigation_ownership_lost") }
+            let initial = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+            guard await owned() else { return result(verified: false, reason: "navigation_ownership_lost") }
+            switch initial {
+            case .found(let mixer): before = true; revealedMixer = mixer
+            case .notFound: before = false
+            case .childrenUnread: return result(verified: false, reason: "mixer_children_unread")
+            }
+            var acknowledged = true
+            if before != desired {
+                acknowledged = await toggle(desiredVisibility: desired, permittingActuation: { await owned() }, stoppingWhen: stop)
+            }
+            func observe(_ lookup: AXLogicProElements.MixerAreaLookup) {
+                switch lookup {
+                case .found(let mixer):
+                    if let revealedMixer, !CFEqual(mixer, revealedMixer) {
+                        after = nil
+                    } else {
+                        revealedMixer = mixer
+                        after = true
+                    }
+                case .notFound: after = false
+                case .childrenUnread: after = nil
+                }
+            }
+            let end = min(OperationTraceContext.current?.deadline ?? ContinuousClock.now.advanced(by: .milliseconds(mixerRevealPollTimeoutMs)),
+                          ContinuousClock.now.advanced(by: .milliseconds(mixerRevealPollTimeoutMs)))
+            repeat {
+                guard await owned() else {
+                    menuRestored = !effects.navigationPerformed
+                    return result(verified: false, reason: "navigation_ownership_lost")
+                }
+                let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+                guard await owned() else {
+                    menuRestored = !effects.navigationPerformed
+                    return result(verified: false, reason: "navigation_ownership_lost")
+                }
+                observe(lookup)
+                if after == desired || !acknowledged || !effects.attempted.contains("mixer_visibility") { break }
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { break }
+            } while ContinuousClock.now < end
+            menuRestored = await dismissOwnedMenu(stoppingWhen: stop)
+            guard menuRestored, await owned(), sameFocus(),
+                  !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                return result(verified: false, reason: "menu_restoration_failed")
+            }
+            let finalLookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+            guard await owned(), sameFocus() else {
+                return result(verified: false, reason: "navigation_ownership_lost")
+            }
+            observe(finalLookup)
+            // An external appearance during menu acquisition is not an owned successful action.
+            let actedOrUnchanged = before == desired || effects.attempted.contains("mixer_visibility")
+            return result(verified: after == desired && actedOrUnchanged,
+                          reason: after == desired && actedOrUnchanged ? nil : "mixer_visibility_unverified")
+        }
+    }
+
+    static func defaultSetMixerVisibility(params: [String: String], runtime: AXLogicProElements.Runtime) async -> ChannelResult {
+        guard let raw = params["visible"], raw == "true" || raw == "false" else {
+            return .error(HonestContract.encodeStateC(error: .invalidParams,
+                hint: "visible must be a boolean", extras: ["write_attempted": false]))
+        }
+        let stop: @Sendable () -> Bool = {
+            (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
+                || StatePoller.backgroundTickYields(to: Self.readLogicKeyboardFocus(runtime: runtime))
+        }
+        guard !stop(), case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
+              let navigation = OwnedMixerObservationNavigation(window: window, runtime: runtime,
+                  expectedProject: nil, requiresProjectReference: false, referenceIsCurrent: { true }) else {
+            return .error(HonestContract.encodeStateC(error: .readbackUnavailable,
+                hint: "The current project/window custody is unreadable; no action was sent.",
+                extras: ["operation": "view.set_mixer_visibility", "write_attempted": false]))
+        }
+        return await navigation.setFinalVisibility(raw == "true", stoppingWhen: stop)
     }
 
     // MARK: - Shared validation inputs

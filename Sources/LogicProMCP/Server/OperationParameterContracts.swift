@@ -242,7 +242,10 @@ extension OperationRegistry {
                 "level": .unconstrained("read as text with fit as the default", sample: .string("fit")),
                 "direction": .unconstrained("read as text with fit as the default", sample: .string("fit")),
             ], required: [["level", "direction"]]),
-            "navigate.toggle_view": .init(params: ["view": .unconstrained("read as text with mixer as the default", sample: .string("mixer"))],
+            "navigate.toggle_view": .init(params: [
+                "view": .unconstrained("read as text with mixer as the default", sample: .string("mixer")),
+                "visible": .enforced(.boolean, .bool(true)),
+            ],
                                      required: [["view"]]),
 
             // logic_edit
