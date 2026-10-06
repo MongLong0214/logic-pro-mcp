@@ -107,6 +107,7 @@ actor AccessibilityChannel: Channel {
         let renameTrack: @Sendable ([String: String]) -> ChannelResult
         let sortTracks: @Sendable ([String: String]) -> ChannelResult
         let mixerState: @Sendable () -> ChannelResult
+        let mixerStates: (@Sendable (@escaping @Sendable () -> Bool) -> (states: [ChannelStripState]?, yielded: Bool))?
         let channelStrip: @Sendable ([String: String]) -> ChannelResult
         let setMixerValue: @Sendable ([String: String], MixerTarget) -> ChannelResult
         let projectInfo: @Sendable () -> ChannelResult
@@ -144,6 +145,7 @@ actor AccessibilityChannel: Channel {
             renameTrack: @escaping @Sendable ([String: String]) -> ChannelResult,
             sortTracks: @escaping @Sendable ([String: String]) -> ChannelResult = { _ in .error("sortTracks not wired") },
             mixerState: @escaping @Sendable () -> ChannelResult,
+            mixerStates: (@Sendable (@escaping @Sendable () -> Bool) -> (states: [ChannelStripState]?, yielded: Bool))? = nil,
             channelStrip: @escaping @Sendable ([String: String]) -> ChannelResult,
             setMixerValue: @escaping @Sendable ([String: String], MixerTarget) -> ChannelResult,
             projectInfo: @escaping @Sendable () -> ChannelResult,
@@ -179,6 +181,7 @@ actor AccessibilityChannel: Channel {
             self.renameTrack = renameTrack
             self.sortTracks = sortTracks
             self.mixerState = mixerState
+            self.mixerStates = mixerStates
             self.channelStrip = channelStrip
             self.setMixerValue = setMixerValue
             self.projectInfo = projectInfo
@@ -264,6 +267,7 @@ actor AccessibilityChannel: Channel {
                 },
                 sortTracks: { AccessibilityChannel.defaultSortTracks(params: $0, runtime: logicRuntime) },
                 mixerState: { AccessibilityChannel.defaultGetMixerState(runtime: logicRuntime) },
+                mixerStates: { AccessibilityChannel.defaultGetMixerStates(runtime: logicRuntime, stoppingWhen: $0) },
                 channelStrip: { AccessibilityChannel.defaultGetChannelStrip(params: $0, runtime: logicRuntime) },
                 setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime) },
                 projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) },
@@ -303,6 +307,12 @@ actor AccessibilityChannel: Channel {
 
     func readTrackStates() -> [TrackState]? {
         runtime.trackStates()
+    }
+
+    func readMixerStates(stoppingWhen stop: @escaping @Sendable () -> Bool) -> (states: [ChannelStripState]?, yielded: Bool, provided: Bool) {
+        guard let reader = runtime.mixerStates else { return (nil, false, false) }
+        let result = reader(stop)
+        return (result.states, result.yielded, true)
     }
 
     /// Request-owned, read-only population collection. The bound window and physical rows,
@@ -391,7 +401,7 @@ actor AccessibilityChannel: Channel {
                let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: found, runtime: logic.ax) {
                 mixer = found
                 stripElements = enumeration.strips
-                strips = Self.readChannelStrips(from: enumeration.strips, runtime: logic, stoppingWhen: stop)
+                strips = Self.readChannelStrips(from: enumeration.strips, runtime: logic, window: window, mixer: found, stoppingWhen: stop)
             }
             try check()
             return Read(title: title, document: document, documentReadable: documentReadable,
@@ -455,6 +465,13 @@ actor AccessibilityChannel: Channel {
                 && sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] })
                 && sameElements(before.stripElements, after.stripElements)
                 && before.tracks?.map(\.liveIdentityBacked) == after.tracks?.map(\.liveIdentityBacked)
+                && zip(before.strips ?? [], after.strips ?? []).allSatisfy {
+                    switch ($0.physicalBinding, $1.physicalBinding) {
+                    case (nil, nil): return true
+                    case (.some(let a), .some(let b)): return a.matches(b)
+                    default: return false
+                    }
+                }
                 && sameValues(before.tracks, after.tracks) && sameValues(before.strips, after.strips)
             let project = before.title.map {
                 ProjectInfo(name: Self.projectName(fromWindowTitle: $0), filePath: path, source: "ax_request_read")

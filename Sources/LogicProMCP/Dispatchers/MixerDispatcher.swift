@@ -50,6 +50,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             let index: Int
             let resolvedReference: TargetReference?
             let resolvedFingerprint: String?
+            let physical: AXMixerStripBinding.Binding?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -67,6 +68,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 index = resolved.index
                 resolvedReference = resolved.reference
                 resolvedFingerprint = resolved.binding?.observedFingerprint
+                physical = resolved.binding?.physicalMixerStrip
             case .failure(let result):
                 return result
             }
@@ -82,10 +84,12 @@ struct MixerDispatcher: OperationTraceDispatching {
             }
             let traceID = await startTraceIfEnabled(command: command)
             let routed = await withWriteBoundaryArmed(traceID) {
-                await routedTextResult(router, operation: "mixer.set_volume", params: [
+                await AXMixerStripBinding.$current.withValue(physical) {
+                    await routedTextResult(router, operation: "mixer.set_volume", params: [
                     "index": String(index),
                     "volume": String(volume),
-                ])
+                    ])
+                }
             }
             let result = TargetRefResolver.addEvidence(
                 resolvedReference,
@@ -99,6 +103,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             let index: Int
             let resolvedReference: TargetReference?
             let resolvedFingerprint: String?
+            let physical: AXMixerStripBinding.Binding?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -116,6 +121,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 index = resolved.index
                 resolvedReference = resolved.reference
                 resolvedFingerprint = resolved.binding?.observedFingerprint
+                physical = resolved.binding?.physicalMixerStrip
             case .failure(let result):
                 return result
             }
@@ -131,10 +137,12 @@ struct MixerDispatcher: OperationTraceDispatching {
             }
             let traceID = await startTraceIfEnabled(command: command)
             let routed = await withWriteBoundaryArmed(traceID) {
-                await routedTextResult(router, operation: "mixer.set_pan", params: [
+                await AXMixerStripBinding.$current.withValue(physical) {
+                    await routedTextResult(router, operation: "mixer.set_pan", params: [
                     "index": String(index),
                     "pan": String(pan),
-                ])
+                    ])
+                }
             }
             let result = TargetRefResolver.addEvidence(
                 resolvedReference,
@@ -159,6 +167,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             let index: Int
             let resolvedReference: TargetReference?
             let resolvedFingerprint: String?
+            let physical: AXMixerStripBinding.Binding?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -177,6 +186,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 index = resolved.index
                 resolvedReference = resolved.reference
                 resolvedFingerprint = resolved.binding?.observedFingerprint
+                physical = resolved.binding?.physicalMixerStrip
             case .failure(let result):
                 return result
             }
@@ -201,7 +211,9 @@ struct MixerDispatcher: OperationTraceDispatching {
             routedParams["index"] = String(index)
             let traceID = await startTraceIfEnabled(command: command)
             let routed = await withWriteBoundaryArmed(traceID) {
-                await routedTextResult(router, operation: "mixer.set_output_verified", params: routedParams)
+                await AXMixerStripBinding.$current.withValue(physical) {
+                    await routedTextResult(router, operation: "mixer.set_output_verified", params: routedParams)
+                }
             }
             let result = TargetRefResolver.addEvidence(
                 resolvedReference,

@@ -32,18 +32,38 @@ extension AccessibilityChannel {
         return encodeResult(states)
     }
 
+    /// Typed poll transport retains the same native extraction's physical observations.
+    static func defaultGetMixerStates(
+        runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
+    ) -> (states: [ChannelStripState]?, yielded: Bool) {
+        if stop() { return (nil, true) }
+        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
+              case .found(let mixer) = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime),
+              let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: mixer, runtime: runtime.ax)
+        else { return (nil, false) }
+        let states = readChannelStrips(from: enumeration.strips, runtime: runtime, window: window, mixer: mixer, stoppingWhen: stop)
+        return (states, stop())
+    }
+
     /// The full and request-owned readers share extraction from an already-bound population.
     static func readChannelStrips(
-        from strips: [AXUIElement], runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
+        from strips: [AXUIElement], runtime: AXLogicProElements.Runtime,
+        window: AXUIElement? = nil, mixer: AXUIElement? = nil, stoppingWhen stop: () -> Bool
     ) -> [ChannelStripState]? {
         var channelStrips: [ChannelStripState] = []
+        let document: String?
+        if let window, case .success(.some(let observed)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
+           let url = URL(string: observed), url.isFileURL, url.path.hasPrefix("/"),
+           url.host == nil || url.host == "" || url.host == "localhost" {
+            document = observed
+        } else { document = nil }
 
         for (index, strip) in strips.enumerated() {
             if stop() { return nil }
             let volume = AXLogicProElements.findVolumeFader(in: strip, runtime: runtime.ax)
                 .flatMap { AXValueExtractors.extractLogicMixerFaderValue($0, runtime: runtime.ax) }
                 ?? 0.0
-            let pan = AXLogicProElements.findPanControl(in: strip, runtime: runtime.ax)
+            let pan = AXLogicProElements.findPanControl(in: strip, runtime: runtime.ax, requireUnique: window != nil && mixer != nil)
                 .flatMap { AXValueExtractors.extractCenteredSliderValue($0, runtime: runtime.ax) }
                 ?? 0.0
 
@@ -52,6 +72,9 @@ extension AccessibilityChannel {
                 volume: volume,
                 pan: pan
             )
+            if let window, let mixer, let document {
+                state.physicalBinding = .init(window: window, mixer: mixer, strip: strip, document: document)
+            }
             readStripName(of: strip, into: &state, runtime: runtime)
             readPluginChain(of: strip, into: &state, runtime: runtime)
             // #291: `output` has been on this model since it was written and nothing ever set it, so
@@ -163,8 +186,17 @@ extension AccessibilityChannel {
             return .error("Missing 'value' or '\(label)' parameter")
         }
         let operation = target == .volume ? "mixer.set_volume" : "mixer.set_pan"
+        let physical = AXMixerStripBinding.current
+        let physicalIndex = physical?.currentIndex(runtime: runtime)
+        if physical != nil, physicalIndex == nil {
+            return .error(HonestContract.encodeStateC(error: .staleTargetReference,
+                hint: "The referenced physical Mixer strip is no longer in its observed project/window.",
+                extras: ["operation": operation, "write_attempted": false]))
+        }
+        let position = physicalIndex ?? index
+        let positionKey = physical == nil ? "track" : "mixer_strip_index"
         let targetIdentity: [String: Any] = [
-            "track_index": index,
+            (physical == nil ? "track_index" : "mixer_strip_index"): position,
             "control": label,
         ]
 
@@ -178,11 +210,23 @@ extension AccessibilityChannel {
         // not jump to the written value (`set 0.5` on a 0.76 fader looked unmoved),
         // but on Logic 12.3.1 it moved one raw unit toward it, which the fine phase uses.
         let slider: AXUIElement?
-        switch target {
-        case .volume: slider = AXLogicProElements.findTrackHeaderVolumeFader(at: index, runtime: runtime)
-        case .pan:    slider = AXLogicProElements.findTrackHeaderPanControl(at: index, runtime: runtime)
+        if let physical {
+            switch target {
+            case .volume: slider = AXLogicProElements.findVolumeFader(in: physical.strip, runtime: runtime.ax)
+            case .pan: slider = AXLogicProElements.findPanControl(in: physical.strip, runtime: runtime.ax, requireUnique: true)
+            }
+        } else {
+            switch target {
+            case .volume: slider = AXLogicProElements.findTrackHeaderVolumeFader(at: index, runtime: runtime)
+            case .pan: slider = AXLogicProElements.findTrackHeaderPanControl(at: index, runtime: runtime)
+            }
         }
         guard let slider else {
+            if physical != nil {
+                return .error(HonestContract.encodeStateC(error: .elementNotFound,
+                    hint: "The referenced physical Mixer strip exposes no \(label) control.",
+                    extras: ["operation": operation, "write_attempted": false]))
+            }
             // #543: this refusal used to say only "cannot locate", which cannot be acted on by the
             // person who hit it and cannot be diagnosed by anyone who cannot reproduce it. Three steps
             // can fail here and they need different fixes: the track-header LIST was not found at all,
@@ -257,23 +301,37 @@ extension AccessibilityChannel {
               range.max > range.min else {
             return .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: "\(label) slider for track \(index) exposes no AX range",
+                hint: "\(label) slider for \(physical == nil ? "track" : "Mixer strip") \(position) exposes no AX range",
                 extras: [
-                    "operation": operation, "track": index, "requested": value,
+                    "operation": operation, positionKey: position, "requested": value,
                     "target_identity": targetIdentity, "verify_source": "ax_slider",
                 ]
             ))
         }
 
+        func controlIsCurrent() -> Bool {
+            guard let physical else { return true }
+            guard physical.currentIndex(runtime: runtime) != nil else { return false }
+            let current: AXUIElement?
+            switch target {
+            case .volume: current = AXLogicProElements.findVolumeFader(in: physical.strip, runtime: runtime.ax)
+            case .pan: current = AXLogicProElements.findPanControl(in: physical.strip, runtime: runtime.ax, requireUnique: true)
+            }
+            return current.map { CFEqual($0, slider) } == true
+        }
+
         // #973: retried like `readSlider` below (#685). This read decides State A versus State B
         // too, and one dropped read here reported an exact landing as `readback_unavailable`.
         func readContract() -> Double? {
+            guard controlIsCurrent() else { return nil }
             var wait: UInt32 = 25_000
             for _ in 0..<4 {
                 let value: Double?
                 switch target {
                 case .volume: value = AXValueExtractors.extractLogicMixerFaderValue(slider, runtime: runtime.ax)
-                case .pan:    value = AXValueExtractors.headerPanContract(slider, range: range, runtime: runtime.ax)
+                case .pan: value = physical == nil
+                    ? AXValueExtractors.headerPanContract(slider, range: range, runtime: runtime.ax)
+                    : AXValueExtractors.extractCenteredSliderValue(slider, runtime: runtime.ax)
                 }
                 if let value { return value }
                 usleep(wait)
@@ -289,9 +347,13 @@ extension AccessibilityChannel {
         case .volume:
             targetRaw = AXValueExtractors.logicMixerFaderContractToRaw(value, range: range)
         case .pan:
-            let center = (range.min + range.max) / 2.0
-            let half = (range.max - range.min) / 2.0
-            targetRaw = center + min(max(value, -1.0), 1.0) * half
+            if physical != nil, range.min < 0, range.max > 0 {
+                targetRaw = value < 0 ? value * abs(range.min) : value * range.max
+            } else {
+                let center = (range.min + range.max) / 2.0
+                let half = (range.max - range.min) / 2.0
+                targetRaw = center + min(max(value, -1.0), 1.0) * half
+            }
         }
 
         // Closed-loop AXIncrement/AXDecrement nudge toward `targetRaw`. Stops on
@@ -308,6 +370,7 @@ extension AccessibilityChannel {
         // an increment is a rail OR a read that has not caught up; those are indistinguishable at
         // that timescale, so stagnation is confirmed against a longer settle before it is believed.
         func readSlider() -> Double? {
+            guard controlIsCurrent() else { return nil }
             var wait: UInt32 = 25_000
             for _ in 0..<4 {
                 if let value = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) {
@@ -327,6 +390,7 @@ extension AccessibilityChannel {
         while let cur = current, steps < maxSteps {
             if abs(cur - targetRaw) < 0.5 { break }
             let goingUp = cur < targetRaw
+            guard controlIsCurrent() else { break }
             _ = AXHelpers.performAction(slider, goingUp ? kAXIncrementAction : kAXDecrementAction, runtime: runtime.ax)
             steps += 1
             usleep(25_000)
@@ -339,6 +403,7 @@ extension AccessibilityChannel {
             if crossed {
                 // Land on whichever of cur/next is closer to the target.
                 if abs(cur - targetRaw) < abs(next - targetRaw) {
+                    guard controlIsCurrent() else { break }
                     _ = AXHelpers.performAction(slider, goingUp ? kAXDecrementAction : kAXIncrementAction, runtime: runtime.ax)
                     usleep(25_000)
                 }
@@ -358,6 +423,7 @@ extension AccessibilityChannel {
         let detentRawStep = 10
         let maxFineSteps = detentRawStep
         while rawUnitRange, fineSteps < maxFineSteps, let cur = readSlider(), cur.rounded() != targetRaw.rounded() {
+            guard controlIsCurrent() else { break }
             guard AXHelpers.setAttribute(
                 slider, kAXValueAttribute as String, NSNumber(value: targetRaw), runtime: runtime.ax
             ) else { break }
@@ -382,6 +448,11 @@ extension AccessibilityChannel {
         // loop was fixed — a run that reached its target still came back State B here.
         let observedRaw = readSlider()
         let observedAfter = readContract()
+        if physical != nil, steps == 0, fineSteps == 0, !controlIsCurrent() {
+            return .error(HonestContract.encodeStateC(error: .staleTargetReference,
+                hint: "The referenced physical control changed before actuation; nothing was written.",
+                extras: ["operation": operation, "write_attempted": false]))
+        }
         // Judged on the final read when there is one. When that read fails, the loop's own read is
         // the only witness left, and without it a write seen moving away was reported as a bare
         // `readback_unavailable`, as if nothing had been observed.
@@ -399,7 +470,7 @@ extension AccessibilityChannel {
 
         var baseExtras: [String: Any] = [
             "operation": operation,
-            "track": index,
+            positionKey: position,
             "control": label,
             "requested": value,
             "target_identity": targetIdentity,
