@@ -3592,16 +3592,16 @@
    "rationale": "The All mode radio button in the Mixer-own toolbar; does not itself prove whole population coverage.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "mixerPresentationSingle": {
@@ -3620,15 +3620,15 @@
    "rationale": "The Single mode radio button in the Mixer-own toolbar; read-only presentation witness.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -3726,7 +3726,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -3770,11 +3770,11 @@
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
+    "es-ES": "derived",
+    "fr-FR": "derived",
     "it-IT": "derived",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -3792,13 +3792,13 @@
    "rationale": "Mixer-own instrument type-filter checkbox description.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
+    "ja-JP": "derived",
+    "de-DE": "derived",
     "es-ES": "derived",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
+    "fr-FR": "derived",
+    "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
@@ -3835,16 +3835,16 @@
    "rationale": "Mixer-own combined master/VCA type-filter checkbox description.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "mixerTypeFilterOutput": {

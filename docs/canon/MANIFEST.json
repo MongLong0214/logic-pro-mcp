@@ -113,7 +113,7 @@
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "ledger/casefold.tsv": "54f66ebe562b13118c1335f38a7cd8b4dcc54f890ffdb3941fffbb6665f23866",
+    "ledger/casefold.tsv": "78ee9969c251d83238b9388ba44555c567f1e020d65b9ecc2b410defab05f1b4",
     "ledger/presence.tsv": "be816c3fa6ec5483e65210ea19027165406ebcddf202de3f985e36488de0cf72"
   },
   "extractor_version": 3,
@@ -122,42 +122,42 @@
       "-": 16
     },
     "niblabels": {
-      "-": 36,
-      "de": 28,
+      "-": 37,
+      "de": 29,
       "en": 35,
-      "es": 29,
-      "fr": 31,
-      "it": 31,
-      "ja": 35,
-      "ko": 40,
-      "pt": 31,
-      "zh_CN": 35,
+      "es": 30,
+      "fr": 32,
+      "it": 32,
+      "ja": 37,
+      "ko": 41,
+      "pt": 32,
+      "zh_CN": 36,
       "zh_TW": 33
     },
     "nibstrings": {
-      "en": 98
+      "en": 103
     },
     "quickhelp": {
-      "de": 49,
-      "en": 62,
-      "es": 50,
+      "de": 51,
+      "en": 64,
+      "es": 52,
       "fr": 5,
-      "ja": 61,
-      "ko": 65,
-      "zh_CN": 39
+      "ja": 64,
+      "ko": 67,
+      "zh_CN": 40
     },
     "strings": {
       "-": 2,
-      "de": 183,
-      "en": 194,
-      "es": 185,
-      "fr": 174,
-      "it": 180,
-      "ja": 190,
-      "ko": 193,
-      "pt": 190,
-      "zh_CN": 173,
-      "zh_TW": 165
+      "de": 188,
+      "en": 199,
+      "es": 193,
+      "fr": 180,
+      "it": 185,
+      "ja": 194,
+      "ko": 196,
+      "pt": 196,
+      "zh_CN": 178,
+      "zh_TW": 167
     }
   },
   "ledger_presence_entries": {
