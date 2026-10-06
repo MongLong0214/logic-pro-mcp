@@ -374,29 +374,22 @@ extension ResourceHandlers {
             fileReader: .unavailable
         )
         let strips = capture.channelStrips
-        let tracks = TrackReferenceIssuance.liveInventory(capture.tracks)
         let conn = await cache.getMCUConnection()
         let fetchedAt = capture.mixerFetchedAt
         let axOccluded = capture.before.axOccluded
         let stripsJSON: String
         var project = RoutingProjectBinding.referencesUnavailable
-        if let targetRegistry, let targetSnapshot = capture.targetSnapshot {
+        if capture.targetSnapshot != nil {
             // The mixer issues through the same path as logic://tracks, so reading it first binds
             // the same trk_ references rather than finding none (#291 R0).
-            guard let issuedReferences = capture.issued else {
+            guard capture.issued != nil, capture.mixerReferences != nil else {
                 throw MCPError.internalError("mixer target snapshot became stale during resource emission")
             }
             var payload: [[String: Any]] = []
             payload.reserveCapacity(strips.count)
-            for strip in strips {
+            for (row, strip) in strips.enumerated() {
                 var object = jsonObject(strip) as? [String: Any] ?? [:]
-                if let reference = try await mixerStripReference(
-                    for: strip,
-                    tracks: tracks,
-                    issued: issuedReferences,
-                    registry: targetRegistry,
-                    snapshot: targetSnapshot
-                ) {
+                if let reference = capture.mixerReference(at: row) {
                     object["mixer_strip_ref"] = reference.rawValue
                 }
                 payload.append(object)
@@ -728,8 +721,7 @@ extension ResourceHandlers {
         // the collection. Reading this first must not require a preliminary public resource read.
         let capture = await SessionPopulationObservation.capture(
             cache: cache, targetRegistry: targetRegistry, fileReader: .unavailable)
-        let targetSnapshot = capture.targetSnapshot
-        guard let strip = capture.channelStrips.first(where: { $0.trackIndex == index }) else {
+        guard let row = capture.channelStrips.firstIndex(where: { $0.trackIndex == index }) else {
             // Mixer strips are keyed by `trackIndex` (not array position), so the
             // valid set is the actual trackIndex values — possibly non-contiguous.
             return indexOutOfRangeResult(
@@ -739,6 +731,7 @@ extension ResourceHandlers {
                 collection: "channel strip"
             )
         }
+        let strip = capture.channelStrips[row]
         // B2 (#11): give the single-strip read the same envelope + provenance as
         // logic://mixer, so a harness reading an individual strip gets the same
         // freshness signal instead of a bare, undated object.
@@ -748,19 +741,12 @@ extension ResourceHandlers {
         let isoPart = (iso as? String).map { "\"\($0)\"" } ?? "null"
         let dataSource = mixerDataSource(fetchedAt: fetchedAt)
         let stripJSON: String
-        if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
+        if capture.targetSnapshot != nil {
             var object = jsonObject(strip) as? [String: Any] ?? [:]
-            let tracks = TrackReferenceIssuance.liveInventory(capture.tracks)
-            guard let issued = capture.issued else {
+            guard capture.issued != nil, capture.mixerReferences != nil else {
                 throw MCPError.internalError("mixer target snapshot became stale during resource emission")
             }
-            if let reference = try await mixerStripReference(
-                for: strip,
-                tracks: tracks,
-                issued: issued,
-                registry: targetRegistry,
-                snapshot: targetSnapshot
-            ) {
+            if let reference = capture.mixerReference(at: row) {
                 object["mixer_strip_ref"] = reference.rawValue
             }
             stripJSON = encodeJSONObject(object)
@@ -773,31 +759,6 @@ extension ResourceHandlers {
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
         )
-    }
-
-    /// The typed AX strip observation alone supplies physical authority. A JSON/MCU ordinal,
-    /// or an issued Arrange track at that ordinal, cannot manufacture a strip reference.
-    private static func mixerStripReference(
-        for strip: ChannelStripState,
-        tracks: [TrackState],
-        issued: IssuedTrackReferences,
-        registry: TargetRegistry,
-        snapshot: TargetRegistrySnapshot
-    ) async throws -> TargetReference? {
-        guard let physical = strip.physicalBinding else {
-            return nil
-        }
-        let descriptor = TargetDescriptor(trackIndex: strip.trackIndex, trackName: strip.name ?? "")
-        guard let reference = await registry.bind(
-            kind: .mixerStrip,
-            descriptor: descriptor,
-            fingerprint: descriptor.fingerprint,
-            snapshot: snapshot,
-            physicalMixerStrip: physical
-        ) else {
-            throw MCPError.internalError("mixer target snapshot became stale during resource emission")
-        }
-        return reference
     }
 
     /// v3.1.8 (Issue #7) — markers wrapped in cache envelope with source attribution.

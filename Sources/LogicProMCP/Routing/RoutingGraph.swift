@@ -4,6 +4,8 @@ let routingPhysicalSendSlots = 0..<12
 
 enum RoutingNodeKind: String, Codable, Sendable {
     case track
+    /// An independently observed Mixer strip; its Arrange association/type remains unknown.
+    case physicalStrip = "physical_strip"
     case aux
     case bus
     case input
