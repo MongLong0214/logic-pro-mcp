@@ -85,6 +85,12 @@ extension ProjectSessionAudit {
         let destination: IntentMainOutput
     }
 
+    struct IntentSort: Equatable, Sendable {
+        let criterion: TrackSortCriterion
+        let expectedOrder: [String]
+        let inverseCriterion: TrackSortCriterion
+    }
+
     /// Only `parseIntentPolicy` constructs this, so `assessIntent` never sees an unvalidated policy.
     /// `projectRef`, when present, is the project the policy was written for.
     struct IntentPolicy: Equatable, Sendable {
@@ -97,6 +103,7 @@ extension ProjectSessionAudit {
         /// new aux that reads it; `.keep` approves the observed receivers; `.noReceiver` (wire `none`) says nothing is meant to read it (a sidechain-only bus).
         let receivers: [Int: IntentReceiver]
         let mixerVisible: Bool?
+        let trackSort: IntentSort?
 
         fileprivate init(
             projectRef: TargetReference?,
@@ -104,7 +111,8 @@ extension ProjectSessionAudit {
             roles: [IntentRole],
             outputs: [IntentOutput],
             receivers: [Int: IntentReceiver] = [:],
-            mixerVisible: Bool? = nil
+            mixerVisible: Bool? = nil,
+            trackSort: IntentSort? = nil
         ) {
             self.projectRef = projectRef
             self.targets = targets
@@ -112,6 +120,7 @@ extension ProjectSessionAudit {
             self.outputs = outputs
             self.receivers = receivers
             self.mixerVisible = mixerVisible
+            self.trackSort = trackSort
         }
     }
 
@@ -139,6 +148,8 @@ extension ProjectSessionAudit {
         case conflictingOutputs(subject: String, outputs: [IntentMainOutput])
         case busBelowOne(path: String, value: Int)
         case duplicateReceiver(bus: Int)
+        case unsupportedSortCriterion(path: String, value: String)
+        case invalidSortOrder(path: String)
 
         /// The deterministic form the rejection list is sorted by.
         var sortKey: String {
@@ -175,6 +186,10 @@ extension ProjectSessionAudit {
                 return "bus_below_one \(path) \(value)"
             case .duplicateReceiver(let bus):
                 return "duplicate_receiver bus \(bus)"
+            case .unsupportedSortCriterion(let path, let value):
+                return "unsupported_sort_criterion \(path) \(value)"
+            case .invalidSortOrder(let path):
+                return "invalid_sort_order \(path)"
             }
         }
     }
@@ -400,10 +415,16 @@ extension ProjectSessionAudit {
         let outputs = parseOutputs(object, into: &rejections)
         let receivers = parseReceivers(object, into: &rejections)
         var mixerVisible: Bool?
+        var trackSort: IntentSort?
         if let raw = object["presentation"] {
             if let presentation = raw.objectValue {
-                rejectUnknownKeys(presentation, allowed: ["mixer_visible"], path: "policy.presentation", into: &rejections)
-                mixerVisible = requiredBool(presentation, key: "mixer_visible", path: "policy.presentation", into: &rejections)
+                rejectUnknownKeys(presentation, allowed: ["mixer_visible", "sort"], path: "policy.presentation", into: &rejections)
+                if presentation["mixer_visible"] != nil || presentation["sort"] == nil {
+                    mixerVisible = requiredBool(presentation, key: "mixer_visible", path: "policy.presentation", into: &rejections)
+                }
+                if let sort = presentation["sort"] {
+                    trackSort = parseIntentSort(sort, into: &rejections)
+                }
             } else {
                 rejections.append(.wrongType(path: "policy.presentation", expected: "object"))
             }
@@ -423,8 +444,44 @@ extension ProjectSessionAudit {
             roles: roles,
             outputs: outputs,
             receivers: receivers,
-            mixerVisible: mixerVisible
+            mixerVisible: mixerVisible,
+            trackSort: trackSort
         ))
+    }
+
+    private static func parseIntentSort(_ value: Value, into rejections: inout [IntentPolicyRejection]) -> IntentSort? {
+        let path = "policy.presentation.sort"
+        guard let object = value.objectValue else {
+            rejections.append(.wrongType(path: path, expected: "object"))
+            return nil
+        }
+        rejectUnknownKeys(object, allowed: ["criterion", "expected_order", "inverse_criterion"], path: path, into: &rejections)
+        func criterion(_ key: String) -> TrackSortCriterion? {
+            guard let raw = requiredString(object, key: key, path: path, into: &rejections) else { return nil }
+            guard let criterion = TrackSortCriterion(rawValue: raw) else {
+                rejections.append(.unsupportedSortCriterion(path: "\(path).\(key)", value: raw))
+                return nil
+            }
+            return criterion
+        }
+        let forward = criterion("criterion")
+        let inverse = criterion("inverse_criterion")
+        guard let rawOrder = object["expected_order"] else {
+            rejections.append(.missingKey(path: path, key: "expected_order"))
+            return nil
+        }
+        guard let values = rawOrder.arrayValue, values.allSatisfy({ $0.stringValue != nil }) else {
+            rejections.append(.wrongType(path: "\(path).expected_order", expected: "array of track references"))
+            return nil
+        }
+        let references = values.compactMap(\.stringValue)
+        guard !references.isEmpty, Set(references).count == references.count,
+              references.allSatisfy({ $0.hasPrefix(trackReferencePrefix) }) else {
+            rejections.append(.invalidSortOrder(path: "\(path).expected_order"))
+            return nil
+        }
+        guard let forward, let inverse else { return nil }
+        return .init(criterion: forward, expectedOrder: references, inverseCriterion: inverse)
     }
 
     /// Optional `receivers`: `[{"bus": n >= 1, "aux": "new" | "keep" | "none"}]`, at most one per bus.
