@@ -35,6 +35,9 @@ struct TransportState: Sendable, Codable {
     /// Nil means the metronome control was absent or its AX value could not be read.
     var isMetronomeEnabled: Bool? = nil
     var tempo: Double = 120.0
+    /// The control bar's raw key-signature display value (#1117), not a parsed musical key.
+    /// Nil means absent, ambiguous or unreadable; historical payloads decode without this field.
+    var keySignature: String? = nil
     /// A display value only. Its legacy default is not an AX observation; consult
     /// `positionReadback` before treating it as evidence of a landed position.
     var position: String = "1.1.1.1"

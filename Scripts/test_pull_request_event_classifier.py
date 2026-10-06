@@ -1,25 +1,13 @@
 #!/usr/bin/env python3
-"""The classifier's decisions, and the workflow wiring that makes them safe.
+"""The classifier's decisions and the narrow workflow wiring around them.
 
-Two halves, and the second is the load-bearing one. The classifier is twelve lines and easy to get
-right; what is easy to get WRONG is the workflow, because the obvious way to skip a job -- an `if:`
-and nothing else -- publishes a `skipped` check run under the job's own name, and GitHub counts a
-skipped required check as satisfied. That is a metadata edit silently supplying a passing `compile`
-over a real failure on the same commit, and no assertion about `classify()` would notice it.
+`ci.yml` deliberately does not subscribe to `edited`: metadata-only code-CI runs leave the branch
+ruleset's newest suite without its required contexts. Retarget validation instead belongs to
+`pr-policy.yml`, which runs `review_edit()` with `--refuse-unvalidated-edit`.
 
-So these cases read `.github/workflows/ci.yml` and assert that every job whose name is a required
-context, or which the required context depends on, carries BOTH the condition and a non-canonical
-display name for the skipped case.
-
-Since #960 there is a third half, and it is where the rule now BITES. `ci.yml` no longer subscribes
-to `edited`, because a metadata-only run of it still creates a check suite and the ruleset reads
-the newest suite for an app -- so a description edit made the three code contexts read as
-`expected` and refused the merge. The retarget that subscription existed for is refused instead by
-`review_edit()`, which `pr-policy.yml` runs as `--refuse-unvalidated-edit`. `RetargetRefusal` below
-measures both sides of that: the decision, and the fact that the body gate actually calls it.
-
-Comment lines are stripped before any of that is matched. A rule about what a workflow RUNS that a
-comment can satisfy is a rule about prose.
+The code workflow has fixed check names and no event classifier job. Its macOS offline guards run
+independently of Swift tests, and the aggregate reports either failure. Comment lines are stripped
+before workflow assertions: comments must not satisfy a rule about executed configuration.
 """
 import json
 import os
@@ -42,15 +30,9 @@ _spec.loader.exec_module(classifier)
 
 CI = os.path.join(REPO, ".github", "workflows", "ci.yml")
 
-#: The jobs the branch ruleset requires, plus the ones the required aggregate depends on. Every one
-#: of them must be unable to publish its canonical name for a metadata-only edit.
-GATED_JOBS = ("guards", "compile", "test", "formula", "build")
-
-#: The contexts the branch ruleset requires (re-read from the API 2026-09-21). A name a skipped job
-#: could publish must never be one of these.
-REQUIRED_CONTEXTS = ("build", "compile", "test", "pr-policy")
-
-CONDITION = "needs.classify.outputs.code_validation_required == 'true'"
+REQUIRED_CONTEXTS = ("build", "compile", "test")
+AGGREGATE_JOBS = ("guards", "offline-guards", "compile", "test", "formula")
+SETUP_PYTHON_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
 
 
 def executable_lines(text: str):
@@ -198,103 +180,83 @@ class ClassifierEntryPoint(unittest.TestCase):
 
 
 class WorkflowWiring(unittest.TestCase):
-    """E04, E05, E10 -- the half a `classify()` assertion cannot see."""
+    """The fixed code-CI schedule and its aggregate."""
 
     def setUp(self):
         self.text = workflow_text()
         self.executable = "\n".join(executable_lines(self.text))
         self.jobs = job_blocks(self.text)
 
-    def test_every_gated_job_is_conditional_on_the_classifier(self):
-        for job in GATED_JOBS:
+    def test_code_ci_has_fixed_jobs_without_event_classification(self):
+        self.assertNotIn("classify", self.jobs)
+        self.assertNotIn("code_validation_required", self.executable)
+        for job in (*AGGREGATE_JOBS, "build"):
             with self.subTest(job=job):
-                self.assertIn(job, self.jobs, f"`{job}` is not a job in ci.yml")
-                block = self.jobs[job]
-                condition = re.search(r"^    if:(.*)$", block, re.M)
-                self.assertIsNotNone(condition, f"`{job}` has no job-level `if:`")
-                self.assertIn(CONDITION, condition.group(1),
-                              f"`{job}`'s `if:` does not consult the classifier")
+                self.assertIn(job, self.jobs)
+                self.assertRegex(self.jobs[job], rf"(?m)^    name: {job}$")
 
-    def test_every_gated_job_publishes_a_non_canonical_name_when_it_skips(self):
-        # This is the case that fails if somebody "simplifies" the workflow by deleting the `name:`
-        # expressions: a skipped job would then publish `compile`, `test` or `build`, and GitHub
-        # counts a skipped required check as satisfied.
-        for job in GATED_JOBS:
+    def test_independent_offline_guards_use_pinned_python_and_stream_logs(self):
+        guards = self.jobs["offline-guards"]
+        self.assertRegex(guards, r"(?m)^    runs-on: macos-15$")
+        self.assertIn(f"actions/setup-python@{SETUP_PYTHON_SHA}", guards)
+        self.assertIn("python-version: '3.11'", guards)
+        self.assertIn("cache-dependency-path: Scripts/requirements-ci.txt", guards)
+        self.assertIn('python3 -m venv "$RUNNER_TEMP/logic-pro-ci-venv"', guards)
+        self.assertIn('source "$RUNNER_TEMP/logic-pro-ci-venv/bin/activate"', guards)
+        self.assertNotIn(".venv-ci", guards)
+        self.assertIn("python3 -m pip install", guards)
+        self.assertIn("-r Scripts/requirements-ci.txt", guards)
+        self.assertIn("set -o pipefail", guards)
+        self.assertIn("python3 -u Scripts/run-repo-guards.py 2>&1 | tee guard-run.log", guards)
+        self.assertNotIn("continue-on-error", guards)
+        self.assertNotIn("run-repo-guards.py", self.jobs["test"])
+        self.assertIn("run-helper-suites.py", guards)
+
+    def test_swift_cache_excludes_build_products(self):
+        for job in ("compile", "test"):
             with self.subTest(job=job):
                 block = self.jobs[job]
-                name = re.search(r"^    name:(.*)$", block, re.M)
-                self.assertIsNotNone(name, f"`{job}` has no job-level `name:`")
-                value = name.group(1)
-                self.assertIn(CONDITION, value,
-                              f"`{job}`'s display name does not depend on the classifier")
-                literals = re.findall(r"'([^']*)'", value)
-                # `&& <a> || <b>`: the first literal after the condition is the canonical name and
-                # the second is what a skipped job publishes.
-                canonical = [lit for lit in literals if lit == job]
-                self.assertEqual(len(canonical), 1,
-                                 f"`{job}` does not name itself exactly once in its `name:`")
-                others = [lit for lit in literals if lit != job and lit not in ("true", "false")]
-                self.assertTrue(others, f"`{job}` has no non-canonical name for the skipped case")
-                for other in others:
-                    self.assertNotIn(other, REQUIRED_CONTEXTS,
-                                     f"`{job}`'s skipped name `{other}` IS a required context")
-                    self.assertIn("not a code gate", other,
-                                  f"`{job}`'s skipped name `{other}` does not say it is not a gate")
+                cache = re.search(r"(?ms)      - name: Cache SwiftPM downloads\n.*?(?=      - name:|\Z)", block)
+                self.assertIsNotNone(cache)
+                cache_block = cache.group(0)
+                self.assertIn("~/Library/Caches/org.swift.swiftpm", cache_block)
+                self.assertNotIn(".build", cache_block)
+                self.assertIn("runner.arch", cache_block)
+                self.assertIn("Package.resolved", cache_block)
 
-    def test_the_aggregate_depends_on_the_classifier_and_checks_its_result(self):
+    def test_the_aggregate_requires_every_gate_and_checks_success(self):
         build = self.jobs["build"]
         needs = re.search(r"^    needs:\s*\[([^\]]*)\]", build, re.M)
         self.assertIsNotNone(needs)
         listed = [item.strip() for item in needs.group(1).split(",") if item.strip()]
-        self.assertIn("classify", listed)
-        for job in ("guards", "compile", "test", "formula"):
-            self.assertIn(job, listed)
-        # Every need is compared against `success` by name. A need the aggregate forgets is a job
-        # that can go red while the only required context stays green.
+        self.assertEqual(set(listed), set(AGGREGATE_JOBS))
+        self.assertNotIn("classify", listed)
         for job in listed:
             with self.subTest(job=job):
-                self.assertRegex(build, rf'\[ "\${job.upper()}" = "success" \]')
+                self.assertRegex(build, rf'\[ "\${job.upper().replace("-", "_")}" = "success" \]')
 
     def test_the_aggregate_still_refuses_to_decide_a_cancelled_run(self):
-        # A cancelled run has no verdict to give, and `!cancelled()` is what stops it publishing
-        # one. Without it a superseded run leaves a red `build` on top of a healthy one.
         self.assertRegex(self.jobs["build"], r"(?m)^    if:.*!cancelled\(\)")
 
-    def _concurrency_group(self):
-        group = re.search(r"^concurrency:\n(?:.*\n)*?\s*group:(.*(?:\n\s{4,}.*)*)",
-                          self.executable, re.M)
-        self.assertIsNotNone(group, "ci.yml has no concurrency group")
-        return " ".join(group.group(1).split())
-
     def test_the_body_check_is_no_longer_in_the_code_workflow(self):
-        # It moved to the separately required `pr-policy` context. Leaving a copy here is what made
-        # a description edit restart a macOS test job.
         self.assertNotIn("--text", self.executable)
         self.assertNotIn("canon-citations-in-the-pull-request", self.executable)
 
     def test_the_code_workflow_does_not_subscribe_to_edited(self):
-        # The inverse of the case that stood here until 2026-09-22, and the reason is #960: a run
-        # of this workflow on an `edited` publishes no check run under `build`, `compile` or
-        # `test`, but it still creates a check SUITE, and the ruleset reads the newest suite for an
-        # app -- so the three contexts read as `expected` again and the merge was refused until a
-        # close-and-reopen. E06 did not go away with the subscription; it moved to `pr-policy.yml`,
-        # and the two cases below are what hold it there.
         trigger = re.search(r"^\s*types:\s*\[([^\]]*)\]", self.executable, re.M)
         self.assertIsNotNone(trigger)
         listed = {item.strip() for item in trigger.group(1).split(",") if item.strip()}
         self.assertEqual(listed, {"opened", "synchronize", "reopened"})
 
     def test_the_concurrency_group_no_longer_carries_a_metadata_domain(self):
-        # It carried `-metadata` and `-code` so that a description edit could not cancel a running
-        # macOS job. With `edited` unsubscribed no run reaching this expression is a description
-        # edit, so every run in the group is a code run and a newer one should supersede an older.
-        # What this case refuses is the half-change: `edited` back in the trigger with the single
-        # domain left here would restore the cancellation the two domains were built to stop.
-        group = self._concurrency_group()
-        self.assertNotIn("metadata", group)
-        self.assertNotIn("github.event.changes", group)
-        self.assertIn("github.workflow", group)
-        self.assertIn("github.ref", group)
+        group = re.search(r"^concurrency:\n(?:.*\n)*?\s*group:(.*(?:\n\s{4,}.*)*)",
+                          self.executable, re.M)
+        self.assertIsNotNone(group, "ci.yml has no concurrency group")
+        group_text = " ".join(group.group(1).split())
+        self.assertNotIn("metadata", group_text)
+        self.assertNotIn("github.event.changes", group_text)
+        self.assertIn("github.workflow", group_text)
+        self.assertIn("github.ref", group_text)
 
 
 class RetargetRefusal(unittest.TestCase):

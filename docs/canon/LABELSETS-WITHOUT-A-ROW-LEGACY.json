@@ -19,11 +19,6 @@
       "candidate": "0 candidate(s)",
       "members": 2
     },
-    "horizontalZoomSlider": {
-      "verdict": "value",
-      "candidate": "ControllerAssignments.strings aGM-qO-ZOT.title",
-      "members": 4
-    },
     "nonInsertButtonText": {
       "verdict": "namespace",
       "candidate": "Localizable.strings Record#mti via #mti",
@@ -33,11 +28,6 @@
       "verdict": "ambiguous",
       "candidate": "3 candidate(s)",
       "members": 2
-    },
-    "projectPickerWindow": {
-      "verdict": "ambiguous",
-      "candidate": "2 candidate(s)",
-      "members": 4
     },
     "regionKindDrummer": {
       "verdict": "no-row",
@@ -63,11 +53,6 @@
       "verdict": "ambiguous",
       "candidate": "2 candidate(s)",
       "members": 3
-    },
-    "sliderSendHint": {
-      "verdict": "ambiguous",
-      "candidate": "10 candidate(s)",
-      "members": 2
     },
     "sliderZoomHint": {
       "verdict": "value",

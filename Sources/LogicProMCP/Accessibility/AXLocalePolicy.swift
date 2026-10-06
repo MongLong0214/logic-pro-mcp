@@ -1852,6 +1852,14 @@ enum AXLocalePolicy {
         rationale: "Identifies the tick slider in the Playhead Position group; verbatim description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats."
     )
 
+    /// The current project-key popup; its observed value remains opaque and localized.
+    static let keySignaturePopupLabel = LabelSet(
+        canonical: "Key Signature",
+        variants: ["조표", "キー", "Tonart", "Armadura", "Armature", "Armatura", "调号", "調號"],
+        rationale: "Identifies the key-signature AXPopUpButton by its complete description under the already bound control bar; read-only. The archived 2026-09-12 en-US/de-DE navigation-free censuses place Key Signature and Tonart at the same nested control-bar popup path. Descriptions are derived from Apple's own Key Signature row in Logic.framework; other locales are not claimed as live readings. Spanish and Portuguese share Armadura, so only one member is carried.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Key%20Signature#value"
+    )
+
     /// The control bar's display-mode popup, and the mode whose Playhead Position group exposes all
     /// four position components. Read-only locator plus the item title a caller would pick.
     static let displayModePopupLabel = LabelSet(
@@ -1891,12 +1899,14 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tempo%23mti#value"
     )
 
-    /// #109: arrange Horizontal-Zoom slider (writable AXValue). EN canonical +
-    /// KO variant; matched by description substring.
+    /// #109: arrange Horizontal-Zoom slider (writable AXValue). Corpus row values +
+    /// two legacy KO tolerance spellings; matched by description substring.
     static let horizontalZoomSlider = LabelSet(
         canonical: "Horizontal Zoom",
-        variants: ["가로 확대/축소", "가로 확대", "横方向にズーム"],
+        variants: ["가로 확대/축소", "가로 확대", "横方向にズーム", "수평 확대/축소", "Horizontal-Zoom", "Zoom horizontal", "Zoom orizzontale", "水平缩放", "水平縮放"],
         rationale: "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the arrange horizontal-zoom slider."
+            + " Extended from the Logic 12.3 (6674) Localizable.strings Horizontal Zoom row to all ten corpus locales. Static horizontal-slider construction supports this row for its tooltip; archived en/ko/ja/de Arrange AXSlider descriptions and help corroborate the values. The two legacy Korean spellings remain tolerance, not row values. This derivation does not newly qualify ten-locale runtime behavior.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Horizontal%20Zoom#value"
     )
 
     // --- Track-header read-only locators ---
@@ -2226,8 +2236,16 @@ enum AXLocalePolicy {
     /// Slider type hints (mutually exclusive groups in `sliderText`).
     static let sliderSendHint = LabelSet(
         canonical: "send",
-        variants: ["센드"],
+        variants: ["센드", "Send Level knob", "센드 레벨 노브", "センドレベルノブ", "Send-Drehregler",
+                   "Botón “Nivel de envío”", "Potentiomètre Niveau d’envoi\u{00A0}", "“发送电平”旋钮"],
         rationale: "Classifies a slider as a send control; read-only."
+            + " Derived from the send knob's own QuickHelp Title, whose prefix appears in archived"
+            + " EN/KO AXHelp (2026-09-27-send-slot-strip-dumps-ko-KR-en-US.json). The original"
+            + " send/센드 fragments and contains semantics remain. French's installed trailing"
+            + " NBSP is preserved in the variant; the existing LabelSet.labels getter trims it."
+            + " Italian, Portuguese and Traditional Chinese ship the English QuickHelp file;"
+            + " these values are not newly measured localized AX readings.",
+        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_011_SendLevelKnob#Title"
     )
     static let sliderZoomHint = LabelSet(
         canonical: "zoom",
@@ -2576,8 +2594,12 @@ enum AXLocalePolicy {
     /// Choose-Project picker window title markers.
     static let projectPickerWindow = LabelSet(
         canonical: "프로젝트 선택",
-        variants: ["choose a project", "choose project", "new from template"],
-        rationale: "Distinguishes the Choose-Project picker window from a real project; read-only classifier."
+        variants: ["choose a project", "choose project", "new from template",
+                   "プロジェクトを選択", "Wähle ein Projekt aus", "Seleccionar un proyecto", "Choisir un projet",
+                   "Scegli un progetto", "Escolha um projeto", "选取项目", "選擇計畫案"],
+        rationale: "Identifies chooser-shaped AXWindow titles; a title alone is not document identity. Document counting and track readers also inspect the raw AXDocument status and payload."
+            + " The eight added titles are the own Choose a Project row's values in Logic.framework Localizable.strings, already carried by projectChooserWindowTitle. Installed Logic 12.3 (6674) arm64 CLgAppManager._openNewProjectDialogSelectingCategoryID: obtains the Logic bundle through bundleForClass(MAContentPackageManager), localizes this key and passes the result to MANewProjectDialog.window.setTitle:. The bundle getter has an explicit mainBundle fallback when bundleForClass returns nil. This is static ownership evidence, not fresh AX or ten-locale native qualification; existing canonical and legacy contains markers are retained.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Choose%20a%20Project#value"
     )
 
     /// Transport text-field description hints (tempo/position fields).
@@ -2825,24 +2847,30 @@ enum AXLocalePolicy {
     /// The word an output slot's description BEGINS with when the strip goes to a physical output
     /// pair or channel (#291): `Output 3-4`, measured en 2026-09-11.
     ///
-    /// Logic composes these from `Output %d-%d` and `Output %d` in Logic.framework's
-    /// Localizable.strings. The cited row `Output#mix` is the one whose values are those
-    /// templates' prefixes in nine languages; Japanese is the exception, where the row keeps
-    /// `Output` and both templates say `出力` — so `出力` is carried as the template's own prefix,
-    /// not as a reading. Italian composes the pair as `Uscita %d-%d` and a single channel as
-    /// `Output %d`, so both words are members. Japanese again puts no space before the number.
+    /// The original Logic.framework `Output#mix` row and all existing JA/IT spellings remain
+    /// supported. That row reads English `Output` in German, whereas the Mixer's own `Output`
+    /// row reads `Ausgang`. The existing output-assignment reader already parses `Ausgang 3-4`
+    /// through that own row; the graph must recognize it too. These are runtime numeric labels,
+    /// not whole template values derived from an `Output %d-%d` row.
     ///
     /// A PREFIX, and the reason `Stereo Output` is matched whole by its own set: `output` is inside
     /// it, and a containment match here would file the main output as a physical one.
     static let physicalOutputLabelPrefix = LabelSet(
         canonical: "output",
-        variants: ["출력", "出力", "Salida", "Sortie", "Uscita", "Saída", "输出", "輸出"],
+        variants: ["출력", "出力", "Salida", "Sortie", "Uscita", "Saída", "输出", "輸出", "Ausgang"],
         rationale: "Classifies an output slot description as a physical output by its leading word;"
             + " read-only prefix classifier consumed by the routing graph. Ten locales derived on"
-            + " 2026-09-27 from Apple's `Output#mix` row, the prefixes of the `Output %d-%d` and"
-            + " `Output %d` templates; `出力` is the Japanese template's prefix where the row keeps"
-            + " English. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output%23mix#value"
+            + " 2026-09-27 from Apple's `Output#mix` row; all existing members are preserved."
+            + " The installed Logic 12.3 (6674) Mixer's own Output row adds German Ausgang, also"
+            + " consumed by OutputAssignment's existing pair parser. The historical ko/de pair"
+            + " readings and the retained R1 limitation are recorded by e42c5453; this repair's"
+            + " cached-resource witnesses are not a fresh native read or a binary factory proof."
+            + " Numeric and anchored-prefix checks remain with the existing consumer."
+            + " Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output%23mix#value",
+        alsoDerivedFrom: [
+            "logic-canon://strings/Contents%2FFrameworks%2FMAMixer.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output#value",
+        ]
     )
 
     /// en measured 2026-09-09 on Logic 12.3 (6674), inspector channel strip: an `AXButton` whose
@@ -3415,6 +3443,7 @@ enum AXLocalePolicy {
         beatSliderLabel,
         subdivisionSliderLabel,
         tickSliderLabel,
+        keySignaturePopupLabel,
         displayModePopupLabel,
         beatsDisplayModeItem,
         tempoSliderLabel,

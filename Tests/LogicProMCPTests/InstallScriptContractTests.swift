@@ -79,23 +79,29 @@ import Testing
     #expect(script.contains("path_writable_without_sudo \"$INSTALL_DIR\" && path_writable_without_sudo \"$SHARE_DIR\""))
 }
 
-@Test func testReleaseWorkflowDualModesAndPublishesMetadata() throws {
+@Test func testReleaseWorkflowRejectsUnvalidatedSigningAndPublishesMetadata() throws {
     let workflow = try scriptContents(".github/workflows/release.yml")
     let packageScript = try scriptContents("Scripts/release-package.sh")
 
-    // Dual-mode release: Developer ID credentials produce notarized artifacts;
-    // otherwise stable and prerelease tags use the historical ADHOC path.
+    // Developer ID credentials fail closed until notarization is validated.
+    // Credential-free stable and prerelease tags retain the ADHOC path.
     #expect(workflow.contains("Detect release mode"))
-    #expect(workflow.contains("mode=notarized"))
+    #expect(!workflow.contains("mode=notarized"))
     #expect(workflow.contains("mode=adhoc"))
-    #expect(workflow.contains("Publishing ADHOC stable release"))
+    #expect(workflow.contains("Release mode: ADHOC"))
     #expect(!workflow.contains("Stable ADHOC releases are not permitted"))
     #expect(!workflow.contains("Do not push stable tags manually"))
     #expect(!workflow.contains("ALLOW_ADHOC_STABLE"))
-    #expect(workflow.contains("Validate notarization secrets"))
+    #expect(workflow.contains("configured_credentials=("))
     #expect(workflow.contains("bash Scripts/release-build-universal.sh"))
-    #expect(workflow.contains("is required for a notarized release build"))
-    #expect(workflow.contains("Codesign binary (Developer ID)"))
+    #expect(workflow.contains("Notarized releases are disabled until privately validated"))
+    #expect(!workflow.contains("Codesign binary (Developer ID)"))
+    #expect(workflow.contains("if [ -n \"${!credential}\" ]; then"))
+    for credential in ["MACOS_CERT_BASE64", "MACOS_CERT_PASSWORD", "MACOS_SIGNING_IDENTITY",
+                       "MACOS_KEYCHAIN_PASSWORD", "APPLE_NOTARY_APPLE_ID",
+                       "APPLE_NOTARY_TEAM_ID", "APPLE_NOTARY_APP_PASSWORD"] {
+        #expect(workflow.contains("\(credential): ${{ secrets.\(credential) }}"))
+    }
     #expect(workflow.contains("Codesign binary (ADHOC)"))
     #expect(workflow.contains("codesign --force --sign - LogicProMCP"))
     #expect(workflow.contains("bash Scripts/release-package.sh"))

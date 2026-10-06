@@ -55,7 +55,7 @@ Allowed values are recorded only where the dispatcher keeps a list as a named co
 | Resource | Returns |
 |----------|---------|
 | `logic://system/health` | channel readiness, permissions, manual-validation state |
-| `logic://transport/state` | tempo, position, cycle, play/record state |
+| `logic://transport/state` | tempo, position, cycle, play/record state, optional current key signature |
 | `logic://tracks` | track list with source/freshness metadata |
 | `logic://mixer` | mixer strips (with per-strip `send_slots` occupancy), plugin slots, data-source labels, and the read-only `routing_graph` (#291): `trk_` source nodes carrying `output_classification` (`physical_output` / `bus` / `no_output` / `unclassified`), `bus_<n>` nodes and `mainOutput` edges only for a source whose own output slot reads as a bus, no send edges, a `snapshot_id` identifying its capture (separate resource and inspection reads have different IDs; resource graph IDs are not retained inspection-report handles), and `coverage` per domain (`population`, `strip_track_association`, `main_output`, `physical_output`, `bus_to_aux_input`, `sends`: `complete` / `partial` / `unavailable` / `unstable` / `not_observed` with `reasons`); `complete` is true only when every domain is, which no graph is in this increment |
 | `logic://markers` | marker list when Logic exposes it |
@@ -146,6 +146,14 @@ Track objects do **not** carry a sample rate. Sample rate is a project/transport
 | `goto_position` | `{ bar: number }` or `{ position: string }` | text / contract envelope | Accessibility -> MIDIKeyCommands -> MMC |
 
 Read current state from `logic://transport/state` after any transport mutation.
+
+`data.state.keySignature`, when present, is the control bar's raw key-signature display string
+(for example, `C Major` or localized `C-Dur`), not a normalized musical-key enum. It is omitted
+when the popup is absent, ambiguous, unreadable, or its bounded scan is incomplete. Reading it
+does not open a menu or change the project. This is the current display, not a last-saved file
+value or the Signature track's key-change timeline. A failed live refresh retains existing cached
+state with the resource's `source: "cache"`, `stale` and `unverified` flags; an unread key in a
+successful refresh clears the old key. Clients must accept historical payloads without this field.
 
 ### `logic_tracks`
 

@@ -1115,7 +1115,8 @@ extension AccessibilityChannel {
                 ]
             ))
         }
-        let live = scannedNames[track]
+        let names = scannedNames
+        let live = names[track]
         guard let live, live.utf8.elementsEqual(expected.utf8) else {
             return .error(HonestContract.encodeV2StateC(
                 error: .staleTargetReference,
@@ -1132,7 +1133,7 @@ extension AccessibilityChannel {
                 ]
             ))
         }
-        let ambiguousIndices = scannedNames
+        let ambiguousIndices = names
             .filter { $0.value.utf8.elementsEqual(expected.utf8) }
             .map(\.key)
             .sorted()
