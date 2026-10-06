@@ -649,12 +649,12 @@ actor LogicProServer {
                 // liveness net derived from the same instant), so the outer is
                 // provably always later than the inner regardless of
                 // begin/gate/preflight pre-execute skew.
-                let isSagaExecute = sagaControlPath && command == "saga_execute"
+                let isSagaExecute = Self.sagaExecutionOwnsLifecycle(tool: name, command: command)
                 let sagaLifecycleDeadline: ContinuousClock.Instant? = isSagaExecute
                     ? ContinuousClock.now.advanced(by: .seconds(
                         OperationRegistry.spec(
                             tool: name,
-                            command: "saga_execute"
+                            command: command
                         )?.deadline.seconds ?? DeadlineClass.long.seconds
                     ))
                     : nil
@@ -727,8 +727,13 @@ actor LogicProServer {
     }
 
     static func sagaControlBypassesGlobalMutationGate(tool: String, command: String) -> Bool {
-        tool == ToolID.logicSystem.rawValue
+        sagaExecutionOwnsLifecycle(tool: tool, command: command) || tool == ToolID.logicSystem.rawValue
             && (command == "saga_execute" || command == "saga_cancel")
+    }
+
+    static func sagaExecutionOwnsLifecycle(tool: String, command: String) -> Bool {
+        (tool == ToolID.logicSystem.rawValue && command == "saga_execute")
+            || (tool == ToolID.logicProject.rawValue && command == "apply_session_repair")
     }
 
     static func deadlineTimeoutResult(

@@ -139,6 +139,8 @@ actor SagaJournal {
     /// oldest-first body eviction.
     private struct CompactRow: Sendable {
         let planHash: String
+        let canonicalPlanID: String?
+        let canonicalDigest: String?
         let sequence: UInt64
         var terminal: TerminalKind?
     }
@@ -236,11 +238,31 @@ actor SagaJournal {
         )
         idempotencySet[plan.idempotencyKey] = CompactRow(
             planHash: Self.planHash(plan),
+            canonicalPlanID: plan.canonicalPlanID,
+            canonicalDigest: plan.canonicalDigest,
             sequence: sequence,
             terminal: nil
         )
         entries[plan.idempotencyKey] = Entry(plan: plan, claim: claim, record: .inProgress)
         return .started(claim)
+    }
+
+    /// Consult the same atomic compact identity before a retained draft's TTL lookup.
+    /// This never admits a key or weakens begin's complete-plan hash comparison.
+    func canonicalReplay(key: String, planID: String, digest: String) -> BeginResult? {
+        guard let row = idempotencySet[key] else { return nil }
+        guard row.canonicalPlanID == planID, row.canonicalDigest == digest else { return .conflict }
+        if let entry = entries[key] {
+            return entry.record == .inProgress ? .inProgress : .cancellationRequested
+        }
+        guard let terminal = row.terminal else { return .conflict }
+        guard let body = outcomeBodies[key] else { return .outcomeEvicted(terminal: terminal) }
+        switch body.record {
+        case .completed(let outcome): return .completed(outcome)
+        // Here `.completed` carries the retained terminal response, not a
+        // successful Saga claim. Cancellation keeps its original state/body.
+        case .cancelled(let outcome, _): return .completed(outcome)
+        }
     }
 
     @discardableResult
@@ -717,6 +739,8 @@ enum SagaWire {
             "state_history": outcome.stateHistory.map(\.rawValue),
             "steps": stepObjects(plan: plan, outcome: outcome),
         ]) { _, new in new }
+        if let id = plan.canonicalPlanID { extras["plan_id"] = id }
+        if let digest = plan.canonicalDigest { extras["digest"] = digest }
 
         let body: String
         let isError: Bool
@@ -1028,7 +1052,8 @@ enum SagaWire {
         guard let read = state.read else { return object }
         object["read_source"] = read.readSource.rawValue
         object["provenance"] = read.provenance.rawValue
-        object["track_index"] = read.trackIndex
+        if let index = read.trackIndex { object["track_index"] = index }
+        if let reference = read.projectReference { object["project_ref"] = reference }
         object["field"] = read.field
         object["observed"] = foundationValue(read.observed)
         object["sampled_at"] = read.sampledAt

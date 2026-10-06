@@ -350,6 +350,8 @@ enum OperationHandlerRegistry {
                         cleanupAuditFileReader: dependencies.projectFileReader,
                         acquireSessionPopulation: { request in
                             try await dependencies.poller.acquireSessionPopulation(request: request, targetRegistry: dependencies.targetRegistry)
+                        }, applySessionRepair: { params in
+                            await ApprovedSessionRepair.apply(params: params, dependencies: dependencies)
                         }
                     )
                 }
@@ -363,6 +365,8 @@ enum OperationHandlerRegistry {
                     cleanupAuditFileReader: dependencies.projectFileReader,
                     acquireSessionPopulation: { request in
                         try await dependencies.poller.acquireSessionPopulation(request: request, targetRegistry: dependencies.targetRegistry)
+                    }, applySessionRepair: { params in
+                        await ApprovedSessionRepair.apply(params: params, dependencies: dependencies)
                     }
                 )
             }

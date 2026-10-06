@@ -276,13 +276,20 @@ struct Issue965MixerPresentationWitnessTests {
     @Test func staleInnerElementCannotBorrowAnOwnersToolbar() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let fixture = Fixture()
-            let reads = Counter()
-            let observed = try await presentation(inspect(fixture, children: { element in
+            let identified = Counter()
+            let omitted = Counter()
+            let observed = try await presentation(inspect(fixture, attributes: { element, attribute in
+                if CFEqual(element, fixture.layout), attribute == kAXHelpAttribute as String { _ = identified.next() }
+                return nil
+            }, children: { element in
                 guard CFEqual(element, fixture.owner) else { return nil }
                 // Each discovery sees the inner area, while its presentation read observes
                 // that exact edge gone. Old retained inner reads still return the same strips.
-                return .success(reads.next() % 2 == 1 ? [fixture.toolbar, fixture.layout] : [fixture.toolbar])
+                // Unrelated role-only Control Bar census does not consume the deciding fault.
+                if omitted.count < identified.count { _ = omitted.next(); return .success([fixture.toolbar]) }
+                return .success([fixture.toolbar, fixture.layout])
             }))
+            #expect(identified.count >= 2 && omitted.count == identified.count)
             #expect(observed["mode"] is NSNull)
             let filters = try #require(observed["type_filters"] as? [String: Any])
             #expect(filters.values.allSatisfy { $0 is NSNull })

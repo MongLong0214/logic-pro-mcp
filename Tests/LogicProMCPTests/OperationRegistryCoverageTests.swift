@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 120)   // #1118 navigate.capture_markers
+        #expect(OperationRegistry.specs.count == 121)   // #971 project.apply_session_repair
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -87,7 +87,7 @@ struct OperationRegistryCoverageTests {
             .tracksSetInstrument,
         ]
 
-        #expect(mutating.count == 94)   // #1118 capture_markers temporarily changes UI;
+        #expect(mutating.count == 95)   // #971 applies an approved Mixer view;
                                         // #448: sort_verified is a mutating structural verb;
                                         // #301 added plugins.set_eq_band_verified, which is
                                         // target-bearing, so `targetless` is unchanged;
@@ -99,7 +99,7 @@ struct OperationRegistryCoverageTests {
                                         // target-bearing, so `targetless` is unchanged
         #expect(readOnly.count == 26)   // #965 added project.inspect_session
         #expect(targetBearingIDs == expectedTargetBearingIDs)
-        #expect(targetless.count == 78)   // #1118 capture_markers binds the current project, not a target_ref
+        #expect(targetless.count == 79)   // #971 internally binds a retained project approval
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
         #expect(readOnly.allSatisfy { $0.target == .none })
     }

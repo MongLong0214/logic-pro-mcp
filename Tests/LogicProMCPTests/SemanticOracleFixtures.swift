@@ -1111,6 +1111,17 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
+        .projectApplySessionRepair: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","journal_scope":"session",\
+                "journal_survives_process_restart":false,"idempotency_key":"approved-view",\
+                "plan_id":"retained-plan","digest":"canonical-digest","saga_state":"completed",\
+                "state_history":["draft","validated","running","completed"],\
+                "steps":[{"operation_id":"navigate.toggle_view","result":{"state":"A","write_boundary_crossed":false},\
+                "evidence":{"before_state":{"observed":false},"verification":{"readback":{"observed":false}}}}]}
+                """,
+            readback: "{}"
+        ),
         // saga_cancel .cancelled + verified → encodeStateA. status cancelled.
         .systemSagaCancel: SemanticOracleFixture(
             response: """

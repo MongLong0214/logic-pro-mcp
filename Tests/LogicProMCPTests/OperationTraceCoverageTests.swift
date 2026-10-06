@@ -347,8 +347,8 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 120)   // #1118 navigate.capture_markers
-        #expect(mutatingSpecs.count == 94)   // #1118 temporarily opens/restores UI
+        #expect(OperationRegistry.specs.count == 121)   // #971 project.apply_session_repair
+        #expect(mutatingSpecs.count == 95)
 
         // A mutating op that refuses BEFORE dispatch starts its trace starts no trace with the
         // coverage params (which carry no consent), so it is asserted to claim NO trace coverage
@@ -356,7 +356,8 @@ extension OperationTraceTests {
         // and setup_control_surface (#884). Both refuse ahead of `startTraceIfEnabled` on purpose —
         // a refusal must not have touched the user's configuration, and starting a trace is the
         // first thing that would.
-        let notOracledDeferrals: Set<OperationID> = [.systemSetupArmKey, .systemSetupControlSurface]
+        // Missing native approval refuses before entering the Saga trace.
+        let notOracledDeferrals: Set<OperationID> = [.systemSetupArmKey, .systemSetupControlSurface, .projectApplySessionRepair]
 
         for spec in mutatingSpecs {
             await OperationTraceStore.shared.clear()
@@ -474,7 +475,7 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 120)   // #1118 navigate.capture_markers
+        #expect(OperationRegistry.specs.count == 121)   // #971 project.apply_session_repair
         #expect(readOnlySpecs.count == 26)
         // Mutability is total: the mutating census (94) and this inverse gate
         // (26) together account for every registered spec, so a new operation

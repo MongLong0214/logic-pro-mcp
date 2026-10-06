@@ -96,19 +96,22 @@ extension ProjectSessionAudit {
         /// approves only the bus a track feeds, not what reads that bus. `.new` approves planning a
         /// new aux that reads it; `.keep` approves the observed receivers; `.noReceiver` (wire `none`) says nothing is meant to read it (a sidechain-only bus).
         let receivers: [Int: IntentReceiver]
+        let mixerVisible: Bool?
 
         fileprivate init(
             projectRef: TargetReference?,
             targets: [IntentTarget],
             roles: [IntentRole],
             outputs: [IntentOutput],
-            receivers: [Int: IntentReceiver] = [:]
+            receivers: [Int: IntentReceiver] = [:],
+            mixerVisible: Bool? = nil
         ) {
             self.projectRef = projectRef
             self.targets = targets
             self.roles = roles
             self.outputs = outputs
             self.receivers = receivers
+            self.mixerVisible = mixerVisible
         }
     }
 
@@ -371,7 +374,7 @@ extension ProjectSessionAudit {
         var rejections: [IntentPolicyRejection] = []
         rejectUnknownKeys(
             object,
-            allowed: ["schema", "project_ref", "targets", "roles", "outputs", "receivers"],
+            allowed: ["schema", "project_ref", "targets", "roles", "outputs", "receivers", "presentation"],
             path: "policy",
             into: &rejections
         )
@@ -396,6 +399,15 @@ extension ProjectSessionAudit {
         let roles = parseRoles(object, into: &rejections)
         let outputs = parseOutputs(object, into: &rejections)
         let receivers = parseReceivers(object, into: &rejections)
+        var mixerVisible: Bool?
+        if let raw = object["presentation"] {
+            if let presentation = raw.objectValue {
+                rejectUnknownKeys(presentation, allowed: ["mixer_visible"], path: "policy.presentation", into: &rejections)
+                mixerVisible = requiredBool(presentation, key: "mixer_visible", path: "policy.presentation", into: &rejections)
+            } else {
+                rejections.append(.wrongType(path: "policy.presentation", expected: "object"))
+            }
+        }
         validate(targets: targets, roles: roles, outputs: outputs, into: &rejections)
 
         guard rejections.isEmpty else {
@@ -410,7 +422,8 @@ extension ProjectSessionAudit {
             targets: targets,
             roles: roles,
             outputs: outputs,
-            receivers: receivers
+            receivers: receivers,
+            mixerVisible: mixerVisible
         ))
     }
 
