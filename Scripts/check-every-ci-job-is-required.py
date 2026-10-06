@@ -173,24 +173,49 @@ def workflow_runs_command(text: str, command: str) -> bool:
             if not isinstance(run, str):
                 continue
             run = re.sub(r"\\\s*\n\s*", " ", run)
+            # Actions expressions are argument data, not Bash control operators.
+            # Their expansion cannot supply the required literal command witness.
+            run = re.sub(r"\$\{\{.*?\}\}", "__github_expression__", run, flags=re.S)
             # Heredocs are not an execution witness. Reject unsupported forms rather
             # than counting their data as commands; quotes stay intact across lines.
             if "<<" in run:
                 continue
-            lexer = shlex.shlex(run, posix=True, punctuation_chars=";&|()\n")
+            # Keep whole quoted arguments intact until after boundary detection.
+            # POSIX tokenization would turn the argument ';' into an operator.
+            lexer = shlex.shlex(run, posix=False, punctuation_chars=";&|()\n<>")
             lexer.whitespace = " \t\r"
             lexer.whitespace_split = True
             try:
                 tokens = list(lexer)
             except ValueError:
                 continue
+            # Only literal command lists/pipelines are supported. Conditional,
+            # background and compound-shell bodies are not guaranteed invocations.
+            control_words = {
+                "if", "then", "elif", "else", "fi", "case", "esac", "for", "while",
+                "until", "do", "done", "select", "function", "{", "}",
+                "exit", "return", "exec", "eval", "break", "continue",
+            }
+            if any(token in control_words or token == "||" or
+                   (token and all(char in ";&|()\n<>" for char in token) and
+                    any(char in "&()" for char in token) and
+                    token not in {">&", "<&", "&>", "&>>"})
+                   for token in tokens):
+                continue
+            try:
+                decoded = [[token] if all(char in ";&|()\n<>" for char in token)
+                           else shlex.split(token, comments=False) for token in tokens]
+            except ValueError:
+                continue
+            if any(len(word) != 1 for word in decoded):
+                continue
             statements, current = [], []
-            for token in tokens:
+            for token, word in zip(tokens, decoded):
                 if token and all(char in ";&|()\n" for char in token):
                     statements.append(current)
                     current = []
                 else:
-                    current.append(token)
+                    current.append(word[0])
             statements.append(current)
             for actual in statements:
                 if actual[:2] == ["python3", "-u"]:

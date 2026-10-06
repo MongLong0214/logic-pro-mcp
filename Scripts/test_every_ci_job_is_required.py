@@ -492,6 +492,46 @@ class TheEntryPointRefuses(unittest.TestCase):
         self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
         self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
 
+    def test_quoted_separators_are_arguments_not_commands_at_the_entry_point(self):
+        for separator in [";", "\n", "|", "("]:
+            with self.subTest(separator=separator):
+                run = f"echo '{separator}' python3 -u Scripts/run-repo-guards.py"
+                shell = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", run],
+                                       capture_output=True, text=True)
+                self.assertEqual(shell.returncode, 0, shell.stderr)
+                self.assertEqual(shell.stdout,
+                                 f"{separator} python3 -u Scripts/run-repo-guards.py\n")
+                proc = self._run_required_command_mutation(
+                    lambda step: step.update(run=run))
+                self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
+
+    def test_skipped_conditional_commands_are_refused_at_the_entry_point(self):
+        for run in [
+            "true || python3 -u Scripts/run-repo-guards.py",
+            "false && python3 -u Scripts/run-repo-guards.py; true",
+            "if false; then\npython3 -u Scripts/run-repo-guards.py\nfi",
+        ]:
+            with self.subTest(run=run):
+                shell = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", run],
+                                       capture_output=True, text=True)
+                self.assertEqual(shell.returncode, 0, shell.stderr)
+                self.assertEqual(shell.stdout, "")
+                proc = self._run_required_command_mutation(
+                    lambda step: step.update(run=run))
+                self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
+
+    def test_an_escaped_separator_is_not_a_command_boundary_at_the_entry_point(self):
+        run = r"echo \; python3 -u Scripts/run-repo-guards.py"
+        shell = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", run],
+                               capture_output=True, text=True)
+        self.assertEqual(shell.returncode, 0, shell.stderr)
+        self.assertEqual(shell.stdout, "; python3 -u Scripts/run-repo-guards.py\n")
+        proc = self._run_required_command_mutation(lambda step: step.update(run=run))
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
+
     def test_heredoc_command_is_refused_at_the_entry_point(self):
         proc = self._run_required_command_mutation(
             lambda step: step.update(run="cat <<'EOF'\npython3 -u Scripts/run-repo-guards.py\nEOF"))
@@ -671,6 +711,15 @@ class TheMigrationsOwnMutations(unittest.TestCase):
             self._edit("pr-policy.yml",
                        "python3 Scripts/check-canon-citations.py \\\n            --text pr-body.md --changed pr-changed.txt",
                        "true")
+            self.assertEqual(guard.main(), 1)
+
+    def test_printing_the_body_invocation_is_refused_at_the_entry_point(self):
+        with mock.patch.object(guard, "WORKFLOW", self._path("ci.yml")):
+            self.assertEqual(guard.main(), 0)
+            self._edit("pr-policy.yml",
+                       "python3 Scripts/check-canon-citations.py \\\n            --text pr-body.md --changed pr-changed.txt",
+                       "echo ';' python3 Scripts/check-canon-citations.py "
+                       "--text pr-body.md --changed pr-changed.txt")
             self.assertEqual(guard.main(), 1)
 
     def test_deleting_the_coverage_gate_from_both_gates_fails(self):
