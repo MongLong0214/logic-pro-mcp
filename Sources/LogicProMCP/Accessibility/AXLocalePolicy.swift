@@ -2829,24 +2829,30 @@ enum AXLocalePolicy {
     /// The word an output slot's description BEGINS with when the strip goes to a physical output
     /// pair or channel (#291): `Output 3-4`, measured en 2026-09-11.
     ///
-    /// Logic composes these from `Output %d-%d` and `Output %d` in Logic.framework's
-    /// Localizable.strings. The cited row `Output#mix` is the one whose values are those
-    /// templates' prefixes in nine languages; Japanese is the exception, where the row keeps
-    /// `Output` and both templates say `出力` — so `出力` is carried as the template's own prefix,
-    /// not as a reading. Italian composes the pair as `Uscita %d-%d` and a single channel as
-    /// `Output %d`, so both words are members. Japanese again puts no space before the number.
+    /// The original Logic.framework `Output#mix` row and all existing JA/IT spellings remain
+    /// supported. That row reads English `Output` in German, whereas the Mixer's own `Output`
+    /// row reads `Ausgang`. The existing output-assignment reader already parses `Ausgang 3-4`
+    /// through that own row; the graph must recognize it too. These are runtime numeric labels,
+    /// not whole template values derived from an `Output %d-%d` row.
     ///
     /// A PREFIX, and the reason `Stereo Output` is matched whole by its own set: `output` is inside
     /// it, and a containment match here would file the main output as a physical one.
     static let physicalOutputLabelPrefix = LabelSet(
         canonical: "output",
-        variants: ["출력", "出力", "Salida", "Sortie", "Uscita", "Saída", "输出", "輸出"],
+        variants: ["출력", "出力", "Salida", "Sortie", "Uscita", "Saída", "输出", "輸出", "Ausgang"],
         rationale: "Classifies an output slot description as a physical output by its leading word;"
             + " read-only prefix classifier consumed by the routing graph. Ten locales derived on"
-            + " 2026-09-27 from Apple's `Output#mix` row, the prefixes of the `Output %d-%d` and"
-            + " `Output %d` templates; `出力` is the Japanese template's prefix where the row keeps"
-            + " English. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output%23mix#value"
+            + " 2026-09-27 from Apple's `Output#mix` row; all existing members are preserved."
+            + " The installed Logic 12.3 (6674) Mixer's own Output row adds German Ausgang, also"
+            + " consumed by OutputAssignment's existing pair parser. The historical ko/de pair"
+            + " readings and the retained R1 limitation are recorded by e42c5453; this repair's"
+            + " cached-resource witnesses are not a fresh native read or a binary factory proof."
+            + " Numeric and anchored-prefix checks remain with the existing consumer."
+            + " Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output%23mix#value",
+        alsoDerivedFrom: [
+            "logic-canon://strings/Contents%2FFrameworks%2FMAMixer.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output#value",
+        ]
     )
 
     /// en measured 2026-09-09 on Logic 12.3 (6674), inspector channel strip: an `AXButton` whose

@@ -4254,7 +4254,8 @@
     "Uscita",
     "Saída",
     "输出",
-    "輸出"
+    "輸出",
+    "Ausgang"
    ],
    "rationale": "Classifies an output slot description as a physical output by its leading word;",
    "match": "exact",
