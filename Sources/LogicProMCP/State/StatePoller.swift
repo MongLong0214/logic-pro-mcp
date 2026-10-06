@@ -278,17 +278,23 @@ actor StatePoller {
             population = .init(project: nil, tracks: nil, strips: nil, fileTrackCount: nil,
                                beganAt: now, endedAt: now, stable: true)
         }
-        try SessionPopulationObservation.requireOwnedAcquisition()
-        guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: before, stoppingWhen: stop) else {
+        do {
             try SessionPopulationObservation.requireOwnedAcquisition()
-            throw SessionPopulationObservation.AcquisitionError.ownershipLost
+            guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: before, stoppingWhen: stop) else {
+                try SessionPopulationObservation.requireOwnedAcquisition()
+                throw SessionPopulationObservation.AcquisitionError.ownershipLost
+            }
+            let capture = await SessionPopulationObservation.capture(
+                cache: cache, targetRegistry: targetRegistry, fileReader: runtime.projectFileReader,
+                requestedProjectRef: request.projectRef, accepted: accepted, stoppingWhen: stop
+            )
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            return capture
+        } catch {
+            // Acquisition has already returned a UI receipt. Later refusal must retain
+            // that observation, even when no capture can be accepted or published.
+            throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: population.uiEffects)
         }
-        let capture = await SessionPopulationObservation.capture(
-            cache: cache, targetRegistry: targetRegistry, fileReader: runtime.projectFileReader,
-            requestedProjectRef: request.projectRef, accepted: accepted, stoppingWhen: stop
-        )
-        try SessionPopulationObservation.requireOwnedAcquisition()
-        return capture
     }
 
     private func beginPopulationCycle() async -> Bool {

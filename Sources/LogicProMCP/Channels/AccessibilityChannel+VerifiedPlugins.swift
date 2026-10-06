@@ -603,33 +603,63 @@ extension AccessibilityChannel {
 
         private func dismissOwnedMenu(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             guard menuOpen else { return true }
-            guard await stillOwned(stoppingWhen: stop), ownedMenuFocus(), let bar,
+            guard await stillOwned(stoppingWhen: stop), ownedMenuFocus(), let bar else { return false }
+            if AXHelpers.getAttribute(bar, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? == false,
+               sameFocus() {
+                menuOpen = false
+                return true
+            }
+            guard
                   runtime.ax.actionNames(bar).contains(kAXCancelAction as String),
                   !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   AXHelpers.performAction(bar, kAXCancelAction as String, runtime: runtime.ax) else { return false }
+            guard await stillOwned(stoppingWhen: stop), sameFocus(),
+                  AXHelpers.getAttribute(bar, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? == false
+            else { return false }
             menuOpen = false
             return true
+        }
+
+        private func uniqueMenuTarget(
+            _ candidates: [AXUIElement], role: String, labels: AXLocalePolicy.LabelSet
+        ) -> AXUIElement? {
+            var target: AXUIElement?
+            for candidate in candidates {
+                let observedRole: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                    candidate, kAXRoleAttribute as String, runtime: runtime.ax)
+                guard case .success(.some(let candidateRole)) = observedRole else { return nil }
+                guard candidateRole == role else { continue }
+                switch AXLocalePolicy.elementMatchesResult(candidate, labels, runtime: runtime.ax) {
+                case .failure: return nil
+                case .success(false): continue
+                case .success(true):
+                    guard target == nil else { return nil }
+                    target = candidate
+                }
+            }
+            return target
         }
 
         private func toggle(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             guard await stillOwned(stoppingWhen: stop), sameFocus(),
                   let menuBar = AXLogicProElements.getMenuBar(runtime: runtime),
                   case .success(let children) = AXHelpers.childrenResult(menuBar, runtime: runtime.ax) else { return false }
-            let bars = children.filter {
-                AXHelpers.getRole($0, runtime: runtime.ax) == kAXMenuBarItemRole as String &&
-                    AXLocalePolicy.elementMatches($0, AXLocalePolicy.viewMenuBar, runtime: runtime.ax)
-            }
-            guard bars.count == 1, let view = bars.first,
+            guard let view = uniqueMenuTarget(children, role: kAXMenuBarItemRole as String, labels: AXLocalePolicy.viewMenuBar),
                   runtime.ax.actionNames(view).contains(kAXPressAction as String),
                   runtime.ax.actionNames(view).contains(kAXCancelAction as String),
+                  AXHelpers.getAttribute(view, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? == false,
                   await stillOwned(stoppingWhen: stop), sameFocus() else { return false }
             if let bar, !CFEqual(bar, view) { return false }
             bar = view
-            guard AccessibilityChannel.openMenuBarItem(view, runtime: runtime.ax) else { return false }
+            // An AX error is not proof that the attempted native action had no effect.
             menuOpen = true
             effects.navigationPerformed = true
-            if !effects.changed.contains("view_menu") { effects.changed.append("view_menu") }
             effects.restoration = "not_restored"
+            if !effects.attempted.contains("view_menu") { effects.attempted.append("view_menu") }
+            let opened = AccessibilityChannel.openMenuBarItem(view, runtime: runtime.ax)
+            let selected: Bool? = AXHelpers.getAttribute(view, kAXSelectedAttribute as String, runtime: runtime.ax)
+            if selected == true, !effects.changed.contains("view_menu") { effects.changed.append("view_menu") }
+            guard opened, selected == true else { return false }
             // Menus update their dynamic labels only after opening. The shared deadline and
             // cancellation remain effective while waiting; no swallowed cancellation or retry key.
             do { try await Task.sleep(for: .milliseconds(120)) } catch { return false }
@@ -637,10 +667,7 @@ extension AccessibilityChannel {
                   case .success(let census) = AXHelpers.censusDescendantResult(
                     of: view, role: kAXMenuItemRole as String, maxDepth: 5, runtime: runtime.ax)
             else { return false }
-            let matches = census.matches.filter {
-                AXLocalePolicy.elementMatches($0, AXLocalePolicy.showMixerMenuItem, runtime: runtime.ax)
-            }
-            guard matches.count == 1, let item = matches.first,
+            guard let item = uniqueMenuTarget(census.matches, role: kAXMenuItemRole as String, labels: AXLocalePolicy.showMixerMenuItem),
                   AXHelpers.getAttribute(item, kAXEnabledAttribute as String, runtime: runtime.ax) as Bool? == true,
                   runtime.ax.actionNames(item).contains(kAXPressAction as String),
                   await stillOwned(stoppingWhen: stop), ownedMenuFocus() else { return false }
@@ -652,22 +679,28 @@ extension AccessibilityChannel {
                       AXHelpers.getTitle(item, runtime: runtime.ax) != "Hide Mixer" else { return false }
             }
             guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
-            if !effects.changed.contains("mixer_visibility") { effects.changed.append("mixer_visibility") }
+            if !effects.attempted.contains("mixer_visibility") { effects.attempted.append("mixer_visibility") }
             guard
                   AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) else { return false }
-            menuOpen = false
+            menuOpen = AXHelpers.getAttribute(view, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? != false
             return true
         }
 
         func reveal(stoppingWhen stop: @Sendable () -> Bool) async {
             guard case .notFound = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime) else { return }
-            guard await toggle(stoppingWhen: stop) else { effects.reason = "mixer_reveal_refused"; return }
+            let toggled = await toggle(stoppingWhen: stop)
+            guard toggled || effects.attempted.contains("mixer_visibility") else { effects.reason = "mixer_reveal_refused"; return }
             let end = min(OperationTraceContext.current?.deadline ?? ContinuousClock.now, ContinuousClock.now.advanced(by: .milliseconds(mixerRevealPollTimeoutMs)))
             repeat {
                 guard await stillOwned(stoppingWhen: stop) else { effects.reason = "navigation_ownership_lost"; return }
                 let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
-                if let mixer = lookup.mixer { revealedMixer = mixer; return }
+                if let mixer = lookup.mixer {
+                    revealedMixer = mixer
+                    if !effects.changed.contains("mixer_visibility") { effects.changed.append("mixer_visibility") }
+                    return
+                }
                 if lookup.childrenUnread { effects.reason = "mixer_children_unread"; return }
+                if !toggled { effects.reason = "mixer_reveal_unverified"; return }
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { effects.reason = "navigation_cancelled"; return }
             } while ContinuousClock.now < end
             effects.reason = "mixer_reveal_unverified"
@@ -692,9 +725,12 @@ extension AccessibilityChannel {
                       case .notFound = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime) else {
                     effects.reason = "mixer_restoration_unverified"; return effects
                 }
-            } else if effects.changed.contains("mixer_visibility") {
+            } else if effects.attempted.contains("mixer_visibility") {
                 effects.reason = "mixer_reveal_unverified"; return effects
             }
+            guard sameFocus(), let bar,
+                  AXHelpers.getAttribute(bar, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? == false
+            else { effects.reason = "menu_restoration_unverified"; return effects }
             effects.restoration = "restored"
             effects.reason = nil
             return effects

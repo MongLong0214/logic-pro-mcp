@@ -485,6 +485,12 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
             let capture: SessionPopulationObservation.Capture
             var capturedUIEffects = SessionPopulationObservation.UIEffects()
+            func uiEffectExtras(_ effects: SessionPopulationObservation.UIEffects) -> [String: Any] {
+                ["write_attempted": false, "navigation_performed": effects.navigationPerformed,
+                 "ui_effects": ["navigation_performed": effects.navigationPerformed,
+                                "restoration": effects.restoration, "changed": effects.changed, "attempted": effects.attempted,
+                                "reason": effects.reason as Any? ?? NSNull()]]
+            }
             func acquisitionFailure(_ error: Error) -> CallTool.Result {
                 let navigationFailure = error as? SessionPopulationObservation.NavigationAcquisitionError
                 let cause = navigationFailure?.cause ?? error
@@ -497,10 +503,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 }
                 return toolStateCResult(failure,
                     hint: "Fresh population acquisition could not finish under its owned deadline; no replacement report was published.",
-                    extras: ["write_attempted": false, "navigation_performed": effects.navigationPerformed,
-                             "ui_effects": ["navigation_performed": effects.navigationPerformed,
-                                            "restoration": effects.restoration, "changed": effects.changed,
-                                            "reason": effects.reason as Any? ?? NSNull()]])
+                    extras: uiEffectExtras(effects))
             }
             if let acquireSessionPopulation {
                 do {
@@ -523,7 +526,8 @@ struct ProjectDispatcher: OperationTraceDispatching {
                     request.projectRef,
                     operation: "project.inspect_session",
                     referenceKey: "project_ref",
-                    hint: "project_ref does not name the project the state cache holds (it changed after the reference was issued); no report was built"
+                    hint: "project_ref does not name the project the state cache holds (it changed after the reference was issued); no report was built",
+                    extras: uiEffectExtras(capturedUIEffects)
                 )
             }
             var report = SessionPopulationObservation.build(request: request, capture: capture)
@@ -553,7 +557,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
                     }
                     return toolStateCResult(.staleSnapshot,
                         hint: "capture could not be retained (project changed, document closed, or report exceeds 2 MiB); no reusable snapshot was issued",
-                        extras: ["write_attempted": false])
+                        extras: uiEffectExtras(capturedUIEffects))
                 }
                 return toolTextResult(json)
             } catch {

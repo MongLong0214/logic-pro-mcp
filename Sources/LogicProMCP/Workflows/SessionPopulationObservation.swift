@@ -656,12 +656,14 @@ enum SessionPopulationObservation {
         var navigationPerformed = false
         var restoration = "not_applicable"
         var changed: [String] = []
+        var attempted: [String] = []
         var reason: String?
 
         enum CodingKeys: String, CodingKey {
             case navigationPerformed = "navigation_performed"
             case restoration
             case changed
+            case attempted
             case reason
         }
     }
