@@ -129,6 +129,577 @@ private final class MarkerListReadProbe: @unchecked Sendable {
     var failedAXRowsReadWasObserved = false
 }
 
+// #1118 uses the measured Marker List fixture above, not a second AX harness.
+private final class Issue1118CaptureFixture: @unchecked Sendable {
+    let builder = FakeAXRuntimeBuilder()
+    let app: AXUIElement
+    let arrange: AXUIElement
+    let list: AXUIElement
+    let focus: AXUIElement
+    let close: AXUIElement
+    let foreign: AXUIElement
+    var events: [String] = []
+    var phase = "before"
+    var unreadInitial: String?
+    var unreadRows = false
+    var closeRemains = false
+    var unreadAfterClose = false
+    var focusIneffective = false
+    var duplicateAfter = false
+    var wrongDocumentAfter = false
+    var originalGone = false
+    var ownsGate = true
+    var loseOwnershipOnOpen = false
+    var openerFailsAfterOpening = false
+    var foreignFocusAfter = false
+    var mainProjectChangedAfter = false
+    var replacementAfter = false
+    var closeReportsFailure = false
+    var focusReportsFailure = false
+    var openerRefusesBeforeWrite = false
+    var focusDriftOnRestore: String?
+    var focusedApplicationPID: pid_t? = 4242
+    var globalFocusDriftStage: String?
+    var globalFocusDriftPID: pid_t? = 4343
+    var closeReadDrift: String?
+    var userOpensListOnRefusal = false
+    var finalRestoreDocumentDrift = false
+    var inventoryDocumentDrift: String?
+
+    init(open: Bool = false, empty: Bool = false) {
+        app = builder.element(111800)
+        arrange = builder.element(111801)
+        list = builder.element(111802)
+        focus = builder.element(111803)
+        close = builder.element(111804)
+        foreign = builder.element(111805)
+        _ = makeMarkerListTree(
+            builder: builder, appElement: app, arrangeWindow: arrange, markerListWindow: list,
+            rows: empty ? [] : [(position: "5 1 1 1 ", name: "Verse", length: "∞")]
+        )
+        builder.setAttribute(foreign, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(foreign, kAXTitleAttribute as String, "OtherProject - 트랙")
+        builder.setAttribute(foreign, kAXDocumentAttribute as String, "/OtherProject.logicx")
+        builder.setAttribute(app, kAXWindowsAttribute as String, open ? [arrange, list, foreign] : [arrange, foreign])
+        builder.setAttribute(app, kAXFocusedWindowAttribute as String, arrange)
+        builder.setAttribute(app, kAXFocusedUIElementAttribute as String, focus)
+        builder.setAttribute(focus, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        builder.setAttribute(focus, kAXWindowAttribute as String, arrange)
+        builder.setAttribute(list, kAXCloseButtonAttribute as String, close)
+        builder.setAttribute(close, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(close, kAXWindowAttribute as String, list)
+        builder.setAttribute(close, kAXEnabledAttribute as String, true)
+    }
+
+    var runtime: AXLogicProElements.Runtime {
+        let base = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { [self] element, attribute in
+                if CFEqual(element, close), attribute == kAXEnabledAttribute as String {
+                    if closeReadDrift == "foreign_focus" {
+                        builder.setAttribute(app, kAXFocusedWindowAttribute as String, foreign)
+                        builder.setAttribute(app, kAXFocusedUIElementAttribute as String, foreign)
+                    }
+                    if closeReadDrift == "original_document" {
+                        builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Changed.logicx")
+                    }
+                    if closeReadDrift == "owned_document" {
+                        builder.setAttribute(list, kAXDocumentAttribute as String, "/Changed.logicx")
+                    }
+                }
+                if attribute == "AXRows" {
+                    if inventoryDocumentDrift == "original" {
+                        builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Changed.logicx")
+                    }
+                    if inventoryDocumentDrift == "list" {
+                        builder.setAttribute(list, kAXDocumentAttribute as String, "/Changed.logicx")
+                    }
+                }
+                if phase == "before", unreadInitial == attribute {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                if phase == "closed", unreadAfterClose, CFEqual(element, app),
+                   attribute == kAXWindowsAttribute as String {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                if unreadRows, attribute == "AXRows" {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                return nil
+            },
+            setAttributeHandler: { [self] element, attribute, _ in
+                events.append("set.\(attribute)")
+                if !focusIneffective {
+                    if CFEqual(element, arrange), attribute == kAXMainAttribute as String {
+                        builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+                    }
+                    if CFEqual(element, arrange), attribute == kAXFocusedAttribute as String {
+                        builder.setAttribute(app, kAXFocusedWindowAttribute as String, arrange)
+                    }
+                    if CFEqual(element, focus), attribute == kAXFocusedAttribute as String {
+                        builder.setAttribute(app, kAXFocusedUIElementAttribute as String, focus)
+                    }
+                }
+                if (focusDriftOnRestore == "main" && attribute == kAXMainAttribute as String)
+                    || (focusDriftOnRestore == "window" && CFEqual(element, arrange)
+                        && attribute == kAXFocusedAttribute as String) {
+                    builder.setAttribute(app, kAXFocusedWindowAttribute as String, foreign)
+                    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, foreign)
+                }
+                if globalFocusDriftStage == "restore", CFEqual(element, arrange),
+                   attribute == kAXMainAttribute as String {
+                    focusedApplicationPID = globalFocusDriftPID
+                }
+                if finalRestoreDocumentDrift, CFEqual(element, focus), attribute == kAXFocusedAttribute as String {
+                    builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Changed.logicx")
+                }
+                return !focusReportsFailure
+            },
+            performActionHandler: { [self] element, action in
+                events.append(CFEqual(element, close) ? "close" : "action.\(action)")
+                if CFEqual(element, close), action == kAXPressAction as String {
+                    phase = "closed"
+                    if !closeRemains {
+                        builder.setAttribute(app, kAXWindowsAttribute as String,
+                                             originalGone ? [foreign] : [arrange, foreign])
+                    }
+                }
+                return !(CFEqual(element, close) && closeReportsFailure)
+            },
+            executeAppleScript: { [self] _ in
+                events.append("unexpected_script")
+                return .error("fixture refuses AppleScript")
+            }
+        )
+        return AXLogicProElements.Runtime(
+            logicProPID: base.logicProPID, ax: base.ax,
+            executeAppleScript: base.executeAppleScript,
+            executeAppleScriptWithTimeout: base.executeAppleScriptWithTimeout,
+            onScreenWindowList: base.onScreenWindowList,
+            postPopupMenuEscape: base.postPopupMenuEscape,
+            focusedApplicationPID: { [self] in focusedApplicationPID },
+            observeFrontmost: base.observeFrontmost
+        )
+    }
+
+    func openList() async -> ChannelResult {
+        if openerRefusesBeforeWrite {
+            if userOpensListOnRefusal {
+                events.append("user_open")
+                phase = "opened"
+                builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, list, foreign])
+                builder.setAttribute(app, kAXMainWindowAttribute as String, list)
+                builder.setAttribute(app, kAXFocusedWindowAttribute as String, list)
+                builder.setAttribute(app, kAXFocusedUIElementAttribute as String, builder.element(8000))
+            }
+            return .error(HonestContract.encodeStateC(error: .readbackUnavailable,
+                extras: ["write_attempted": false]))
+        }
+        events.append("open")
+        phase = "opened"
+        var windows = originalGone ? [list, foreign] : [arrange, list, foreign]
+        if duplicateAfter {
+            let duplicate = builder.element(111806)
+            builder.setAttribute(duplicate, kAXRoleAttribute as String, kAXWindowRole as String)
+            builder.setAttribute(duplicate, kAXTitleAttribute as String, "TestProject - 마커 목록")
+            builder.setAttribute(duplicate, kAXDocumentAttribute as String, "/TestProject.logicx")
+            windows.append(duplicate)
+        }
+        if wrongDocumentAfter {
+            builder.setAttribute(list, kAXDocumentAttribute as String, "/OtherProject.logicx")
+        }
+        if replacementAfter {
+            let replacement = builder.element(111807)
+            builder.setAttribute(replacement, kAXTitleAttribute as String, "TestProject - 트랙")
+            builder.setAttribute(replacement, kAXDocumentAttribute as String, "/TestProject.logicx")
+            windows.removeAll { CFEqual($0, arrange) }
+            windows.append(replacement)
+        }
+        builder.setAttribute(app, kAXWindowsAttribute as String, windows)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, list)
+        builder.setAttribute(app, kAXFocusedWindowAttribute as String, list)
+        builder.setAttribute(app, kAXFocusedUIElementAttribute as String, builder.element(8000))
+        if foreignFocusAfter {
+            builder.setAttribute(app, kAXFocusedWindowAttribute as String, foreign)
+            builder.setAttribute(app, kAXFocusedUIElementAttribute as String, foreign)
+        }
+        if mainProjectChangedAfter {
+            builder.setAttribute(arrange, kAXDocumentAttribute as String, "/ChangedProject.logicx")
+        }
+        if loseOwnershipOnOpen { ownsGate = false }
+        if globalFocusDriftStage == "open" { focusedApplicationPID = globalFocusDriftPID }
+        if openerFailsAfterOpening {
+            return .error(HonestContract.encodeStateC(error: .axWriteFailed))
+        }
+        return .success(HonestContract.encodeStateA())
+    }
+
+    func capture() async -> ChannelResult {
+        let context = OperationTraceContext(ownsGate: { [self] in ownsGate })
+        return await OperationTraceContext.$current.withValue(context) {
+            await AccessibilityChannel.defaultCaptureMarkers(
+                runtime: runtime, openMarkerList: { [self] in await openList() }
+            )
+        }
+    }
+
+    func object(_ result: ChannelResult) -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: Data(result.message.utf8))) as? [String: Any] ?? [:]
+    }
+}
+
+@Test func issue1118CaptureClosedListReadsAndRestoresExactWindowsAndFocus() async throws {
+    let fixture = Issue1118CaptureFixture()
+    let result = await fixture.capture()
+    let body = fixture.object(result)
+    #expect(body["state"] as? String == "A")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(restored)
+    let markers = try #require(body["markers"] as? [[String: Any]])
+    let marker = try #require(markers.first)
+    #expect(marker["name"] as? String == "Verse")
+    #expect(marker["position"] as? String == "5.1.1.1")
+    #expect(marker["positionSource"] as? String == "parser")
+    #expect(fixture.events.first == "open")
+    #expect(fixture.events.filter { $0 == "close" }.count == 1)
+    #expect(!fixture.events.contains("unexpected_script"))
+    let ax = fixture.runtime.ax
+    let windows: [AXUIElement] = AXHelpers.getAttribute(fixture.app, kAXWindowsAttribute, runtime: ax) ?? []
+    #expect(windows.count == 2)
+    #expect(windows.contains { CFEqual($0, fixture.arrange) })
+    #expect(windows.contains { CFEqual($0, fixture.foreign) })
+    let main: AXUIElement = try #require(AXHelpers.getAttribute(fixture.app, kAXMainWindowAttribute, runtime: ax))
+    let focused: AXUIElement = try #require(AXHelpers.getAttribute(fixture.app, kAXFocusedWindowAttribute, runtime: ax))
+    let element: AXUIElement = try #require(AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute, runtime: ax))
+    #expect(CFEqual(main, fixture.arrange))
+    #expect(CFEqual(focused, fixture.arrange))
+    #expect(CFEqual(element, fixture.focus))
+}
+
+@Test(arguments: [false, true])
+func issue1118CaptureAlreadyOpenLeavesTheUIUntouched(empty: Bool) async throws {
+    let fixture = Issue1118CaptureFixture(open: true, empty: empty)
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "A")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(restored)
+    let markers = try #require(body["markers"] as? [[String: Any]])
+    #expect(markers.count == (empty ? 0 : 1))
+    #expect(fixture.events.isEmpty)
+}
+
+@Test(arguments: [kAXWindowsAttribute as String, kAXMainWindowAttribute as String,
+                  kAXFocusedWindowAttribute as String, kAXFocusedUIElementAttribute as String,
+                  kAXDocumentAttribute as String])
+func issue1118CaptureUnknownInitialStateRefusesBeforeOpening(attribute: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.unreadInitial = attribute
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let attempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!attempted)
+    #expect(fixture.events.isEmpty)
+}
+
+@Test func issue1118CaptureUnreadInventoryStillClosesOwnedListAndRestoresFocus() async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.unreadRows = true
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(restored)
+    #expect(body["error"] as? String == "readback_unavailable")
+    #expect(fixture.events.contains("open"))
+    #expect(fixture.events.filter { $0 == "close" }.count == 1)
+}
+
+@Test(arguments: ["close_remains", "windows_unread", "focus_ineffective"])
+func issue1118CaptureAcceptedCleanupWithoutReadbackIsNotVerified(failure: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.closeRemains = failure == "close_remains"
+    fixture.unreadAfterClose = failure == "windows_unread"
+    fixture.focusIneffective = failure == "focus_ineffective"
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String != "A")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    #expect(fixture.events.filter { $0 == "close" }.count == 1)
+}
+
+@Test(arguments: ["duplicate", "wrong_document", "original_gone"])
+func issue1118CaptureUnownedWindowIsNeverClosed(failure: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.duplicateAfter = failure == "duplicate"
+    fixture.wrongDocumentAfter = failure == "wrong_document"
+    fixture.originalGone = failure == "original_gone"
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String != "A")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    #expect(fixture.events == ["open"])
+}
+
+@Test func issue1118CaptureLostWriteOwnershipStopsCleanupWrites() async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.loseOwnershipOnOpen = true
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String != "A")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    #expect(fixture.events == ["open"])
+}
+
+@Test func issue1118CaptureOpenerFailureAfterOpeningStillCleansItsOwnedWindow() async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.openerFailsAfterOpening = true
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(restored)
+    #expect(fixture.events.filter { $0 == "close" }.count == 1)
+}
+
+@Test(arguments: ["foreign_focus", "project_changed", "replacement"])
+func issue1118CaptureUserFocusOrProjectChangeIsNotOverwritten(failure: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.foreignFocusAfter = failure == "foreign_focus"
+    fixture.mainProjectChangedAfter = failure == "project_changed"
+    fixture.replacementAfter = failure == "replacement"
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String != "A")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    #expect(fixture.events == ["open"])
+}
+
+@Test func issue1118CaptureCancelledTaskDoesNotStartUIWrites() async throws {
+    let fixture = Issue1118CaptureFixture()
+    let task = Task {
+        withUnsafeCurrentTask { $0?.cancel() }
+        return await fixture.capture()
+    }
+    let body = fixture.object(await task.value)
+    #expect(body["state"] as? String == "C")
+    let attempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!attempted)
+    #expect(fixture.events.isEmpty)
+}
+
+@Test(arguments: ["close_status", "focus_status", "no_write_opener"])
+func issue1118CaptureUsesObservedEffectsAndHonestWriteAttempt(failure: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.closeReportsFailure = failure == "close_status"
+    fixture.focusReportsFailure = failure == "focus_status"
+    fixture.openerRefusesBeforeWrite = failure == "no_write_opener"
+    let body = fixture.object(await fixture.capture())
+    if failure == "no_write_opener" {
+        #expect(body["state"] as? String == "C")
+        let attempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!attempted)
+        #expect(fixture.events.isEmpty)
+    } else {
+        #expect(body["state"] as? String == "A")
+        let restored = try #require(body["ui_restored"] as? Bool)
+        #expect(restored)
+        #expect(fixture.events.filter { $0 == "close" }.count == 1)
+    }
+}
+
+@Test(arguments: ["main", "window"])
+func issue1118CaptureFocusDriftDuringRestorationStopsSubsequentWrites(stage: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.focusDriftOnRestore = stage
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    #expect(fixture.events == (stage == "main"
+        ? ["open", "close", "set.AXMain"]
+        : ["open", "close", "set.AXMain", "set.AXFocused"]))
+    let focused: AXUIElement = try #require(AXHelpers.getAttribute(
+        fixture.app, kAXFocusedWindowAttribute, runtime: fixture.runtime.ax))
+    #expect(CFEqual(focused, fixture.foreign))
+}
+
+@Test(arguments: ["open_foreign", "open_unknown", "restore_foreign", "restore_unknown"])
+func issue1118CaptureGlobalFocusLossStopsLateWritesDespiteUnchangedAXFocus(failure: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    let duringRestore = failure.hasPrefix("restore")
+    fixture.globalFocusDriftStage = duringRestore ? "restore" : "open"
+    fixture.globalFocusDriftPID = failure.hasSuffix("unknown") ? nil : 4343
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    #expect(fixture.ownsGate)
+    #expect(fixture.focusedApplicationPID == fixture.globalFocusDriftPID)
+    #expect(fixture.events == (duringRestore ? ["open", "close", "set.AXMain"] : ["open"]))
+    let ax = fixture.runtime.ax
+    let main: AXUIElement = try #require(AXHelpers.getAttribute(fixture.app, kAXMainWindowAttribute, runtime: ax))
+    let focused: AXUIElement = try #require(AXHelpers.getAttribute(fixture.app, kAXFocusedWindowAttribute, runtime: ax))
+    let element: AXUIElement = try #require(AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute, runtime: ax))
+    #expect(CFEqual(main, duringRestore ? fixture.arrange : fixture.list))
+    #expect(CFEqual(focused, fixture.list))
+    #expect(CFEqual(element, fixture.builder.element(8000)))
+}
+
+@Test(arguments: ["foreign_focus", "original_document", "owned_document"])
+func issue1118CaptureCloseMetadataDriftRevokesCloseAuthority(failure: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.closeReadDrift = failure
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    #expect(fixture.events == ["open"])
+}
+
+@Test func issue1118CaptureDefiniteNoWriteOpenerNeverOwnsConcurrentUserList() async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.openerRefusesBeforeWrite = true
+    fixture.userOpensListOnRefusal = true
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    let attempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!restored)
+    #expect(!attempted)
+    #expect(fixture.events == ["user_open"])
+}
+
+@Test func issue1118CaptureFinalRestoreDocumentDriftCannotPublishPriorMarkers() async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.finalRestoreDocumentDrift = true
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    #expect(fixture.events == ["open", "close", "set.AXMain", "set.AXFocused", "set.AXFocused"])
+}
+
+@Test(arguments: ["original", "list"])
+func issue1118CaptureAlreadyOpenInventoryDocumentDriftIsNotVerified(failure: String) async throws {
+    let fixture = Issue1118CaptureFixture(open: true)
+    fixture.inventoryDocumentDrift = failure
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    #expect(fixture.events.isEmpty)
+}
+
+@Test(arguments: ["valid", "valid_deep", "valid_folded", "disabled", "duplicate", "unknown_owner", "unread_menu", "unknown_enabled",
+                  "main_drift", "document_drift", "focus_drift"])
+func issue1118OpenCaptureUsesOnlyOneOwnedAXMenuPress(failure: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    let bar = fixture.builder.element(111810)
+    let navigate = fixture.builder.element(111811)
+    let menu = fixture.builder.element(111812)
+    let item = fixture.builder.element(111813)
+    fixture.builder.setAttribute(fixture.app, kAXMenuBarAttribute as String, bar)
+    fixture.builder.setAttribute(bar, kAXRoleAttribute as String, kAXMenuBarRole as String)
+    fixture.builder.setAttribute(navigate, kAXRoleAttribute as String, kAXMenuBarItemRole as String)
+    let navigateTitle = failure == "valid_folded"
+        ? "  " + AXLocalePolicy.navigateMenuBar.canonical.uppercased() + "  "
+        : AXLocalePolicy.navigateMenuBar.canonical
+    fixture.builder.setAttribute(navigate, kAXTitleAttribute as String, navigateTitle)
+    fixture.builder.setAttribute(menu, kAXRoleAttribute as String, kAXMenuRole as String)
+    fixture.builder.setAttribute(item, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    let itemTitle = failure == "valid_folded"
+        ? "  " + AXLocalePolicy.openMarkerListMenuItem.canonical.uppercased() + "  "
+        : AXLocalePolicy.openMarkerListMenuItem.canonical
+    fixture.builder.setAttribute(item, kAXTitleAttribute as String, itemTitle)
+    fixture.builder.setAttribute(item, kAXEnabledAttribute as String, failure != "disabled")
+    fixture.builder.setActionNames(item, [kAXPressAction as String])
+    fixture.builder.setChildren(bar, [navigate])
+    fixture.builder.setChildren(navigate, [menu])
+    var items = [item]
+    if failure == "duplicate" {
+        let duplicate = fixture.builder.element(111814)
+        fixture.builder.setAttribute(duplicate, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        fixture.builder.setAttribute(duplicate, kAXTitleAttribute as String, AXLocalePolicy.openMarkerListMenuItem.canonical)
+        items.append(duplicate)
+    }
+    if failure == "valid_deep" {
+        // Archived EN navigation-free census :3830-3875 has this unrelated
+        // submenu down to depth 6; Open Marker List remains a direct row (:3976).
+        let other = fixture.builder.element(111815)
+        let otherMenu = fixture.builder.element(111816)
+        let scene = fixture.builder.element(111817)
+        let sceneMenu = fixture.builder.element(111818)
+        let autoRange = fixture.builder.element(111819)
+        for (element, role, title) in [
+            (other, kAXMenuItemRole as String, "Other"),
+            (otherMenu, kAXMenuRole as String, ""),
+            (scene, kAXMenuItemRole as String, "Create Movie Scene Cut Markers"),
+            (sceneMenu, kAXMenuRole as String, ""),
+            (autoRange, kAXMenuItemRole as String, "Auto Range"),
+        ] {
+            fixture.builder.setAttribute(element, kAXRoleAttribute as String, role)
+            if !title.isEmpty { fixture.builder.setAttribute(element, kAXTitleAttribute as String, title) }
+        }
+        fixture.builder.setChildren(other, [otherMenu])
+        fixture.builder.setChildren(otherMenu, [scene])
+        fixture.builder.setChildren(scene, [sceneMenu])
+        fixture.builder.setChildren(sceneMenu, [autoRange])
+        items.append(other)
+    }
+    fixture.builder.setChildren(menu, items)
+    let ax = fixture.builder.makeAXRuntime(
+        appElement: fixture.app,
+        attributeValueResultHandler: { element, attribute in
+            if CFEqual(element, item), attribute == kAXEnabledAttribute as String {
+                if failure == "main_drift" {
+                    fixture.builder.setAttribute(fixture.app, kAXMainWindowAttribute as String, fixture.foreign)
+                }
+                if failure == "document_drift" {
+                    fixture.builder.setAttribute(fixture.arrange, kAXDocumentAttribute as String, "/Changed.logicx")
+                }
+                if failure == "focus_drift" {
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.foreign)
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.foreign)
+                }
+            }
+            if failure == "unknown_enabled", CFEqual(element, item), attribute == kAXEnabledAttribute as String {
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+            return nil
+        },
+        childrenResultHandler: { element in
+            if failure == "unread_menu", CFEqual(element, menu) {
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+            return nil
+        },
+        setAttributeHandler: { _, _, _ in
+            fixture.events.append("unexpected_set")
+            return false
+        },
+        performActionHandler: { element, action in
+            fixture.events.append(CFEqual(element, item) && action == kAXPressAction as String ? "press" : "unexpected_action")
+            fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String,
+                                         [fixture.arrange, fixture.list, fixture.foreign])
+            fixture.builder.setAttribute(fixture.app, kAXMainWindowAttribute as String, fixture.list)
+            return true
+        }
+    )
+    let runtime = AXLogicProElements.Runtime(
+        logicProPID: { 4242 }, ax: ax,
+        executeAppleScript: { _ in fixture.events.append("unexpected_script"); return .error("no script") },
+        focusedApplicationPID: { failure == "unknown_owner" ? nil : 4242 }
+    )
+    let result = await AccessibilityChannel.defaultOpenMarkerListForCapture(runtime: runtime)
+    let body = fixture.object(result)
+    let valid = failure == "valid" || failure == "valid_deep" || failure == "valid_folded"
+    #expect(body["state"] as? String == (valid ? "A" : "C"))
+    if valid {
+        #expect(fixture.events == ["press"])
+        #expect(body["opener_source"] as? String == "ax_menu_item")
+    } else {
+        #expect(fixture.events.isEmpty)
+    }
+}
+
 @Test
 func enumerateMarkers_logic122_markerListWindow_open_returnsMarkers() async {
     let builder = FakeAXRuntimeBuilder()

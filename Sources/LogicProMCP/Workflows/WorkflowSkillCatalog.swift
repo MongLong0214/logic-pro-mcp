@@ -536,7 +536,7 @@ enum WorkflowSkillCatalog {
             "duplicate", "toggle_step_input", "move_to_playhead",
         ],
         "logic_navigate": [
-            "goto_bar", "goto_marker", "create_marker", "delete_marker",
+            "goto_bar", "goto_marker", "capture_markers", "create_marker", "delete_marker",
             "rename_marker", "zoom_to_fit", "set_zoom", "toggle_view",
         ],
         "logic_project": [
