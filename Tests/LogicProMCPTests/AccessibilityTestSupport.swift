@@ -85,6 +85,10 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         attributes[key(for: element)]?[attribute]
     }
 
+    func removeAttribute(_ element: AXUIElement, _ attribute: String) {
+        attributes[key(for: element)]?.removeValue(forKey: attribute)
+    }
+
     func elementID(_ element: AXUIElement) -> Int {
         key(for: element)
     }
@@ -95,10 +99,12 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
 
     func makeAXRuntime(
         appElement: AXUIElement? = nil,
+        appElementProvider: (@Sendable (pid_t) -> AXUIElement?)? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
         childrenHandler: (@Sendable (AXUIElement) -> [AXUIElement]?)? = nil,
         childrenResultHandler: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)? = nil,
+        actionNamesHandler: (@Sendable (AXUIElement) -> [String]?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
         performActionResultHandler: (@Sendable (AXUIElement, String) -> Result<Void, AXHelpers.AXStatusError>)? = nil,
@@ -107,8 +113,8 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         }
     ) -> AXHelpers.Runtime {
         AXHelpers.Runtime(
-            axApp: { [self] _ in
-                appElement ?? element(0)
+            axApp: { [self] pid in
+                appElementProvider?(pid) ?? appElement ?? element(0)
             },
             attributeValue: { [self] element, attribute in
                 if let handled = attributeValueHandler?(element, attribute) {
@@ -148,7 +154,8 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                 children[key(for: element)]?.count
             },
             actionNames: { [self] element in
-                actionNames[key(for: element)] ?? []
+                if let handled = actionNamesHandler?(element) { return handled }
+                return actionNames[key(for: element)] ?? []
             },
             // Without this the status-preserving reader falls through to the REAL
             // `AXUIElementCopyAttributeValue` and asks the window server about a fake element, which

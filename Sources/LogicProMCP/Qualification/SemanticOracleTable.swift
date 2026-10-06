@@ -249,6 +249,8 @@ enum SemanticOracleTable {
     static let postClosureMutatingOperationIDs: Set<OperationID> = [
         .editMoveToPlayhead,
         .tracksSortVerified,
+        // Explicit Mixer final-state mode only; omitted blind toggles remain State B.
+        .navigateToggleView,
         .navigateCaptureMarkers,
     ]
 
@@ -367,9 +369,6 @@ enum SemanticOracleTable {
             "send-only — routes to [.midiKeyCommands, .cgEvent]; both fire a blind key "
             + "command (CC 46 / key Z) with no arrange-zoom read-back, so the op is honestly "
             + "State B and never reaches a verified State A",
-        .navigateToggleView:
-            "send-only — routes each view to [.midiKeyCommands, .cgEvent] (view.toggle_*); "
-            + "the key command fires blind with no view-state read-back, so no State A exists",
         // B3 audit: project-lifecycle / tracks-topology / midi-send ops that
         // structurally cannot reach State A. Kept explicit so their absence from
         // the B3 increment is a reviewed decision, not a gap.
@@ -598,6 +597,7 @@ enum SemanticOracleTable {
         // #575 — registered after B4 closed the inventory; see
         // `postClosureMutatingOperationIDs` for why it is kept out of the phase sets.
         editMoveToPlayhead,
+        navigateSetMixerVisibility,
     ]
 
     static let byOperationID: [OperationID: OperationOracle] = Dictionary(
@@ -2549,6 +2549,22 @@ enum SemanticOracleTable {
     //                                    rounding. NOT `.fieldsEqual`: State A does not promise an
     //                                    exact match, and pinning one would describe a contract the
     //                                    handler never made.
+    // Receipt oracle for the explicit AX-only Mixer mode, not a separate getter or
+    // qualification of legacy blind toggles, other views, or a native session.
+    static let navigateSetMixerVisibility = SafeMutationOracle.oracle(
+        .navigateToggleView,
+        semantics: [
+            .enumMember(key: "operation", allowed: ["view.set_mixer_visibility"]),
+            .typedField(key: "requested_visible", type: .bool),
+            .typedField(key: "before_visible", type: .bool),
+            .typedField(key: "after_visible", type: .bool),
+            .typedField(key: "write_attempted", type: .bool),
+            .fieldsEqual(keyA: "requested_visible", keyB: "after_visible"),
+            .valueEquals(key: "menu_restored", expected: .bool(true)),
+            .enumMember(key: "visibility_source", allowed: ["ax_bound_mixer"]),
+        ]
+    )
+
     static let editMoveToPlayhead = SafeMutationOracle.oracle(
         .editMoveToPlayhead,
         semantics: [

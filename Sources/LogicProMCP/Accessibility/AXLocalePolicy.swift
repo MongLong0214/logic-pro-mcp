@@ -82,6 +82,13 @@ enum AXLocalePolicy {
             return result
         }
 
+        /// Retain the same policy-owned canonical text and matching semantics when a
+        /// caller must distinguish that direction from this set's other variants.
+        var canonicalOnly: Self {
+            Self(canonical: canonical, variants: [], rationale: rationale,
+                 derivedFrom: derivedFrom, alsoDerivedFrom: alsoDerivedFrom)
+        }
+
         func matches(_ text: String?, mode: MatchMode = .exact) -> Bool {
             guard let text else { return false }
 
@@ -278,6 +285,13 @@ enum AXLocalePolicy {
         variants: ["Hide Mixer", "믹서 보기"],
         rationale: "Used only as a best-effort mixer reveal before structural mixer readback."
     )
+
+    /// The existing first variant owns the known English Hide direction. The Korean
+    /// discovery variant does not establish a direction and is deliberately not projected.
+    static var mixerMenuHideDirection: LabelSet {
+        .init(canonical: showMixerMenuItem.variants[0], variants: [],
+              rationale: showMixerMenuItem.rationale)
+    }
 
     static let windowMenuBar = LabelSet(
         canonical: "Window",

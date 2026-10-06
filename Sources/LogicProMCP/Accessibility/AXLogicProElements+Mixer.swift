@@ -72,7 +72,13 @@ extension AXLogicProElements {
         return mixerAreaLookup(in: window, runtime: runtime)
     }
 
-    static func mixerAreaLookup(in window: AXUIElement, runtime: Runtime) -> MixerAreaLookup {
+    static func mixerAreaLookup(
+        in window: AXUIElement, runtime: Runtime, requiresCompleteAbsence: Bool = false
+    ) -> MixerAreaLookup {
+        if requiresCompleteAbsence {
+            return (try? mixerPopulationAreaLookup(in: window, runtime: runtime,
+                requiresCompleteAbsence: true))?.lookup ?? .childrenUnread
+        }
         // Preserve the ordinary reader's historical ID-first behavior. Request acquisition
         // uses the same candidate walk below with per-read cancellation checks instead.
         if let mixer = AXHelpers.findDescendant(
@@ -91,7 +97,8 @@ extension AXLogicProElements {
     }
 
     static func mixerPopulationAreaLookup(
-        in window: AXUIElement, runtime: Runtime, checking check: () throws -> Void = {}
+        in window: AXUIElement, runtime: Runtime, requiresCompleteAbsence: Bool = false,
+        checking check: () throws -> Void = {}
     ) throws -> (lookup: MixerAreaLookup, binding: MixerAreaBinding?) {
         try check()
 
@@ -102,7 +109,8 @@ extension AXLogicProElements {
         // Do not fall back to the Inspector's small two-strip "믹서" area; that
         // would make a full mixer read silently return only selected-track +
         // output strips.
-        let scan = try mixerAreaCandidates(in: window, runtime: runtime.ax, checking: check)
+        let scan = try mixerAreaCandidates(in: window, runtime: runtime.ax,
+            requiresCompleteAbsence: requiresCompleteAbsence, checking: check)
         // Existing fake/older AXIdentifier contracts remain supported, including an empty
         // ID-bound container. They no longer require separate unchecked recursive walks.
         let legacy = scan.candidates.first { $0.legacyRole == (kAXGroupRole as String) }
@@ -116,7 +124,8 @@ extension AXLogicProElements {
         if let best {
             return (.found(best.element), .init(mixer: best.element, owners: best.owners, path: best.path))
         }
-        return (scan.sawUnreadMixerContainer ? .childrenUnread : .notFound, nil)
+        return (scan.sawUnreadMixerContainer || (requiresCompleteAbsence && scan.sawIncompleteAbsence)
+            ? .childrenUnread : .notFound, nil)
     }
 
     /// #107: the per-track volume fader inside the track HEADER (an AXSlider
@@ -294,10 +303,12 @@ extension AXLogicProElements {
     private static func mixerAreaCandidates(
         in root: AXUIElement,
         runtime: AXHelpers.Runtime,
+        requiresCompleteAbsence: Bool,
         checking check: () throws -> Void
-    ) throws -> (candidates: [MixerAreaCandidate], sawUnreadMixerContainer: Bool) {
+    ) throws -> (candidates: [MixerAreaCandidate], sawUnreadMixerContainer: Bool, sawIncompleteAbsence: Bool) {
         var candidates: [MixerAreaCandidate] = []
         var sawUnreadMixerContainer = false
+        var sawIncompleteAbsence = false
         var remainingNodes = 4096
         _ = try collectMixerAreaCandidates(
             root,
@@ -308,11 +319,13 @@ extension AXLogicProElements {
             ancestors: [],
             owners: [],
             remainingNodes: &remainingNodes,
+            requiresCompleteAbsence: requiresCompleteAbsence,
             checking: check,
             into: &candidates,
-            sawUnreadMixerContainer: &sawUnreadMixerContainer
+            sawUnreadMixerContainer: &sawUnreadMixerContainer,
+            sawIncompleteAbsence: &sawIncompleteAbsence
         )
-        return (candidates, sawUnreadMixerContainer)
+        return (candidates, sawUnreadMixerContainer, sawIncompleteAbsence)
     }
 
     private static func collectMixerAreaCandidates(
@@ -324,20 +337,38 @@ extension AXLogicProElements {
         ancestors: [AXUIElement],
         owners: [AXUIElement],
         remainingNodes: inout Int,
+        requiresCompleteAbsence: Bool,
         checking check: () throws -> Void,
         into candidates: inout [MixerAreaCandidate],
-        sawUnreadMixerContainer: inout Bool
+        sawUnreadMixerContainer: inout Bool,
+        sawIncompleteAbsence: inout Bool
     ) throws -> Bool {
         try check()
-        guard depth <= 12 else { return false }
+        guard depth <= 12 else { sawIncompleteAbsence = true; return false }
         guard remainingNodes > 0, !ancestors.contains(where: { CFEqual($0, element) }) else {
             if ancestorIsMixer { sawUnreadMixerContainer = true }
+            sawIncompleteAbsence = true
             return false
         }
         remainingNodes -= 1
 
         func metadata(_ attribute: String) throws -> String? {
             try check()
+            if requiresCompleteAbsence {
+                let read: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                    element, attribute, runtime: runtime)
+                switch read {
+                case .success(.some(let value)):
+                    guard let text = value as? String else { sawIncompleteAbsence = true; return nil }
+                    return text
+                case .success(nil):
+                    if attribute == kAXRoleAttribute as String { sawIncompleteAbsence = true }
+                    return nil
+                case .failure(let error):
+                    if !error.isDefinitiveAbsence || attribute == kAXRoleAttribute as String { sawIncompleteAbsence = true }
+                    return nil
+                }
+            }
             return AXHelpers.getAttribute(element, attribute, runtime: runtime)
         }
         let role = try metadata(kAXRoleAttribute)
@@ -359,6 +390,7 @@ extension AXLogicProElements {
         // between its outer group and the layout area) hides strips that may be there.
         try check()
         guard let children = childrenIfRead(element, runtime: runtime) else {
+            sawIncompleteAbsence = true
             if !isInspector, ancestorIsMixer || isMixerContainer {
                 sawUnreadMixerContainer = true
             }
@@ -397,9 +429,11 @@ extension AXLogicProElements {
                 ancestors: ancestors + [element],
                 owners: isMixerContainer ? owners + [element] : owners,
                 remainingNodes: &remainingNodes,
+                requiresCompleteAbsence: requiresCompleteAbsence,
                 checking: check,
                 into: &candidates,
-                sawUnreadMixerContainer: &sawUnreadMixerContainer
+                sawUnreadMixerContainer: &sawUnreadMixerContainer,
+                sawIncompleteAbsence: &sawIncompleteAbsence
             ) { return true }
         }
         return false

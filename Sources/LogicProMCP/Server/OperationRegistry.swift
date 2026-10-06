@@ -624,7 +624,7 @@ enum OperationRegistry {
         (.navigateRenameMarker, "rename_marker", .readbackRequired, .defaultInstall, ["index", "name"]),
         (.navigateZoomToFit, "zoom_to_fit", .readbackRequired, .defaultInstall, []),
         (.navigateSetZoom, "set_zoom", .readbackRequired, .defaultInstall, ["direction", "level"]),
-        (.navigateToggleView, "toggle_view", .none, .defaultInstall, ["view"]),
+        (.navigateToggleView, "toggle_view", .none, .defaultInstall, ["view", "visible"]),
     ] as [(OperationID, String, VerificationPolicy, AvailabilityPolicy, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,

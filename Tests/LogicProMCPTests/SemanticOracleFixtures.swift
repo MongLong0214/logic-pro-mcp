@@ -941,6 +941,10 @@ enum SemanticOracleFixtures {
         // exactly matched the pre-write positions with the target occurrence
         // removed. Each sorted position entry is length-prefixed, then the entries
         // join without an ambiguous delimiter.
+        .navigateToggleView: SemanticOracleFixture(
+            response: "{\"state\":\"A\",\"success\":true,\"verified\":true,\"operation\":\"view.set_mixer_visibility\",\"requested_visible\":true,\"before_visible\":false,\"after_visible\":true,\"menu_restored\":true,\"visibility_source\":\"ax_bound_mixer\",\"write_attempted\":true}",
+            readback: "{}"
+        ),
         .navigateDeleteMarker: SemanticOracleFixture(
             response: """
                 {"success":true,"verified":true,"state":"A",\
