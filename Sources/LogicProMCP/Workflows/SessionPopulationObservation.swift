@@ -596,6 +596,8 @@ enum SessionPopulationObservation {
         var nameStatus: String { name != nil ? "observed" : (nameReadError != nil ? "unknown" : "not_read") }
         let output: String?
         let input: String?
+        let inputObservation: InputSlotObservation?
+        var inputStatus: String { inputObservation?.state.rawValue ?? "not_read" }
         let pluginCount: Int
         let pluginsSource: String?
 
@@ -606,6 +608,8 @@ enum SessionPopulationObservation {
             case nameReadError = "name_read_error"
             case output
             case input
+            case inputObservation = "input_observation"
+            case inputStatus = "input_status"
             case pluginCount = "plugin_count"
             case pluginsSource = "plugins_source"
         }
@@ -623,6 +627,8 @@ enum SessionPopulationObservation {
             try container.encodeIfPresent(nameReadError, forKey: .nameReadError)
             try container.encodeIfPresent(output, forKey: .output)
             try container.encodeIfPresent(input, forKey: .input)
+            try container.encodeIfPresent(inputObservation, forKey: .inputObservation)
+            try container.encode(inputStatus, forKey: .inputStatus)
             try container.encode(pluginCount, forKey: .pluginCount)
             try container.encodeIfPresent(pluginsSource, forKey: .pluginsSource)
         }
@@ -884,6 +890,7 @@ enum SessionPopulationObservation {
                     nameReadError: strip.nameReadError,
                     output: strip.output,
                     input: strip.input,
+                    inputObservation: strip.inputObservation,
                     pluginCount: strip.plugins.count,
                     pluginsSource: strip.pluginsSource
                 )

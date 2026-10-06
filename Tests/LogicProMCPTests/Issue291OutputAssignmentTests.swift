@@ -1100,11 +1100,12 @@ func inputSlotReadingNoSlotWithOnlyIdentifiedButtons() throws {
     #expect(AXLogicProElements.inputSlotReading(in: strip, runtime: runtime) == .noSlot)
 }
 
-/// The first recognised input slot still decides, even after an unidentified button that names a bus.
-@Test("inputSlotReading: a recognised input slot is the source even after an unidentified bus button")
+/// An unidentified bus button may be another input. A recognised slot cannot make the
+/// existing output writer's loop precheck treat that competing possibility as a known route.
+@Test("inputSlotReading: an unidentified bus button remains unknown beside a recognised slot")
 func inputSlotReadingRecognisedSlotStillDecides() throws {
     let (strip, runtime) = r2InputReadingStrip(unknown: .helpUnmatchedBusDescription, recognisedInputAfter: "Bus 2")
-    #expect(AXLogicProElements.inputSlotReading(in: strip, runtime: runtime) == .source("Bus 2"))
+    #expect(AXLogicProElements.inputSlotReading(in: strip, runtime: runtime) == .unreadable)
 }
 
 /// Kills M14: skipping the cleanup when no menu appears under the Mixer. The press still put a

@@ -719,16 +719,17 @@ extension AXLogicProElements {
 
     /// The three answers `inputSlotSource` folds into `nil`, kept apart (#291 R2).
     enum InputSlotReading: Equatable, Sendable {
-        /// The slot's description, as `inputSlotSource` returns it.
+        /// The sole recognised slot's description, with no unread possible competitor.
         case source(String)
         /// Every element in the walk read, no button's help named the input slot, and no button
-        /// whose help named none of the input, output and send slots is described as a bus: a
+        /// whose help named none of the input, output and send slots is described as a bus; the
+        /// bounded walk also established that it omitted no descendants: a
         /// software instrument strip, or one whose unrecognised buttons all name something else.
         case noSlot
         /// A children, role or help read in the walk failed; the slot was found and named nothing;
         /// the description of a button whose help named no known slot failed to read; or such a
-        /// button is described as a bus — possibly an input slot whose help wording this project's
-        /// LabelSet does not know, so its absence was not established.
+        /// button is described as a bus — possibly another input slot whose help wording this
+        /// project's LabelSet does not know; or matching slots repeat or descendants exceed the bound.
         case unreadable
     }
 
@@ -736,7 +737,7 @@ extension AXLogicProElements {
     /// safety depends on the difference: `set_output_verified` treats a strip with no input slot
     /// as one no bus can feed, which it may do only when that absence was read.
     ///
-    /// The walk, depth and first match of `slotButton`, taken through `preOrderDescendants` and
+    /// The walk and depth of `slotButton`, taken through `preOrderDescendants` and
     /// `slotDecidingString`, so -25205 and -25212 are answers and any other failed read makes the
     /// reading `.unreadable` instead of passing the element over.
     ///
@@ -759,7 +760,15 @@ extension AXLogicProElements {
             return .unreadable
         }
         var unidentifiedButtonNamesBus = false
+        var source: String?
         for visit in walk {
+            // A truncated subtree cannot establish absence or uniqueness. Only this input
+            // reading needs the extra boundary check; the output/send readers are unchanged.
+            if visit.depth == 4 {
+                guard let children = childrenIfRead(visit.element, runtime: runtime), children.isEmpty else {
+                    return .unreadable
+                }
+            }
             guard case let .success(role) = slotDecidingString(
                 visit.element, kAXRoleAttribute as String, runtime: runtime
             ) else { return .unreadable }
@@ -780,13 +789,17 @@ extension AXLogicProElements {
                 }
                 continue
             }
-            guard let description = AXHelpers.getDescription(visit.element, runtime: runtime),
+            guard source == nil,
+                  case let .success(description) = slotDecidingString(
+                    visit.element, kAXDescriptionAttribute as String, runtime: runtime
+                  ), let description,
                   !description.isEmpty else {
                 return .unreadable
             }
-            return .source(description)
+            source = description
         }
-        return unidentifiedButtonNamesBus ? .unreadable : .noSlot
+        guard !unidentifiedButtonNamesBus else { return .unreadable }
+        return source.map(InputSlotReading.source) ?? .noSlot
     }
 
     // MARK: - Send slots (#291)
