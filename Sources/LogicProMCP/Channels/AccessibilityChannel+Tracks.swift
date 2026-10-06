@@ -90,6 +90,9 @@ extension AccessibilityChannel {
                 hint: "sort_verified requires expected_order as a non-empty array of unique track_ref values."
             )
         }
+        guard !Task.isCancelled else {
+            return trackSortRefusal(.cancelled, criterion: criterion, extras: [:])
+        }
 
         var beforeTracks: [TrackState]?
         var afterTracks: [TrackState]?
@@ -234,6 +237,7 @@ extension AccessibilityChannel {
                 case .failure(let error):
                     return .menuReadFailed(stage: "AXMenuItem.AXEnabled", status: error.diagnosticLabel)
                 }
+                guard !Task.isCancelled else { return .cancelled }
                 // The menu leaf does not expose a persistent "selected sort"
                 // attribute. Its own title is therefore the only trustworthy
                 // criterion witness: we record the title and its measured mapping
@@ -544,6 +548,14 @@ extension AccessibilityChannel {
         extras: [String: Any]
     ) -> ChannelResult {
         switch refusal {
+        case .cancelled:
+            return trackSortStateC(
+                .readbackUnavailable,
+                criterion: criterion.rawValue,
+                reason: "cancelled",
+                hint: "sort_verified cancelled before the criterion menu action; no AXPress was sent.",
+                extras: extras
+            )
         case .beforeOrderUnreadable:
             return trackSortStateC(
                 .readbackUnavailable,

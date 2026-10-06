@@ -120,6 +120,19 @@ swift test --filter <testName>
 
 Use `swift test --no-parallel` before asking for review when the change touches shared routing, state, resource envelopes, or safety-sensitive behavior.
 
+### Python CI guards
+
+The offline CI guards use Python 3.11 and `Scripts/requirements-ci.txt`. To run them locally without
+changing your system Python:
+
+```bash
+python3.11 -m venv "${TMPDIR:-$HOME/.cache}/logic-pro-ci-venv"
+source "${TMPDIR:-$HOME/.cache}/logic-pro-ci-venv/bin/activate"
+python -m pip install -r Scripts/requirements-ci.txt
+python -u Scripts/run-repo-guards.py
+```
+
+
 ## Live E2E Testing
 
 With Logic Pro launched and the MCP server registered, run the live test script:

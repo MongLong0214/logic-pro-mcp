@@ -121,6 +121,40 @@ private final class DeadlineFlipProbe: @unchecked Sendable {
     }
 }
 
+/// Masks one corroborating read or expires the allowance during a later read.
+private actor CompensationReadProbeExecutor: SagaStepExecutor {
+    private let base: MockSagaExecutor
+    private let unavailableRead: Int?
+    private let afterRead: @Sendable (Int) -> Void
+    private var readbacks: [ObservedState?] = []
+
+    init(base: MockSagaExecutor, unavailableRead: Int? = nil,
+         afterRead: @escaping @Sendable (Int) -> Void = { _ in }) {
+        self.base = base
+        self.unavailableRead = unavailableRead
+        self.afterRead = afterRead
+    }
+
+    func run(_ step: SagaStep) async -> StepResult {
+        await base.run(step)
+    }
+
+    func readState(_ step: SagaStep) async -> ObservedState? {
+        let ordinal = readbacks.count + 1
+        let observed: ObservedState?
+        if ordinal == unavailableRead {
+            observed = nil
+        } else {
+            observed = await base.readState(step)
+        }
+        readbacks.append(observed)
+        afterRead(ordinal)
+        return observed
+    }
+
+    func observations() -> [ObservedState?] { readbacks }
+}
+
 @Suite("Mutation saga", .serialized)
 struct MutationSagaTests {
     private func bind(
@@ -401,6 +435,77 @@ struct MutationSagaTests {
         #expect(outcome.journal[2].compensationEvidence?.disposition == .notNeeded)
         #expect(outcome.journal[0].compensationEvidence?.readback != nil)
         #expect(outcome.journal[1].compensationEvidence?.readback != nil)
+    }
+
+    @Test("applied State A without an owned after-observation cannot authorize inverse")
+    func compensationRefusesMissingOwnedAfterState() async throws {
+        let registry = TargetRegistry()
+        let target = await bind(registry, index: 0, name: "Bass")
+        let base = MockSagaExecutor(states: [target: .double(0.25)],
+                                    behaviors: [.applyStateA, .applyStateA])
+        let executor = CompensationReadProbeExecutor(base: base, unavailableRead: 2)
+        let cancellation = StepBoundaryCancellationProbe()
+        let outcome = await MutationSaga(targetRegistry: registry, enabled: true,
+                                         routeAvailable: { _ in true }).execute(
+            SagaPlan(steps: [step(.mixerSetVolume, target: target, value: .double(0.75))],
+                     idempotencyKey: "compensation-missing-owned-after"),
+            executor: executor,
+            cancellationRequested: { await cancellation.shouldCancel() })
+
+        let first = try #require(outcome.journal.first)
+        #expect(first.executionResult?.state == .stateA)
+        #expect(first.writeBoundaryCrossed)
+        #expect(first.verificationEvidence?.disposition == .applied)
+        #expect(first.verificationEvidence?.readback == nil)
+        #expect(first.verificationEvidence?.comparison?.desired == .double(0.75))
+        let observations = await executor.observations()
+        let expected: [Value?] = [.double(0.25), nil, .double(0.75)]
+        #expect(observations.map { $0?.value } == expected)
+        #expect(await base.runCount() == 1)
+        #expect(await base.state(for: target) == .double(0.75))
+        let compensation = try #require(first.compensationEvidence)
+        #expect(compensation.disposition == .uncertain)
+        #expect(compensation.executionResult == nil)
+        #expect(compensation.readback?.value == .double(0.75))
+        #expect(compensation.comparison?.desired == nil)
+        #expect(outcome.state == .rollbackUncertain)
+        #expect(!outcome.complete)
+    }
+
+    @Test("deadline expiry during current-state read prevents the inverse dispatch")
+    func compensationDeadlineExpiresDuringCurrentRead() async throws {
+        let registry = TargetRegistry()
+        let target = await bind(registry, index: 0, name: "Bass")
+        let base = MockSagaExecutor(states: [target: .double(0.25)],
+                                    behaviors: [.applyStateA, .applyStateA])
+        let deadline = DeadlineFlipProbe(flipAfter: 1)
+        let executor = CompensationReadProbeExecutor(base: base, afterRead: { ordinal in
+            // The initial compensation checkpoint was false; read three expires it.
+            if ordinal == 3 { _ = deadline.reached() }
+        })
+        let cancellation = StepBoundaryCancellationProbe()
+        let outcome = await MutationSaga(targetRegistry: registry, enabled: true,
+                                         routeAvailable: { _ in true }).execute(
+            SagaPlan(steps: [step(.mixerSetVolume, target: target, value: .double(0.75))],
+                     idempotencyKey: "compensation-deadline-during-current-read"),
+            executor: executor,
+            cancellationRequested: { await cancellation.shouldCancel() },
+            deadlineReached: { deadline.reached() })
+
+        let first = try #require(outcome.journal.first)
+        #expect(first.verificationEvidence?.disposition == .applied)
+        #expect(first.verificationEvidence?.readback?.value == .double(0.75))
+        let observations = await executor.observations()
+        let expected: [Value?] = [.double(0.25), .double(0.75), .double(0.75)]
+        #expect(observations.map { $0?.value } == expected)
+        #expect(await base.runCount() == 1)
+        #expect(await base.state(for: target) == .double(0.75))
+        #expect(deadline.reached())
+        let compensation = try #require(first.compensationEvidence)
+        #expect(compensation.disposition == .uncertain)
+        #expect(compensation.executionResult == nil)
+        #expect(outcome.state == .rollbackUncertain)
+        #expect(!outcome.complete)
     }
 
     @Test

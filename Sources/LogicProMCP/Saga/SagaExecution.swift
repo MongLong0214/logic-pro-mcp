@@ -41,17 +41,28 @@ struct SagaLiveReadback: Sendable {
 }
 
 extension SagaLiveReadback {
-    /// Production seam. Each reader mirrors a dispatcher's State-A verification
-    /// primitive exactly:
-    /// - name: `AXLogicProElements.trackName(at:)` — the same live-identity-gated
-    ///   read the ADR-002 F5 mutation-boundary check uses.
+    /// Match reference issuance's raw name bytes, refusing an unreadable or
+    /// ambiguous header instead of using the legacy display-name trimming shim.
+    static func productionTrackName(
+        at index: Int, runtime: AXLogicProElements.Runtime = .production
+    ) -> String? {
+        guard let header = AXLogicProElements.findTrackHeader(at: index, runtime: runtime),
+              case .success(.some(let name)) = AXValueExtractors.extractTrackNameResult(
+                from: header, runtime: runtime.ax
+              ) else { return nil }
+        return name
+    }
+
+    /// Production seam. Name identity preserves reference issuance's raw bytes;
+    /// the scalar readers mirror the dispatchers' State-A readback primitives:
+    /// - name: the status-preserving, unambiguous track-header Name reading.
     /// - volume/pan: the header fader/pan slider + the same contract mapping
     ///   `AccessibilityChannel.defaultSetMixerValue` reads back through.
     /// - toggles: the M/S/R checkbox AXValue that
     ///   `AccessibilityChannel.defaultSetTrackToggle` verifies against.
     static let production = SagaLiveReadback(
         readTrackName: { index in
-            AXLogicProElements.trackName(at: index)
+            productionTrackName(at: index)
         },
         readTrackVolume: { index in
             guard let fader = AXLogicProElements.findTrackHeaderVolumeFader(at: index) else {
@@ -389,11 +400,12 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         // LIVE-sourced: the cache name it used to compare could agree with the
         // binding while the live track at `index` was a different track after
         // an out-of-band reorder — the gate would pass and the saga would read
-        // (and later restore) the wrong track. `trackName(at:)` is itself
-        // live-identity-gated and returns nil for an unreadable header.
+        // (and later restore) the wrong track. The production reader preserves
+        // raw Name bytes and refuses an unreadable or ambiguous header. Swift's
+        // canonical String equality must not join byte-distinct identities.
         guard let liveName = await liveReadback.readTrackName(index),
               TargetDescriptor(trackIndex: index, trackName: liveName).fingerprint
-                == binding.observedFingerprint
+                .utf8.elementsEqual(binding.observedFingerprint.utf8)
         else {
             return nil
         }

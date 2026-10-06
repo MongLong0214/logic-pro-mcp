@@ -527,14 +527,9 @@ extension AXLogicProElements {
         guard !headers.isEmpty else { return nil }
         var names: [Int: String] = [:]
         for (index, header) in headers.enumerated() {
-            let track = AXValueExtractors.extractTrackState(
-                from: header,
-                index: index,
-                runtime: runtime.ax
-            )
-            guard track.liveIdentityBacked else { return nil }
-            let name = track.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { return nil }
+            guard case .success(.some(let name)) = AXValueExtractors.extractTrackNameResult(
+                from: header, runtime: runtime.ax
+            ) else { return nil }
             names[index] = name
         }
         return names

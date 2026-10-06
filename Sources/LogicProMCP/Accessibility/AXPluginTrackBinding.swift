@@ -49,7 +49,7 @@ enum AXPluginTrackBinding {
             headerNames.append(name)
         }
         let name = headerNames[track]
-        guard headerNames.filter({ $0 == name }).count == 1 else {
+        guard headerNames.filter({ $0.utf8.elementsEqual(name.utf8) }).count == 1 else {
             onRefusal?("arrange_name_ambiguous"); return nil
         }
 
@@ -72,7 +72,7 @@ enum AXPluginTrackBinding {
                 } else { onRefusal?("strip_name_unavailable") }
                 return nil
             }
-            if stripName == name { matching.append((index, strip)) }
+            if stripName.utf8.elementsEqual(name.utf8) { matching.append((index, strip)) }
         }
         guard matching.count == 1 else { onRefusal?("strip_name_not_unique"); return nil }
         return Binding(trackIndex: track, trackName: name, mixerStripIndex: matching[0].0,
@@ -127,7 +127,7 @@ enum AXPluginTrackBinding {
     /// ordinal (even with the same name) is not the acquired target.
     static func isStable(_ original: Binding, runtime: AXLogicProElements.Runtime) -> Bool {
         guard let fresh = resolve(track: original.trackIndex, mixer: original.mixer, runtime: runtime),
-              fresh.trackName == original.trackName,
+              fresh.trackName.utf8.elementsEqual(original.trackName.utf8),
               CFEqual(fresh.header, original.header), CFEqual(fresh.strip, original.strip) else { return false }
         return true
     }

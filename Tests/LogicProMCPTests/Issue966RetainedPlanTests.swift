@@ -60,6 +60,26 @@ struct Issue966RetainedPlanTests {
         }
     }
 
+    @Test(arguments: ["Bad\u{0000}Name", "Bad\tName", "Bad\nName", "Bad\rName",
+                      "Bad\u{001F}Name", "Bad\u{007F}Name", "Bad\u{0080}Name", "Bad\u{009F}Name"])
+    func approvedControlCharacterNameCannotBecomeARetainedDraft(name: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, snapshot, reference) = try await fixture()
+            let result = await plan([
+                "snapshot_id": .string(snapshot), "policy": policy(reference: reference),
+                "names": .array([.object(["target": .string("track"), "name": .string(name)])])
+            ], cache: cache, registry: registry)
+            let isError = try #require(result.isError)
+            #expect(isError)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(body["error"] as? String == "invalid_params")
+            #expect(!body.keys.contains("plan_id"))
+            #expect(!body.keys.contains("steps"))
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!attempted)
+        }
+    }
+
     @Test func byteDistinctUnicodeNamesRemainBlockedTasks() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             for (observed, wanted) in [("\u{00E9}", "e\u{0301}"), ("e\u{0301}", "\u{00E9}")] {
