@@ -211,6 +211,7 @@ extension ChannelRouter {
         "nav.delete_marker":          [.accessibility],
         "nav.rename_marker":          [.accessibility],
         "nav.get_markers":            [.accessibility],
+        "nav.capture_markers":        [.accessibility],
         "nav.zoom_to_fit":            [.midiKeyCommands, .cgEvent],
         // #109: AX-first — the arrange Horizontal-Zoom AXSlider honours AXValue
         // writes (unlike faders/playhead), so set_zoom now lands a verified

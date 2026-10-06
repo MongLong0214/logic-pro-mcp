@@ -468,8 +468,8 @@ struct SemanticOracleCensusTests {
                 )
             }
         }
-        // 49 through B4, plus two registered after the inventory closed (#575, #448).
-        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 51)
+        // 49 through B4, plus three registered after it closed (#575, #448, #1118).
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 52)
     }
 
     /// #373 B4 — the mutating oracle inventory is CLOSED. Every supported
