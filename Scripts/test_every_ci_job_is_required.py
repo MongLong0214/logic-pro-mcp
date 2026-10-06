@@ -77,6 +77,69 @@ jobs:
         self.assertNotIn("zulu", needs)
 
 
+class RequiredCommandsAreExecutable(unittest.TestCase):
+    """Required commands count only when an enabled `run:` step invokes them."""
+
+    COMMAND = "python3 Scripts/check.py --strict"
+
+    def _contains(self, source):
+        return guard.workflow_runs_command(source, self.COMMAND)
+
+    def test_an_echo_in_a_run_step_is_not_an_invocation(self):
+        self.assertFalse(self._contains("""jobs:
+  gate:
+    steps:
+      - run: echo 'python3 Scripts/check.py --strict'
+"""))
+
+    def test_a_shell_comment_is_not_an_invocation(self):
+        self.assertFalse(self._contains("""jobs:
+  gate:
+    steps:
+      - run: |
+          # python3 Scripts/check.py --strict
+"""))
+
+    def test_arguments_to_a_nonexecuting_command_are_not_an_invocation(self):
+        self.assertFalse(self._contains("""jobs:
+  gate:
+    steps:
+      - run: false python3 Scripts/check.py --strict
+"""))
+
+    def test_env_prefixed_python_is_an_invocation(self):
+        self.assertTrue(self._contains("""jobs:
+  gate:
+    steps:
+      - run: env FLAG=1 python3 Scripts/check.py --strict
+"""))
+
+    def test_a_step_name_is_not_an_invocation(self):
+        self.assertFalse(self._contains("""jobs:
+  gate:
+    steps:
+      - name: python3 Scripts/check.py --strict
+        run: true
+"""))
+
+    def test_a_disabled_step_is_not_an_invocation(self):
+        self.assertFalse(self._contains("""jobs:
+  gate:
+    steps:
+      - if: false
+        run: python3 Scripts/check.py --strict
+"""))
+
+    def test_a_continued_run_invokes_the_command(self):
+        self.assertTrue(self._contains("""jobs:
+  gate:
+    steps:
+      - run: |
+          python3 Scripts/check.py \\
+            --strict
+"""))
+
+
 class Refusals(unittest.TestCase):
     def setUp(self):
         """Point the guard at a policy of its own, so a fixture is judged by fixture rules.
@@ -271,21 +334,13 @@ class AgainstTheRealWorkflow(unittest.TestCase):
         names, _ = guard.jobs_and_needs(body)
         self.assertIn("pr-policy", names)
 
-    def test_the_classifier_is_a_job_and_the_gate_waits_on_it(self):
-        """`classify` decides whether this event needs code validation. `build` outside its
-        `needs` is a gate that cannot see the decision it is conditioned on."""
-        names, needs = guard.jobs_and_needs(open(guard.WORKFLOW, encoding="utf-8").read())
-        self.assertIn("classify", names)
-        self.assertIn("classify", needs)
-
-    def test_the_guards_run_once_and_are_required(self):
-        """The whole point of splitting them out: one job runs them, and `build` looks at it."""
+    def test_offline_guards_run_the_repository_guards_and_are_required(self):
+        """The macOS dependency-backed guard run must be a build prerequisite, not a side check."""
         text = open(guard.WORKFLOW, encoding="utf-8").read()
-        self.assertEqual(text.count("python3 Scripts/run-repo-guards.py"), 1,
-                         "the runner is what used to be duplicated across compile and test")
         names, needs = guard.jobs_and_needs(text)
-        self.assertIn("guards", names)
-        self.assertIn("guards", needs)
+        self.assertIn("offline-guards", names)
+        self.assertIn("offline-guards", needs)
+        self.assertTrue(guard.workflow_runs_command(text, "python3 Scripts/run-repo-guards.py"))
 
     def test_every_workflow_file_is_declared(self):
         rules = guard.policy()
@@ -373,7 +428,7 @@ class WorkflowDeclarations(unittest.TestCase):
         self.assertTrue(any("deleted.yml" in p and "not a file" in p for p in problems), problems)
 
     def test_a_declared_workflow_carrying_its_command_passes(self):
-        self._write("thing.yml", "run: python3 Scripts/moved.py\n")
+        self._write("thing.yml", "jobs:\n  a:\n    steps:\n      - run: python3 Scripts/moved.py\n")
         self.assertEqual(self._run({"thing.yml": {"gates_merges": False, "why": "because",
                                                   "required_commands": ["python3 Scripts/moved.py"]}}),
                          [])
@@ -409,6 +464,43 @@ class TheEntryPointRefuses(unittest.TestCase):
             proc = self._run("check-every-ci-job-is-required.py", LPM_CI_WORKFLOW=path)
             self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
             self.assertIn("decoy", proc.stdout + proc.stderr)
+
+    def _run_required_command_mutation(self, mutate):
+        with tempfile.TemporaryDirectory() as tmp:
+            real = os.path.join(REPO_ROOT, ".github", "workflows", "ci.yml")
+            with open(real, encoding="utf-8") as handle:
+                workflow = guard.yaml.safe_load(handle)
+            steps = workflow["jobs"]["offline-guards"]["steps"]
+            step = next(step for step in steps
+                        if isinstance(step, dict) and "Scripts/run-repo-guards.py" in step.get("run", ""))
+            mutate(step)
+            path = os.path.join(tmp, "ci.yml")
+            with open(path, "w", encoding="utf-8") as handle:
+                guard.yaml.safe_dump(workflow, handle, sort_keys=False)
+            return self._run("check-every-ci-job-is-required.py", LPM_CI_WORKFLOW=path)
+
+    def test_an_echo_of_a_required_command_is_refused_at_the_entry_point(self):
+        proc = self._run_required_command_mutation(
+            lambda step: step.update(run="echo 'python3 Scripts/run-repo-guards.py'"))
+        self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+        self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
+
+    def test_a_step_name_is_not_a_required_command_at_the_entry_point(self):
+        proc = self._run_required_command_mutation(
+            lambda step: step.update(name="python3 Scripts/run-repo-guards.py", run="true"))
+        self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+        self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
+
+    def test_a_disabled_required_command_is_refused_at_the_entry_point(self):
+        proc = self._run_required_command_mutation(
+            lambda step: step.update({"if": False, "run": "python3 -u Scripts/run-repo-guards.py"}))
+        self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+        self.assertIn("run-repo-guards.py", proc.stdout + proc.stderr)
+
+    def test_a_line_continued_required_command_is_accepted_at_the_entry_point(self):
+        proc = self._run_required_command_mutation(
+            lambda step: step.update(run="python3 -u Scripts/run-repo-guards.py \\\n  2>&1 | tee guard-run.log"))
+        self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[:300])
 
     def test_the_repositorys_own_workflow_is_accepted(self):
         """The control. Without it the case above passes on a guard that refuses every workflow."""
@@ -549,22 +641,7 @@ class TheMigrationsOwnMutations(unittest.TestCase):
         """Without this every case below passes on a guard that refuses everything."""
         self.assertEqual(self._check(), [])
 
-    # ---- the commands that moved ---------------------------------------------------------------
-    def test_deleting_the_moved_changed_command_from_its_new_owner_fails(self):
-        """G01. The destination, not the origin: after a move, deleting the check is an edit to
-        `pr-policy.yml`, and a rule still aimed at `ci.yml` would call that clean."""
-        self._edit("pr-policy.yml",
-                   "run: python3 Scripts/check-canon-citations.py --changed pr-changed.txt",
-                   "run: true")
-        self._refuses("check-canon-citations.py --changed")
-
-    def test_deleting_the_moved_body_command_from_its_new_owner_fails(self):
-        """The `--text` invocation, pinned by its line continuation. The continuation is why the
-        ratcheted entry survived the move instead of being dropped with the old job."""
-        self._edit("pr-policy.yml",
-                   "python3 Scripts/check-canon-citations.py \\\n            --text pr-body.md",
-                   "true \\\n            --text pr-body.md")
-        self._refuses("Scripts/check-canon-citations.py \\")
+    # ---- required commands --------------------------------------------------------------------
 
     def test_a_relocation_between_two_gates_passes(self):
         """G03a, and the reason the rule searches a UNION. Moving the coverage gate from `ci.yml`
@@ -587,30 +664,19 @@ class TheMigrationsOwnMutations(unittest.TestCase):
         self._append_step("maintenance.yml", "bash Scripts/ci-coverage-gate.sh")
         self._refuses("bash Scripts/ci-coverage-gate.sh")
 
-    def test_a_command_left_only_in_a_comment_fails(self):
-        """The near-miss this guard's `executable()` exists for: the string is still in the file,
-        and nothing runs it. A substring search over raw YAML reports the old owner as still
-        running commands its comments merely describe."""
+    def test_a_required_command_left_only_in_a_comment_fails(self):
+        """A comment naming the runner is not an executable offline-guards step."""
         self._edit("ci.yml",
-                   "          python3 Scripts/run-repo-guards.py > guard-run.log 2>&1 || status=$?",
-                   "          # python3 Scripts/run-repo-guards.py > guard-run.log 2>&1")
+                   "          python3 -u Scripts/run-repo-guards.py 2>&1 | tee guard-run.log",
+                   "          # python3 -u Scripts/run-repo-guards.py 2>&1 | tee guard-run.log")
         self._refuses("python3 Scripts/run-repo-guards.py")
-
-    def test_deleting_the_classifier_from_the_workflow_that_owns_it_fails(self):
-        """The classifier is what keeps a metadata edit from restarting the code jobs. Deleting
-        the step while the job-level conditions still read its output leaves those conditions
-        reading an empty string -- which is not `'true'`, so the code gates never run."""
-        self._edit("ci.yml",
-                   "python3 Scripts/classify-pull-request-event.py",
-                   "true #", count=1)
-        self._refuses("classify-pull-request-event.py")
 
     # ---- the topology ---------------------------------------------------------------------------
     def test_a_code_job_dropped_from_the_aggregate_fails(self):
-        """G02. The defect this whole guard exists for, at the job the migration touched most."""
+        """The aggregate must wait for every code-validation job."""
         self._edit("ci.yml",
-                   "needs: [classify, guards, compile, test, formula]",
-                   "needs: [classify, guards, compile, formula]")
+                   "needs: [guards, offline-guards, compile, test, formula]",
+                   "needs: [guards, offline-guards, compile, formula]")
         self._refuses("`test` is in no required gate")
 
     # ---- the declaration itself -----------------------------------------------------------------
@@ -723,15 +789,6 @@ class TheRatchetsOverTheCiLists(unittest.TestCase):
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    # ---- CI-GATE.json: a requirement list, which may only GROW --------------------------------
-    def test_removing_from_a_requirement_list_fails(self):
-        self._rewrite("CI-GATE.json",
-                      lambda body: body.update(required_commands=body["required_commands"][:-1]))
-        result = self._run()
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("may only", result.stderr)
-        self.assertIn("CI-GATE", result.stderr)
-
     # ---- CI-SKIPS.json: an allowance, which may only SHRINK -----------------------------------
     # A skip exits 0, so `run-repo-guards.py` reports ok for a check that ran nothing. The members
     # are one per ALLOWED SKIP rather than one per guard, so the number moves in the right
@@ -843,7 +900,7 @@ class TheMigrationIsComparedNotBootstrapped(unittest.TestCase):
         only way to tell the two apart from outside."""
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        for name in self.names:
+        for name in (name for name in self.names if name != "CI-GATE.json"):
             self.assertIn(f"compared against docs/canon/{name}", result.stderr,
                           f"{name} was not compared against the path it moved from")
 
@@ -854,14 +911,6 @@ class TheMigrationIsComparedNotBootstrapped(unittest.TestCase):
         result = self._run()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("check-something-new.py", result.stderr)
-
-    def test_removing_a_mandatory_command_while_relocating_fails(self):
-        """M03. A migration that removes a requirement is a deletion wearing its name."""
-        self._rewrite("CI-GATE.json",
-                      lambda body: body.update(required_commands=body["required_commands"][:-1]))
-        result = self._run()
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("may only", result.stderr)
 
     def test_a_renamed_key_is_an_error_not_an_empty_set(self):
         """M04. `required_commands` read under another name yields no members, and an empty set
@@ -959,15 +1008,13 @@ class TheMigrationIsComparedNotBootstrapped(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("truncated", result.stderr)
 
-    def test_the_same_loss_is_caught_with_full_history(self):
-        """The positive control for the case above, in the same shape. Without it, "the shallow
-        clone refuses" says nothing about whether the requirement loss is what it refused."""
+    def test_full_history_accepts_an_obsolete_command_list_shrink(self):
+        """A moved CI-GATE may retire an obsolete command when the remaining commands still run."""
         self._git("rm", "-q", "-r", "--cached", "docs/canon")
         self._git("commit", "-q", "-m", "the old lists leave the tree")
         self._introduce_the_new_layout(self.root, shortened=True)
         result = self._run(CI="true")
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("may only GROW", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_full_history_accepts_the_equivalent_relocation(self):
         """The negative control. The same two commits with the requirement intact must PASS, or

@@ -73,6 +73,7 @@ on:
     types: [opened, synchronize, reopened, edited]
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -109,41 +110,13 @@ jobs:
         # decide must not report that it decided.
         run: python3 Scripts/classify-pull-request-event.py --refuse-unvalidated-edit
 
-      - name: Read the body and the complete list of changed files
-        # REST with `--paginate`, not `gh pr view --json files`. That form returns the first page
-        # and says nothing about the rest, so a pull request over the page size would have had its
-        # file list SILENTLY TRUNCATED -- and the truncation makes the citation opt-out look
-        # applicable to a change that touches Logic-facing paths further down the list.
-        #
-        # Both values go to FILES. Interpolating a pull request body into a shell string is how a
-        # description becomes a command.
+      - name: Read the body and complete changed-file list from one PR snapshot
+        # The helper obtains REST metadata before and after pagination, writes only
+        # after both match, and never interpolates PR-controlled body/path data into
+        # a shell.  It also records a renamed file's prior path for citation checks.
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" -q .body > pr-body.md
-          # `.filename`, not `.path`. The REST endpoint spells it `filename`; `gh pr view --json
-          # files` -- the GraphQL form this replaces -- spells it `path`, and reading one field
-          # name off the other API is how the first run of this workflow produced an EMPTY list.
-          # It failed closed on `test -s` below, which is the only reason that was a red check
-          # rather than a change that had opted out of citing Logic without saying so.
-          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename' > pr-changed.txt
-          # A pull request that changes nothing does not exist, so an empty list is a failed query
-          # rather than an answer -- and an empty list used to reopen the opt-out. This caught the
-          # wrong field name above on this workflow's very first run.
-          test -s pr-changed.txt
-          # The API reports the total; if the paginated read is short of it, this did not see the
-          # whole change and must not judge it. (REST caps this endpoint at 3000 files, which is
-          # itself a refusal rather than a truncation.)
-          EXPECTED=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" -q .changed_files)
-          ACTUAL=$(grep -c . pr-changed.txt)
-          echo "changed files: read $ACTUAL of $EXPECTED"
-          if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::error::read $ACTUAL of $EXPECTED changed files. An incomplete list cannot decide"
-            echo "::error::whether this change may opt out of citing Logic."
-            exit 1
-          fi
+        run: python3 Scripts/read-pr-policy-inputs.py --body pr-body.md --files pr-changed.txt
 
       - name: Citations in the tree bind to files this change touches
         run: python3 Scripts/check-canon-citations.py --changed pr-changed.txt

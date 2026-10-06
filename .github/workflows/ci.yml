@@ -5,27 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    # `edited` IS DELIBERATELY ABSENT, and this is the default set. It was subscribed until
-    # 2026-09-22 for one reason -- RETARGETING a pull request arrives as `edited`, there is no
-    # separate event for it, and a change that now merges into a different branch has not been
-    # validated against the branch it now merges into. `classify` below made that subscription
-    # cheap. #960 measured that it was not safe:
-    #
-    #   a metadata-only run publishes no check run under `build`, `compile` or `test` -- that is
-    #   what the renaming below is for -- but it still creates a check SUITE, and the ruleset reads
-    #   the NEWEST suite for an app. On #959 every tool reported the three contexts green while
-    #   `PUT /pulls/959/merge` answered `3 of 4 required status checks are expected`. `gh run
-    #   rerun` did not clear it (a rerun makes no newer suite); closing and reopening did.
-    #
-    # So editing a description cost a close-and-reopen or a second 30-minute macOS run, which is
-    # the friction this repository removed `edited` to end. The retarget is still caught, by
-    # `pr-policy.yml` -- required, subscribed to `edited`, fifteen seconds long -- which runs
-    # `Scripts/classify-pull-request-event.py --refuse-unvalidated-edit` and goes RED for any
-    # `edited` that is not a title or body change. A retarget then cannot merge on this workflow's
-    # stale verdict, because the required body context is red until a push or a reopen revalidates.
-    #
-    # `Scripts/test_pull_request_event_classifier.py` pins this list. Re-adding `edited` here
-    # without re-opening #960 is the change that case exists to stop.
+    # `edited` stays excluded: PR metadata must not replace code CI's required check suite.
     types: [opened, synchronize, reopened]
 
 # Least privilege: the build job only reads the repo. Declaring the scope here
@@ -35,17 +15,6 @@ permissions:
   contents: read
 
 concurrency:
-  # ONE domain again, as of 2026-09-22. It carried two -- `-metadata` and `-code` -- so that a
-  # description edit could not cancel the macOS test job already running for the same pull request.
-  # That expression restated `classify`'s rule a second time, in a language that cannot enumerate
-  # an object's keys, which is why it had to name `title`, `body` and `base` one at a time and why
-  # the two could disagree on a payload GitHub has not documented.
-  #
-  # It is gone because its input is gone: this workflow no longer subscribes to `edited` (see the
-  # trigger above and #960), so no run reaching this expression is a description edit, and every
-  # run in the group is a code run that a newer code run should supersede. Restoring `edited` means
-  # restoring the two domains WITH it; a re-subscription that leaves this expression as it is
-  # brings back the cancellation this repository already paid to fix.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -59,77 +28,6 @@ defaults:
     shell: bash
 
 jobs:
-  # Does this event need code validation at all, or did somebody edit a description?
-  #
-  # The rule is in `Scripts/classify-pull-request-event.py` and the cases that drive it are in
-  # `Scripts/test_pull_request_event_classifier.py`. It answers `metadata-only` for exactly one
-  # shape -- a `pull_request` `edited` whose `changes` names title and/or body and nothing else --
-  # and `code` for everything else, including an `edited` carrying `changes.base` (a retarget),
-  # an `edited` with no `changes` at all, and an `edited` naming a key the script has not been
-  # taught. A future editable field must not inherit the exemption by saying nothing.
-  #
-  # SINCE 2026-09-22 THIS ANSWERS `code` FOR EVERY EVENT THIS WORKFLOW RECEIVES. The trigger above
-  # no longer lists `edited`, so the only shape it exempts cannot arrive, and the conditions and
-  # renamings below never take their skipped branch. They are kept rather than deleted because
-  # they are the apparatus that makes re-subscribing `edited` survivable at all: without them the
-  # obvious re-subscription publishes `compile: skipped` over a real verdict, which GitHub counts
-  # as satisfied. Deleting them would leave the next person to rediscover that, and #952 is what
-  # rediscovering it cost. The same decision is written down in the script's own docstring.
-  #
-  # THE JOBS BELOW CHANGE THEIR NAME AND NOT ONLY THEIR CONDITION, and that is the whole safety
-  # argument. A job skipped by an `if:` still publishes a check run under its own name, and GitHub
-  # counts a `skipped` required check as SATISFIED -- so the obvious form of this optimisation
-  # would let a title edit publish `compile: skipped` over a real `compile: failure` on the same
-  # head commit and open the merge. Publishing under a name that is not a required context leaves
-  # the code run's verdicts exactly where they were.
-  #
-  # MEASURED 2026-09-21, and not what the author expected: a job GitHub SKIPS does not have its
-  # `name:` expression evaluated at all. Run 35569321799 (a `pull_request` `edited` on #952)
-  # published five check runs named with the RAW EXPRESSION BODY --
-  # `needs.classify.outputs.code_validation_required == 'true' && 'test' || 'test (not a code gate
-  # - metadata-only edit)'` and its four siblings -- each `skipped`. Run 35569251102, the code run
-  # on the same head `bd1745b7` where these jobs actually executed, published `compile`, `test`,
-  # `guards` and `formula`. So the expression evaluates when the job runs and is left verbatim when
-  # it does not, and the safety argument survives BOTH readings: evaluated, the name is the
-  # parenthesised one; unevaluated, it is the expression itself; neither is `compile` or `test`,
-  # and branch protection matches a context by exact name. The parenthesised branch is the one a
-  # human is meant to read, and on current GitHub behaviour a human never sees it.
-  #
-  # Do not "simplify" this to a plain string because the pretty half never appears in the UI. The
-  # plain string IS the canonical name, and publishing `skipped` under it is the whole hazard.
-  #
-  # It also decides nothing on its own behalf: if this job fails, its dependents are skipped for
-  # want of a satisfied `needs`, they publish under a name that is not a required context by the
-  # same mechanism, and the required contexts are simply absent for that commit. Absent is not
-  # satisfied.
-  classify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      code_validation_required: ${{ steps.decide.outputs.code_validation_required }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - id: decide
-        name: Classify this event
-        # The payload is read from the FILE GitHub writes, by the script, from
-        # `GITHUB_EVENT_PATH`. A title and a body are attacker-controlled strings and neither is
-        # interpolated into this shell -- nothing here even names them.
-        #
-        # `|| DECISION=unclassified` rather than letting the failure stop the step: an unreadable
-        # or unexpected answer must mean "validate the code", not "decide nothing". Only the exact
-        # token `metadata-only` turns validation off, and every other string, including the empty
-        # one, falls through to `true`.
-        run: |
-          DECISION=$(python3 Scripts/classify-pull-request-event.py) || DECISION=unclassified
-          if [ "$DECISION" = "metadata-only" ]; then
-            REQUIRED=false
-          else
-            REQUIRED=true
-          fi
-          echo "decision=$DECISION code_validation_required=$REQUIRED"
-          echo "code_validation_required=$REQUIRED" >> "$GITHUB_OUTPUT"
-
   # WAS `roadmap`, and carried four things: two that compare GitHub issue state against
   # `docs/roadmap/README.md` and the ADR index, and two about the Homebrew Formula. Only the
   # second pair protects the product -- a wrong `sha256` is `brew install` failing for everyone --
@@ -140,15 +38,7 @@ jobs:
   # roadmap row blocked a merge that had nothing to do with the roadmap, which is the cost the
   # instruction to separate them names.
   formula:
-    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'formula' || 'formula (not a code gate - metadata-only edit)' }}"
-    needs: [classify]
-    if: needs.classify.outputs.code_validation_required == 'true'
-    # `classify` decides whether this event needs code validation at all, and the DISPLAY NAME
-    # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
-    # check run that is not a required context, so the verdict the code run left on this commit
-    # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
-    # skipped required check as satisfied. What GitHub actually published for both branches of
-    # this expression is measured above `classify`; read it before rewriting this line.
+    name: formula
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -185,16 +75,9 @@ jobs:
   # Platform-independent shell integrity checks. The discovered Python runner runs in the macOS
   # `test` job: #896 adds `test_logic_key_event.py`, whose Swift subprocess imports AppKit. Keeping
   # that runner out of this Ubuntu job preserves the measured platform-independent shell boundary.
+
   guards:
-    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'guards' || 'guards (not a code gate - metadata-only edit)' }}"
-    needs: [classify]
-    if: needs.classify.outputs.code_validation_required == 'true'
-    # `classify` decides whether this event needs code validation at all, and the DISPLAY NAME
-    # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
-    # check run that is not a required context, so the verdict the code run left on this commit
-    # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
-    # skipped required check as satisfied. What GitHub actually published for both branches of
-    # this expression is measured above `classify`; read it before rewriting this line.
+    name: guards
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -229,17 +112,51 @@ jobs:
         # reappears — see the script for the full rationale.
         run: bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
 
+  offline-guards:
+    name: offline-guards
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: Scripts/requirements-ci.txt
+
+      - name: Install guard dependencies
+        run: |
+          python3 -m venv .venv-ci
+          source .venv-ci/bin/activate
+          python3 -m pip install --disable-pip-version-check -r Scripts/requirements-ci.txt
+          python3 -c "import yaml; print('PyYAML', yaml.__version__)"
+
+      - name: Offline guards and standalone drives
+        run: |
+          source .venv-ci/bin/activate
+          set -o pipefail
+          python3 -u Scripts/run-repo-guards.py 2>&1 | tee guard-run.log
+
+      - name: Non-executable bounce test libraries (#896)
+        run: |
+          source .venv-ci/bin/activate
+          python3 Scripts/run-helper-suites.py
+
+      - name: Keep guard log on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: offline-guards-${{ github.run_id }}-${{ github.run_attempt }}
+          path: guard-run.log
+          retention-days: 7
+          if-no-files-found: warn
 
   compile:
-    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'compile' || 'compile (not a code gate - metadata-only edit)' }}"
-    needs: [classify]
-    if: needs.classify.outputs.code_validation_required == 'true'
-    # `classify` decides whether this event needs code validation at all, and the DISPLAY NAME
-    # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
-    # check run that is not a required context, so the verdict the code run left on this commit
-    # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
-    # skipped required check as satisfied. What GitHub actually published for both branches of
-    # this expression is measured above `classify`; read it before rewriting this line.
+    name: compile
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -252,15 +169,13 @@ jobs:
           # base is unreadable under CI, and this is what makes that satisfiable.
           fetch-depth: 0
 
-      - name: Cache SwiftPM and build products
+      - name: Cache SwiftPM downloads
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
-          path: |
-            .build
-            ~/Library/Caches/org.swift.swiftpm
-          key: spm-macos15-xcode164-release-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ runner.arch }}-xcode164-release-${{ hashFiles('Package.resolved', 'Package.swift') }}
           restore-keys: |
-            spm-macos15-xcode164-release-
+            spm-${{ runner.os }}-${{ runner.arch }}-xcode164-release-
 
       - name: Select Xcode and say which toolchain this is
         # The pin is Xcode 16.4, required by swift-sdk 0.11.0+ which adopts the short-form
@@ -287,17 +202,8 @@ jobs:
       - name: Verify Package.resolved is unchanged
         run: git diff --exit-code Package.resolved
 
-
   test:
-    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'test' || 'test (not a code gate - metadata-only edit)' }}"
-    needs: [classify]
-    if: needs.classify.outputs.code_validation_required == 'true'
-    # `classify` decides whether this event needs code validation at all, and the DISPLAY NAME
-    # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
-    # check run that is not a required context, so the verdict the code run left on this commit
-    # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
-    # skipped required check as satisfied. What GitHub actually published for both branches of
-    # this expression is measured above `classify`; read it before rewriting this line.
+    name: test
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -310,15 +216,13 @@ jobs:
           # base is unreadable under CI, and this is what makes that satisfiable.
           fetch-depth: 0
 
-      - name: Cache SwiftPM and build products
+      - name: Cache SwiftPM downloads
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
-          path: |
-            .build
-            ~/Library/Caches/org.swift.swiftpm
-          key: spm-macos15-xcode164-debug-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ runner.arch }}-xcode164-debug-${{ hashFiles('Package.resolved', 'Package.swift') }}
           restore-keys: |
-            spm-macos15-xcode164-debug-
+            spm-${{ runner.os }}-${{ runner.arch }}-xcode164-debug-
 
       - name: Select Xcode and say which toolchain this is
         # The pin is Xcode 16.4, required by swift-sdk 0.11.0+ which adopts the short-form
@@ -362,10 +266,9 @@ jobs:
           mkdir -p "$PROFRAW_DIR"
           export LLVM_PROFILE_FILE="$PROFRAW_DIR/%m-%p.profraw"
 
-          # `.build` is RESTORED FROM CACHE, and `default.profdata` lives inside it. A run whose
-          # tests produced no profile would otherwise find the previous run's file and report its
-          # coverage as this one's -- the cached answer to a question nobody asked again. Deleting
-          # only the coverage output keeps the incremental build, which is what the cache is for.
+          # Coverage must come from this run. SwiftPM downloads are cached, but `.build` is not;
+          # clearing any generated coverage directory still prevents a reused workspace from being
+          # mistaken for fresh test output.
           find .build -type d -name codecov -prune -exec rm -rf {} + 2>/dev/null || true
 
           swift test --enable-code-coverage -Xswiftc -suppress-warnings --no-parallel 2>&1 | tee "$COVERAGE_LOG"
@@ -379,53 +282,13 @@ jobs:
           fi
           echo "LLVM profile warnings: ${PROFILE_WARNING_COUNT:-0}." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: PyYAML, because a guard that cannot import it has not run
-        # `Scripts/test_issue_form_canon_field.py` renders the issue forms the way GitHub does and
-        # runs the real checker over the result, so it needs a real YAML parser -- and it imports
-        # `yaml` at module level rather than skipping, because a drive that cannot read its input
-        # has not checked anything and `run-repo-guards.py` has counted two such skips as passes
-        # before. macOS 15's runner image ships no PyYAML, so the guard died on `ModuleNotFoundError`
-        # in run 35587823299 while passing on every developer machine that happened to have it.
-        # Installing it here is what that file's own docstring asks for, and it retires the older
-        # contract `83a19d5` (#893) recorded -- "run-repo-guards.py's contract is plain Python with
-        # no third-party imports", which is why `check-every-ci-job-is-required.py` parses this
-        # file by indentation. `Scripts/check-third-party-imports-are-installed.py` is the
-        # replacement: third-party is allowed where CI PROVES it can import it, and that guard
-        # fails on a module installed without the readback or imported without the install.
-        #
-        # The `import` afterwards is the check: `pip install` printing nothing is not evidence the
-        # interpreter `run-repo-guards.py` launches can find the module. `--break-system-packages`
-        # is the fallback for an image whose Python is marked externally managed (PEP 668); if both
-        # forms fail the step fails, which is the honest end.
-        run: |
-          python3 -m pip install --quiet --disable-pip-version-check pyyaml \
-            || python3 -m pip install --quiet --disable-pip-version-check --break-system-packages pyyaml
-          python3 -c "import yaml; print('PyYAML', yaml.__version__)"
-
-      - name: Guards and standalone drives (discovered, not listed)
-        # This runs once, on macOS: #896's `test_logic_key_event.py` compiles a Swift file that
-        # imports AppKit. The Ubuntu `guards` job remains shell-only and platform-independent.
-        # The runner discovers new `test_*.py` drives, so adding one does not edit this workflow.
-        # Its log is retained by the diagnostic upload below if any child fails.
-        run: |
-          status=0
-          python3 Scripts/run-repo-guards.py > guard-run.log 2>&1 || status=$?
-          cat guard-run.log
-          exit "$status"
-
-      # The three `logic_bounce_*_test.py` libraries have no `unittest.main()`, so discovery in
-      # the runner would report success without executing cases. This collector imports them and
-      # checks each module's committed case floor instead.
-      - name: Non-executable bounce test libraries (#896)
-        run: python3 Scripts/run-helper-suites.py
-
       - name: Coverage gate
         # Hard thresholds: 70% region, 78% line. 90% line is the project target and deliberately
         # NOT the hard gate -- setting it today would only make every release red. Both numbers
         # live in the script beside the comparison that uses them.
         run: bash Scripts/ci-coverage-gate.sh
 
-      - name: Keep the test, guard, and coverage reports whatever happened
+      - name: Keep the test and coverage reports whatever happened
         # This is where `always()` belongs: after the step that decides, so a red gate leaves
         # behind the report that explains it. An upload that fails does not turn a failed test run
         # green -- this step's own result is not in `build`'s aggregate.
@@ -434,7 +297,6 @@ jobs:
         with:
           name: coverage-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            guard-run.log
             coverage-report.txt
             ${{ runner.temp }}/logicpromcp-coverage.log
           retention-days: 7
@@ -444,45 +306,25 @@ jobs:
   # via `gh api repos/MongLong0214/logic-pro-mcp/rulesets/19060230`: strict is on, the bypass list
   # is empty, and those three are the whole list. So `needs` is what makes every OTHER job able to
   # block a merge, which is what `check-every-ci-job-is-required.py` enforces.
+
   build:
-    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'build' || 'build (not a code gate - metadata-only edit)' }}"
+    name: build
     runs-on: ubuntu-latest
-    # `roadmap` joins this list in the same change that restores the job. The instruction three
-    # lines above says to, and skipping it is how a restored gate becomes decoration: the job runs,
-    # it can fail, and the only required context does not look at it. A stale roadmap, a drifted ADR
-    # index or a wrong Formula sha256 would have turned `roadmap` red while `build` stayed green and
-    # the ruleset permitted the merge. Found by review 2026-09-15.
-    needs: [classify, guards, compile, test, formula]
-    # `always()` so a FAILED need still reaches the decision below -- that is the point of this
-    # job. `!cancelled()` so a CANCELLED RUN does not. `concurrency.cancel-in-progress` cancels the
-    # previous run on every push, and this job then ran anyway, saw its cancelled needs, and left a
-    # red `build` on the pull request while a healthy run was still in progress. It misled me twice
-    # in one afternoon: `gh pr checks` shows the newest check run per NAME, so a superseded run's
-    # failure sits on top of a run that has not finished. A cancelled run has no verdict to give.
-    if: always() && !cancelled() && needs.classify.outputs.code_validation_required == 'true'
+    needs: [guards, offline-guards, compile, test, formula]
+    if: always() && !cancelled()
     timeout-minutes: 5
     steps:
       - name: Every gate must have passed
-        # Each need spelled out and compared to `success`, rather than tested for truthiness:
-        # `cancelled` and `skipped` are not success, and a dependency this list forgets is a job
-        # that can go red while the only required context stays green -- which has happened here
-        # three times and is what the required-gate guard under Scripts/ watches for.
-        #
-        # There is no longer a need that may legitimately be `skipped` here. The body check that
-        # was -- it ran only on `pull_request`, because a pull request body is what it reads -- is
-        # `pr-policy` now, a required context of its own, and this job does not depend on it: a
-        # `jobs.needs` reference cannot cross workflows, and the branch ruleset is what links the
-        # two required paths. `classify` runs on every event and is checked like the rest.
         env:
-          CLASSIFY: ${{ needs.classify.result }}
           GUARDS: ${{ needs.guards.result }}
+          OFFLINE_GUARDS: ${{ needs.offline-guards.result }}
           COMPILE: ${{ needs.compile.result }}
           TEST: ${{ needs.test.result }}
           FORMULA: ${{ needs.formula.result }}
         run: |
-          echo "classify=$CLASSIFY guards=$GUARDS compile=$COMPILE test=$TEST formula=$FORMULA"
-          [ "$CLASSIFY" = "success" ] || { echo "::error::classify did not succeed"; exit 1; }
+          echo "guards=$GUARDS offline-guards=$OFFLINE_GUARDS compile=$COMPILE test=$TEST formula=$FORMULA"
           [ "$GUARDS" = "success" ] || { echo "::error::guards did not succeed"; exit 1; }
+          [ "$OFFLINE_GUARDS" = "success" ] || { echo "::error::offline-guards did not succeed"; exit 1; }
           [ "$COMPILE" = "success" ] || { echo "::error::compile did not succeed"; exit 1; }
           [ "$TEST" = "success" ] || { echo "::error::test did not succeed"; exit 1; }
           [ "$FORMULA" = "success" ] || { echo "::error::formula did not succeed"; exit 1; }
