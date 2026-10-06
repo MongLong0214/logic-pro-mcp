@@ -27,7 +27,9 @@ enum TrackReferenceIssuance {
     /// focus: three or more rows whose names all end in `:`. The threshold keeps a single real track
     /// named "MyMix:" from being dropped.
     static func isInspectorContaminated(_ tracks: [TrackState]) -> Bool {
-        tracks.count >= 3 && tracks.allSatisfy { $0.name.hasSuffix(":") }
+        tracks.count >= 3 && tracks.allSatisfy {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(":")
+        }
     }
 
     static func liveInventory(_ cached: [TrackState]) -> [TrackState] {
@@ -39,18 +41,21 @@ enum TrackReferenceIssuance {
     static func issue(
         for inventory: [TrackState],
         registry: TargetRegistry,
-        snapshot: TargetRegistrySnapshot
+        snapshot: TargetRegistrySnapshot,
+        stoppingWhen stop: @Sendable () -> Bool = { false }
     ) async -> IssuedTrackReferences? {
+        guard !Task.isCancelled, !stop() else { return nil }
         var byRow: [TargetReference?] = []
         byRow.reserveCapacity(inventory.count)
         for row in inventory {
+            guard !Task.isCancelled, !stop() else { return nil }
             guard isEligible(row) else {
                 byRow.append(nil)
                 continue
             }
             let descriptor = TargetDescriptor(trackIndex: row.id, trackName: row.name)
             // One line, so a line search for `bind(kind: .track` finds this sole issuer.
-            let bound = await registry.bind(kind: .track, descriptor: descriptor, fingerprint: descriptor.fingerprint, snapshot: snapshot)
+            let bound = await registry.bind(kind: .track, descriptor: descriptor, fingerprint: descriptor.fingerprint, snapshot: snapshot, stoppingWhen: stop)
             guard let reference = bound else { return nil }
             byRow.append(reference)
         }

@@ -480,6 +480,11 @@ private final class LiveFixture: @unchecked Sendable {
                     )
             },
             setAttributeHandler: { [b, axActions] el, attribute, value in
+                // The selection ladder's first two rungs decline in this fixture. Its existing
+                // AXPress handler owns selection and the interleavings exercised below.
+                if attribute == kAXSelectedChildrenAttribute as String || attribute == kAXSelectedAttribute as String {
+                    return false
+                }
                 axActions.value.append((b.elementID(el), attribute))
                 if pluginWindowRejectsDirectDemotion,
                    b.elementID(el) == b.elementID(pluginWindow),
@@ -2305,6 +2310,159 @@ private func namedEQBandParams(
 }
 
 // MARK: - ADR-002 F1: live track-name cross-check for target_ref resolutions
+
+// #965: these witnesses run the actual parameter/EQ acquisition and write path, not just the
+// name helper. Every external-input fallback is injected; accepted AX writes stay in the fixture.
+private func rawReferenceRuntime(_ fixture: LiveFixture) -> AXLogicProElements.Runtime {
+    AXLogicProElements.Runtime(
+        logicProPID: fixture.runtime.logicProPID, ax: fixture.runtime.ax,
+        executeAppleScript: { _ in
+            Issue.record("raw reference fixture must not execute AppleScript")
+            return .error("unexpected script")
+        }, onScreenWindowList: { [] },
+        postPopupMenuEscape: { Issue.record("raw reference fixture must not post Escape") },
+        focusedApplicationPID: { 4242 }
+    )
+}
+
+private func runRawReferenceWrite(
+    _ fixture: LiveFixture, eq: Bool, expected: String,
+    entryLookup: @escaping VerifiedPluginCatalog.EntryLookup = VerifiedPluginCatalog.productionEntryLookup
+) async throws -> [String: Any] {
+    var params = eq ? namedEQBandParams() : thresholdParams()
+    params["expected_track_name"] = expected
+    let runtime = rawReferenceRuntime(fixture)
+    let opener: AccessibilityChannel.PluginWindowOpener = { _, _, _, _, _ in
+        Issue.record("raw reference fixture must use its already visible editor")
+        return nil
+    }
+    let result: ChannelResult
+    if eq {
+        result = await AccessibilityChannel.defaultSetEQBandVerified(
+            params: params, runtime: runtime, frontDocumentPath: { expectedPath },
+            entryLookup: entryLookup, pluginWindowOpener: opener,
+            pluginPopupMenuCleaner: { _ in .noPopupObserved }
+        )
+    } else {
+        result = await AccessibilityChannel.defaultSetParamVerified(
+            params: params, runtime: runtime, frontDocumentPath: { expectedPath },
+            entryLookup: entryLookup, pluginWindowOpener: opener,
+            pluginPopupMenuCleaner: { _ in .noPopupObserved }
+        )
+    }
+    return try #require(sharedJSONObject(result.message))
+}
+
+private func rawReferenceFixture(
+    name: String, eq: Bool,
+    onSelection: (@Sendable (FakeAXRuntimeBuilder, Int) -> Void)? = nil
+) -> LiveFixture {
+    LiveFixture(
+        trackDisplayName: name, thresholdDescription: eq ? "Peak 1 Frequency" : "Threshold",
+        pluginSlotName: eq ? "Channel EQ" : "Compressor", beforeValue: eq ? 0 : 51,
+        sliderWriteBehavior: eq ? .oneStepTowardRequest : .direct,
+        onTrackHeaderPress: onSelection
+    )
+}
+
+@Test(arguments: [false, true], [(" Bass", "Bass "), ("q\u{0301}\u{0323}", "q\u{0323}\u{0301}")])
+func testIssue965PluginReferenceRejectsByteDistinctLiveNameBeforeAnyAction(
+    _ eq: Bool, names: (String, String)
+) async throws {
+    let fixture = rawReferenceFixture(name: names.1, eq: eq)
+    let object = try await runRawReferenceWrite(fixture, eq: eq, expected: names.0)
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == "stale_target_reference")
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    let expected = try #require(object["expected_track_name"] as? String)
+    let observed = try #require(object["observed_track_name"] as? String)
+    #expect(expected.utf8.elementsEqual(names.0.utf8))
+    #expect(observed.utf8.elementsEqual(names.1.utf8))
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.axActions.value.isEmpty)
+}
+
+@Test(arguments: [false, true], [" Bass ", "q\u{0301}\u{0323}"])
+func testIssue965PluginReferenceUnchangedRawNameStillWrites(_ eq: Bool, name: String) async throws {
+    let fixture = rawReferenceFixture(name: name, eq: eq)
+    let object = try await runRawReferenceWrite(fixture, eq: eq, expected: name)
+    #expect(object["state"] as? String == "A")
+    let verified = try #require(object["verified"] as? Bool)
+    #expect(verified)
+    #expect(fixture.currentSliderValue == (eq ? 3 : 60))
+    #expect(fixture.sliderWriteCount.value == (eq ? 3 : 1))
+}
+
+@Test(arguments: [false, true], ["catalog", "selection"])
+func testIssue965PluginReferenceRejectsRawDriftAfterInitialGuard(_ eq: Bool, stage: String) async throws {
+    let old = "q\u{0301}\u{0323}"
+    let changed = "q\u{0323}\u{0301}"
+    #expect(old == changed, "exercise canonical equality without byte equality")
+    let interleaves = MutableBox(0)
+    let mutate: @Sendable (FakeAXRuntimeBuilder) -> Void = { builder in
+        interleaves.value += 1
+        builder.setAttribute(builder.element(1100), kAXDescriptionAttribute as String, "1개의 ‘\(changed)’ 트랙")
+        builder.setAttribute(builder.element(150_000), kAXValueAttribute as String, changed)
+        builder.setAttribute(builder.element(1004), kAXTitleAttribute as String, changed)
+        builder.setAttribute(builder.element(1012), kAXValueAttribute as String, changed)
+    }
+    let fixture = rawReferenceFixture(name: old, eq: eq, onSelection: { builder, headerID in
+        if stage == "selection", headerID == 1100, interleaves.value == 0 { mutate(builder) }
+    })
+    let lookups = MutableBox(0)
+    let lookup: VerifiedPluginCatalog.EntryLookup = { requestedID in
+        lookups.value += 1
+        if stage == "catalog", lookups.value == 1 { mutate(fixture.builder) }
+        return VerifiedPluginCatalog.productionEntryLookup(requestedID)
+    }
+    let object = try await runRawReferenceWrite(fixture, eq: eq, expected: old, entryLookup: lookup)
+    #expect(lookups.value > 0, "initial live name check must pass before the interleaving")
+    #expect(interleaves.value == 1, "drive a real catalog/selection boundary, not an initial mismatch")
+    #expect(object["state"] as? String == "C")
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.currentSliderValue == (eq ? 0 : 51))
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+}
+
+@Test func testIssue965PluginReferenceRetainedInventoryRejectsByteDistinctSameElements() async throws {
+    let old = "q\u{0301}\u{0323}"
+    let changed = "q\u{0323}\u{0301}"
+    let fixture = LiveFixture(trackDisplayName: old)
+    let emptySlot = fixture.builder.element(965_700)
+    fixture.builder.setAttribute(emptySlot, kAXRoleAttribute as String, kAXButtonRole as String)
+    fixture.builder.setAttribute(emptySlot, kAXDescriptionAttribute as String, "오디오 플러그인")
+    fixture.builder.setAttribute(emptySlot, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
+    fixture.builder.setChildren(emptySlot, [])
+    fixture.builder.setChildren(fixture.builder.element(1200), [fixture.builder.element(150_000), emptySlot])
+    let driverCalls = MutableBox(0)
+    let result = await AccessibilityChannel.defaultInsertVerified(
+        params: ["track": "0", "insert": "0", "plugin": "Compressor",
+                 "mode": "duplicate_applyback", "project_expected_path": expectedPath,
+                 "expected_track_name": old], runtime: rawReferenceRuntime(fixture),
+        frontDocumentPath: { expectedPath },
+        insertDriver: { track, _, _, _, runtime in
+            driverCalls.value += 1
+            let before = AccessibilityChannel.fullStripInventory(track: track, runtime: runtime)
+            let initiallyReadable = before != nil
+            #expect(initiallyReadable)
+            // Retain every AX element: only the acquired raw name drifts.
+            fixture.builder.setAttribute(fixture.builder.element(1100), kAXDescriptionAttribute as String,
+                                         "1개의 ‘\(changed)’ 트랙")
+            fixture.builder.setAttribute(fixture.builder.element(150_000), kAXValueAttribute as String, changed)
+            let after = AccessibilityChannel.fullStripInventory(track: track, runtime: runtime)
+            let refused = after == nil
+            #expect(refused, "retained binding must not authorize canonical-equivalent raw name drift")
+            return (.transientSetupFailure(stage: "fixture_terminal"), [:])
+        }
+    )
+    #expect(driverCalls.value == 1)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.targetOpenControlPressCount.value == 0)
+}
 
 // The `target_ref` path threads the reference's bound track name in as
 // `expected_track_name`. When the live AX header at the positional index no

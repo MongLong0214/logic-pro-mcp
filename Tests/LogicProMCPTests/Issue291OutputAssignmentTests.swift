@@ -55,6 +55,10 @@ struct R2PopupLanguage: Sendable, CustomStringConvertible {
     )
 }
 
+private enum R2SourcePopupDrift: String, CaseIterable, Sendable {
+    case reordered, replaced
+}
+
 private final class R2Fixture: @unchecked Sendable {
     enum CurrentOutput { case stereo, bus(Int), label(String), blank }
     enum AfterPress { case applies, doesNothing, slotGoesBlank }
@@ -99,6 +103,8 @@ private final class R2Fixture: @unchecked Sendable {
         var auxChange = R2ReceiverChange.inPlace
         /// A strip is added to the Mixer when the output popup opens.
         var stripAddedWhilePopupOpen = false
+        /// Synthetic source drift during the opener, before any terminal entry is selected.
+        var sourceDriftWhilePopupOpen: R2SourcePopupDrift?
     }
 
     let options: Options
@@ -115,6 +121,8 @@ private final class R2Fixture: @unchecked Sendable {
     private var answeringAttribute: [Int: (String, AXHelpers.AXStatusError)] = [:]
     private var failingChildren: Set<Int> = []
     private var replacedStrips = 0
+    private var sourceOpenerDrifts = 0
+    private var sourceOpenerStripSnapshot: [AXUIElement]?
     private var auxInputNow = ""
 
     private(set) var app: AXUIElement!
@@ -201,6 +209,8 @@ private final class R2Fixture: @unchecked Sendable {
     var presses: [Int] { lock.withLock { pressLog } }
     var escapeCount: Int { lock.withLock { escapes } }
     var stripsReplaced: Int { lock.withLock { replacedStrips } }
+    var sourceOpenerDriftCount: Int { lock.withLock { sourceOpenerDrifts } }
+    var stripsAtSourceOpenerDrift: [AXUIElement]? { lock.withLock { sourceOpenerStripSnapshot } }
     func id(_ element: AXUIElement) -> Int { b.elementID(element) }
     func isGone(_ element: AXUIElement) -> Bool { lock.withLock { invalidated.contains(id(element)) } }
 
@@ -254,6 +264,25 @@ private final class R2Fixture: @unchecked Sendable {
         for child in stripChildren[id(old)] ?? [] { invalidated.insert(id(child)) }
         strips[0] = strip(output: output, input: options.sourceInput, inputHelp: options.sourceInputHelp).0
         replacedStrips += 1
+    }
+
+    /// Not a measured host transition: these two synthetic races keep the strip count and
+    /// Aux 1 receiver unchanged while invalidating the source binding acquired before the opener.
+    /// This is separate from the measured post-terminal replacement and its counter above.
+    private func driftSourceAtOpener(_ drift: R2SourcePopupDrift) {
+        switch drift {
+        case .reordered:
+            strips.swapAt(0, 2)
+        case .replaced:
+            let old = strips[0]
+            invalidated.insert(id(old))
+            for child in stripChildren[id(old)] ?? [] { invalidated.insert(id(child)) }
+            strips[0] = strip(output: resultLabel[id(rootEcho)], input: options.sourceInput,
+                              inputHelp: options.sourceInputHelp).0
+        }
+        // Capture before any terminal action can replace the strip at the old ordinal.
+        sourceOpenerStripSnapshot = strips
+        sourceOpenerDrifts += 1
     }
 
     /// Aux 1 takes another input while the popup is open. Whether Logic relabels the slot or
@@ -348,6 +377,7 @@ private final class R2Fixture: @unchecked Sendable {
             pressLog.append(pressed)
             if pressed == id(outputButton) {
                 menuOpen = true
+                if let drift = options.sourceDriftWhilePopupOpen { driftSourceAtOpener(drift) }
                 if let input = options.auxInputWhilePopupOpen { reassignAuxInput(to: input) }
                 if options.stripAddedWhilePopupOpen { strips.append(make(role: kAXLayoutItemRole as String)) }
                 if options.menuAppearsUnderMixer { b.setChildren(mixer, strips + [root]) }
@@ -624,6 +654,55 @@ func outputAssignmentRechecksTheStripCountAtThePress() async throws {
     #expect(!written)
     #expect(envelope["popup_menu_state"] as? String == "dismissed")
     #expect(fixture.presses == [fixture.id(fixture.outputButton)])
+}
+
+/// #291/#967 primitive prerequisite only: a same-count source reorder/replacement must not
+/// validate another strip at the original ordinal and then select the held source's popup entry.
+/// The original receiver stays in place; no lifecycle allocation or post-terminal identity is
+/// qualified by these synthetic opener races.
+@Test("same-count source drift while the output popup opens refuses before terminal selection",
+      arguments: R2SourcePopupDrift.allCases)
+private func outputAssignmentRefusesSourceDriftWhilePopupOpens(_ drift: R2SourcePopupDrift) async throws {
+    var options = R2Fixture.Options()
+    options.sourceDriftWhilePopupOpen = drift
+    let fixture = R2Fixture(options)
+    let originalSource = try #require(fixture.strips.first)
+    let originalReceiver = fixture.strips[1]
+    let originalThird = fixture.strips[2]
+    let originalOutput = try #require(fixture.outputButton)
+
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    // Establish the actual seam fired without growing the population or replacing the receiver.
+    let openerStrips = try #require(fixture.stripsAtSourceOpenerDrift)
+    try #require(openerStrips.count == 3)
+    #expect(fixture.sourceOpenerDriftCount == 1)
+    #expect(fixture.strips.count == 3)
+    #expect(envelope["strip_count_before"] as? Int == 3)
+    #expect(envelope["bus_receivers"] as? [Int] == [1])
+    #expect(CFEqual(openerStrips[1], originalReceiver))
+    #expect(!CFEqual(openerStrips[0], originalSource))
+    switch drift {
+    case .reordered:
+        #expect(CFEqual(openerStrips[0], originalThird))
+        #expect(CFEqual(openerStrips[2], originalSource))
+        #expect(!fixture.isGone(originalSource))
+    case .replaced:
+        #expect(fixture.isGone(originalSource))
+        #expect(fixture.isGone(originalOutput))
+    }
+
+    #expect(envelope["state"] as? String == "C")
+    // Same-count binding drift belongs to the adapter's existing unsupported-state refusal.
+    #expect(envelope["error"] as? String == "unsupported_state")
+    let written = try #require(envelope["write_attempted"] as? Bool)
+    #expect(!written)
+    #expect(envelope["popup_menu_state"] as? String == "dismissed")
+    #expect(fixture.escapeCount == 1)
+    #expect(fixture.presses == [fixture.id(originalOutput)])
+    #expect(fixture.presses.filter { $0 == fixture.id(fixture.busOne) }.isEmpty)
+    // Opener drift must not be counted as the legitimate replacement after a selected entry.
+    #expect(fixture.stripsReplaced == 0)
 }
 
 @Test("a strip whose input did not read is listed beside bus_has_no_receiver, never counted")
@@ -1021,11 +1100,12 @@ func inputSlotReadingNoSlotWithOnlyIdentifiedButtons() throws {
     #expect(AXLogicProElements.inputSlotReading(in: strip, runtime: runtime) == .noSlot)
 }
 
-/// The first recognised input slot still decides, even after an unidentified button that names a bus.
-@Test("inputSlotReading: a recognised input slot is the source even after an unidentified bus button")
+/// An unidentified bus button may be another input. A recognised slot cannot make the
+/// existing output writer's loop precheck treat that competing possibility as a known route.
+@Test("inputSlotReading: an unidentified bus button remains unknown beside a recognised slot")
 func inputSlotReadingRecognisedSlotStillDecides() throws {
     let (strip, runtime) = r2InputReadingStrip(unknown: .helpUnmatchedBusDescription, recognisedInputAfter: "Bus 2")
-    #expect(AXLogicProElements.inputSlotReading(in: strip, runtime: runtime) == .source("Bus 2"))
+    #expect(AXLogicProElements.inputSlotReading(in: strip, runtime: runtime) == .unreadable)
 }
 
 /// Kills M14: skipping the cleanup when no menu appears under the Mixer. The press still put a

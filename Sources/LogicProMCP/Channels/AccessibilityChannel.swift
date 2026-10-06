@@ -107,6 +107,7 @@ actor AccessibilityChannel: Channel {
         let renameTrack: @Sendable ([String: String]) -> ChannelResult
         let sortTracks: @Sendable ([String: String]) -> ChannelResult
         let mixerState: @Sendable () -> ChannelResult
+        let mixerStates: (@Sendable (@escaping @Sendable () -> Bool) -> (states: [ChannelStripState]?, yielded: Bool))?
         let channelStrip: @Sendable ([String: String]) -> ChannelResult
         let setMixerValue: @Sendable ([String: String], MixerTarget) -> ChannelResult
         let projectInfo: @Sendable () -> ChannelResult
@@ -144,6 +145,7 @@ actor AccessibilityChannel: Channel {
             renameTrack: @escaping @Sendable ([String: String]) -> ChannelResult,
             sortTracks: @escaping @Sendable ([String: String]) -> ChannelResult = { _ in .error("sortTracks not wired") },
             mixerState: @escaping @Sendable () -> ChannelResult,
+            mixerStates: (@Sendable (@escaping @Sendable () -> Bool) -> (states: [ChannelStripState]?, yielded: Bool))? = nil,
             channelStrip: @escaping @Sendable ([String: String]) -> ChannelResult,
             setMixerValue: @escaping @Sendable ([String: String], MixerTarget) -> ChannelResult,
             projectInfo: @escaping @Sendable () -> ChannelResult,
@@ -179,6 +181,7 @@ actor AccessibilityChannel: Channel {
             self.renameTrack = renameTrack
             self.sortTracks = sortTracks
             self.mixerState = mixerState
+            self.mixerStates = mixerStates
             self.channelStrip = channelStrip
             self.setMixerValue = setMixerValue
             self.projectInfo = projectInfo
@@ -264,6 +267,7 @@ actor AccessibilityChannel: Channel {
                 },
                 sortTracks: { AccessibilityChannel.defaultSortTracks(params: $0, runtime: logicRuntime) },
                 mixerState: { AccessibilityChannel.defaultGetMixerState(runtime: logicRuntime) },
+                mixerStates: { AccessibilityChannel.defaultGetMixerStates(runtime: logicRuntime, stoppingWhen: $0) },
                 channelStrip: { AccessibilityChannel.defaultGetChannelStrip(params: $0, runtime: logicRuntime) },
                 setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime) },
                 projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) },
@@ -303,6 +307,209 @@ actor AccessibilityChannel: Channel {
 
     func readTrackStates() -> [TrackState]? {
         runtime.trackStates()
+    }
+
+    func readMixerStates(stoppingWhen stop: @escaping @Sendable () -> Bool) -> (states: [ChannelStripState]?, yielded: Bool, provided: Bool) {
+        guard let reader = runtime.mixerStates else { return (nil, false, false) }
+        let result = reader(stop)
+        return (result.states, result.yielded, true)
+    }
+
+    /// Request-owned, read-only population collection. The bound window and physical rows,
+    /// not cache counts or equal display names, bracket each attempt.
+    func readFreshSessionPopulation(
+        request: SessionPopulationObservation.Request,
+        fileReader: LogicProjectFileReader.Runtime,
+        navigationProject: TargetDescriptor? = nil,
+        navigationReferenceIsCurrent: @escaping @Sendable () async -> Bool = { true },
+        stoppingBeforeAXRead stopBeforeAXRead: (@Sendable () -> Bool)? = nil,
+        stoppingWhen stop: @escaping @Sendable () -> Bool
+    ) async throws -> SessionPopulationObservation.FreshPopulation {
+        try SessionPopulationObservation.requireOwnedAcquisition()
+        var navigation: OwnedMixerObservationNavigation?
+        if request.allowUINavigation, request.needsStrips,
+           case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime) {
+            navigation = OwnedMixerObservationNavigation(
+                window: window, runtime: runtime.logicRuntime,
+                expectedProject: navigationProject, requiresProjectReference: request.projectRef != nil,
+                referenceIsCurrent: navigationReferenceIsCurrent)
+            await navigation?.reveal(stoppingWhen: stop)
+        }
+        do {
+            var population = try await readExposedSessionPopulation(
+                request: request, fileReader: fileReader,
+                stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop
+            )
+            if let navigation {
+                population.uiEffects = await navigation.restore(stoppingWhen: stop)
+                if population.uiEffects.navigationPerformed && population.uiEffects.restoration != "restored" {
+                    population.stable = false
+                }
+            } else if request.allowUINavigation && request.needsStrips {
+                population.uiEffects.reason = "navigation_baseline_unavailable"
+            }
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            return population
+        } catch {
+            let effects = await navigation?.restore(stoppingWhen: stop) ?? .init()
+            throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: effects)
+        }
+    }
+
+    private func readExposedSessionPopulation(
+        request: SessionPopulationObservation.Request,
+        fileReader: LogicProjectFileReader.Runtime,
+        stoppingBeforeAXRead stopBeforeAXRead: @escaping @Sendable () -> Bool,
+        stoppingWhen stop: @escaping @Sendable () -> Bool
+    ) async throws -> SessionPopulationObservation.FreshPopulation {
+        let beganAt = Date()
+        let logic = runtime.logicRuntime
+        let wantsTracks = request.needsTracks
+        let wantsStrips = request.needsStrips
+        struct Read {
+            let title: String?
+            let document: String?
+            let documentReadable: Bool
+            let headers: [AXUIElement]?
+            let mixer: AXUIElement?
+            let stripElements: [AXUIElement]?
+            let tracks: [TrackState]?
+            let strips: [ChannelStripState]?
+            let presentation: AXLogicProElements.MixerPresentationRead?
+        }
+        func check() throws {
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            if stop() { throw SessionPopulationObservation.AcquisitionError.textEditing }
+        }
+        // The poller can separate cheap lifecycle/latch checks from full focus
+        // acquisition. Other callers retain their original per-read stop callback.
+        func checkAXRead() throws {
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            if stopBeforeAXRead() { throw SessionPopulationObservation.AcquisitionError.textEditing }
+        }
+        func read(in window: AXUIElement) throws -> Read {
+            try check()
+            let title = AXHelpers.getTitle(window, runtime: logic.ax)
+            let document: String?
+            let documentReadable: Bool
+            switch AXLogicProElements.projectPickerDocumentRead(window, runtime: logic) {
+            case .success(let value): document = value; documentReadable = true
+            case .failure: document = nil; documentReadable = false
+            }
+            try check()
+            var headers: [AXUIElement]?
+            var tracks: [TrackState]?
+            if wantsTracks,
+               case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
+                headers = observed
+                tracks = Self.readTrackStates(from: observed, runtime: logic, stoppingWhen: stop).states
+            }
+            try check()
+            var mixer: AXUIElement?
+            var stripElements: [AXUIElement]?
+            var strips: [ChannelStripState]?
+            var presentation: AXLogicProElements.MixerPresentationRead?
+            if wantsStrips {
+                let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic, checking: checkAXRead)
+                try check()
+                if let binding = lookup.binding {
+                    mixer = binding.mixer
+                    presentation = try AXLogicProElements.mixerPresentationRead(binding: binding, runtime: logic.ax, checking: checkAXRead)
+                    try check()
+                    if let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: binding.mixer, runtime: logic.ax) {
+                        stripElements = enumeration.strips
+                        strips = Self.readChannelStrips(from: enumeration.strips, runtime: logic,
+                            window: window, mixer: binding.mixer, stoppingWhen: stop)
+                    }
+                }
+            }
+            try check()
+            return Read(title: title, document: document, documentReadable: documentReadable,
+                        headers: headers, mixer: mixer, stripElements: stripElements, tracks: tracks, strips: strips,
+                        presentation: presentation)
+        }
+        func sameElements(_ lhs: [AXUIElement]?, _ rhs: [AXUIElement]?) -> Bool {
+            switch (lhs, rhs) {
+            case (nil, nil): return true
+            case (.some(let a), .some(let b)):
+                return a.count == b.count && zip(a, b).allSatisfy { CFEqual($0, $1) }
+            default: return false
+            }
+        }
+        func sameBytes(_ lhs: String?, _ rhs: String?) -> Bool {
+            switch (lhs, rhs) {
+            case (nil, nil): return true
+            case (.some(let a), .some(let b)): return a.utf8.elementsEqual(b.utf8)
+            default: return false
+            }
+        }
+        func sameValues<T: Encodable>(_ lhs: T?, _ rhs: T?) -> Bool {
+            switch (lhs, rhs) {
+            case (nil, nil): return true
+            case (.some(let a), .some(let b)):
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys]
+                guard let encodedA = try? encoder.encode(a), let encodedB = try? encoder.encode(b) else { return false }
+                return encodedA == encodedB
+            default: return false
+            }
+        }
+        var last = SessionPopulationObservation.FreshPopulation(
+            project: nil, tracks: nil, strips: nil, fileTrackCount: nil,
+            beganAt: beganAt, endedAt: beganAt, stable: false
+        )
+        for _ in 0..<3 {
+            try check()
+            guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: logic) else {
+                return .init(project: nil, tracks: nil, strips: nil, fileTrackCount: nil,
+                             beganAt: beganAt, endedAt: Date(), stable: true)
+            }
+            let before = try read(in: window)
+            var path: String?
+            if let document = before.document, let url = URL(string: document), url.isFileURL,
+               url.host == nil || url.host == "" || url.host == "localhost",
+               let validated = LogicProjectFileReader.validatePath(url.path) {
+                path = validated.bundle.path
+            }
+            let metadata: LogicProjectMetadata?
+            if let path { metadata = await LogicProjectFileReader.readPath(path, runtime: fileReader) }
+            else { metadata = nil }
+            try check()
+            let after = try read(in: window)
+            let sameWindow: Bool
+            if case .found(let current) = AXLogicProElements.arrangeWindowRead(runtime: logic) {
+                sameWindow = CFEqual(window, current)
+            } else { sameWindow = false }
+            let stable = sameWindow && before.title != nil && before.documentReadable && after.documentReadable
+                && sameBytes(before.title, after.title) && sameBytes(before.document, after.document)
+                && sameElements(before.headers, after.headers)
+                && sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] })
+                && sameElements(before.stripElements, after.stripElements)
+                && sameElements(before.presentation?.elements, after.presentation?.elements)
+                && before.presentation?.presentation == after.presentation?.presentation
+                && before.tracks?.map(\.liveIdentityBacked) == after.tracks?.map(\.liveIdentityBacked)
+                && zip(before.strips ?? [], after.strips ?? []).allSatisfy {
+                    switch ($0.physicalBinding, $1.physicalBinding) {
+                    case (nil, nil): return true
+                    case (.some(let a), .some(let b)): return a.matches(b)
+                    default: return false
+                    }
+                }
+                && sameValues(before.tracks, after.tracks) && sameValues(before.strips, after.strips)
+            let project = before.title.map {
+                ProjectInfo(name: Self.projectName(fromWindowTitle: $0), filePath: path, source: "ax_request_read")
+            }
+            let candidate = SessionPopulationObservation.FreshPopulation(
+                project: project, tracks: before.tracks, strips: before.strips,
+                fileTrackCount: metadata?.trackCount, beganAt: beganAt, endedAt: Date(), stable: stable,
+                mixerPresentation: before.presentation?.presentation
+            )
+            if stable { return candidate }
+            last = candidate
+        }
+        try check()
+        // Three attempts are the existing contract, not evidence of atomic host state.
+        return last
     }
 
     /// #1079: `readTrackStates` for the background poll, which stops before the next header once

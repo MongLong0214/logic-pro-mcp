@@ -43,6 +43,14 @@ struct TrackDispatcher: OperationTraceDispatching {
                 ]
             )
         }
+        guard !name.unicodeScalars.contains(where: {
+            (0x00...0x1F).contains($0.value) || (0x7F...0x9F).contains($0.value)
+        }) else {
+            return toolInvalidParamsResult(
+                "rename 'name' must not contain C0 or C1 control characters",
+                extras: ["operation": "track.rename", "write_attempted": false]
+            )
+        }
         return nil
     }
 

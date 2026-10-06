@@ -12,6 +12,12 @@ on:
       - 'v[0-9]*.[0-9]*.[0-9]*'
       - 'v[0-9]*.[0-9]*.[0-9]*-*'
 
+# Same-tag releases serialize without cancelling an in-progress publish or replacing pending runs.
+concurrency:
+  group: release-${{ github.ref }}
+  queue: max
+  cancel-in-progress: false
+
 jobs:
   # NOT `build`. `ci.yml`'s aggregate job is also called `build`, and it is one of the three
   # required status checks on the branch ruleset. GitHub matches a required context by NAME and
@@ -22,6 +28,9 @@ jobs:
     runs-on: macos-15
     permissions:
       contents: read
+    outputs:
+      verified_artifact_name: ${{ steps.artifact-name.outputs.name }}
+      verified_artifact_id: ${{ steps.upload-verified-release-artifacts.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -72,34 +81,6 @@ jobs:
         id: mode
         env:
           MACOS_CERT_BASE64: ${{ secrets.MACOS_CERT_BASE64 }}
-          # Release rule (2026-06-09 owner decision): Apple Developer ID is
-          # not required for this project. If Developer ID credentials are
-          # present, publish a notarized release. Otherwise publish the same
-          # SHA256-pinned ADHOC release path used by historical stable tags.
-        run: |
-          tag="${GITHUB_REF_NAME}"
-          if [[ "$tag" =~ - ]]; then
-            tag_kind="prerelease"
-          else
-            tag_kind="stable"
-          fi
-          echo "Tag kind: $tag_kind"
-
-          if [ -n "$MACOS_CERT_BASE64" ]; then
-            echo "mode=notarized" >> "$GITHUB_OUTPUT"
-            echo "Release mode: NOTARIZED (Developer ID + notarization)"
-          else
-            echo "mode=adhoc" >> "$GITHUB_OUTPUT"
-            echo "Release mode: ADHOC (codesign --sign -; no notarization)"
-            if [ "$tag_kind" = "stable" ]; then
-              echo "::warning::Publishing ADHOC stable release ($tag)."
-            fi
-          fi
-
-      - name: Validate notarization secrets
-        if: steps.mode.outputs.mode == 'notarized'
-        env:
-          MACOS_CERT_BASE64: ${{ secrets.MACOS_CERT_BASE64 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
           MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
@@ -107,7 +88,7 @@ jobs:
           APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
           APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
         run: |
-          required=(
+          configured_credentials=(
             MACOS_CERT_BASE64
             MACOS_CERT_PASSWORD
             MACOS_SIGNING_IDENTITY
@@ -116,58 +97,23 @@ jobs:
             APPLE_NOTARY_TEAM_ID
             APPLE_NOTARY_APP_PASSWORD
           )
-          for name in "${required[@]}"; do
-            if [ -z "${!name}" ]; then
-              echo "::error::$name is required for a notarized release build"
+          for credential in "${configured_credentials[@]}"; do
+            if [ -n "${!credential}" ]; then
+              echo "::error::Notarized releases are disabled until privately validated; remove Developer ID credentials for the supported ADHOC release mode."
               exit 1
             fi
           done
+          echo "mode=adhoc" >> "$GITHUB_OUTPUT"
+          echo "Release mode: ADHOC (codesign --sign -; no notarization)"
 
       - name: Build universal binary
         run: bash Scripts/release-build-universal.sh
 
-      - name: Codesign binary (Developer ID)
-        if: steps.mode.outputs.mode == 'notarized'
-        env:
-          MACOS_CERT_BASE64: ${{ secrets.MACOS_CERT_BASE64 }}
-          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
-        run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
-          CERT_PATH="$RUNNER_TEMP/cert.p12"
-          echo "$MACOS_CERT_BASE64" | base64 --decode > "$CERT_PATH"
-          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" LogicProMCP
-
       - name: Codesign binary (ADHOC)
-        if: steps.mode.outputs.mode == 'adhoc'
         run: |
           codesign --force --sign - LogicProMCP
 
-      - name: Notarize binary
-        if: steps.mode.outputs.mode == 'notarized'
-        env:
-          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
-          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
-        run: |
-          xcrun notarytool submit LogicProMCP --apple-id "$APPLE_NOTARY_APPLE_ID" --team-id "$APPLE_NOTARY_TEAM_ID" --password "$APPLE_NOTARY_APP_PASSWORD" --wait
-          xcrun stapler staple LogicProMCP
-
-      - name: Verify notarized artifact
-        if: steps.mode.outputs.mode == 'notarized'
-        run: |
-          codesign --verify --strict --verbose=2 LogicProMCP
-          spctl --assess --type execute LogicProMCP
-
       - name: Verify adhoc artifact
-        if: steps.mode.outputs.mode == 'adhoc'
         run: |
           codesign --verify --strict --verbose=2 LogicProMCP
 
@@ -202,10 +148,15 @@ jobs:
           )
           shasum -a 256 "${files[@]}" > release-artifacts.sha256
 
+      - name: Name verified release artifacts
+        id: artifact-name
+        run: echo "name=verified-release-artifacts-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
       - name: Upload verified release artifacts
+        id: upload-verified-release-artifacts
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
-          name: verified-release-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ steps.artifact-name.outputs.name }}
           if-no-files-found: error
           path: |
             LogicProMCP
@@ -226,7 +177,7 @@ jobs:
       - name: Download verified release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: verified-release-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ needs.build-release.outputs.verified_artifact_name }}
       # The checksum check stays and is no longer conditional. A user who downloads a corrupted
       # artifact experiences that directly, which is why it outlived the certification system that
       # used to run beside it.
@@ -273,7 +224,7 @@ jobs:
       - name: Download verified release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: verified-release-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ needs.build-release.outputs.verified_artifact_name }}
           path: ${{ runner.temp }}/artifact
 
       - name: Reverify downloaded release artifact
@@ -339,9 +290,11 @@ jobs:
           test ! -e "$LOGIC_PRO_MCP_SHARE_DIR"
 
       - name: Upload install validation evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
-          name: install-validation-${{ matrix.os }}
+          name: install-validation-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.os }}
+          if-no-files-found: ignore
           path: |
             install.log
             uninstall.log
@@ -364,7 +317,7 @@ jobs:
       - name: Download the artifact this run verified
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: verified-release-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ needs.build-release.outputs.verified_artifact_name }}
           path: verified
 
       - name: The published assets are byte-identical to the verified ones

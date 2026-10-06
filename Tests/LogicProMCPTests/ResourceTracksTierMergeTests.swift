@@ -236,7 +236,10 @@ func fallbackNamedRowsDoNotEmitTargetRefs_butExactLiveNameDoes() async throws {
             targetRegistry: registry
         )
         let mixer = try #require(sharedJSONObject(sharedResourceText(mixerResult))?["strips"] as? [[String: Any]])
-        #expect(mixer[0]["mixer_strip_ref"] as? String != nil)
+        // A healthy Arrange reference does not grant this scalar-only Mixer row physical
+        // ownership. The typed producer/resource positive is exercised by the #291 fixture.
+        #expect(mixer.count == 3)
+        #expect(mixer.allSatisfy { $0["mixer_strip_ref"] == nil })
         #expect(mixer[1]["mixer_strip_ref"] == nil)
         #expect(mixer[2]["mixer_strip_ref"] == nil)
 

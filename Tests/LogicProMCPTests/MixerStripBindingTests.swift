@@ -1,5 +1,6 @@
 @preconcurrency import ApplicationServices
 import Foundation
+import MCP
 import Testing
 @testable import LogicProMCP
 
@@ -54,6 +55,17 @@ private final class PluginBindingFixture: @unchecked Sendable {
     }
 
     var runtime: AXLogicProElements.Runtime { builder.makeLogicRuntime(appElement: app) }
+    var readOnlyRuntime: AXLogicProElements.Runtime {
+        AXLogicProElements.Runtime(
+            logicProPID: { 4242 }, ax: builder.makeAXRuntime(appElement: app,
+                setAttributeHandler: { _, _, _ in Issue.record("unexpected AX write"); return false },
+                performActionHandler: { _, _ in Issue.record("unexpected AX action"); return false }),
+            executeAppleScript: { _ in Issue.record("unexpected AppleScript"); return .error("unexpected script") },
+            onScreenWindowList: { [] },
+            postPopupMenuEscape: { Issue.record("unexpected Escape") },
+            focusedApplicationPID: { 4242 }
+        )
+    }
     func resolve(_ track: Int = 9) -> AXPluginTrackBinding.Binding? {
         AXPluginTrackBinding.resolve(track: track, mixer: mixer, runtime: runtime)
     }
@@ -172,6 +184,156 @@ func pluginTrackBindingWaitRefusesSameNameElementReplacement(_ stage: String) as
     f.builder.setChildren(replacement, [f.builder.element(30411)])
     f.builder.setChildren(f.mixer, [replacement] + Array(reordered.dropFirst()))
     #expect(!AXPluginTrackBinding.isStable(binding, runtime: f.runtime))
+}
+
+@Test(arguments: [
+    ("q\u{0301}\u{0323}", "q\u{0323}\u{0301}"),
+    ("q\u{0323}\u{0301}", "q\u{0301}\u{0323}"),
+    (" Bass ", "Bass "),
+])
+func pluginTrackBindingRetainedElementsDoNotHideRawNameDrift(_ names: (String, String)) throws {
+    try #require(!names.0.utf8.elementsEqual(names.1.utf8))
+    let f = PluginBindingFixture(headerNames: [names.0], stripNames: [names.0])
+    let runtime = f.readOnlyRuntime
+    let binding = try #require(AXPluginTrackBinding.resolve(track: 0, mixer: f.mixer, runtime: runtime))
+    #expect(binding.trackName.utf8.elementsEqual(names.0.utf8))
+    #expect(AXPluginTrackBinding.isStable(binding, runtime: runtime), "unchanged raw bytes remain stable")
+
+    // Change the displayed names on the acquired elements, not their CF identities or positions.
+    f.builder.setAttribute(f.builder.element(30200), kAXDescriptionAttribute as String, names.1)
+    f.builder.setAttribute(f.builder.element(30400), kAXValueAttribute as String, names.1)
+    let fresh = try #require(AXPluginTrackBinding.resolve(track: 0, mixer: f.mixer, runtime: runtime))
+    #expect(CFEqual(fresh.header, binding.header) && CFEqual(fresh.strip, binding.strip))
+    #expect(fresh.trackName.utf8.elementsEqual(names.1.utf8))
+    #expect(!AXPluginTrackBinding.isStable(binding, runtime: runtime),
+            "retained AX identities cannot substitute canonically equivalent or normalized-equal name bytes")
+    #expect(AXPluginTrackBinding.isStable(fresh, runtime: runtime))
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+
+    let collision = PluginBindingFixture(headerNames: [names.0, names.1], stripNames: [names.0])
+    let first = AXPluginTrackBinding.resolve(track: 0, mixer: collision.mixer, runtime: collision.readOnlyRuntime)
+    let second = AXPluginTrackBinding.resolve(track: 1, mixer: collision.mixer, runtime: collision.readOnlyRuntime)
+    let firstMatch = try #require(first)
+    #expect(CFEqual(firstMatch.strip, collision.strips[0]))
+    #expect(firstMatch.trackName.utf8.elementsEqual(names.0.utf8))
+    #expect(second == nil, "a byte-distinct sibling cannot use the other track's strip")
+    #expect(collision.builder.setCalls.isEmpty && collision.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: [" Bass ", "\tBass\n", "Bass "], [false, true])
+func pluginTrackBindingKeepsByteDistinctStripSiblingSeparate(_ rawName: String, reverse: Bool) throws {
+    let names = reverse ? ["Bass", rawName] : [rawName, "Bass"]
+    let f = PluginBindingFixture(headerNames: [rawName], stripNames: names)
+    let binding = try #require(f.resolve(0))
+    let exactIndex = reverse ? 1 : 0
+    #expect(CFEqual(binding.strip, f.strips[exactIndex]),
+            "only the exact-byte strip matches; trimming cannot select its sibling")
+    #expect(binding.mixerStripIndex == exactIndex)
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: [" Bass ", "\tBass\n", "Bass "])
+func pluginTrackBindingPreservesUniqueExactRawJoin(_ rawName: String) throws {
+    let f = PluginBindingFixture(headerNames: [rawName], stripNames: [rawName])
+    let binding = try #require(f.resolve(0))
+    #expect(CFEqual(binding.header, f.headers[0]))
+    #expect(CFEqual(binding.strip, f.strips[0]))
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: [" Bass ", "\tBass\n", "Bass "])
+func pluginTrackBindingRefusesNormalizedOnlyCrossSurfaceJoin(_ rawName: String) {
+    let f = PluginBindingFixture(headerNames: [rawName], stripNames: ["Bass"])
+    let runtime = f.readOnlyRuntime
+    #expect(AXPluginTrackBinding.resolve(track: 0, mixer: f.mixer, runtime: runtime) == nil,
+            "a trim-equal observation is not the issued track's exact name evidence")
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: [" Bass ", "\tBass\n", "Bass "], [false, true])
+func pluginTrackBindingKeepsByteDistinctArrangeSiblingSeparate(_ rawName: String, reverse: Bool) throws {
+    let names = reverse ? ["Bass", rawName] : [rawName, "Bass"]
+    let f = PluginBindingFixture(headerNames: names, stripNames: ["Bass"])
+    let first = AXPluginTrackBinding.resolve(track: 0, mixer: f.mixer, runtime: f.readOnlyRuntime)
+    let second = AXPluginTrackBinding.resolve(track: 1, mixer: f.mixer, runtime: f.readOnlyRuntime)
+    let exact = try #require(reverse ? first : second)
+    #expect(CFEqual(exact.strip, f.strips[0]))
+    #expect(exact.trackName.utf8.elementsEqual("Bass".utf8))
+    #expect((reverse ? second : first) == nil,
+            "the padded Arrange sibling cannot substitute the unpadded strip")
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: [false, true])
+func pluginTrackBindingRawInventoryRequiresExactCrossSurfaceEvidence(_ identical: Bool) async throws {
+    try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        let rawName = " Bass "
+        let f = PluginBindingFixture(headerNames: [rawName], stripNames: [identical ? rawName : "Bass"])
+        let b = f.builder
+        let group = b.element(30700)
+        let bypass = b.element(30701)
+        let open = b.element(30702)
+        b.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(group, kAXDescriptionAttribute as String, "Gain")
+        b.setAttribute(group, kAXPositionAttribute as String, axPoint(100, 300))
+        b.setAttribute(group, kAXSizeAttribute as String, axSize(58, 16))
+        b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        b.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
+        b.setAttribute(bypass, kAXValueAttribute as String, 0)
+        b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+        b.setChildren(group, [bypass, open])
+        b.setChildren(f.strips[0], b.makeAXRuntime().children(f.strips[0]) + [group])
+        let runtime = f.readOnlyRuntime
+        let inventory = await AccessibilityChannel.defaultGetPluginInventory(
+            params: ["track": "0"], runtime: runtime,
+            revealMixer: { _ in (f.mixer, .alreadyVisible) }
+        )
+        #expect(inventory.isSuccess)
+        let inventoryBody = try #require(sharedJSONObject(inventory.message))
+        if !identical {
+            #expect(inventoryBody["state"] as? String == "B")
+            #expect(inventoryBody["plugins_unknown_reason"] as? String == "ax_subtree_unreadable")
+            #expect(inventoryBody["plugins"] == nil)
+            #expect(b.setCalls.isEmpty && b.actionCalls.isEmpty)
+            return
+        }
+        try #require(inventoryBody["state"] as? String == "A")
+        let complete = try #require(inventoryBody["complete"] as? Bool)
+        #expect(complete)
+        let observedName = try #require(inventoryBody["track_name"] as? String)
+        #expect(observedName.utf8.elementsEqual(rawName.utf8))
+
+        let cache = StateCache()
+        let track = AXValueExtractors.extractTrackState(from: f.headers[0], index: 0, runtime: runtime.ax)
+        #expect(track.name.utf8.elementsEqual(rawName.utf8))
+        await cache.updateTracks([track])
+        let registry = TargetRegistry()
+        let published = await PluginsDispatcher.addInventoryTargetReferences(
+            to: toolTextResult(inventory.message), cache: cache, targetRegistry: registry
+        )
+        let publishedBody = try #require(sharedJSONObject(sharedToolText(published)))
+        let plugins = try #require(publishedBody["plugins"] as? [[String: Any]])
+        try #require(plugins.count == 1)
+        let rawReference = try #require(plugins[0]["plugin_insert_ref"] as? String)
+        let reference = TargetReference(rawValue: rawReference)
+        let binding = try #require(await registry.resolve(reference))
+        #expect(binding.descriptor.trackName.utf8.elementsEqual(rawName.utf8))
+        let result = await TargetRefResolver.resolveMutationIndex(
+            ["target_ref": .string(rawReference)], targetRegistry: registry, cache: cache,
+            operation: "plugin.set_param_verified", requiredKind: .pluginInsert,
+            invalidIndexResult: toolInvalidParamsResult("fixture requires an insert reference"),
+            liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+            liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) }
+        )
+        if case .success(let resolved) = result {
+            #expect(resolved.index == 0)
+            #expect(resolved.reference == reference)
+        } else {
+            Issue.record("a raw-name inventory insert reference must resolve against the same observed track")
+        }
+        #expect(b.setCalls.isEmpty && b.actionCalls.isEmpty)
+    }
 }
 
 @Test func pluginTrackBindingRetainsTheAcquiredMixerWhenAnotherMixerIsDiscoverable() throws {
@@ -362,4 +524,229 @@ func pluginTrackBindingRefusesFailedRequiredReads(_ stage: String) {
     f.builder.setChildren(replacement, [f.builder.element(30209)])
     f.builder.setChildren(f.rail, Array(f.headers.dropLast()) + [replacement])
     #expect(!AXPluginTrackBinding.isStable(binding, runtime: f.runtime))
+}
+
+// R1116-001: raw names are identity inputs, not display strings to trim or normalize.
+@Test(arguments: [false, true])
+func plugin1116PaddedBindingNeverChoosesUnpaddedDecoy(_ decoyFirst: Bool) {
+    let names = decoyFirst ? ["Bass", " Bass "] : [" Bass ", "Bass"]
+    let f = PluginBindingFixture(headerNames: [" Bass "], stripNames: names)
+    if let binding = f.resolve(0) {
+        let paddedIndex = decoyFirst ? 1 : 0
+        #expect(CFEqual(binding.strip, f.strips[paddedIndex]))
+        #expect(binding.mixerStripIndex == paddedIndex)
+        #expect(Array(binding.trackName.utf8) == Array(" Bass ".utf8))
+    }
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test func plugin1116SinglePaddedBindingRemainsUsable() throws {
+    let f = PluginBindingFixture(headerNames: [" Bass "], stripNames: [" Bass "])
+    let binding = try #require(f.resolve(0))
+    #expect(CFEqual(binding.header, f.headers[0]))
+    #expect(CFEqual(binding.strip, f.strips[0]))
+    #expect(Array(binding.trackName.utf8) == Array(" Bass ".utf8))
+    #expect(AXPluginTrackBinding.isStable(binding, runtime: f.runtime))
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["padding", "unicode"], [false, true])
+func plugin1116ByteDistinctNamesRemainUniqueAtBothSides(_ kind: String, _ reverse: Bool) throws {
+    let names = kind == "padding" ? [" Bass ", "Bass"] : ["\u{00E9}", "e\u{0301}"]
+    #expect(Array(names[0].utf8) != Array(names[1].utf8))
+    let strips = reverse ? Array(names.reversed()) : names
+    let f = PluginBindingFixture(headerNames: names, stripNames: strips)
+    for track in names.indices {
+        let binding = try #require(f.resolve(track))
+        let stripIndex = reverse ? 1 - track : track
+        #expect(CFEqual(binding.header, f.headers[track]))
+        #expect(CFEqual(binding.strip, f.strips[stripIndex]))
+        #expect(binding.mixerStripIndex == stripIndex)
+        #expect(Array(binding.trackName.utf8) == Array(names[track].utf8))
+    }
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["field", "static", "quoted", "title"])
+func plugin1116ArrangeNameFallbackPreservesPaddedBytes(_ source: String) throws {
+    let f = PluginBindingFixture(headerNames: [" Bass "], stripNames: [" Bass "])
+    if source != "field" {
+        f.builder.setChildren(f.headers[0], [])
+        if source == "static" {
+            let text = f.builder.element(30520)
+            f.builder.setAttribute(text, kAXRoleAttribute as String, kAXStaticTextRole as String)
+            f.builder.setAttribute(text, kAXValueAttribute as String, " Bass ")
+            f.builder.setChildren(f.headers[0], [text])
+        } else if source == "quoted" {
+            f.builder.setAttribute(f.headers[0], kAXDescriptionAttribute as String, "1개의 ‘ Bass ’ 트랙")
+        } else {
+            f.builder.setAttribute(f.headers[0], kAXTitleAttribute as String, " Bass ")
+        }
+    }
+    let name = try #require(try AXValueExtractors.extractTrackNameResult(
+        from: f.headers[0], runtime: f.runtime.ax
+    ).get())
+    #expect(Array(name.utf8) == Array(" Bass ".utf8))
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["padding", "unicode"])
+func plugin1116RetainedBindingRefusesByteDistinctNameDrift(_ kind: String) throws {
+    let original = kind == "padding" ? "Bass" : "\u{00E9}"
+    let changed = kind == "padding" ? " Bass " : "e\u{0301}"
+    let f = PluginBindingFixture(headerNames: [original], stripNames: [original])
+    let binding = try #require(f.resolve(0))
+    f.builder.setAttribute(f.builder.element(30200), kAXDescriptionAttribute as String, changed)
+    f.builder.setAttribute(f.builder.element(30400), kAXValueAttribute as String, changed)
+    #expect(!AXPluginTrackBinding.isStable(binding, runtime: f.runtime))
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["padding", "unicode"])
+func plugin1116ReferenceGuardRefusesByteDistinctName(_ kind: String) throws {
+    let live = kind == "padding" ? " Bass " : "\u{00E9}"
+    let expected = kind == "padding" ? "Bass" : "e\u{0301}"
+    let f = PluginBindingFixture(headerNames: [live], stripNames: [live])
+    let refusal = try #require(AccessibilityChannel.targetTrackNameGuard(
+        operation: "logic_plugins.insert_verified", track: 0, expectedTrackName: expected,
+        identity: [:], runtime: f.runtime
+    ))
+    let object = try #require(JSONSerialization.jsonObject(with: Data(refusal.message.utf8)) as? [String: Any])
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == "stale_target_reference")
+    let attempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!attempted)
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["padding", "unicode"])
+func plugin1116ReferenceGuardAllowsSameByteName(_ kind: String) {
+    let name = kind == "padding" ? " Bass " : "e\u{0301}"
+    let f = PluginBindingFixture(headerNames: [name], stripNames: [name])
+    #expect(AccessibilityChannel.targetTrackNameGuard(
+        operation: "logic_plugins.insert_verified", track: 0, expectedTrackName: name,
+        identity: [:], runtime: f.runtime
+    ) == nil)
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["padding", "unicode"])
+func plugin1116ReferenceGuardAllowsByteUniqueSiblings(_ kind: String) {
+    let names = kind == "padding" ? [" Bass ", "Bass"] : ["\u{00E9}", "e\u{0301}"]
+    let f = PluginBindingFixture(headerNames: names, stripNames: names)
+    for track in names.indices {
+        #expect(AccessibilityChannel.targetTrackNameGuard(
+            operation: "logic_plugins.insert_verified", track: track, expectedTrackName: names[track],
+            identity: [:], runtime: f.runtime
+        ) == nil)
+    }
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: [false, true])
+func plugin1116InventoryNeverAttributesDecoySlotsToPaddedTrack(_ decoyFirst: Bool) async throws {
+    let names = decoyFirst ? ["Bass", " Bass "] : [" Bass ", "Bass"]
+    let f = PluginBindingFixture(headerNames: [" Bass "], stripNames: names)
+    for index in f.strips.indices {
+        let slot = f.builder.element(30530 + index * 10)
+        let bypass = f.builder.element(30531 + index * 10)
+        let open = f.builder.element(30532 + index * 10)
+        f.builder.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
+        f.builder.setAttribute(slot, kAXDescriptionAttribute as String,
+                               names[index].utf8.elementsEqual(" Bass ".utf8) ? "Gain" : "Compressor")
+        f.builder.setAttribute(slot, kAXPositionAttribute as String, axPoint(100 + CGFloat(index) * 100, 300))
+        f.builder.setAttribute(slot, kAXSizeAttribute as String, axSize(58, 16))
+        f.builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        f.builder.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
+        f.builder.setAttribute(bypass, kAXValueAttribute as String, 0)
+        f.builder.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
+        f.builder.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+        f.builder.setChildren(slot, [bypass, open])
+        f.builder.setChildren(f.strips[index], [f.builder.element(30400 + index), slot])
+    }
+    let visibleMixer = try #require(AccessibilityChannel.mixerWithoutReveal(runtime: f.runtime)?.mixer)
+    try #require(CFEqual(visibleMixer, f.mixer), "the production reveal fallback must be unreachable")
+    let result = await AccessibilityChannel.defaultGetPluginInventory(params: ["track": "0"], runtime: f.runtime)
+    let object = try #require(JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any])
+    if object["state"] as? String == "A" {
+        #expect(object["mixer_strip_index"] as? Int == (decoyFirst ? 1 : 0))
+        let name = try #require(object["track_name"] as? String)
+        #expect(Array(name.utf8) == Array(" Bass ".utf8))
+        let plugins = try #require(object["plugins"] as? [[String: Any]])
+        #expect(plugins.first?["name"] as? String == "Gain")
+    } else {
+        #expect(object["state"] as? String == "B", "safe unread binding is permitted, wrong-strip State A is not")
+    }
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test func plugin1116SinglePaddedInventoryRemainsUsable() async throws {
+    let f = PluginBindingFixture(headerNames: [" Bass "], stripNames: [" Bass "])
+    let slot = f.builder.element(30560)
+    f.builder.setAttribute(slot, kAXRoleAttribute as String, kAXButtonRole as String)
+    f.builder.setAttribute(slot, kAXDescriptionAttribute as String, "오디오 플러그인")
+    f.builder.setAttribute(slot, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
+    f.builder.setAttribute(slot, kAXPositionAttribute as String, axPoint(100, 300))
+    f.builder.setAttribute(slot, kAXSizeAttribute as String, axSize(58, 16))
+    f.builder.setChildren(f.strips[0], [f.builder.element(30400), slot])
+    let visibleMixer = try #require(AccessibilityChannel.mixerWithoutReveal(runtime: f.runtime)?.mixer)
+    try #require(CFEqual(visibleMixer, f.mixer), "the production reveal fallback must be unreachable")
+    let result = await AccessibilityChannel.defaultGetPluginInventory(params: ["track": "0"], runtime: f.runtime)
+    let object = try #require(JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any])
+    #expect(object["state"] as? String == "A")
+    let complete = try #require(object["complete"] as? Bool)
+    #expect(complete)
+    let name = try #require(object["track_name"] as? String)
+    #expect(Array(name.utf8) == Array(" Bass ".utf8))
+    let plugins = try #require(object["plugins"] as? [[String: Any]])
+    #expect(plugins.count == 1)
+    #expect(plugins.first?["read_status"] as? String == "empty")
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["field", "static"])
+func plugin1116ArrangeCensusRefusesByteDistinctReadings(_ source: String) throws {
+    let names = ["\u{00E9}", "e\u{0301}"]
+    #expect(Array(names[0].utf8) != Array(names[1].utf8))
+    let f = PluginBindingFixture(headerNames: [names[0]], stripNames: [names[0]])
+    let readings = names.enumerated().map { index, name in
+        let element = f.builder.element(30570 + index)
+        f.builder.setAttribute(element, kAXRoleAttribute as String,
+                               source == "field" ? kAXTextFieldRole as String : kAXStaticTextRole as String)
+        if source == "field" {
+            f.builder.setAttribute(element, kAXDescriptionAttribute as String, name)
+            f.builder.setAttribute(element, kAXValueAttribute as String, "0")
+        } else {
+            f.builder.setAttribute(element, kAXValueAttribute as String, name)
+        }
+        return element
+    }
+    f.builder.setChildren(f.headers[0], readings)
+    let name = try AXValueExtractors.extractTrackNameResult(from: f.headers[0], runtime: f.runtime.ax).get()
+    #expect(name == nil, "canonically equal but byte-distinct readings cannot identify one name")
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["field", "static"])
+func plugin1116ArrangeCensusAllowsSameByteReadings(_ source: String) throws {
+    let observed = "e\u{0301}"
+    let f = PluginBindingFixture(headerNames: [observed], stripNames: [observed])
+    let readings = (0..<2).map { index in
+        let element = f.builder.element(30580 + index)
+        f.builder.setAttribute(element, kAXRoleAttribute as String,
+                               source == "field" ? kAXTextFieldRole as String : kAXStaticTextRole as String)
+        if source == "field" {
+            f.builder.setAttribute(element, kAXDescriptionAttribute as String, observed)
+            f.builder.setAttribute(element, kAXValueAttribute as String, "0")
+        } else {
+            f.builder.setAttribute(element, kAXValueAttribute as String, observed)
+        }
+        return element
+    }
+    f.builder.setChildren(f.headers[0], readings)
+    let name = try #require(try AXValueExtractors.extractTrackNameResult(
+        from: f.headers[0], runtime: f.runtime.ax
+    ).get())
+    #expect(Array(name.utf8) == Array(observed.utf8))
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
 }

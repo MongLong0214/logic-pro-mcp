@@ -667,7 +667,13 @@ enum StockPluginCatalogValidator {
             return false
         }
         return parsed.transitions.contains { transition in
-            transition.from != transition.to && parsed.transitions.contains(
+            // Reciprocity cannot witness a value outside this parameter's declared domain.
+            if let range = parameter.valueRange,
+               !(transition.from >= range.min && transition.from <= range.max &&
+                 transition.to >= range.min && transition.to <= range.max) {
+                return false
+            }
+            return transition.from != transition.to && parsed.transitions.contains(
                 VerifiedParameterEvidence.Transition(
                     from: transition.to,
                     to: transition.from

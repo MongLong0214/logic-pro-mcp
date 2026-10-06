@@ -11,11 +11,14 @@ extension AccessibilityChannel {
     // MARK: - Tracks
 
     static func defaultGetTracks(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
-        encodeResult(defaultGetTrackStates(runtime: runtime))
+        guard let states = defaultGetTrackStates(runtime: runtime) else {
+            return .error("Track population unavailable: the Arrange track rail could not be read.")
+        }
+        return encodeResult(states)
     }
 
-    static func defaultGetTrackStates(runtime: AXLogicProElements.Runtime = .production) -> [TrackState] {
-        defaultGetTrackStates(runtime: runtime, stoppingWhen: { false }).states ?? []
+    static func defaultGetTrackStates(runtime: AXLogicProElements.Runtime = .production) -> [TrackState]? {
+        defaultGetTrackStates(runtime: runtime, stoppingWhen: { false }).states
     }
 
     /// #1079: the same walk, asking `stop` before each header and again inside it, right before
@@ -25,7 +28,19 @@ extension AccessibilityChannel {
     static func defaultGetTrackStates(
         runtime: AXLogicProElements.Runtime = .production, stoppingWhen stop: () -> Bool
     ) -> (states: [TrackState]?, yielded: Bool) {
-        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+        // Keep acquisition failure distinct from a successfully observed empty rail.
+        // The shared reader tolerates unrelated loading subtrees, but rejects an
+        // unreadable rail or row role rather than shifting the remaining row indices.
+        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
+              case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        else { return (nil, false) }
+        return readTrackStates(from: headers, runtime: runtime, stoppingWhen: stop)
+    }
+
+    /// Read the retained rail, rather than rediscovering a possibly different window.
+    static func readTrackStates(
+        from headers: [AXUIElement], runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
+    ) -> (states: [TrackState]?, yielded: Bool) {
         var states: [TrackState] = []
         states.reserveCapacity(headers.count)
         for (index, header) in headers.enumerated() {
@@ -89,6 +104,9 @@ extension AccessibilityChannel {
                 reason: "expected_order_invalid",
                 hint: "sort_verified requires expected_order as a non-empty array of unique track_ref values."
             )
+        }
+        guard !Task.isCancelled else {
+            return trackSortRefusal(.cancelled, criterion: criterion, extras: [:])
         }
 
         var beforeTracks: [TrackState]?
@@ -234,6 +252,7 @@ extension AccessibilityChannel {
                 case .failure(let error):
                     return .menuReadFailed(stage: "AXMenuItem.AXEnabled", status: error.diagnosticLabel)
                 }
+                guard !Task.isCancelled else { return .cancelled }
                 // The menu leaf does not expose a persistent "selected sort"
                 // attribute. Its own title is therefore the only trustworthy
                 // criterion witness: we record the title and its measured mapping
@@ -544,6 +563,14 @@ extension AccessibilityChannel {
         extras: [String: Any]
     ) -> ChannelResult {
         switch refusal {
+        case .cancelled:
+            return trackSortStateC(
+                .readbackUnavailable,
+                criterion: criterion.rawValue,
+                reason: "cancelled",
+                hint: "sort_verified cancelled before the criterion menu action; no AXPress was sent.",
+                extras: extras
+            )
         case .beforeOrderUnreadable:
             return trackSortStateC(
                 .readbackUnavailable,
@@ -1789,7 +1816,7 @@ extension AccessibilityChannel {
         }
 
         func verifiedResult(via: String) -> ChannelResult? {
-            guard let observed = observedTrackName(), observed == truncatedName else { return nil }
+            guard let observed = observedTrackName(), observed.utf8.elementsEqual(truncatedName.utf8) else { return nil }
             return .success(HonestContract.encodeStateA(
                 extras: baseExtras.merging([
                     "observed": observed,
@@ -1798,7 +1825,7 @@ extension AccessibilityChannel {
             ))
         }
 
-        if let currentName = observedTrackName(), currentName == truncatedName {
+        if let currentName = observedTrackName(), currentName.utf8.elementsEqual(truncatedName.utf8) {
             return .success(HonestContract.encodeStateA(
                 extras: baseExtras.merging([
                     "observed": currentName,

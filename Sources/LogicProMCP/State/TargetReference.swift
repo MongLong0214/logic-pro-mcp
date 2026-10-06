@@ -102,6 +102,7 @@ struct TargetBinding: Sendable {
     let descriptor: TargetDescriptor
     let observedFingerprint: String
     let pluginInsertIndex: Int?
+    var physicalMixerStrip: AXMixerStripBinding.Binding? = nil
     let createdAt: ContinuousClock.Instant
 }
 
@@ -131,23 +132,48 @@ actor TargetRegistry {
         )
     }
 
+    /// A request-owned native project observation cannot inherit another document's bindings.
+    /// Reuse the existing project descriptor and epoch, invalidating in-flight old snapshots too.
+    func snapshotForObservedProject(
+        _ project: ProjectInfo, ifCurrent snapshot: TargetRegistrySnapshot,
+        stoppingWhen stop: @Sendable () -> Bool
+    ) -> TargetRegistrySnapshot? {
+        guard !stop(), snapshot.projectEpoch == projectEpoch,
+              snapshot.topologyGeneration == topologyGeneration else { return nil }
+        let observed = ProjectReferenceIssuance.descriptor(
+            name: project.name, filePath: project.filePath, epoch: projectEpoch
+        )
+        if observed == nil || observed != currentProjectDescriptor {
+            bumpProjectEpoch()
+            currentProjectDescriptor = ProjectReferenceIssuance.descriptor(
+                name: project.name, filePath: project.filePath, epoch: projectEpoch
+            )
+        }
+        return currentSnapshot
+    }
+
     func bind(
         kind: TargetKind,
         descriptor: TargetDescriptor,
         fingerprint: String,
-        pluginInsertIndex: Int? = nil
+        pluginInsertIndex: Int? = nil,
+        physicalMixerStrip: AXMixerStripBinding.Binding? = nil
     ) -> TargetReference {
         if kind == .project, currentProjectDescriptor != descriptor {
             currentProjectDescriptor = descriptor
             bindings = bindings.filter { $0.value.kind != .project }
         }
-        if let binding = bindings.values.first(where: {
-            $0.kind == kind
-                && $0.serverSessionID == serverSessionID
-                && $0.projectEpoch == projectEpoch
-                && $0.topologyGeneration == topologyGeneration
-                && $0.descriptor == descriptor
-                && $0.observedFingerprint == fingerprint
+        if let binding = bindings.values.first(where: { binding in
+            binding.kind == kind
+                && binding.serverSessionID == serverSessionID
+                && binding.projectEpoch == projectEpoch
+                && binding.topologyGeneration == topologyGeneration
+                && (physicalMixerStrip.map { physical in binding.physicalMixerStrip?.matches(physical) == true }
+                    ?? (binding.physicalMixerStrip == nil && binding.descriptor == descriptor))
+                && (physicalMixerStrip != nil || binding.descriptor == descriptor)
+                && (physicalMixerStrip != nil || kind == .project || binding.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8))
+                && (physicalMixerStrip != nil || (kind == .project ? binding.observedFingerprint == fingerprint
+                    : binding.observedFingerprint.utf8.elementsEqual(fingerprint.utf8)))
         }) {
             return binding.reference
         }
@@ -166,6 +192,7 @@ actor TargetRegistry {
             pluginInsertIndex: kind == .pluginInsert
                 ? pluginInsertIndex ?? TargetDescriptor.pluginInsertIndex(from: fingerprint)
                 : nil,
+            physicalMixerStrip: physicalMixerStrip,
             createdAt: ContinuousClock().now
         )
         return reference
@@ -175,13 +202,20 @@ actor TargetRegistry {
         kind: TargetKind,
         descriptor: TargetDescriptor,
         fingerprint: String,
-        snapshot: TargetRegistrySnapshot
+        snapshot: TargetRegistrySnapshot,
+        physicalMixerStrip: AXMixerStripBinding.Binding? = nil,
+        stoppingWhen stop: @Sendable () -> Bool = { false }
     ) -> TargetReference? {
-        guard snapshot.projectEpoch == projectEpoch,
+        guard !Task.isCancelled, !stop(), snapshot.projectEpoch == projectEpoch,
               snapshot.topologyGeneration == topologyGeneration else {
             return nil
         }
-        return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint)
+        if let physicalMixerStrip {
+            guard kind == .mixerStrip, let path = physicalMixerStrip.projectPath,
+                  let observedPath = currentProjectDescriptor?.projectFilePath,
+                  path.utf8.elementsEqual(observedPath.utf8) else { return nil }
+        }
+        return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint, physicalMixerStrip: physicalMixerStrip)
     }
 
     /// Return a current reference that this registry has already issued for the
@@ -203,7 +237,9 @@ actor TargetRegistry {
                 && $0.projectEpoch == projectEpoch
                 && $0.topologyGeneration == topologyGeneration
                 && $0.descriptor == descriptor
-                && $0.observedFingerprint == fingerprint
+                && (kind == .project || $0.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8))
+                && (kind == .project ? $0.observedFingerprint == fingerprint
+                    : $0.observedFingerprint.utf8.elementsEqual(fingerprint.utf8))
         })?.reference
     }
 
@@ -228,6 +264,8 @@ actor TargetRegistry {
         else {
             return nil
         }
+        if let physical = binding.physicalMixerStrip, let projectPath = currentProjectDescriptor?.projectFilePath,
+           physical.projectPath?.utf8.elementsEqual(projectPath.utf8) != true { return nil }
         return binding
     }
 
@@ -264,6 +302,7 @@ actor TargetRegistry {
             descriptor: descriptor,
             observedFingerprint: descriptor.fingerprint,
             pluginInsertIndex: existing.pluginInsertIndex,
+            physicalMixerStrip: existing.physicalMixerStrip,
             createdAt: existing.createdAt
         )
     }

@@ -179,6 +179,10 @@ def track_flags_parse(raw):
     if not rails:
         return {"readable": False, "cause": "no element's layout items carry a record-enable "
                 "checkbox named by Apple's row", "rails": rails, "raw": raw}
+    top = [r for r in rails if r["items_with_arm"] == rails[0]["items_with_arm"]]
+    if len(top) != 1:
+        return {"readable": False, "cause": "ambiguous track header rails: multiple candidates "
+                "have the same highest record-enable count", "rails": rails, "raw": raw}
     rail = tuple(rails[0]["path"])
     tracks = []
     for position, item in enumerate(k for k in children.get(rail, [])

@@ -99,6 +99,31 @@ enum TargetRefResolver {
                 return .failure(staleTargetReferenceResult(rawReference, operation: operation))
             }
 
+            if binding.kind == .mixerStrip {
+                let project = await cache.getProject()
+                guard let physical = binding.physicalMixerStrip,
+                      let projectPath = project.filePath,
+                      physical.projectPath?.utf8.elementsEqual(projectPath.utf8) == true,
+                      !indexKeys.contains(where: { params[$0] != nil }),
+                      await cache.getChannelStrips().contains(where: { $0.physicalBinding?.matches(physical) == true }) else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+                await beforeFinalValidation?()
+                guard !Task.isCancelled, await targetRegistry.resolve(binding.reference) != nil else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+                let currentProject = await cache.getProject()
+                guard currentProject.filePath?.utf8.elementsEqual(projectPath.utf8) == true else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+                if let failure = await validateProjectReference(params, targetRegistry: targetRegistry, operation: operation) {
+                    return .failure(failure)
+                }
+                // The writer revalidates this physical owner/membership at each action. An
+                // Arrange index/name is deliberately not part of this resolution.
+                return .success(.init(index: binding.descriptor.trackIndex, reference: binding.reference, binding: binding))
+            }
+
             if indexKeys.contains(where: { params[$0] != nil }) {
                 guard let requestedIndex = intParamOrNil(params, keys: indexKeys),
                       requestedIndex >= 0,
@@ -111,7 +136,7 @@ enum TargetRefResolver {
             let tracks = await cache.getTracks()
             guard let track = tracks.first(where: { $0.id == binding.descriptor.trackIndex }),
                   TargetDescriptor(trackIndex: track.id, trackName: track.name).fingerprint
-                    == binding.descriptor.fingerprint
+                    .utf8.elementsEqual(binding.descriptor.fingerprint.utf8)
             else {
                 return .failure(staleTargetReferenceResult(rawReference, operation: operation))
             }
@@ -189,7 +214,7 @@ enum TargetRefResolver {
               insert >= 0,
               pluginInsertIndex(from: binding.observedFingerprint) == insert else { return nil }
         let prefix = "\(binding.descriptor.fingerprint)|insert=\(insert)|plugin="
-        guard binding.observedFingerprint.hasPrefix(prefix) else { return nil }
+        guard binding.observedFingerprint.utf8.starts(with: prefix.utf8) else { return nil }
         return String(binding.observedFingerprint.dropFirst(prefix.count))
     }
 
@@ -199,7 +224,7 @@ enum TargetRefResolver {
         case .project:
             return false
         case .track, .mixerStrip:
-            return binding.observedFingerprint == descriptorFingerprint
+            return binding.observedFingerprint.utf8.elementsEqual(descriptorFingerprint.utf8)
         case .pluginInsert:
             return pluginInsertIdentity(from: binding) != nil
         }
@@ -252,7 +277,7 @@ enum TargetRefResolver {
     /// inside their own AX write, and pass nil here). When nil this is a no-op,
     /// so the resolver stays AX-agnostic and the explicit-index path is
     /// unaffected. Requires the live header at the reference's bound index to
-    /// still read back its bound track name (trimmed, exact), with no matching
+    /// still read back its bound raw track-name bytes, with no byte-identical
     /// name at any other index. A mismatch, ambiguity, or unreadable live name
     /// fails closed with `stale_target_reference`,
     /// `write_attempted:false`, and no write, making the live read authoritative
@@ -267,9 +292,8 @@ enum TargetRefResolver {
         guard liveTrackName != nil || liveTrackNames != nil else { return nil }
         let index = binding.descriptor.trackIndex
         let expected = binding.descriptor.trackName
-            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let scanned = liveTrackNames?() else {
-            let live = liveTrackName?(index)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let live = liveTrackName?(index)
             return staleLiveIdentityResult(
                 rawReference,
                 operation: operation,
@@ -278,9 +302,8 @@ enum TargetRefResolver {
                 observed: live
             )
         }
-        let names = scanned.mapValues { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let live = names[index]
-        guard let live, live == expected else {
+        let live = scanned[index]
+        guard let live, live.utf8.elementsEqual(expected.utf8) else {
             return staleLiveIdentityResult(
                 rawReference,
                 operation: operation,
@@ -289,8 +312,8 @@ enum TargetRefResolver {
                 observed: live
             )
         }
-        let ambiguousIndices = names
-            .filter { $0.value == expected }
+        let ambiguousIndices = scanned
+            .filter { $0.value.utf8.elementsEqual(expected.utf8) }
             .map(\.key)
             .sorted()
         guard ambiguousIndices.count <= 1 else {
@@ -361,16 +384,17 @@ enum TargetRefResolver {
         _ rawReference: String?,
         operation: String,
         referenceKey: String = "target_ref",
-        hint: String = "target_ref is stale or does not identify the requested current track"
+        hint: String = "target_ref is stale or does not identify the requested current track",
+        extras: [String: Any] = [:]
     ) -> CallTool.Result {
         toolStateCResult(
             .staleTargetReference,
             hint: hint,
-            extras: [
+            extras: extras.merging([
                 "operation": operation,
                 referenceKey: rawReference ?? "",
                 "write_attempted": false,
-            ]
+            ]) { _, authoritative in authoritative }
         )
     }
 

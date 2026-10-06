@@ -757,14 +757,14 @@ private let slotPopupOpenCustomAction = AccessibilityChannel.slotPopupOpenCustom
 /// tests run sequentially, so this deliberately lightweight recorder is safe.
 private final class AXActionRecorder: @unchecked Sendable {
     private(set) var calls: [(elementID: Int, action: String)] = []
-    private(set) var attributeWrites: [(elementID: Int, attribute: String)] = []
+    private(set) var attributeWrites: [(elementID: Int, attribute: String, popupWasOpen: Bool)] = []
 
     func record(elementID: Int, action: String) {
         calls.append((elementID, action))
     }
 
-    func recordAttributeWrite(elementID: Int, attribute: String) {
-        attributeWrites.append((elementID, attribute))
+    func recordAttributeWrite(elementID: Int, attribute: String, popupWasOpen: Bool = false) {
+        attributeWrites.append((elementID, attribute, popupWasOpen))
     }
 
     func contains(elementID: Int, action: String) -> Bool {
@@ -868,6 +868,7 @@ private final class SelectionBindingReadFailure: @unchecked Sendable {
             return true
         }
     }
+    var wasConsumed: Bool { lock.withLock { consumed } }
 }
 
 private enum PostOpenerDrift: String, Sendable {
@@ -886,6 +887,7 @@ private struct SlotPopupInsertFixture {
     let runtime: AXLogicProElements.Runtime
     let ownerWindowID: Int
     let otherWindowID: Int
+    let trackHeadersGroupID: Int
     let slotItemID: Int
     let categoryItemID: Int?
     let nonMatchingLeafItemID: Int?
@@ -893,6 +895,7 @@ private struct SlotPopupInsertFixture {
     let formatNamedCategoryItemID: Int?
     let leafItemID: Int
     let actions: AXActionRecorder
+    let selectionBindingReadFailure: SelectionBindingReadFailure
     let slotOccupier: SlotOccupier
     let slotReplacer: SlotOccupier
     let replacementSlotID: Int
@@ -1135,6 +1138,7 @@ private func makeSlotPopupInsertFixture(
     }
     let bindingReadFailure = SelectionBindingReadFailure()
     let popupOpened = SlotPopupOpenedState()
+    if popupInitiallyVisible { popupOpened.markOpened() }
     let runtime = b.makeLogicRuntime(
         appElement: app,
         attributeValueResultHandler: { element, attribute in
@@ -1149,8 +1153,16 @@ private func makeSlotPopupInsertFixture(
             }
             return nil
         },
-        setAttributeHandler: { element, attribute, _ in
-            actions.recordAttributeWrite(elementID: b.elementID(element), attribute: attribute)
+        setAttributeHandler: { element, attribute, value in
+            actions.recordAttributeWrite(
+                elementID: b.elementID(element), attribute: attribute,
+                popupWasOpen: popupOpened.isOpened
+            )
+            if CFEqual(element, headersGroup), attribute == kAXSelectedChildrenAttribute as String,
+               let selectedHeaders = value as? [AXUIElement], selectedHeaders.count == 1,
+               CFEqual(selectedHeaders[0], headerRow) {
+                bindingReadFailure.markSelected()
+            }
             return true
         },
         performActionHandler: { element, action in
@@ -1201,6 +1213,7 @@ private func makeSlotPopupInsertFixture(
         runtime: runtime,
         ownerWindowID: b.elementID(window),
         otherWindowID: b.elementID(otherWindow),
+        trackHeadersGroupID: b.elementID(headersGroup),
         slotItemID: slotKey,
         categoryItemID: categoryKey,
         nonMatchingLeafItemID: nonMatchingLeafKey,
@@ -1208,6 +1221,7 @@ private func makeSlotPopupInsertFixture(
         formatNamedCategoryItemID: formatNamedCategoryKey,
         leafItemID: leafKey,
         actions: actions,
+        selectionBindingReadFailure: bindingReadFailure,
         slotOccupier: slotOccupier,
         slotReplacer: slotReplacer,
         replacementSlotID: b.elementID(replacementSlot),
@@ -1216,6 +1230,7 @@ private func makeSlotPopupInsertFixture(
         searchFieldID: b.elementID(searchField),
         leftoverMenuItemID: leftoverItem.map(b.elementID),
         coordinateFallbackClick: {
+            popupOpened.markOpened()
             b.setChildren(app, leftoverMenu.map { [window, $0, popupMenu] } ?? [window, popupMenu])
             return true
         }
@@ -1394,6 +1409,7 @@ private func testPlugin1108TerminalGuardReportsOnlyItsObservedSlotFacts(_ drift:
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let bindingStable = try #require(trace["target_binding_stable_after_selection"] as? Bool)
     #expect(bindingStable)
+    #expect(fixture.selectionBindingReadFailure.wasConsumed)
 }
 
 @Test func testPlugin1107InsertRaisesAcquiredMixerWindowNotAnotherMixer() async throws {
@@ -1660,7 +1676,15 @@ private func testPlugin1108TerminalGuardReportsOnlyItsObservedSlotFacts(_ drift:
     }
     #expect(try #require(obj["state"] as? String) == "A")
     #expect(!fixture.actions.touched(elementID: fixture.searchFieldID))
-    #expect(fixture.actions.attributeWrites.isEmpty)
+    // Selection precedes the popup and uses AXSelectedChildren on the acquired track rail.
+    // Keep every write in the recorder: no other target/attribute, and no write after the
+    // opener, is permitted. In particular, this must still catch writes to popup elements.
+    #expect(!fixture.actions.attributeWrites.isEmpty)
+    for write in fixture.actions.attributeWrites {
+        #expect(write.elementID == fixture.trackHeadersGroupID)
+        #expect(write.attribute == kAXSelectedChildrenAttribute as String)
+        #expect(!write.popupWasOpen)
+    }
 }
 
 @Test func testPlugin425NeverPicksAFormatLabelledEntryThatOwnsItsOwnMenu() async throws {
@@ -1982,4 +2006,78 @@ private func emptyLogicRuntimeForRollbackTests() -> AXLogicProElements.Runtime {
         await runRealInsert(runtime: fixture.runtime)
     }
     #expect(try #require(obj["state"] as? String) == "A")
+}
+
+// R1116-001: exercise the public exact-slot gates and retained inventory, not
+// the live driver (which still has native activation/selection before its seams).
+@Test(arguments: [false, true])
+func testPlugin1116ExactSlotPreflightNeverTargetsUnpaddedDecoy(_ decoyFirst: Bool) async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let b = fixture.builder
+    let header = b.element(9003)
+    let paddedStrip = b.element(9005)
+    b.setAttribute(header, kAXDescriptionAttribute as String, "1개의 ‘ Bass ’ 트랙")
+    b.setAttribute(b.element(9050), kAXValueAttribute as String, " Bass ")
+    let decoyStrip = b.element(9070)
+    let decoyName = b.element(9071)
+    let decoySlot = addEmptySlot(b, 9072)
+    b.setAttribute(decoyStrip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setAttribute(decoyName, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(decoyName, kAXDescriptionAttribute as String, "이름")
+    b.setAttribute(decoyName, kAXValueAttribute as String, "Bass")
+    let paddedMarker = addOccupiedSlot(b, 9073, name: "Gain")
+    let decoyMarker = addOccupiedSlot(b, 9074, name: "Compressor")
+    b.setChildren(paddedStrip, [b.element(9050)] + framedRows(b, [b.element(9006), paddedMarker]))
+    b.setChildren(decoyStrip, [decoyName] + framedRows(b, [decoySlot, decoyMarker]))
+    b.setChildren(b.element(9004), decoyFirst ? [decoyStrip, paddedStrip] : [paddedStrip, decoyStrip])
+    let fake = FakeInsertDriver(outcome: .transientSetupFailure(stage: "bounded_1116_pre_actuation"))
+    let result = await AccessibilityChannel.defaultInsertVerified(
+        params: insertParams(), runtime: fixture.runtime, frontDocumentPath: { expectedPath },
+        insertDriver: { track, insert, pluginID, query, runtime in
+            // This reader executes inside the public operation's retained
+            // binding TaskLocal. Distinct real fixture inventories identify the
+            // authorized strip independently, before any insertion action.
+            let inventory = AccessibilityChannel.fullStripInventory(track: track, runtime: runtime)
+            #expect(inventory?[1]?.name == "Gain", "Compressor belongs only to the unpadded decoy")
+            #expect(inventory?[0] == nil, "the requested physical slot remains empty")
+            return await fake.driver(track, insert, pluginID, query, runtime)
+        }, rollback: fakeRollback()
+    )
+    let object = try #require(JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any])
+    #expect(object["state"] as? String == "C")
+    let attempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!attempted)
+    if fake.invoked {
+        #expect(fake.lastTrack == 0 && fake.lastInsert == 0)
+        #expect(object["setup_stage"] as? String == "bounded_1116_pre_actuation")
+    } else {
+        #expect(object["error"] as? String == "incomplete_inventory", "a safe binding refusal is also permitted")
+    }
+    #expect(fixture.actions.calls.isEmpty && fixture.actions.attributeWrites.isEmpty)
+    let paddedSlots = try #require(AXLogicProElements.audioPluginInsertSlots(in: paddedStrip, runtime: fixture.runtime.ax))
+    let decoySlots = try #require(AXLogicProElements.audioPluginInsertSlots(in: decoyStrip, runtime: fixture.runtime.ax))
+    #expect(paddedSlots.count == 2 && paddedSlots[0].isEmpty && paddedSlots[1].name == "Gain")
+    #expect(decoySlots.count == 2 && decoySlots[0].isEmpty && decoySlots[1].name == "Compressor")
+}
+
+@Test func testPlugin1116SinglePaddedReferenceInsertAllowsExistingDriver() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let b = fixture.builder
+    b.setAttribute(b.element(9003), kAXDescriptionAttribute as String, "1개의 ‘ Bass ’ 트랙")
+    b.setAttribute(b.element(9050), kAXValueAttribute as String, " Bass ")
+    let fake = FakeInsertDriver(outcome: .mounted(slot: 0, pluginID: "logic.stock.effect.gain", observedName: "Gain"))
+    let result = await AccessibilityChannel.defaultInsertVerified(
+        params: ["track": "0", "insert": "0", "plugin": "Gain", "mode": "duplicate_applyback",
+                 "project_expected_path": expectedPath, "expected_track_name": " Bass ",
+                 "expected_slot_read_status": "empty", "expected_plugin_identity": ""],
+        runtime: fixture.runtime, frontDocumentPath: { expectedPath },
+        insertDriver: fake.driver, rollback: fakeRollback()
+    )
+    let object = try #require(JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any])
+    #expect(object["state"] as? String == "A")
+    #expect(fake.invoked)
+    #expect(fake.lastTrack == 0 && fake.lastInsert == 0)
+    #expect(fixture.actions.calls.isEmpty && fixture.actions.attributeWrites.isEmpty)
+    let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: b.element(9005), runtime: fixture.runtime.ax))
+    #expect(slots.count == 1 && slots[0].isEmpty, "this positive covers authorization, not a simulated or native mount")
 }

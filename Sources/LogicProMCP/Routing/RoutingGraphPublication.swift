@@ -137,6 +137,16 @@ enum RoutingGraphPublication {
 
             guard let issued else { continue }
 
+            // A native Mixer observation owns a physical strip, not the Arrange track at
+            // its current ordinal. R0 makes that strip independently addressable; it does
+            // not supply the missing strip-to-track association needed by this projection.
+            if strip.physicalBinding != nil {
+                association.partial(positionalAssociationReason)
+                mainOutput.partial(positionalAssociationReason)
+                physicalOutput.partial(positionalAssociationReason)
+                continue
+            }
+
             // Two strips claiming one track index cannot both be that track's source, and nothing
             // observed says which one is.
             if stripCounts[trackIndex, default: 0] > 1 {

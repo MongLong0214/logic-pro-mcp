@@ -107,14 +107,14 @@
     "index/plugin_names.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/pluginsettings.tsv": "827154b12becb1b89cf36a9cd5bc43c1d8ca952a370fea6b9dcafde2ac1a6eb9",
     "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/quickhelp.tsv": "b5f991422533beb898382ead18d863b9c782855bdb95c016fe5cf6b24476c69e",
+    "index/quickhelp.tsv": "d1f97be3a324c18b05512624bf6d740fb124f8b126f9ec006f235d920e2518bc",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/strings.tsv": "94efba629d72c91629e9515775fb0c996128ef0dd31fd1c4b5534bd47915bee4",
+    "index/strings.tsv": "d414660c3f081bc92c68ee44481f10425458c769f7cb77e5d61c487adba6810e",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "ledger/casefold.tsv": "1fc990dd5ca92ea8b403932f30820397967fbb73aa02d7643d6c7d19fc7bdf96",
-    "ledger/presence.tsv": "712d5effe9d035e058187d2957291f347f63333d5a5c4f04f1f298977c9ca008"
+    "ledger/casefold.tsv": "78ee9969c251d83238b9388ba44555c567f1e020d65b9ecc2b410defab05f1b4",
+    "ledger/presence.tsv": "be816c3fa6ec5483e65210ea19027165406ebcddf202de3f985e36488de0cf72"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
@@ -122,88 +122,88 @@
       "-": 16
     },
     "niblabels": {
-      "-": 36,
-      "de": 28,
+      "-": 37,
+      "de": 29,
       "en": 35,
-      "es": 29,
-      "fr": 31,
-      "it": 31,
-      "ja": 35,
-      "ko": 40,
-      "pt": 31,
-      "zh_CN": 35,
+      "es": 30,
+      "fr": 32,
+      "it": 32,
+      "ja": 37,
+      "ko": 41,
+      "pt": 32,
+      "zh_CN": 36,
       "zh_TW": 33
     },
     "nibstrings": {
-      "en": 98
+      "en": 103
     },
     "quickhelp": {
-      "de": 48,
-      "en": 61,
-      "es": 49,
-      "fr": 4,
-      "ja": 60,
-      "ko": 64,
-      "zh_CN": 38
+      "de": 51,
+      "en": 64,
+      "es": 52,
+      "fr": 5,
+      "ja": 64,
+      "ko": 67,
+      "zh_CN": 40
     },
     "strings": {
       "-": 2,
-      "de": 181,
-      "en": 193,
-      "es": 183,
-      "fr": 172,
-      "it": 178,
-      "ja": 189,
-      "ko": 191,
-      "pt": 188,
-      "zh_CN": 171,
-      "zh_TW": 163
+      "de": 188,
+      "en": 199,
+      "es": 193,
+      "fr": 180,
+      "it": 185,
+      "ja": 194,
+      "ko": 196,
+      "pt": 196,
+      "zh_CN": 178,
+      "zh_TW": 167
     }
   },
   "ledger_presence_entries": {
     "madsp": {
-      "-": 8
+      "-": 9
     },
     "niblabels": {
-      "-": 28,
-      "de": 28,
-      "en": 31,
-      "es": 29,
-      "fr": 30,
-      "it": 31,
-      "ja": 41,
-      "ko": 49,
-      "pt": 32,
-      "zh_CN": 40,
+      "-": 31,
+      "de": 30,
+      "en": 33,
+      "es": 32,
+      "fr": 32,
+      "it": 33,
+      "ja": 44,
+      "ko": 50,
+      "pt": 34,
+      "zh_CN": 41,
       "zh_TW": 40
     },
     "nibstrings": {
-      "en": 80
+      "en": 91
     },
     "quickhelp": {
-      "de": 44,
-      "en": 40,
-      "es": 45,
-      "fr": 47,
-      "it": 40,
-      "ja": 57,
-      "ko": 67,
-      "pt": 40,
-      "zh_CN": 56,
-      "zh_TW": 40
+      "de": 46,
+      "en": 43,
+      "es": 47,
+      "fr": 49,
+      "it": 43,
+      "ja": 61,
+      "ko": 69,
+      "pt": 43,
+      "zh_CN": 59,
+      "zh_TW": 43
     },
     "strings": {
       "-": 3,
-      "de": 171,
-      "en": 180,
-      "es": 177,
-      "fr": 165,
-      "it": 174,
-      "ja": 184,
-      "ko": 193,
-      "pt": 182,
-      "zh_CN": 177,
-      "zh_TW": 161
+      "de": 183,
+      "en": 194,
+      "es": 192,
+      "fr": 176,
+      "it": 187,
+      "ja": 194,
+      "ko": 201,
+      "pt": 194,
+      "zh_CN": 185,
+      "zh_TW": 168
     }
   },
   "logic": {
@@ -618,7 +618,7 @@
         "zh_CN": 4.791887e-06,
         "zh_TW": 4.812842e-06
       },
-      "cited_rows": 636,
+      "cited_rows": 666,
       "cited_values": 0,
       "corpus_digest": "21cc7dce8e354afa1ab3de915762a9b01054735823bd32c99114cd8fa5b2cadb",
       "english_equal_rows_in_translated_units": {
@@ -855,7 +855,7 @@
         "zh_CN": 1.1548866e-05,
         "zh_TW": 1.087226e-05
       },
-      "cited_rows": 6183,
+      "cited_rows": 6453,
       "cited_values": 2,
       "corpus_digest": "830a5131378ede72bb0a20211985166f367b7a35a30a85d875c9c25ff0b89e1a",
       "english_equal_rows_in_translated_units": {

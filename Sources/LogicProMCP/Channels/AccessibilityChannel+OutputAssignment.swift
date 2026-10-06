@@ -58,10 +58,20 @@ extension AccessibilityChannel {
         popupCleaner: PluginPopupMenuCleaner = livePluginPopupMenuCleaner
     ) async -> ChannelResult {
         let operation = "mixer.set_output_verified"
-        guard let index = params["index"].flatMap({ Int($0) }), index >= 0 else {
+        guard let requestedIndex = params["index"].flatMap({ Int($0) }), requestedIndex >= 0 else {
             return .error(HonestContract.encodeStateC(
                 error: .invalidParams, hint: "\(operation) requires 'index' (Int >= 0)"
             ))
+        }
+        let physical = AXMixerStripBinding.current
+        var index = requestedIndex
+        if let physical {
+            guard let current = physical.currentIndex(runtime: runtime) else {
+                return .error(HonestContract.encodeStateC(error: .staleTargetReference,
+                    hint: "The referenced physical Mixer strip is no longer in its observed project/window.",
+                    extras: ["operation": operation, "write_attempted": false]))
+            }
+            index = current
         }
         guard let destination = params["destination"].flatMap(OutputAssignment.init(token:)) else {
             return .error(HonestContract.encodeStateC(
@@ -91,7 +101,7 @@ extension AccessibilityChannel {
 
         var extras: [String: Any] = [
             "operation": operation,
-            "track": index,
+            (physical == nil ? "track" : "mixer_strip_index"): index,
             "destination": destination.json,
             "write_attempted": false,
         ]
@@ -107,7 +117,8 @@ extension AccessibilityChannel {
 
         // The strip, by the same ordinal convention `insert_plugin` uses, refusing when a Mixer
         // child would not report a role: a dropped child shifts every later ordinal.
-        let lookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        let lookup: AXLogicProElements.MixerAreaLookup = physical.map { .found($0.mixer) }
+            ?? AXLogicProElements.mixerAreaLookup(runtime: runtime)
         guard let mixer = lookup.mixer else {
             return refusal(.elementNotFound, "Cannot locate the visible Mixer. Show it so the strip's "
                 + "output slot can be read; nothing was pressed.")
@@ -125,16 +136,31 @@ extension AccessibilityChannel {
         }
         let strips = enumeration.strips
         extras["strip_count_before"] = strips.count
-        guard index < strips.count else {
-            return refusal(.elementNotFound, "track index out of range for the visible Mixer; nothing was pressed.")
+        let strip: AXUIElement
+        if let physical {
+            let members = strips.indices.filter { CFEqual(strips[$0], physical.strip) }
+            guard members.count == 1, let observedIndex = members.first,
+                  physical.currentIndex(runtime: runtime) == observedIndex else {
+                return refusal(.staleTargetReference, "The referenced physical source did not remain uniquely bound before its output read; nothing was pressed.")
+            }
+            index = observedIndex
+            extras["mixer_strip_index"] = index
+            strip = physical.strip
+        } else {
+            guard index < strips.count else {
+                return refusal(.elementNotFound, "track index out of range for the visible Mixer; nothing was pressed.")
+            }
+            strip = strips[index]
         }
-        let strip = strips[index]
 
         // The current output, read by R1's reader. Unreadable is not absent, and a label this
         // cannot classify cannot be compared with anything, so both refuse.
         guard let beforeLabel = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax) else {
             return refusal(.readbackUnavailable, "The strip's current output did not read. Unreadable is "
                 + "not absent, so there is nothing to compare the request with; nothing was pressed.")
+        }
+        if let physical, physical.currentIndex(runtime: runtime) != index {
+            return refusal(.staleTargetReference, "The referenced source changed during its current output read; nothing was pressed.")
         }
         guard let before = OutputAssignment.observed(slotLabel: beforeLabel) else {
             return refusal(.readbackUnavailable, "The strip's current output reads as a label this "
@@ -205,6 +231,9 @@ extension AccessibilityChannel {
         // Open the popup of THIS strip and find the menu it opened: a new AXMenu among the Mixer
         // layout area's children, which is where Logic parents it (measured in ko and de).
         let menusBefore = popupMenus(in: mixer, runtime: runtime.ax)
+        if let physical, physical.currentIndex(runtime: runtime) != index {
+            return refusal(.staleTargetReference, "The referenced source changed before its output popup opened; nothing was pressed.")
+        }
         _ = AXHelpers.performAction(slotButton, kAXPressAction, runtime: runtime.ax)
         let opened = await newPopupMenus(in: mixer, excluding: menusBefore, timing: timing, runtime: runtime.ax)
         guard opened.count == 1, let root = opened.first else {
@@ -250,30 +279,36 @@ extension AccessibilityChannel {
                 cleanup.merging(["menu_failure": "destination_entry_not_enabled", "menu_path": path]) { _, new in new })
         }
 
-        // The bus was checked before the popup opened, and a strip can change while it is open: if
-        // the last strip reading the bus is reassigned meanwhile, this press would create an aux.
-        // So the strips are read again from the Mixer the popup opened under, and the bus checked
-        // again, right before the press. AX has no compare-and-press: a change after this read is
-        // seen only afterwards, as a strip count that moved.
-        if case .bus(let number) = destination {
-            var refused: (HonestContract.FailureError, String, [String: Any])?
-            let fresh = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
-            if let fresh, fresh.unreadableChildren == 0, fresh.strips.count == strips.count {
-                switch busCheck(into: number, from: index, strips: fresh.strips, runtime: runtime.ax) {
-                case .receivers(let receivers): extras["bus_receivers_at_press"] = receivers
-                case .refused(let error, let hint, let more): refused = (error, hint, more)
+        // Opening the popup must not change which source owns it. Reuse one complete
+        // fresh census for this binding and the bus check immediately before selection.
+        // After the terminal press, legitimate element replacement still uses ordinal readback.
+        var refused: (HonestContract.FailureError, String, [String: Any])?
+        let fresh = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
+        if let physical, physical.currentIndex(runtime: runtime) != index {
+            refused = (.staleTargetReference, "The referenced source project/window/membership changed while the popup was open", [:])
+        } else if let fresh, fresh.unreadableChildren == 0, fresh.strips.count == strips.count {
+            if CFEqual(fresh.strips[index], strip),
+               let currentSlot = AXLogicProElements.outputSlotButton(in: fresh.strips[index], runtime: runtime.ax),
+               CFEqual(currentSlot, slotButton) {
+                if case .bus(let number) = destination {
+                    switch busCheck(into: number, from: index, strips: fresh.strips, runtime: runtime.ax) {
+                    case .receivers(let receivers): extras["bus_receivers_at_press"] = receivers
+                    case .refused(let error, let hint, let more): refused = (error, hint, more)
+                    }
                 }
             } else {
-                refused = (.unsupportedState, "The Mixer's strips did not read whole, or their count moved",
-                           ["strip_count_at_press": fresh?.strips.count ?? NSNull(),
-                            "unreadable_mixer_children": fresh?.unreadableChildren ?? NSNull()])
+                refused = (.unsupportedState, "The source strip or its output slot changed while the popup was open", [:])
             }
-            if let (error, hint, more) = refused {
-                let cleanup = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: false,
-                                                     cleaner: popupCleaner)
-                return refusal(error, hint + ", read again with the popup open; nothing was selected.",
-                    cleanup.merging(more.merging(["read_with_popup_open": true]) { _, new in new }) { _, new in new })
-            }
+        } else {
+            refused = (.unsupportedState, "The Mixer's strips did not read whole, or their count moved",
+                       ["strip_count_at_press": fresh?.strips.count ?? NSNull(),
+                        "unreadable_mixer_children": fresh?.unreadableChildren ?? NSNull()])
+        }
+        if let (error, hint, more) = refused {
+            let cleanup = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: false,
+                                                 cleaner: popupCleaner)
+            return refusal(error, hint + ", read again with the popup open; nothing was selected.",
+                cleanup.merging(more.merging(["read_with_popup_open": true]) { _, new in new }) { _, new in new })
         }
 
         extras["write_attempted"] = true
@@ -295,13 +330,21 @@ extension AccessibilityChannel {
         var countAfter: Int?
         let deadline = Date().addingTimeInterval(Double(timing.readbackTimeoutMs) / 1000.0)
         repeat {
-            let enumeration = AXLogicProElements.getMixerArea(runtime: runtime)
+            let enumeration = (physical?.mixer ?? AXLogicProElements.getMixerArea(runtime: runtime))
                 .flatMap { AXLogicProElements.stripEnumeration(in: $0, runtime: runtime.ax) }
                 .flatMap { $0.unreadableChildren == 0 ? $0 : nil }
             countAfter = enumeration?.strips.count
             afterLabel = nil
-            if let enumeration, enumeration.strips.count == strips.count {
-                afterLabel = AXLogicProElements.outputSlotDestination(in: enumeration.strips[index], runtime: runtime.ax)
+            if let enumeration, enumeration.strips.count == strips.count,
+               physical == nil || physical?.currentIndex(runtime: runtime) == index {
+                if let physical {
+                    if CFEqual(enumeration.strips[index], physical.strip) {
+                        afterLabel = AXLogicProElements.outputSlotDestination(in: physical.strip, runtime: runtime.ax)
+                        if physical.currentIndex(runtime: runtime) != index { afterLabel = nil }
+                    }
+                } else {
+                    afterLabel = AXLogicProElements.outputSlotDestination(in: enumeration.strips[index], runtime: runtime.ax)
+                }
             }
             after = afterLabel.flatMap(OutputAssignment.observed(slotLabel:))
             if after == destination { break }

@@ -114,6 +114,67 @@ private let headlessCleanupAuditFileReader = LogicProjectFileReader.Runtime(
 @Suite("Cleanup execution", .serialized)
 struct CleanupExecutionTests {
 
+// #968 N1: exercise the existing scalar and cleanup consumers, not a replacement
+// naming adapter. These are input-validation witnesses; no real host is contacted.
+@Test(arguments: ["Bad\u{0000}Name", "Bad\tName", "Bad\nName", "Bad\rName",
+                  "Bad\u{001F}Name", "Bad\u{007F}Name", "Bad\u{0080}Name", "Bad\u{009F}Name"])
+func scalarRenameRejectsControlCharactersBeforeRouting(name: String) async throws {
+    let cache = StateCache()
+    await seedDuplicateTracks(cache)
+    let channel = FakeRenameChannel { stateARename(name: $0) }
+    let result = await TrackDispatcher.handle(
+        command: "rename", params: ["index": .int(0), "name": .string(name)],
+        router: await routerWith(channel), cache: cache
+    )
+    let isError = try #require(result.isError)
+    #expect(isError)
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(body["error"] as? String == "invalid_params")
+    let attempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!attempted)
+    #expect(await channel.calls().isEmpty)
+}
+
+@Test(arguments: ["Bad\u{0000}Name", "Bad\tName", "Bad\nName", "Bad\rName",
+                  "Bad\u{001F}Name", "Bad\u{007F}Name", "Bad\u{0080}Name", "Bad\u{009F}Name"])
+func controlCharacterInLaterCleanupNameRefusesBeforeFirstRename(name: String) async throws {
+    let cache = StateCache()
+    let stepID = await seedDuplicateTracks(cache)
+    let channel = FakeRenameChannel { stateARename(name: $0) }
+    let result = await ProjectDispatcher.handle(
+        command: "cleanup_apply",
+        params: ["step_id": .string(stepID), "confirmed": .bool(true),
+                 "names": .array([.string("Kick L"), .string(name)])],
+        router: await routerWith(channel), cache: cache,
+        cleanupAuditFileReader: headlessCleanupAuditFileReader
+    )
+    let isError = try #require(result.isError)
+    #expect(isError)
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(body["error"] as? String == "invalid_params")
+    let attempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!attempted)
+    #expect(await channel.calls().isEmpty)
+}
+
+@Test(arguments: [" 킥, \"왼쪽\" ", "Family 👨‍👩‍👧‍👦", "e\u{0301}", "É 🎹"])
+func scalarRenamePreservesPrintableAndJoinerNameBytes(name: String) async throws {
+    let cache = StateCache()
+    await seedDuplicateTracks(cache)
+    let channel = FakeRenameChannel { stateARename(name: $0) }
+    let result = await TrackDispatcher.handle(
+        command: "rename", params: ["index": .int(0), "name": .string(name)],
+        router: await routerWith(channel), cache: cache
+    )
+    let isError = try #require(result.isError)
+    #expect(!isError)
+    let calls = await channel.calls()
+    #expect(calls.count == 1)
+    let call = try #require(calls.first)
+    #expect(call.index == "0")
+    #expect(call.name.utf8.elementsEqual(name.utf8))
+}
+
 @Test func malformedStructuredNamesCannotDiscardAnEntryAndRename() async throws {
     let cache = StateCache()
     let stepID = await seedDuplicateTracks(cache)

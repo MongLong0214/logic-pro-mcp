@@ -167,6 +167,7 @@ struct CoordFreeTrackToggleTests {
         _ fixture: ToggleFixture,
         keyRuntime: AXMouseHelper.Runtime,
         performAction: (@Sendable (AXUIElement, String) -> Bool)? = nil,
+        setAttribute: (@Sendable (AXUIElement, String, Any) -> Bool)? = nil,
         logicProPID: @escaping @Sendable () -> pid_t? = { 4242 },
         activateLogicPro: @escaping @Sendable () -> Bool = { true },
         logicIsFrontmost: @escaping @Sendable () -> Bool = { true },
@@ -177,7 +178,7 @@ struct CoordFreeTrackToggleTests {
             ax: fixture.builder.makeAXRuntime(
                 appElement: fixture.app,
                 attributeValueHandler: attributeValueHandler,
-                setAttributeHandler: nil,
+                setAttributeHandler: setAttribute,
                 performActionHandler: performAction
             )
         )
@@ -1379,7 +1380,18 @@ struct CoordFreeTrackToggleTests {
         // and at that instant header 1 becomes selected too — so the re-check sees a
         // non-exclusive selection and must refuse without posting.
         let flip = HeaderPressFlip(builder: f.builder, watch: f.headers[0], onNthPress: 2, select: f.headers[1])
-        let channel = makeChannel(f, keyRuntime: key.runtime(), performAction: { flip.handler($0, $1) })
+        let channel = makeChannel(
+            f, keyRuntime: key.runtime(),
+            performAction: { flip.handler($0, $1) },
+            setAttribute: { element, attribute, value in
+                // AXPress owns the selection transition that injects this race.
+                if attribute == kAXSelectedChildrenAttribute as String || attribute == kAXSelectedAttribute as String {
+                    return false
+                }
+                f.builder.setAttribute(element, attribute, value)
+                return true
+            }
+        )
 
         let result = await channel.execute(operation: "track.set_mute", params: ["index": "0", "enabled": "true"])
 

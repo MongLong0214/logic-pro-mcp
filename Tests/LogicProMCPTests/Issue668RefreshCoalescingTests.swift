@@ -25,25 +25,85 @@ struct Issue668RefreshCoalescingTests {
     /// test passes for the wrong reason. That is exactly what happened: the cycle-count assertion
     /// below stayed green against a mutant with coalescing removed, and only re-aiming the
     /// instrument exposed it.
-    private static func makePoller(cache: StateCache, cycles: Counter) -> StatePoller {
+    private static func channel() -> AccessibilityChannel {
+        let builder = FakeAXRuntimeBuilder()
+        return AccessibilityChannel(runtime: .init(
+            isTrusted: { true }, isLogicProRunning: { true }, appRoot: { nil },
+            transportState: { .error("unused read") },
+            toggleTransportButton: { _ in .error("unused mutation") },
+            setTempo: { _ in .error("unused mutation") },
+            setCycleRange: { _ in .error("unused mutation") },
+            tracks: { .success("[]") },
+            trackStates: { [TrackState(id: 0, name: "Fixture", type: .audio)] },
+            selectedTrack: { .error("unused read") },
+            selectTrack: { _ in .error("unused mutation") },
+            setTrackToggle: { _, _ in .error("unused mutation") },
+            renameTrack: { _ in .error("unused mutation") },
+            mixerState: { .error("unused read") },
+            channelStrip: { _ in .error("unused read") },
+            setMixerValue: { _, _ in .error("unused mutation") },
+            projectInfo: { .error("unavailable") }, markers: { .error("unused read") },
+            confirmNewTrackDialog: {}, canPostEvents: { false },
+            logicRuntime: builder.makeLogicRuntime(
+                setAttributeHandler: nil, performActionHandler: nil,
+                executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+            )
+        ))
+    }
+
+    private static func makePoller(
+        cache: StateCache, cycles: Counter, loopSleeping: Flag? = nil,
+        postPoll: @escaping @Sendable ([ResourceCacheKey]) async -> Void = { _ in }
+    ) -> StatePoller {
         StatePoller(
-            axChannel: AccessibilityChannel(),
+            axChannel: channel(),
             cache: cache,
-            runtime: .init(hasVisibleWindow: { cycles.bump(); return true }),
-            postPoll: { _ in }
+            runtime: .init(hasVisibleWindow: { cycles.bump(); return true }, sleep: { _ in
+                loopSleeping?.set()
+                try await Task.sleep(for: .seconds(3600))
+            }),
+            postPoll: postPoll
         )
+    }
+
+    /// A timeout bounds a missing callback; it does not decide when callers overlap. The closed
+    /// postPoll gate below supplies that precondition, even when every injected read is instant.
+    private static func waitUntil(_ condition: @escaping @Sendable () async -> Bool) async -> Bool {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !(await condition()), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return await condition()
+    }
+
+    private static func queue(_ count: Int, on poller: StatePoller) async -> [Task<Bool, Never>] {
+        let arriving = Counter()
+        let callers = (0..<count).map { _ in Task {
+            arriving.bump()
+            return await poller.refreshNow()
+        } }
+        #expect(await waitUntil { arriving.value() == count }, "callers did not arrive")
+        // Cross the actor after launching the calls while the owning cycle is still held.
+        _ = await poller.isRunning
+        return callers
     }
 
     @Test("concurrent nudges no longer race: no write is refused")
     func concurrentNudgesDoNotDropWrites() async {
         let cache = StateCache()
-        let poller = Self.makePoller(cache: cache, cycles: Counter())
+        let entered = Flag(), hold = OneShotGate()
+        defer { hold.open() }
+        let poller = Self.makePoller(cache: cache, cycles: Counter(), postPoll: { _ in
+            entered.set(); await hold.wait()
+        })
 
         let droppedBefore = await cache.droppedStaleWriteCount(for: .tracks)
-        await withTaskGroup(of: Bool.self) { group in
-            for _ in 0..<4 { group.addTask { await poller.refreshNow() } }
-            for await _ in group {}
-        }
+        let owner = Task { await poller.refreshNow() }
+        #expect(await Self.waitUntil { entered.isSet() }, "readable fixture never published")
+        let callers = await Self.queue(3, on: poller)
+        hold.open()
+        _ = await owner.value
+        for caller in callers { _ = await caller.value }
         let dropped = await cache.droppedStaleWriteCount(for: .tracks) - droppedBefore
 
         // This is the assertion that inverted. Measured at 3 before coalescing, deterministically
@@ -54,12 +114,17 @@ struct Issue668RefreshCoalescingTests {
     @Test("four concurrent nudges cost two cycles, not four")
     func concurrentNudgesShareACycle() async {
         let cycles = Counter()
-        let poller = Self.makePoller(cache: StateCache(), cycles: cycles)
-
-        await withTaskGroup(of: Bool.self) { group in
-            for _ in 0..<4 { group.addTask { await poller.refreshNow() } }
-            for await _ in group {}
-        }
+        let entered = Flag(), hold = OneShotGate()
+        defer { hold.open() }
+        let poller = Self.makePoller(cache: StateCache(), cycles: cycles, postPoll: { _ in
+            entered.set(); await hold.wait()
+        })
+        let owner = Task { await poller.refreshNow() }
+        #expect(await Self.waitUntil { entered.isSet() }, "readable fixture never published")
+        let callers = await Self.queue(3, on: poller)
+        hold.open()
+        _ = await owner.value
+        for caller in callers { _ = await caller.value }
 
         // One cycle for whoever arrived first, one shared by the three that arrived during it.
         // The bound is what matters, not the exact 2: which callers land inside the first cycle
@@ -72,17 +137,23 @@ struct Issue668RefreshCoalescingTests {
     @Test("a late caller is served a cycle that began after its request, not the one in flight")
     func lateCallerIsNotServedStaleReads() async {
         let cycles = Counter()
-        let poller = Self.makePoller(cache: StateCache(), cycles: cycles)
+        let entered = Flag(), hold = OneShotGate()
+        defer { hold.open() }
+        let poller = Self.makePoller(cache: StateCache(), cycles: cycles, postPoll: { _ in
+            entered.set(); await hold.wait()
+        })
 
         // The hazard this guards is concrete: `refreshAfterWrite` on the saga path nudges the
         // poller immediately after a write. If a late caller were handed the in-flight cycle's
         // result, it would receive AX reads taken BEFORE its own write and the saga would proceed
         // on state that predates it — the staleness the compare-and-swap exists to prevent, with
         // nothing left to count it. So arrivals wait for a fresh cycle.
-        async let first: Bool = poller.refreshNow()
-        try? await Task.sleep(for: .milliseconds(300))  // land inside the first cycle
-        async let second: Bool = poller.refreshNow()
-        _ = await [first, second]
+        let first = Task { await poller.refreshNow() }
+        #expect(await Self.waitUntil { entered.isSet() }, "first cycle never entered postPoll")
+        let second = await Self.queue(1, on: poller)
+        hold.open()
+        _ = await first.value
+        _ = await second[0].value
 
         #expect(cycles.value() == 2,
                 "the late caller was served the in-flight cycle instead of a fresh one")
@@ -91,7 +162,11 @@ struct Issue668RefreshCoalescingTests {
     @Test("a refused write still leaves the section readable")
     func refusedWriteDoesNotMakeTheDocumentLookClosed() async {
         let cache = StateCache()
-        let poller = Self.makePoller(cache: cache, cycles: Counter())
+        let entered = Flag(), hold = OneShotGate()
+        defer { hold.open() }
+        let poller = Self.makePoller(cache: cache, cycles: Counter(), postPoll: { _ in
+            entered.set(); await hold.wait()
+        })
 
         // `hasDocument` defaults to true, so asserting it after a poll would pass whether or not
         // the poll did anything. Drive it false first: then the assertion answers "did the poll
@@ -99,10 +174,12 @@ struct Issue668RefreshCoalescingTests {
         await cache.updateDocumentState(false)
         #expect(!(await cache.getHasDocument()), "precondition not established")
 
-        await withTaskGroup(of: Bool.self) { group in
-            for _ in 0..<4 { group.addTask { await poller.refreshNow() } }
-            for await _ in group {}
-        }
+        let owner = Task { await poller.refreshNow() }
+        #expect(await Self.waitUntil { entered.isSet() }, "readable fixture never published")
+        let callers = await Self.queue(3, on: poller)
+        hold.open()
+        _ = await owner.value
+        for caller in callers { _ = await caller.value }
 
         #expect(await cache.getHasDocument(), "the poller declared the document closed")
     }
@@ -110,38 +187,49 @@ struct Issue668RefreshCoalescingTests {
     @Test("the initiator returns without waiting for the callers it queued")
     func initiatorIsNotHeldByTheDrain() async {
         let cycles = Counter()
-        let poller = Self.makePoller(cache: StateCache(), cycles: cycles)
+        let entered = Counter(), firstHold = OneShotGate(), drainHold = OneShotGate()
+        defer { firstHold.open(); drainHold.open() }
+        let poller = Self.makePoller(cache: StateCache(), cycles: cycles, postPoll: { _ in
+            if entered.next() == 1 { await firstHold.wait() } else { await drainHold.wait() }
+        })
         let waiterFinished = Flag()
+        let initiatorFinished = Flag()
 
         // The caller that finds the poller idle runs the cycle. Its own answer is ready when that
         // cycle ends — but a first draft served the queued callers before returning, so the
         // initiator paid for their cycles too. Measured at ~1.4x its solo latency under a stream of
         // nudges, against a 25s deadline the cycle already overruns on a 74-track project. Whole
         // extra cycles on the critical path make #668 worse, not better.
-        async let initiator: Bool = poller.refreshNow()
-        try? await Task.sleep(for: .milliseconds(300))  // land inside the initiator's cycle
-        let queued = Task { _ = await poller.refreshNow(); waiterFinished.set() }
-        _ = await initiator
+        let initiator = Task { _ = await poller.refreshNow(); initiatorFinished.set() }
+        #expect(await Self.waitUntil { entered.value() == 1 }, "first cycle never entered")
+        let queued = await Self.queue(1, on: poller)
+        let completion = Task { _ = await queued[0].value; waiterFinished.set() }
+        firstHold.open()
+        #expect(await Self.waitUntil { entered.value() == 2 }, "no handed-off drain entered")
+        #expect(await Self.waitUntil { initiatorFinished.isSet() }, "initiator waited for the held drain")
 
         // The queued caller is owed a FRESH cycle, which cannot have finished yet. If the initiator
         // had drained before returning, that cycle would be complete and this flag set.
         #expect(!waiterFinished.isSet(), "the initiator waited for the queued caller's cycle")
-        _ = await queued.value
+        drainHold.open()
+        _ = await initiator.value
+        _ = await completion.value
     }
 
     @Test("stop() still waits for the cycles it is documented to wait for")
     func stopCoversTheHandedOffDrain() async {
         let resolved = Counter()
-        let poller = StatePoller(
-            axChannel: AccessibilityChannel(),
-            cache: StateCache(),
-            runtime: .init(hasVisibleWindow: { true },
-                           sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
-            postPoll: { _ in try? await Task.sleep(for: .seconds(1)) }
-        )
+        let entered = Counter(), firstHold = OneShotGate(), drainHold = OneShotGate()
+        defer { firstHold.open(); drainHold.open() }
+        let poller = Self.makePoller(cache: StateCache(), cycles: Counter(), postPoll: { _ in
+            if entered.next() == 1 { await firstHold.wait() } else { await drainHold.wait() }
+        })
         await poller.start()
-        let waiters = (0..<3).map { _ in Task { _ = await poller.refreshNow(); resolved.bump() } }
-        try? await Task.sleep(for: .milliseconds(400))
+        #expect(await Self.waitUntil { entered.value() == 1 }, "loop never entered its cycle")
+        let waiters = await Self.queue(3, on: poller)
+        let completions = waiters.map { waiter in Task { _ = await waiter.value; resolved.bump() } }
+        firstHold.open()
+        #expect(await Self.waitUntil { entered.value() == 2 }, "the drain was never handed off")
 
         // Handing the drain to its own task let AX polling outlive a `stop()` whose own
         // documentation says it waits for the current cycle. It usually finished in time anyway,
@@ -149,20 +237,46 @@ struct Issue668RefreshCoalescingTests {
         // stop guarantee resting on luck is not a guarantee. Measured over three runs each:
         // unawaited left 3 of 3 callers unresolved every time; awaited left 0, 1, 1.
         let pendingBefore = 3 - resolved.value()
-        await poller.stop()
+        let returned = Flag()
+        let stopper = Task { await poller.stop(); returned.set() }
+        #expect(await Self.waitUntil { !(await poller.isRunning) }, "stop was not requested")
+        // No duration can finish the held drain. The bounded observation only gives an incorrect
+        // non-waiting implementation time to return after it has processed the stop request.
+        try? await Task.sleep(for: .seconds(1))
+        #expect(!returned.isSet(), "stop() returned while its handed-off drain was held")
+        drainHold.open()
+        _ = await stopper.value
         let unresolved = 3 - resolved.value()
+        for completion in completions { _ = await completion.value }
 
         #expect(pendingBefore > 0, "no drain was outstanding, so this measured nothing")
         #expect(unresolved < pendingBefore,
                 "stop() returned without waiting for any of the drain it handed off")
-        for waiter in waiters { _ = await waiter.value }
     }
 
     @Test("stop() returns while nudges keep arriving")
     func stopIsBoundedUnderContinuousNudges() async {
-        let poller = Self.makePoller(cache: StateCache(), cycles: Counter())
-        await poller.start()
+        let entered = Counter(), firstHold = OneShotGate(), drainHold = OneShotGate()
+        defer { firstHold.open(); drainHold.open() }
+        let arrivals = Counter()
         let halt = Flag()
+        let target = PollerTarget()
+        let poller = Self.makePoller(cache: StateCache(), cycles: Counter(), postPoll: { _ in
+            // Each live cycle supplies the next nudge, rather than hoping a fixed timer lands
+            // inside an instant fixture read. An incorrect drain that keeps accepting batches
+            // after stop therefore cannot escape through an accidentally empty queue.
+            if !halt.isSet() { target.nudge(arrivals: arrivals) }
+            if entered.next() == 1 { await firstHold.wait() } else { await drainHold.wait() }
+            await Task.yield()
+        })
+        target.set(poller)
+        await poller.start()
+        #expect(await Self.waitUntil { entered.value() == 1 && arrivals.value() >= 1 },
+                "the first overlapping nudge never arrived")
+        _ = await poller.isRunning
+        firstHold.open()
+        #expect(await Self.waitUntil { entered.value() == 2 && arrivals.value() >= 2 },
+                "continuous nudges never reached the held drain")
         // Fire-and-forget on a timer, which is the shape the 15 bootstrap callers actually have:
         // nothing waits for a previous result, so a nudge lands while the drain's own cycle is
         // still running. My first attempt at this test had each sender await its own result, which
@@ -173,37 +287,34 @@ struct Issue668RefreshCoalescingTests {
                 try? await Task.sleep(for: .milliseconds(50))
             }
         }
-        try? await Task.sleep(for: .milliseconds(400))
 
         // The drain kept accepting new batches and `refreshNow` stays callable after the loop task
         // is gone, so one nudge per cycle held `stop()` open indefinitely — measured at over 20s
         // with no sign of returning, ending only when the nudges did.
         let returned = Flag()
         let stopper = Task { await poller.stop(); returned.set() }
-        try? await Task.sleep(for: .seconds(12))
-        let stoppedInTime = returned.isSet()
+        #expect(await Self.waitUntil { !(await poller.isRunning) }, "stop was not requested")
+        drainHold.open()
+        let stoppedInTime = await Self.waitUntil { returned.isSet() }
 
         halt.set()
         sender.cancel()
         _ = await stopper.value
-        #expect(stoppedInTime, "stop() was still waiting after 12s of continuous nudges")
+        #expect(stoppedInTime, "stop() remained blocked while nudges kept arriving")
     }
 
     @Test("stopImmediately() does not leave a cycle about to start")
     func stopImmediatelyStartsNoNewCycle() async {
         let cycles = Counter()
-        let poller = StatePoller(
-            axChannel: AccessibilityChannel(),
-            cache: StateCache(),
-            runtime: .init(hasVisibleWindow: { cycles.bump(); return true },
-                           sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
-            postPoll: { _ in try? await Task.sleep(for: .milliseconds(200)) }
-        )
+        let entered = Flag(), loopSleeping = Flag(), hold = OneShotGate()
+        defer { hold.open() }
+        let poller = Self.makePoller(cache: StateCache(), cycles: cycles, loopSleeping: loopSleeping,
+            postPoll: { _ in entered.set(); await hold.wait() })
         // An external nudge takes the flag first, so the loop reaches the gate while a cycle runs.
         let nudge = Task { _ = await poller.refreshNow() }
-        try? await Task.sleep(for: .milliseconds(50))
+        #expect(await Self.waitUntil { entered.isSet() }, "external cycle never entered")
         await poller.start()
-        try? await Task.sleep(for: .milliseconds(300))
+        #expect(await Self.waitUntil { loopSleeping.isSet() }, "loop did not skip the held cycle")
 
         // A queued loop suspends in a continuation cancellation cannot wake, so it used to be
         // served by a whole AX cycle that began AFTER stopImmediately() had returned — work done
@@ -211,14 +322,12 @@ struct Issue668RefreshCoalescingTests {
         // instead of queueing.
         await poller.stopImmediately()
         let atReturn = cycles.value()
-        // Long enough for the in-flight cycle to END and any drain it spawns to run. An earlier
-        // 3s window closed before the initiator had even finished, so the test reported "no new
-        // cycles" about a stretch of time in which nothing had happened yet.
-        try? await Task.sleep(for: .seconds(8))
+        hold.open()
+        _ = await nudge.value
+        await poller.stop()
 
         #expect(cycles.value() == atReturn,
                 "\(cycles.value() - atReturn) cycle(s) began after stopImmediately() returned")
-        _ = await nudge.value
     }
 
     @Test("a debounced write is not reported as a refresh")
@@ -254,38 +363,34 @@ struct Issue668RefreshCoalescingTests {
         #expect(await cache.currentVersion(for: .tracks) != observed)
     }
 
-    /// NOT covered here: that `applied == false` stops the poller emitting a `tracks` cache key.
-    /// `StatePoller` takes a concrete `AccessibilityChannel`, so there is no seam to hand it a
-    /// controlled read, and the only way to reach that link is to walk whatever Logic is doing —
-    /// which is what made the test above environment-coupled. Stating the gap rather than
-    /// re-introducing a check that passes for the wrong reason.
+    // The debounce assertions above cover StateCache directly; the other cases use the real
+    // AccessibilityChannel with injected reads so their postPoll precondition is independent of AX.
 
     @Test("no cycle begins once a stop is requested, including from a cycle stop does not own")
     func stopQuiescesACycleItDoesNotOwn() async {
         let cycles = Counter()
-        let poller = StatePoller(
-            axChannel: AccessibilityChannel(),
-            cache: StateCache(),
-            runtime: .init(hasVisibleWindow: { cycles.bump(); return true },
-                           sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
-            postPoll: { _ in try? await Task.sleep(for: .milliseconds(200)) }
-        )
+        let entered = Flag(), loopSleeping = Flag(), hold = OneShotGate()
+        defer { hold.open() }
+        let poller = Self.makePoller(cache: StateCache(), cycles: cycles, loopSleeping: loopSleeping,
+            postPoll: { _ in entered.set(); await hold.wait() })
         // An external nudge owns the cycle, so the loop skips its tick and sleeps. Cancelling the
         // loop then leaves `drainTask` nil, and stop() used to await nothing and return — after
         // which the external cycle would find the queued callers and hand off a fresh,
         // uncancelled drain, running AX work past the stop.
         let owner = Task { _ = await poller.refreshNow() }
-        try? await Task.sleep(for: .milliseconds(50))
+        #expect(await Self.waitUntil { entered.isSet() }, "external cycle never entered")
         await poller.start()
-        let queued = (0..<2).map { _ in Task { _ = await poller.refreshNow() } }
-        try? await Task.sleep(for: .milliseconds(250))
+        #expect(await Self.waitUntil { loopSleeping.isSet() }, "loop did not skip the held cycle")
+        let queued = await Self.queue(2, on: poller)
 
         // Sampled when stop is REQUESTED, not when it returns. Measuring after the return hides
         // the defect: stop parks on the cycle it does not own, so a drain spawned in the meantime
         // finishes inside the wait and its cycle is invisible to an after-the-fact comparison.
         let atRequest = cycles.value()
-        await poller.stop()
-        try? await Task.sleep(for: .seconds(6))
+        let stopper = Task { await poller.stop() }
+        #expect(await Self.waitUntil { !(await poller.isRunning) }, "stop was not requested")
+        hold.open()
+        _ = await stopper.value
 
         #expect(cycles.value() == atRequest,
                 "\(cycles.value() - atRequest) cycle(s) began after the stop was requested")
@@ -297,7 +402,7 @@ struct Issue668RefreshCoalescingTests {
     func stopWaitsForACycleItDoesNotOwn() async {
         let cycleEnded = Flag()
         let poller = StatePoller(
-            axChannel: AccessibilityChannel(),
+            axChannel: Self.channel(),
             cache: StateCache(),
             runtime: .init(hasVisibleWindow: { true },
                            sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
@@ -324,7 +429,7 @@ struct Issue668RefreshCoalescingTests {
     func nudgeAfterStopIsRefused() async {
         let cycles = Counter()
         let poller = StatePoller(
-            axChannel: AccessibilityChannel(),
+            axChannel: Self.channel(),
             cache: StateCache(),
             runtime: .init(hasVisibleWindow: { cycles.bump(); return true },
                            sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
@@ -349,8 +454,9 @@ struct Issue668RefreshCoalescingTests {
         let cycles = Counter()
         let entered = Counter()
         let hold = OneShotGate()
+        defer { hold.open() }
         let poller = StatePoller(
-            axChannel: AccessibilityChannel(),
+            axChannel: Self.channel(),
             cache: StateCache(),
             runtime: .init(hasVisibleWindow: { cycles.bump(); return true }),
             // Holding the cycle open here is what makes the overlap a fact instead of a hope.
@@ -363,20 +469,14 @@ struct Issue668RefreshCoalescingTests {
         // whole test: with AX answering instantly, nothing overlapped, and twelve nudges each
         // getting their own cycle is *correct* behaviour, not a batching failure. The assertion was
         // demanding sharing in a run where there was nothing to share.
-        let callers = (0..<12).map { _ in Task { _ = await poller.refreshNow() } }
+        let owner = Task { await poller.refreshNow() }
 
         // Once one cycle is parked inside postPoll the gate is held, so every later arrival must
         // queue. No sleep decides that; the gate does.
-        while entered.value() == 0 { await Task.yield() }
-        while cycles.value() < 2 && entered.value() == 1 {
-            // Give the queued callers a chance to register before releasing. They cannot start a
-            // cycle while the first is held, so this cannot race ahead of the property.
-            await Task.yield()
-            if entered.value() > 1 { break }
-            try? await Task.sleep(for: .milliseconds(50))
-            break
-        }
+        #expect(await Self.waitUntil { entered.value() > 0 }, "readable fixture never published")
+        let callers = await Self.queue(11, on: poller)
         hold.open()
+        _ = await owner.value
         for caller in callers { _ = await caller.value }
 
         // Eleven callers queued behind one held cycle share the drain rather than each running
@@ -385,6 +485,20 @@ struct Issue668RefreshCoalescingTests {
         #expect(cycles.value() < 12,
                 "\(cycles.value()) cycles for 12 nudges; nothing was batched")
         #expect(cycles.value() >= 1, "no cycle ran")
+    }
+}
+
+private final class PollerTarget: @unchecked Sendable {
+    private let lock = NSLock()
+    private var poller: StatePoller?
+    func set(_ value: StatePoller) { lock.lock(); poller = value; lock.unlock() }
+    func nudge(arrivals: Counter) {
+        lock.lock(); let target = poller; lock.unlock()
+        guard let target else { return }
+        Task {
+            arrivals.bump()
+            _ = await target.refreshNow()
+        }
     }
 }
 
@@ -427,5 +541,6 @@ private final class Counter: @unchecked Sendable {
     private var n = 0
     private let lock = NSLock()
     func bump() { lock.lock(); n += 1; lock.unlock() }
+    func next() -> Int { lock.lock(); defer { lock.unlock() }; n += 1; return n }
     func value() -> Int { lock.lock(); defer { lock.unlock() }; return n }
 }

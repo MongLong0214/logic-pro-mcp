@@ -35,6 +35,9 @@ struct TransportState: Sendable, Codable {
     /// Nil means the metronome control was absent or its AX value could not be read.
     var isMetronomeEnabled: Bool? = nil
     var tempo: Double = 120.0
+    /// The control bar's raw key-signature display value (#1117), not a parsed musical key.
+    /// Nil means absent, ambiguous or unreadable; historical payloads decode without this field.
+    var keySignature: String? = nil
     /// A display value only. Its legacy default is not an AX observation; consult
     /// `positionReadback` before treating it as evidence of a landed position.
     var position: String = "1.1.1.1"
@@ -158,6 +161,12 @@ extension TrackState {
 /// Mixer channel strip state (extends track with routing info).
 struct ChannelStripState: Sendable, Codable {
     var trackIndex: Int
+    /// Retained by typed AX producers/cache only; JSON fallback has no physical write authority.
+    var physicalBinding: AXMixerStripBinding.Binding? = nil
+    /// Original bytes from the strip's displayed semantic Name field, when observed.
+    var name: String?
+    /// An attempted name read was unidentified, ambiguous, or failed; nil with no name is not read.
+    var nameReadError: String?
     var volume: Double = 0.0
     var pan: Double = 0.0
     /// The strip's sends, when they have been READ (#291).
@@ -184,6 +193,9 @@ struct ChannelStripState: Sendable, Codable {
     /// this is occupancy and not a send list, and `sends` above stays absent.
     var sendSlots: [SendSlotObservation]?
     var input: String?
+    /// The existing input-slot reader's result. Nil means not read (including legacy/MCU data),
+    /// not absence. A source is the slot's display bytes, never a bus/port/aux identity.
+    var inputObservation: InputSlotObservation?
     var output: String?
     var eqEnabled: Bool = false
     var plugins: [PluginSlotState] = []
@@ -196,11 +208,25 @@ struct ChannelStripState: Sendable, Codable {
     var pluginsReadError: String?
 
     enum CodingKeys: String, CodingKey {
-        case trackIndex, volume, pan, sends, input, output, eqEnabled, plugins
+        case trackIndex, name, volume, pan, sends, input, output, eqEnabled, plugins
+        case nameReadError = "name_read_error"
         case sendSlots = "send_slots"
+        case inputObservation = "input_observation"
         case pluginsSource = "plugins_source"
         case pluginsReadError = "plugins_read_error"
     }
+}
+
+enum InputSlotObservationState: String, Sendable, Codable {
+    case observedSource = "observed_source"
+    case noSlot = "no_slot"
+    case unreadable
+}
+
+/// A local input-slot observation, not a routing edge or channel-strip type observation.
+struct InputSlotObservation: Sendable, Codable, Equatable {
+    let state: InputSlotObservationState
+    let source: String?
 }
 
 /// A send on a channel strip.

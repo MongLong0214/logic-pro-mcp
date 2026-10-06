@@ -126,6 +126,8 @@ actor StatePoller {
     /// owed reads taken after their own request.
     private var cycleInProgress = false
     private var waitingForNextCycle: [CheckedContinuation<Bool, Never>] = []
+    /// Fresh acquisitions keep their request task/context; they are not a shared refresh Bool.
+    private var populationWaiters: [(UUID, CheckedContinuation<Bool, Never>)] = []
     /// The handed-off drain, tracked rather than detached so `stop()` still means what it says.
     private var drainTask: Task<Void, Never>?
     /// Set the moment a stop begins. Cancelling the loop is not enough: a cycle owned by an
@@ -177,15 +179,15 @@ actor StatePoller {
 
     /// Stop the polling loop and wait for the current poll cycle to finish.
     func stop() async {
-        guard let task = pollingTask else { return }
+        let task = pollingTask
         // Before anything else: no new cycle and no new drain may start from here on. Cancelling
         // the loop does not cover a cycle owned by an external `refreshNow`, and that cycle would
         // otherwise hand off a fresh drain -- uncancelled, because it did not exist when stop ran.
         stopped = true
-        task.cancel()
+        task?.cancel()
         pollingTask = nil
         // Wait for the cancelled task to complete its current cycle
-        await task.value
+        await task?.value
         // The drain runs as its own task so the caller that starts a cycle is not billed for
         // everyone else's; without awaiting it, AX polling outlives a `stop()` that documents
         // itself as waiting for the current cycle. Cancel first, or a steady stream of nudges
@@ -203,9 +205,8 @@ actor StatePoller {
     }
 
     func stopImmediately() {
-        guard let task = pollingTask else { return }
         stopped = true
-        task.cancel()
+        pollingTask?.cancel()
         pollingTask = nil
         drainTask?.cancel()
         Log.info("StatePoller stop requested without awaiting current AX poll", subsystem: "poller")
@@ -238,6 +239,101 @@ actor StatePoller {
         await runCoalescedCycle()
     }
 
+    func acquireSessionPopulation(
+        request: SessionPopulationObservation.Request, targetRegistry: TargetRegistry?
+    ) async throws -> SessionPopulationObservation.Capture {
+        try SessionPopulationObservation.requireOwnedAcquisition()
+        guard await beginPopulationCycle() else {
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            throw SessionPopulationObservation.AcquisitionError.pollerStopped
+        }
+        defer { handOffCycle() }
+        let stop: @Sendable () -> Bool = {
+            (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
+        }
+        try SessionPopulationObservation.requireOwnedAcquisition()
+        let before = await cache.captureBoundary(watching: SessionPopulationObservation.watchedSections)
+        let navigationProject: TargetDescriptor?
+        if request.allowUINavigation, let reference = request.projectRef, let targetRegistry {
+            navigationProject = await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor
+        } else { navigationProject = nil }
+        let population: SessionPopulationObservation.FreshPopulation
+        if runtime.hasVisibleWindow() {
+            let focus = runtime.keyboardFocus
+            let guardian = AXHelpers.HelpReadGuard(stop: { stop() || Self.backgroundTickYields(to: focus()) })
+            population = try await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
+                try await axChannel.readFreshSessionPopulation(
+                    request: request, fileReader: runtime.projectFileReader,
+                    navigationProject: navigationProject,
+                    navigationReferenceIsCurrent: {
+                        guard let reference = request.projectRef else { return true }
+                        guard let navigationProject, let targetRegistry else { return false }
+                        return await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor == navigationProject
+                    },
+                    stoppingBeforeAXRead: { stop() || guardian.stopped },
+                    stoppingWhen: { stop() || guardian.stopped || Self.backgroundTickYields(to: focus()) }
+                )
+            }
+        } else {
+            let now = Date()
+            population = .init(project: nil, tracks: nil, strips: nil, fileTrackCount: nil,
+                               beganAt: now, endedAt: now, stable: true)
+        }
+        do {
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: before, stoppingWhen: stop) else {
+                try SessionPopulationObservation.requireOwnedAcquisition()
+                throw SessionPopulationObservation.AcquisitionError.ownershipLost
+            }
+            let capture = await SessionPopulationObservation.capture(
+                cache: cache, targetRegistry: targetRegistry, fileReader: runtime.projectFileReader,
+                requestedProjectRef: request.projectRef, accepted: accepted, stoppingWhen: stop
+            )
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            return capture
+        } catch {
+            // Acquisition has already returned a UI receipt. Later refusal must retain
+            // that observation, even when no capture can be accepted or published.
+            throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: population.uiEffects)
+        }
+    }
+
+    private func beginPopulationCycle() async -> Bool {
+        if stopped || Task.isCancelled { return false }
+        if !cycleInProgress { cycleInProgress = true; return true }
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if stopped || Task.isCancelled { continuation.resume(returning: false) }
+                else { populationWaiters.append((id, continuation)) }
+            }
+        } onCancel: {
+            Task { await self.cancelPopulationWaiter(id) }
+        }
+    }
+
+    private func cancelPopulationWaiter(_ id: UUID) {
+        guard let index = populationWaiters.firstIndex(where: { $0.0 == id }) else { return }
+        populationWaiters.remove(at: index).1.resume(returning: false)
+    }
+
+    /// Give a request-owned acquisition the next cycle before starting another refresh batch.
+    private func handOffCycle() {
+        if stopped {
+            strandWaiters()
+            let population = populationWaiters
+            populationWaiters = []
+            for waiter in population { waiter.1.resume(returning: false) }
+            releaseCycle()
+        } else if !populationWaiters.isEmpty {
+            populationWaiters.removeFirst().1.resume(returning: true)
+        } else if !waitingForNextCycle.isEmpty {
+            drainTask = Task { await self.drainWaiters() }
+        } else {
+            releaseCycle()
+        }
+    }
+
     /// #668 — one poll cycle at a time, and callers that arrive during one share a single fresh
     /// cycle rather than each starting their own.
     ///
@@ -267,16 +363,7 @@ actor StatePoller {
         }
         cycleInProgress = true
         let mine = await pollOnce(axChannel: axChannel, cache: cache, yieldingToTextEditing: yieldingToTextEditing)
-        if waitingForNextCycle.isEmpty {
-            strandWaiters()
-            releaseCycle()
-        } else {
-            // Hand the drain off rather than running it here. This caller's answer was ready when
-            // its own cycle ended; holding it to serve later arrivals adds whole cycles to a
-            // latency that already overruns its deadline — measured at roughly 2x the solo cost
-            // under a continuous stream of nudges, and the deadline overrun is what #668 is about.
-            drainTask = Task { await self.drainWaiters() }
-        }
+        handOffCycle()
         return mine
     }
 
@@ -288,8 +375,11 @@ actor StatePoller {
         // later nudge queue behind a drain that is gone, and no suspension separates the loop's
         // emptiness check from this, so no arrival can be stranded by observing it true and then
         // finding nobody left to serve it.
-        defer { strandWaiters(); releaseCycle() }
-        while !waitingForNextCycle.isEmpty {
+        defer {
+            if Task.isCancelled { strandWaiters() }
+            handOffCycle()
+        }
+        while !waitingForNextCycle.isEmpty && populationWaiters.isEmpty {
             if stopped { break }
             // Cooperative cancellation, because without it this loop has no upper bound: it keeps
             // accepting new batches, and `refreshNow` stays callable after the loop task is gone,
@@ -642,12 +732,24 @@ actor StatePoller {
         if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if transportReady.applied { cacheKeys.append(.transport) }
         if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
-        let mixerReady = await poll(
-            operation: "mixer.get_state", label: "Mixer",
-            section: .mixer,
-            axChannel: axChannel, cache: cache, as: [ChannelStripState].self
-        ) { cache, strips, observed in
-            await cache.updateChannelStrips(strips, ifCurrent: observed)
+        let mixerVersion = await cache.currentVersion(for: .mixer)
+        let focus = runtime.keyboardFocus
+        let mixerRead = await axChannel.readMixerStates(stoppingWhen: {
+            yieldingToTextEditing && Self.backgroundTickYields(to: focus())
+        })
+        if mixerRead.yielded || Self.helpReadsStopped { return yieldCycle(cacheKeys) }
+        let mixerReady: PollOutcome
+        if mixerRead.provided {
+            if let states = mixerRead.states {
+                mixerReady = PollOutcome(readable: true, applied: await cache.updateChannelStrips(states, ifCurrent: mixerVersion))
+            } else { mixerReady = PollOutcome(readable: false, applied: false) }
+        } else {
+            mixerReady = await poll(
+                operation: "mixer.get_state", label: "Mixer", section: .mixer,
+                axChannel: axChannel, cache: cache, as: [ChannelStripState].self
+            ) { cache, strips, observed in
+                await cache.updateChannelStrips(strips, ifCurrent: observed)
+            }
         }
         if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if mixerReady.applied { cacheKeys.append(.mixer) }

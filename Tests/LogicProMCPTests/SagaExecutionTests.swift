@@ -31,6 +31,7 @@ private actor SagaRecordingChannel: Channel {
     private let failureWriteAttempted: Bool?
     private let malformedWriteAttempted: Bool
     private let failureSuccess: Bool
+    private let onFailure: (@Sendable () async -> Void)?
     private var calls: [(operation: String, params: [String: String])] = []
 
     init(
@@ -40,7 +41,8 @@ private actor SagaRecordingChannel: Channel {
         failureCode: String = "invalid_params",
         failureWriteAttempted: Bool? = nil,
         malformedWriteAttempted: Bool = false,
-        failureSuccess: Bool = false
+        failureSuccess: Bool = false,
+        onFailure: (@Sendable () async -> Void)? = nil
     ) {
         self.cache = cache
         self.surface = surface
@@ -49,6 +51,7 @@ private actor SagaRecordingChannel: Channel {
         self.failureWriteAttempted = failureWriteAttempted
         self.malformedWriteAttempted = malformedWriteAttempted
         self.failureSuccess = failureSuccess
+        self.onFailure = onFailure
     }
 
     func start() async throws {}
@@ -57,6 +60,7 @@ private actor SagaRecordingChannel: Channel {
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
         calls.append((operation, params))
         if calls.count == failureAt {
+            await onFailure?()
             var envelope: [String: Any] = [
                 "success": failureSuccess,
                 "state": "C",
@@ -118,6 +122,40 @@ private actor SagaRecordingChannel: Channel {
 
     func recordedCalls() -> [(operation: String, params: [String: String])] {
         calls
+    }
+}
+
+/// Only the volume reader becomes unavailable; names, refs and other scalar readers stay valid.
+private final class SagaOwnedCompensationProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var failureCount = 0
+    private var beforeFailure: Double?
+    private var afterFailure: Double?
+    private var cacheAtFailure: Double?
+    private var unreadVolume = false
+    private var blockedReads = 0
+
+    func recordFailure(before: Double?, after: Double?, cached: Double?, unread: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        failureCount += 1
+        beforeFailure = before
+        afterFailure = after
+        cacheAtFailure = cached
+        unreadVolume = unread
+    }
+
+    func volumeIsReadable() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if unreadVolume { blockedReads += 1 }
+        return !unreadVolume
+    }
+
+    func snapshot() -> (failures: Int, before: Double?, after: Double?, cached: Double?, blocked: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (failureCount, beforeFailure, afterFailure, cacheAtFailure, blockedReads)
     }
 }
 
@@ -573,6 +611,181 @@ struct SagaExecutionTests {
             #expect(outcome.journal[0].beforeState?.value == .double(0.80))
             #expect(outcome.journal[0].compensationEvidence?.disposition == .verified)
             #expect(fixture.surface.snapshot(0)?.volume == 0.80)
+        }
+    }
+
+    private enum OwnedCompensationMode: Equatable, Sendable {
+        case newerUserValue, newerUserValueWithinWriteTolerance, unchanged, unreadVolume
+    }
+
+    private func ownedCompensationFixture(_ mode: OwnedCompensationMode) async -> (Fixture, SagaOwnedCompensationProbe) {
+        let track = TrackState(id: 0, name: "Bass", type: .audio, volume: 0.25)
+        let cache = StateCache()
+        await cache.updateTracks([track])
+        let surface = SagaLiveTrackSurface([track])
+        let registry = TargetRegistry()
+        let descriptor = TargetDescriptor(trackIndex: 0, trackName: "Bass")
+        let target = await registry.bind(kind: .track, descriptor: descriptor,
+                                         fingerprint: descriptor.fingerprint)
+        let probe = SagaOwnedCompensationProbe()
+        let channel = SagaRecordingChannel(cache: cache, surface: surface, failureAt: 2,
+            failureWriteAttempted: false, onFailure: {
+                let before = surface.snapshot(0)?.volume
+                if mode == .newerUserValue { surface.update(0) { $0.volume = 0.90 } }
+                if mode == .newerUserValueWithinWriteTolerance { surface.update(0) { $0.volume = 0.755 } }
+                let cached = await cache.getTracks().first?.volume
+                probe.recordFailure(before: before, after: surface.snapshot(0)?.volume,
+                                    cached: cached, unread: mode == .unreadVolume)
+            })
+        let router = ChannelRouter()
+        await router.register(channel)
+        let live = surface.readback
+        let readback = SagaLiveReadback(
+            readTrackName: live.readTrackName,
+            readTrackVolume: { index in
+                guard probe.volumeIsReadable() else { return nil }
+                return await live.readTrackVolume(index)
+            },
+            readTrackPan: live.readTrackPan,
+            readTrackToggle: live.readTrackToggle)
+        let executor = ProductionSagaStepExecutor(router: router, cache: cache,
+            targetRegistry: registry, dialogPresent: { false }, liveReadback: readback,
+            liveTrackName: { index in surface.snapshot(index)?.name },
+            liveTrackNames: {
+                guard let name = surface.snapshot(0)?.name else { return nil }
+                return [0: name]
+            })
+        return (Fixture(executor: executor, channel: channel, cache: cache,
+                        surface: surface, registry: registry, target: target), probe)
+    }
+
+    private func runOwnedCompensation(_ fixture: Fixture, key: String) async -> SagaOutcome {
+        await MutationSaga(targetRegistry: fixture.registry, enabled: true,
+                           routeAvailable: { _ in true }).execute(SagaPlan(steps: [
+            step(.mixerSetVolume, target: fixture.target, value: .double(0.75)),
+            step(.tracksRename, target: fixture.target, value: .string("Never applied")),
+        ], idempotencyKey: key), executor: fixture.executor)
+    }
+
+    private func requireAppliedVolumeBeforeFailure(_ outcome: SagaOutcome,
+                                                   fixture: Fixture,
+                                                   probe: SagaOwnedCompensationProbe) async throws {
+        #expect(outcome.journal.count == 2)
+        let first = try #require(outcome.journal.first)
+        #expect(first.beforeState?.value == .double(0.25))
+        let forward = try #require(first.executionResult)
+        #expect(forward.state == .stateA)
+        #expect(forward.writeBoundaryCrossed)
+        let verification = try #require(first.verificationEvidence)
+        #expect(verification.disposition == .applied)
+        let after = try #require(verification.readback)
+        #expect(after.value == .double(0.75))
+        let read = try #require(after.read)
+        #expect(read.provenance == .liveIndependent)
+        #expect(read.readSource == .axTrackHeaderFader)
+        let second = try #require(outcome.journal.last?.executionResult)
+        #expect(second.state == .stateC)
+        #expect(!second.writeBoundaryCrossed)
+        let observed = probe.snapshot()
+        #expect(observed.failures == 1)
+        #expect(observed.before == 0.75)
+        #expect(observed.cached == 0.75)
+        #expect(fixture.surface.snapshot(0)?.name == "Bass")
+        let binding = try #require(await fixture.registry.resolve(fixture.target))
+        #expect(binding.observedFingerprint == TargetDescriptor(trackIndex: 0, trackName: "Bass").fingerprint)
+    }
+
+    @Test("compensation preserves a newer user value on the same live target")
+    func compensationDoesNotOverwriteNewerUserVolume() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (fixture, probe) = await ownedCompensationFixture(.newerUserValue)
+            let outcome = await runOwnedCompensation(fixture, key: "owned-newer-user-volume")
+            try await requireAppliedVolumeBeforeFailure(outcome, fixture: fixture, probe: probe)
+            #expect(probe.snapshot().after == 0.90)
+            let calls = await fixture.channel.recordedCalls()
+            #expect(calls.map(\.operation) == ["mixer.set_volume", "track.rename"])
+            #expect(calls.filter { $0.operation == "mixer.set_volume" }.map { $0.params["volume"] } == ["0.75"])
+            #expect(fixture.surface.snapshot(0)?.volume == 0.90)
+            #expect(outcome.state != .fullyCompensated)
+            let compensation = try #require(outcome.journal.first?.compensationEvidence)
+            #expect(compensation.disposition != .verified)
+            #expect(compensation.executionResult == nil)
+            #expect(!outcome.complete)
+        }
+    }
+
+    @Test("compensation preserves a distinct newer user value inside write tolerance")
+    func compensationDoesNotOverwriteNewerUserVolumeWithinWriteTolerance() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (fixture, probe) = await ownedCompensationFixture(.newerUserValueWithinWriteTolerance)
+            let outcome = await runOwnedCompensation(fixture, key: "owned-newer-user-volume-within-tolerance")
+            try await requireAppliedVolumeBeforeFailure(outcome, fixture: fixture, probe: probe)
+            let owned = try #require(outcome.journal.first?.verificationEvidence?.readback)
+            let later = Value.double(try #require(probe.snapshot().after))
+            #expect(owned.value == .double(0.75))
+            #expect(later == .double(0.755))
+            #expect(owned.value != later)
+            #expect(SagaValueComparator.equals(observed: later, expected: owned.value,
+                                               op: .mixerSetVolume))
+            let calls = await fixture.channel.recordedCalls()
+            #expect(calls.map(\.operation) == ["mixer.set_volume", "track.rename"])
+            #expect(calls.filter { $0.operation == "mixer.set_volume" }.map { $0.params["volume"] } == ["0.75"])
+            #expect(fixture.surface.snapshot(0)?.volume == 0.755)
+            #expect(outcome.state == .rollbackUncertain)
+            #expect(outcome.state != .fullyCompensated)
+            let compensation = try #require(outcome.journal.first?.compensationEvidence)
+            #expect(compensation.disposition == .uncertain)
+            #expect(compensation.executionResult == nil)
+            #expect(compensation.readback?.value == later)
+            #expect(compensation.readback?.read?.provenance == .liveIndependent)
+            #expect(compensation.readback?.read?.readSource == .axTrackHeaderFader)
+            #expect(!outcome.complete)
+        }
+    }
+
+    @Test("unchanged owned after-state still permits verified compensation")
+    func compensationRestoresUnchangedOwnedVolume() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (fixture, probe) = await ownedCompensationFixture(.unchanged)
+            let outcome = await runOwnedCompensation(fixture, key: "owned-unchanged-volume")
+            try await requireAppliedVolumeBeforeFailure(outcome, fixture: fixture, probe: probe)
+            #expect(probe.snapshot().after == 0.75)
+            let calls = await fixture.channel.recordedCalls()
+            #expect(calls.map(\.operation) == ["mixer.set_volume", "track.rename", "mixer.set_volume"])
+            #expect(calls.filter { $0.operation == "mixer.set_volume" }.map { $0.params["volume"] } == ["0.75", "0.25"])
+            #expect(fixture.surface.snapshot(0)?.volume == 0.25)
+            #expect(outcome.state == .fullyCompensated)
+            let compensation = try #require(outcome.journal.first?.compensationEvidence)
+            #expect(compensation.disposition == .verified)
+            let inverse = try #require(compensation.executionResult)
+            #expect(inverse.writeBoundaryCrossed)
+            #expect(compensation.readback?.value == .double(0.25))
+            #expect(compensation.readback?.read?.provenance == .liveIndependent)
+        }
+    }
+
+    @Test("an unread current volume refuses inverse without losing the valid target")
+    func compensationRefusesUnreadCurrentVolume() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (fixture, probe) = await ownedCompensationFixture(.unreadVolume)
+            let outcome = await runOwnedCompensation(fixture, key: "owned-unread-volume")
+            try await requireAppliedVolumeBeforeFailure(outcome, fixture: fixture, probe: probe)
+            #expect(probe.snapshot().after == 0.75)
+            #expect(probe.snapshot().blocked > 0)
+            let calls = await fixture.channel.recordedCalls()
+            #expect(calls.map(\.operation) == ["mixer.set_volume", "track.rename"])
+            #expect(calls.filter { $0.operation == "mixer.set_volume" }.map { $0.params["volume"] } == ["0.75"])
+            #expect(fixture.surface.snapshot(0)?.volume == 0.75)
+            #expect(outcome.state == .rollbackUncertain)
+            let compensation = try #require(outcome.journal.first?.compensationEvidence)
+            #expect(compensation.disposition == .uncertain)
+            #expect(compensation.executionResult == nil)
+            #expect(compensation.readback == nil)
+            #expect(await fixture.executor.readState(step(.mixerSetVolume,
+                target: fixture.target, value: .double(0.25))) == nil)
+            #expect(await fixture.executor.readState(step(.tracksRename,
+                target: fixture.target, value: .string("Bass")))?.value == .string("Bass"))
+            #expect(!outcome.complete)
         }
     }
 
