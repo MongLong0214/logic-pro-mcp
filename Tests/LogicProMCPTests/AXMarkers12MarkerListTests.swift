@@ -159,6 +159,7 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
     var openerRefusesBeforeWrite = false
     var focusDriftOnRestore: String?
     var focusedApplicationPID: pid_t? = 4242
+    var captureLogicPID: pid_t? = 4242
     var globalFocusDriftStage: String?
     var globalFocusDriftPID: pid_t? = 4343
     var closeReadDrift: String?
@@ -698,6 +699,98 @@ func issue1118OpenCaptureUsesOnlyOneOwnedAXMenuPress(failure: String) async thro
     } else {
         #expect(fixture.events.isEmpty)
     }
+}
+
+@Test(arguments: ["unchanged", "project", "focus_window", "focus_element", "process"])
+func issue1118CaptureActualOpenerRetainsOuterAuthorityAtHandoff(change: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    let bar = fixture.builder.element(111830)
+    let navigate = fixture.builder.element(111831)
+    let menu = fixture.builder.element(111832)
+    let item = fixture.builder.element(111833)
+    let otherFocus = fixture.builder.element(111834)
+    fixture.builder.setAttribute(fixture.app, kAXMenuBarAttribute as String, bar)
+    for (element, role) in [(bar, kAXMenuBarRole), (navigate, kAXMenuBarItemRole),
+                            (menu, kAXMenuRole), (item, kAXMenuItemRole)] {
+        fixture.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+    }
+    fixture.builder.setAttribute(navigate, kAXTitleAttribute as String, AXLocalePolicy.navigateMenuBar.canonical)
+    fixture.builder.setAttribute(item, kAXTitleAttribute as String, AXLocalePolicy.openMarkerListMenuItem.canonical)
+    fixture.builder.setAttribute(item, kAXEnabledAttribute as String, true)
+    fixture.builder.setActionNames(item, [kAXPressAction as String])
+    fixture.builder.setChildren(bar, [navigate])
+    fixture.builder.setChildren(navigate, [menu])
+    fixture.builder.setChildren(menu, [item])
+    fixture.builder.setAttribute(otherFocus, kAXWindowAttribute as String, fixture.arrange)
+    fixture.builder.setAttribute(fixture.foreign, kAXWindowAttribute as String, fixture.foreign)
+    if change == "focus_window" {
+        fixture.builder.setAttribute(fixture.foreign, kAXDocumentAttribute as String, "/TestProject.logicx")
+    }
+    let base = fixture.runtime
+    let ax = fixture.builder.makeAXRuntime(appElement: fixture.app,
+        attributeValueResultHandler: { element, attribute in
+            // The outer baseline is already bound; its final initial census read switches UI
+            // before the real opener can establish an independent baseline.
+            if fixture.phase == "before", CFEqual(element, fixture.foreign),
+               attribute == kAXTitleAttribute as String, change != "unchanged", change != "process" {
+                fixture.phase = "handoff"
+                if change == "project" {
+                    fixture.builder.setAttribute(fixture.app, kAXMainWindowAttribute as String, fixture.foreign)
+                }
+                if change == "project" || change == "focus_window" {
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.foreign)
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.foreign)
+                } else {
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, otherFocus)
+                }
+            }
+            if change == "process", CFEqual(element, item), attribute == kAXEnabledAttribute as String {
+                fixture.captureLogicPID = 4343
+                fixture.focusedApplicationPID = 4343
+            }
+            return nil
+        },
+        setAttributeHandler: { element, attribute, value in base.ax.setAttributeValue(element, attribute, value) },
+        performActionHandler: { element, action in
+            if CFEqual(element, item), action == kAXPressAction as String {
+                fixture.events.append("press")
+                fixture.phase = "opened"
+                if change == "project" {
+                    fixture.builder.setAttribute(fixture.list, kAXDocumentAttribute as String, "/OtherProject.logicx")
+                }
+                fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String,
+                    [fixture.arrange, fixture.foreign, fixture.list])
+                fixture.builder.setAttribute(fixture.app, kAXMainWindowAttribute as String, fixture.list)
+                fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.list)
+                fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.builder.element(8000))
+                return true
+            }
+            return base.ax.performAction(element, action)
+        })
+    let runtime = AXLogicProElements.Runtime(logicProPID: { fixture.captureLogicPID }, ax: ax,
+        executeAppleScript: { _ in Issue.record("Unexpected script"); return .error("No script") },
+        onScreenWindowList: { Issue.record("Unexpected window-server read"); return nil },
+        postPopupMenuEscape: { Issue.record("Unexpected Escape") },
+        focusedApplicationPID: { fixture.focusedApplicationPID }, observeFrontmost: nil)
+    let result = await OperationTraceContext.$current.withValue(OperationTraceContext(ownsGate: { true })) {
+        await AccessibilityChannel.defaultCaptureMarkers(runtime: runtime,
+            openMarkerList: { await AccessibilityChannel.defaultOpenMarkerListForCapture(runtime: runtime) })
+    }
+    let body = fixture.object(result)
+    if change == "unchanged" {
+        #expect(body["state"] as? String == "A")
+        let restored = try #require(body["ui_restored"] as? Bool)
+        #expect(restored)
+        #expect(fixture.events == ["press", "close", "set.AXMain", "set.AXFocused", "set.AXFocused"])
+    } else {
+        #expect(body["state"] as? String == "C")
+        let attempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!attempted)
+        #expect(fixture.events.isEmpty)
+    }
+    let windows: [AXUIElement] = try #require(AXHelpers.getAttribute(fixture.app, kAXWindowsAttribute, runtime: ax))
+    #expect(windows.count == 2)
+    #expect(!windows.contains { CFEqual($0, fixture.list) })
 }
 
 @Test

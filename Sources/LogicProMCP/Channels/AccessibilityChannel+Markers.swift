@@ -1,6 +1,18 @@
 import ApplicationServices
 import Foundation
 
+private enum MarkerCaptureContext {
+    struct Authority: @unchecked Sendable {
+        let pid: pid_t
+        let app: AXUIElement
+        let main: AXUIElement
+        let focusedWindow: AXUIElement
+        let focusedElement: AXUIElement
+        let document: String
+    }
+    @TaskLocal static var authority: Authority?
+}
+
 extension AccessibilityChannel {
     /// Explicit UI-mutating capture; the normal getter and poller never call this.
     /// The caller supplies the opener so fixtures cannot escape into AppleScript.
@@ -131,9 +143,12 @@ extension AccessibilityChannel {
                 guard let markers else { return failure(hint: "Marker List rows could not be read.") }
                 return publish(markers)
             }
-            guard !writeBlocked() else { return failure(hint: "Capture stopped before opening Marker List.") }
+            guard !writeBlocked(), let originalPID else { return failure(hint: "Capture stopped before opening Marker List.") }
             extras["already_open"] = false
-            let opened = await openMarkerList()
+            let opened = await MarkerCaptureContext.$authority.withValue(.init(
+                pid: originalPID, app: app, main: main, focusedWindow: focusedWindow,
+                focusedElement: focusedElement, document: document
+            )) { await openMarkerList() }
             let openerBody = opened.message.data(using: .utf8)
                 .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             let openerAttempt = openerBody?["write_attempted"] as? Bool
@@ -254,10 +269,12 @@ extension AccessibilityChannel {
     /// code alone, is the outcome the capture protocol must independently bind.
     static func defaultOpenMarkerListForCapture(runtime: AXLogicProElements.Runtime) async -> ChannelResult {
         var attempted = false
+        let authority = MarkerCaptureContext.authority
+        let originalPID = authority?.pid ?? runtime.logicProPID()
         func stopped() -> Bool {
             Task.isCancelled || OperationTraceContext.current?.ownsGate() == false
-                || runtime.logicProPID() == nil
-                || runtime.focusedApplicationPID() != runtime.logicProPID()
+                || originalPID == nil || runtime.logicProPID() != originalPID
+                || runtime.focusedApplicationPID() != originalPID
         }
         func refused(_ hint: String, status: AXHelpers.AXStatusError? = nil) -> ChannelResult {
             var extras: [String: Any] = [
@@ -288,10 +305,13 @@ extension AccessibilityChannel {
                   let bar = AXLogicProElements.getMenuBar(runtime: runtime) else {
                 return refused("Logic must already own focus; capture never activates another application.")
             }
-            let originalMain = try identity(app, kAXMainWindowAttribute as String)
-            let originalWindow = try identity(app, kAXFocusedWindowAttribute as String)
-            let originalElement = try identity(app, kAXFocusedUIElementAttribute as String)
-            let document = try string(originalMain, kAXDocumentAttribute as String)
+            if let authority, !CFEqual(app, authority.app) {
+                return refused("Capture opener no longer belongs to the original application.")
+            }
+            let originalMain = try authority?.main ?? identity(app, kAXMainWindowAttribute as String)
+            let originalWindow = try authority?.focusedWindow ?? identity(app, kAXFocusedWindowAttribute as String)
+            let originalElement = try authority?.focusedElement ?? identity(app, kAXFocusedUIElementAttribute as String)
+            let document = try authority?.document ?? string(originalMain, kAXDocumentAttribute as String)
             guard !document.isEmpty,
                   try string(originalWindow, kAXDocumentAttribute as String) == document,
                   CFEqual(try identity(originalElement, kAXWindowAttribute as String), originalWindow) else {
