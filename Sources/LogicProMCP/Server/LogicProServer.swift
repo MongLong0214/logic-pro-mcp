@@ -664,6 +664,7 @@ actor LogicProServer {
                 return await Self.runWithDeadline(
                     tool: name,
                     command: command,
+                    commandParams: cmdParams,
                     // #413: nil for every command except a setup_arm_key run that
                     // set a valid LOGIC_PRO_MCP_SETUP_DEADLINE_MS override.
                     deadlineOverride: setupDeadlineOverride,
@@ -735,7 +736,8 @@ actor LogicProServer {
         command: String,
         seconds: Double,
         mutationMayStillBeRunning: Bool = false,
-        mutationGateReclaimableAfterGrace: Bool = true
+        mutationGateReclaimableAfterGrace: Bool = true,
+        readOnlyPopulationRead: Bool = false
     ) -> CallTool.Result {
         let operation = operationName(tool: tool, command: command)
         var extras: [String: Any] = [
@@ -761,6 +763,14 @@ actor LogicProServer {
             } else {
                 extras["mutation_gate"] = "held_until_saga_unwinds"
             }
+        }
+        if readOnlyPopulationRead {
+            // An exclusive read claim must not be mistaken for an unknown
+            // project write. A retry may be refused while that claim drains,
+            // but navigation-disabled inspection cannot duplicate a mutation.
+            extras["write_attempted"] = false
+            extras["navigation_performed"] = false
+            extras["safe_to_retry"] = true
         }
         let body = HonestContract.encodeStateC(
             error: .operationTimeout,
@@ -832,6 +842,7 @@ actor LogicProServer {
     static func runWithDeadline(
         tool: String,
         command: String,
+        commandParams: [String: Value] = [:],
         deadlineOverride: Double? = nil,
         // #412: when set (saga_execute only), the outer transport timer is
         // scheduled from this shared absolute instant instead of `.now() +
@@ -846,7 +857,13 @@ actor LogicProServer {
         let operation = operationName(tool: tool, command: command)
         let heldMutationGate: LogicMutationGate?
         let heldClaim: LogicMutationGate.Claim?
-        if isMutatingCommand(tool: tool, command: command), let mutationGate {
+        // A fresh inspection must exclude
+        // MCP mutations even when navigation is disabled; this is exclusive
+        // Logic access, not permission to change project or audio state.
+        // Retained snapshot lookup never reads Logic or generates a replacement.
+        let freshPopulationRead = tool == "logic_project" && command == "inspect_session"
+            && commandParams["snapshot_id"] == nil
+        if (isMutatingCommand(tool: tool, command: command) || freshPopulationRead), let mutationGate {
             guard let claim = mutationGate.tryAcquire(operation: operation) else {
                 return mutationInProgressResult(
                     tool: tool,
@@ -898,7 +915,9 @@ actor LogicProServer {
                         seconds: deadline,
                         mutationMayStillBeRunning: heldMutationGate != nil
                             || externallyManagedMutation,
-                        mutationGateReclaimableAfterGrace: !externallyManagedMutation
+                        mutationGateReclaimableAfterGrace: !externallyManagedMutation,
+                        readOnlyPopulationRead: freshPopulationRead
+                            && commandParams["allow_ui_navigation"]?.boolValue != true
                     )
                 )
                 if didWin {
