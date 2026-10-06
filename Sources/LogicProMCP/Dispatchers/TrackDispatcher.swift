@@ -437,9 +437,11 @@ struct TrackDispatcher: OperationTraceDispatching {
                     await AXTrackBinding.$corroboratedIndex.withValue(
                         ["index", "track"].contains(where: { params[$0] != nil }) ? index : nil
                     ) {
-                        await router.route(
-                            operation: "track.rename", params: routedParams
-                        )
+                        await AXTrackBinding.$ordinaryRenameAcquisition.withValue(
+                            physical != nil && params["expected_name"] == nil
+                        ) {
+                            await router.route(operation: "track.rename", params: routedParams)
+                        }
                     }
                 }
             }

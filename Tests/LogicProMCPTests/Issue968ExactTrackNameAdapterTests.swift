@@ -25,6 +25,23 @@ private final class ExactNameFixture: @unchecked Sendable {
     var onPress: (@Sendable () -> Void)?
     var onConfirm: (@Sendable () -> Void)?
     var onNameReadAfterWrite: (@Sendable () -> Void)?
+    var permitsSelection = false
+    var exposeFieldWhenSelected = false
+    var renameMenuItem: AXUIElement?
+    var selectionWrites: [AXUIElement] = []
+    var pressReportsFailure = false
+    var boundaryOwnership = true
+    var onSelection: (@Sendable () -> Void)?
+    var onRenameMenuRead: (@Sendable () -> Void)?
+    var menuFocusedEditor: AXUIElement?
+    var typedCodeUnits: [UInt16] = []
+    var postedReturn = false
+    var onTypedCodeUnit: (@Sendable () -> Void)?
+    var typingPostReportsFailure = false
+    var returnReportsFailure = false
+    var observedLogicPID: pid_t = 4242
+    var observedFocusedPID: pid_t = 4242
+    var logicIsFrontmost = true
 
     init(_ name: String = "A") {
         app = builder.element(968_100)
@@ -53,10 +70,13 @@ private final class ExactNameFixture: @unchecked Sendable {
 
     var runtime: AXLogicProElements.Runtime {
         AXLogicProElements.Runtime(
-            logicProPID: { 4242 },
+            logicProPID: { [self] in observedLogicPID },
             ax: builder.makeAXRuntime(
                 appElement: app,
                 attributeValueHandler: { [self] element, attribute in
+                    if let renameMenuItem, CFEqual(element, renameMenuItem), attribute == kAXTitleAttribute as String {
+                        onRenameMenuRead?()
+                    }
                     if !writes.isEmpty, CFEqual(element, field), attribute == kAXDescriptionAttribute as String {
                         onNameReadAfterWrite?()
                     }
@@ -65,6 +85,18 @@ private final class ExactNameFixture: @unchecked Sendable {
                     return nil
                 },
                 setAttributeHandler: { [self] element, attribute, value in
+                    if permitsSelection, CFEqual(element, rail), attribute == kAXSelectedChildrenAttribute as String,
+                       let selected = value as? [AXUIElement], selected.count == 1 {
+                        selectionWrites.append(selected[0])
+                        for row in AXHelpers.getChildren(rail, runtime: builder.makeAXRuntime()) {
+                            builder.setAttribute(row, kAXSelectedAttribute as String, CFEqual(row, selected[0]))
+                        }
+                        if exposeFieldWhenSelected, CFEqual(selected[0], header) {
+                            builder.setChildren(header, [field])
+                        }
+                        onSelection?()
+                        return true
+                    }
                     guard ([field] + additionalNameFields).contains(where: { CFEqual($0, element) }),
                           attribute == kAXValueAttribute as String,
                           let name = value as? String else {
@@ -77,6 +109,15 @@ private final class ExactNameFixture: @unchecked Sendable {
                     return true
                 },
                 performActionHandler: { [self] element, action in
+                    if let renameMenuItem, CFEqual(element, renameMenuItem), action == kAXPressAction as String {
+                        events.append("rename_menu")
+                        if let menuFocusedEditor {
+                            builder.setAttribute(app, kAXFocusedUIElementAttribute as String, menuFocusedEditor)
+                        } else {
+                            builder.setChildren(header, [field])
+                        }
+                        return true
+                    }
                     guard ([field] + additionalNameFields).contains(where: { CFEqual($0, element) }),
                           [kAXPressAction as String, kAXConfirmAction as String].contains(action) else {
                         Issue.record("Unexpected exact-name fixture action")
@@ -89,14 +130,14 @@ private final class ExactNameFixture: @unchecked Sendable {
                     }
                     if action == kAXPressAction as String { onPress?() }
                     if action == kAXConfirmAction as String { onConfirm?() }
-                    return true
+                    return !(action == kAXPressAction as String && pressReportsFailure)
                 },
                 executeAppleScript: { _ in .error("Injected AX runtime refuses scripts") }
             ),
             executeAppleScript: { _ in .error("Injected runtime refuses scripts") },
             onScreenWindowList: { [] },
             postPopupMenuEscape: { Issue.record("Unexpected Escape") },
-            focusedApplicationPID: { 4242 }
+            focusedApplicationPID: { [self] in observedFocusedPID }
         )
     }
 
@@ -106,14 +147,31 @@ private final class ExactNameFixture: @unchecked Sendable {
             params: params, runtime: runtime,
             mouseRuntime: AXMouseHelper.Runtime(
                 postMouseEvent: { _, _, _ in Issue.record("Unexpected mouse event"); return false },
-                postKeyEvent: { _ in Issue.record("Unexpected key event"); return false },
-                postUnicodeScalar: { _ in Issue.record("Unexpected typing"); return false },
+                postKeyEvent: { [self] code in
+                    guard menuFocusedEditor != nil, code == 0x24 else {
+                        Issue.record("Unexpected key event"); return false
+                    }
+                    postedReturn = true
+                    let name = String(decoding: typedCodeUnits, as: UTF16.self)
+                    writes.append(name)
+                    builder.setAttribute(header, kAXTitleAttribute as String, name)
+                    builder.setAttribute(field, kAXDescriptionAttribute as String, name)
+                    return !returnReportsFailure
+                },
+                postUnicodeScalar: { [self] code in
+                    guard let menuFocusedEditor else { Issue.record("Unexpected typing"); return false }
+                    typedCodeUnits.append(code)
+                    builder.setAttribute(menuFocusedEditor, kAXValueAttribute as String,
+                        String(decoding: typedCodeUnits, as: UTF16.self))
+                    onTypedCodeUnit?()
+                    return !typingPostReportsFailure
+                },
                 sleepMicros: { _ in },
                 postFlaggedKeyEvent: { _, _ in Issue.record("Unexpected flagged key"); return false }
             ),
             processRuntime: ProcessUtils.Runtime(
                 logicProPID: { 4242 }, fallbackLogicProPID: { 4242 }, logicProRunning: { true },
-                activateLogicPro: { false }, logicIsFrontmost: { true }, logicProBundleURL: { nil }
+                activateLogicPro: { false }, logicIsFrontmost: { [self] in logicIsFrontmost }, logicProBundleURL: { nil }
             )
         )
     }
@@ -701,6 +759,293 @@ struct Issue968ExactTrackNameAdapterTests {
                 #expect(f.actedNameFields.isEmpty)
                 #expect(await f.cache.getTracks().first?.name == "A")
             }
+        }
+    }
+
+    @Test(arguments: ["direct", "selected_field", "menu_field"])
+    func ordinaryTypedReferenceRenameKeepsSelectionAcquisitionWithoutWeakeningAdapter(shape: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, otherField) = f.appendTrack(name: "B", selected: true)
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
+            f.permitsSelection = true
+            if shape != "direct" {
+                f.builder.setChildren(f.header, [])
+                f.builder.setAttribute(f.header, kAXTitleAttribute as String, "A")
+                f.exposeFieldWhenSelected = shape == "selected_field"
+            }
+            if shape == "menu_field" {
+                let bar = f.builder.element(968_160)
+                let trackMenu = f.builder.element(968_161)
+                let menu = f.builder.element(968_162)
+                let rename = f.builder.element(968_163)
+                f.renameMenuItem = rename
+                f.builder.setAttribute(f.app, kAXMenuBarAttribute as String, bar)
+                for (element, role) in [(bar, kAXMenuBarRole), (trackMenu, kAXMenuBarItemRole),
+                                       (menu, kAXMenuRole), (rename, kAXMenuItemRole)] {
+                    f.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+                }
+                f.builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+                f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
+                f.builder.setChildren(bar, [trackMenu])
+                f.builder.setChildren(trackMenu, [menu])
+                f.builder.setChildren(menu, [rename])
+            }
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let exact = await f.apply(project: project, target: target, before: "A", after: "C")
+            #expect(exact.status == .rejectedBeforeWrite)
+            #expect(f.selectionWrites.isEmpty)
+            #expect(f.events.isEmpty)
+            let scalar = await f.rename(project: project, target: target, expected: nil, desired: "C")
+            let body = try #require(sharedJSONObject(sharedToolText(scalar)))
+            #expect(body["state"] as? String == "A")
+            #expect(f.writes == ["C"])
+            #expect(f.selectionWrites.count == 1)
+            #expect(f.selectionWrites.allSatisfy { CFEqual($0, f.header) })
+            #expect(f.actedNameFields.allSatisfy { CFEqual($0, f.field) })
+            let selected = try #require(AXValueExtractors.extractSelectedState(f.header, runtime: f.runtime.ax) as Bool?)
+            let otherSelected = try #require(AXValueExtractors.extractSelectedState(other, runtime: f.runtime.ax) as Bool?)
+            #expect(selected)
+            #expect(!otherSelected)
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
+        }
+    }
+
+    @Test func freshResourceReferenceAfterExternalReorderKeepsOldRefConservativeAndNewRefUsable() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, _) = f.appendTrack(name: "B", selected: false)
+            let mute = f.builder.element(968_150)
+            f.builder.setAttribute(mute, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+            f.builder.setAttribute(mute, kAXDescriptionAttribute as String, AXLocalePolicy.trackMuteButton.canonical)
+            f.builder.setAttribute(mute, kAXValueAttribute as String, 0)
+            f.builder.setChildren(mute, [])
+            f.builder.setChildren(f.header, [f.field, mute])
+            let (_, oldRef) = try await f.prepare(typedProducer: true)
+            f.builder.setChildren(f.rail, [other, f.header])
+            await f.cache.updateTracks(try #require(AccessibilityChannel.defaultGetTrackStates(runtime: f.runtime)))
+            let resource = try await ResourceHandlers.readTracks(cache: f.cache, uri: "logic://tracks",
+                targetRegistry: f.registry, fileReader: .unavailable)
+            let rows = try #require(sharedJSONObject(sharedResourceText(resource))?["data"] as? [[String: Any]])
+            let freshRef = TargetReference(rawValue: try #require(rows[1]["track_ref"] as? String))
+            #expect(freshRef != oldRef)
+            let binding = try #require(await f.registry.resolve(freshRef))
+            #expect(binding.descriptor.trackIndex == 1)
+            let runtime = f.runtime
+            for (reference, expectedState) in [(oldRef, "C"), (freshRef, "A")] {
+                let result = await TrackDispatcher.handle(command: "mute",
+                    params: ["target_ref": .string(reference.rawValue), "enabled": .bool(false)],
+                    router: f.router, cache: f.cache, targetRegistry: f.registry,
+                    liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                    liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) })
+                let body = try #require(sharedJSONObject(sharedToolText(result)))
+                #expect(body["state"] as? String == expectedState)
+            }
+            #expect(f.routedOperations == ["track.set_mute"])
+            #expect(f.writes.isEmpty)
+            #expect(f.events.isEmpty)
+        }
+    }
+
+    @Test func ordinaryMenuRenameRetainsItsExistingFocusedEditorTypingCapability() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, otherField) = f.appendTrack(name: "B", selected: true)
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
+            f.builder.setAttribute(f.header, kAXTitleAttribute as String, "A")
+            f.builder.setChildren(f.header, [])
+            f.permitsSelection = true
+            let bar = f.builder.element(968_180)
+            let trackMenu = f.builder.element(968_181)
+            let menu = f.builder.element(968_182)
+            let rename = f.builder.element(968_183)
+            let editor = f.builder.element(968_184)
+            f.renameMenuItem = rename
+            f.menuFocusedEditor = editor
+            f.builder.setAttribute(f.app, kAXMenuBarAttribute as String, bar)
+            for (element, role) in [(bar, kAXMenuBarRole), (trackMenu, kAXMenuBarItemRole),
+                                   (menu, kAXMenuRole), (rename, kAXMenuItemRole), (editor, kAXTextFieldRole)] {
+                f.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+            }
+            f.builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+            f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
+            f.builder.setAttribute(editor, kAXWindowAttribute as String, f.window)
+            f.builder.setAttribute(editor, kAXValueAttribute as String, "A")
+            f.builder.setChildren(bar, [trackMenu])
+            f.builder.setChildren(trackMenu, [menu])
+            f.builder.setChildren(menu, [rename])
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let scalar = await f.rename(project: project, target: target, expected: nil, desired: "C")
+            let body = try #require(sharedJSONObject(sharedToolText(scalar)))
+            #expect(body["state"] as? String == "A")
+            #expect(f.writes == ["C"])
+            #expect(f.typedCodeUnits == Array("C".utf16))
+            #expect(f.postedReturn)
+            #expect(f.events == ["rename_menu"])
+            #expect(f.selectionWrites.count == 1)
+            #expect(f.selectionWrites.allSatisfy { CFEqual($0, f.header) })
+            #expect(f.actedNameFields.isEmpty)
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
+            #expect(AXHelpers.getChildren(f.header, runtime: f.runtime.ax).isEmpty)
+            let selected = try #require(AXValueExtractors.extractSelectedState(f.header, runtime: f.runtime.ax) as Bool?)
+            let otherSelected = try #require(AXValueExtractors.extractSelectedState(other, runtime: f.runtime.ax) as Bool?)
+            #expect(selected)
+            #expect(!otherSelected)
+        }
+    }
+
+    @Test(arguments: ["name", "ownership", "false_ack"])
+    func anEditorPressIsAnAttemptEvenWhenTheDecidingReadOrAcknowledgementFails(failure: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (project, target) = try await f.prepare(typedProducer: true)
+            if failure == "name" { f.editOnPress = "User edit" }
+            if failure == "ownership" { f.onPress = { f.boundaryOwnership = false } }
+            f.pressReportsFailure = failure == "false_ack"
+            let context = OperationTraceContext(ownsGate: { f.boundaryOwnership })
+            let receipt = await OperationTraceContext.$current.withValue(context) {
+                await f.apply(project: project, target: target, before: "A", after: "C")
+            }
+            #expect(receipt.status == .attemptedUnverified)
+            #expect(receipt.inverse == nil)
+            #expect(f.events == ["AXPress"])
+            #expect(f.writes.isEmpty)
+            let body = try #require(sharedJSONObject(sharedToolText(receipt.result)))
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(attempted)
+        }
+    }
+
+    @Test(arguments: ["focus", "window", "replacement", "document", "ownership", "pid", "frontmost",
+                      "false_post", "false_return", "name", "return_focus", "return_document",
+                      "return_ownership", "return_selection"])
+    func ordinaryMenuTypingRevalidatesTheHeldEditorBeforeEveryPost(failure: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            f.builder.setAttribute(f.header, kAXTitleAttribute as String, "A")
+            f.builder.setChildren(f.header, [])
+            let bar = f.builder.element(968_190)
+            let trackMenu = f.builder.element(968_191)
+            let menu = f.builder.element(968_192)
+            let rename = f.builder.element(968_193)
+            let editor = f.builder.element(968_194)
+            let stranger = f.builder.element(968_195)
+            f.renameMenuItem = rename
+            f.menuFocusedEditor = editor
+            f.builder.setAttribute(f.app, kAXMenuBarAttribute as String, bar)
+            for (element, role) in [(bar, kAXMenuBarRole), (trackMenu, kAXMenuBarItemRole),
+                                   (menu, kAXMenuRole), (rename, kAXMenuItemRole),
+                                   (editor, kAXTextFieldRole), (stranger, kAXTextFieldRole)] {
+                f.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+            }
+            f.builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+            f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
+            f.builder.setAttribute(editor, kAXWindowAttribute as String, f.window)
+            f.builder.setAttribute(editor, kAXValueAttribute as String, "A")
+            f.builder.setAttribute(stranger, kAXWindowAttribute as String, f.window)
+            f.builder.setChildren(bar, [trackMenu])
+            f.builder.setChildren(trackMenu, [menu])
+            f.builder.setChildren(menu, [rename])
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let replacement = f.builder.element(968_196)
+            f.builder.setAttribute(replacement, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            f.builder.setAttribute(replacement, kAXTitleAttribute as String, "A")
+            f.builder.setAttribute(replacement, kAXSelectedAttribute as String, true)
+            f.builder.setChildren(replacement, [])
+            f.typingPostReportsFailure = failure == "false_post"
+            f.returnReportsFailure = failure == "false_return"
+            f.onTypedCodeUnit = {
+                if failure == "focus" { f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, stranger) }
+                if failure == "window" { f.builder.setAttribute(editor, kAXWindowAttribute as String, stranger) }
+                if failure == "replacement" { f.builder.setChildren(f.rail, [replacement]) }
+                if failure == "document" { f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx") }
+                if failure == "ownership" { f.boundaryOwnership = false }
+                if failure == "pid" { f.observedLogicPID = 5353; f.observedFocusedPID = 5353 }
+                if failure == "frontmost" { f.logicIsFrontmost = false }
+                if failure == "name" { f.builder.setAttribute(f.header, kAXTitleAttribute as String, "User edit") }
+                if f.typedCodeUnits.count == 2 {
+                    if failure == "return_focus" { f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, stranger) }
+                    if failure == "return_document" { f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx") }
+                    if failure == "return_ownership" { f.boundaryOwnership = false }
+                    if failure == "return_selection" { f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false) }
+                }
+            }
+            let context = OperationTraceContext(ownsGate: { f.boundaryOwnership })
+            let result = await OperationTraceContext.$current.withValue(context) {
+                await f.rename(project: project, target: target, expected: nil, desired: "CD")
+            }
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(body["state"] as? String == "B")
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(attempted)
+            let characters = failure == "false_return" || failure.hasPrefix("return_") ? "CD" : "C"
+            #expect(f.typedCodeUnits == Array(characters.utf16))
+            if failure == "false_return" { #expect(f.postedReturn) } else { #expect(!f.postedReturn) }
+            #expect(f.writes == (failure == "false_return" ? ["CD"] : []))
+            #expect(f.events == ["rename_menu"])
+            #expect(f.actedNameFields.isEmpty)
+            #expect(await f.cache.getTracks().first?.name == "A")
+            #expect(await f.registry.resolve(target)?.descriptor.trackName == "A")
+        }
+    }
+
+    @Test(arguments: ["selection_replacement", "selection_reorder", "selection_document", "selection_ownership",
+                      "menu_replacement", "menu_reorder", "menu_document", "menu_ownership"])
+    func ordinaryRenameAcquisitionCannotTransferHeldTargetAuthority(change: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let atSelection = change.hasPrefix("selection_")
+            let (other, otherField) = f.appendTrack(name: "B", selected: atSelection)
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, !atSelection)
+            f.permitsSelection = true
+            if !atSelection {
+                f.builder.setChildren(f.header, [])
+                f.builder.setAttribute(f.header, kAXTitleAttribute as String, "A")
+                let bar = f.builder.element(968_170)
+                let trackMenu = f.builder.element(968_171)
+                let menu = f.builder.element(968_172)
+                let rename = f.builder.element(968_173)
+                f.renameMenuItem = rename
+                f.builder.setAttribute(f.app, kAXMenuBarAttribute as String, bar)
+                for (element, role) in [(bar, kAXMenuBarRole), (trackMenu, kAXMenuBarItemRole),
+                                       (menu, kAXMenuRole), (rename, kAXMenuItemRole)] {
+                    f.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+                }
+                f.builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+                f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
+                f.builder.setChildren(bar, [trackMenu])
+                f.builder.setChildren(trackMenu, [menu])
+                f.builder.setChildren(menu, [rename])
+            }
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let replacement = f.builder.element(968_174)
+            f.builder.setAttribute(replacement, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            f.builder.setAttribute(replacement, kAXTitleAttribute as String, "A")
+            f.builder.setAttribute(replacement, kAXSelectedAttribute as String, true)
+            f.builder.setChildren(replacement, [])
+            let interfere: @Sendable () -> Void = {
+                if change.hasSuffix("replacement") { f.builder.setChildren(f.rail, [replacement, other]) }
+                if change.hasSuffix("reorder") { f.builder.setChildren(f.rail, [other, f.header]) }
+                if change.hasSuffix("document") {
+                    f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                }
+                if change.hasSuffix("ownership") { f.boundaryOwnership = false }
+            }
+            if atSelection { f.onSelection = interfere } else { f.onRenameMenuRead = interfere }
+            let context = OperationTraceContext(ownsGate: { f.boundaryOwnership })
+            let result = await OperationTraceContext.$current.withValue(context) {
+                // An explicit original ordinal cannot silently become a new row after acquisition.
+                await f.rename(project: project, target: target, expected: nil, desired: "C", index: 0)
+            }
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(body["state"] as? String == (atSelection ? "B" : "C"))
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(attempted == atSelection)
+            #expect(f.selectionWrites.count == (atSelection ? 1 : 0))
+            #expect(f.events.isEmpty)
+            #expect(f.writes.isEmpty)
+            #expect(f.actedNameFields.isEmpty)
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
         }
     }
 

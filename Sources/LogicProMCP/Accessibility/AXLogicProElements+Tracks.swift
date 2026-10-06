@@ -39,6 +39,7 @@ enum AXTrackBinding {
 
     @TaskLocal static var current: Binding?
     @TaskLocal static var corroboratedIndex: Int?
+    @TaskLocal static var ordinaryRenameAcquisition = false
 }
 
 
@@ -197,9 +198,17 @@ extension AXLogicProElements {
     /// selection (verified by the caller's `verifyTrackSelection`).
     static func selectTrackViaAX(
         at index: Int,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        heldHeader: AXUIElement? = nil,
+        permittingWrite: (() -> Bool)? = nil
     ) -> Bool {
-        guard let header = findTrackHeader(at: index, runtime: runtime) else { return false }
+        guard let header = findTrackHeader(at: index, runtime: runtime),
+              heldHeader.map({ CFEqual($0, header) }) ?? true else { return false }
+        func permitted() -> Bool {
+            guard permittingWrite?() ?? true else { return false }
+            guard let heldHeader else { return true }
+            return findTrackHeader(at: index, runtime: runtime).map({ CFEqual($0, heldHeader) }) ?? false
+        }
 
         // Step 1 (v3.0.9 primary path) — AXSelectedChildren on parent group.
         // This is the one mechanism that ACTUALLY moves Logic's track selection
@@ -207,6 +216,7 @@ extension AXLogicProElements {
         // action on the track header is a no-op for selection purposes.
         if let headersGroup = getTrackHeaders(runtime: runtime) {
             let arr = [header] as CFArray
+            guard permitted() else { return false }
             if AXHelpers.setAttribute(headersGroup, kAXSelectedChildrenAttribute, arr, runtime: runtime.ax) {
                 return true
             }
@@ -214,12 +224,14 @@ extension AXLogicProElements {
 
         // Step 2 — NSTableRow-style AXSelected=true (test-double path).
         if AXHelpers.isAttributeSettable(header, kAXSelectedAttribute, runtime: runtime.ax) == true {
+            guard permitted() else { return false }
             if AXHelpers.setAttribute(header, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax) {
                 return true
             }
         }
 
         // Step 3 — AXPress on the header itself (test doubles that expose it).
+        guard permitted() else { return false }
         if AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) {
             return true
         }
@@ -244,6 +256,7 @@ extension AXLogicProElements {
         for child in AXHelpers.getChildren(header, runtime: runtime.ax) {
             guard let role = AXHelpers.getRole(child, runtime: runtime.ax),
                   selectableRoles.contains(role) else { continue }
+            guard permitted() else { return false }
             if AXHelpers.performAction(child, kAXPressAction, runtime: runtime.ax) {
                 return true
             }

@@ -169,6 +169,8 @@ actor TargetRegistry {
                     && binding.serverSessionID == serverSessionID && binding.projectEpoch == projectEpoch
                     && binding.topologyGeneration == topologyGeneration
                     && binding.physicalTrack?.matches(physicalTrack) == true
+                    && binding.descriptor.trackIndex == descriptor.trackIndex
+                    && binding.observedFingerprint.utf8.elementsEqual(fingerprint.utf8)
                     && binding.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8)
             }
             return
