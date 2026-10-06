@@ -360,6 +360,7 @@ actor AccessibilityChannel: Channel {
             let stripElements: [AXUIElement]?
             let tracks: [TrackState]?
             let strips: [ChannelStripState]?
+            let presentation: AXLogicProElements.MixerPresentationRead?
         }
         func check() throws {
             try SessionPopulationObservation.requireOwnedAcquisition()
@@ -386,16 +387,24 @@ actor AccessibilityChannel: Channel {
             var mixer: AXUIElement?
             var stripElements: [AXUIElement]?
             var strips: [ChannelStripState]?
-            if wantsStrips,
-               case .found(let found) = AXLogicProElements.mixerAreaLookup(in: window, runtime: logic),
-               let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: found, runtime: logic.ax) {
-                mixer = found
-                stripElements = enumeration.strips
-                strips = Self.readChannelStrips(from: enumeration.strips, runtime: logic, stoppingWhen: stop)
+            var presentation: AXLogicProElements.MixerPresentationRead?
+            if wantsStrips {
+                let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic, checking: check)
+                try check()
+                if let binding = lookup.binding {
+                    mixer = binding.mixer
+                    presentation = try AXLogicProElements.mixerPresentationRead(binding: binding, runtime: logic.ax, checking: check)
+                    try check()
+                    if let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: binding.mixer, runtime: logic.ax) {
+                        stripElements = enumeration.strips
+                        strips = Self.readChannelStrips(from: enumeration.strips, runtime: logic, stoppingWhen: stop)
+                    }
+                }
             }
             try check()
             return Read(title: title, document: document, documentReadable: documentReadable,
-                        headers: headers, mixer: mixer, stripElements: stripElements, tracks: tracks, strips: strips)
+                        headers: headers, mixer: mixer, stripElements: stripElements, tracks: tracks, strips: strips,
+                        presentation: presentation)
         }
         func sameElements(_ lhs: [AXUIElement]?, _ rhs: [AXUIElement]?) -> Bool {
             switch (lhs, rhs) {
@@ -454,6 +463,8 @@ actor AccessibilityChannel: Channel {
                 && sameElements(before.headers, after.headers)
                 && sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] })
                 && sameElements(before.stripElements, after.stripElements)
+                && sameElements(before.presentation?.elements, after.presentation?.elements)
+                && before.presentation?.presentation == after.presentation?.presentation
                 && before.tracks?.map(\.liveIdentityBacked) == after.tracks?.map(\.liveIdentityBacked)
                 && sameValues(before.tracks, after.tracks) && sameValues(before.strips, after.strips)
             let project = before.title.map {
@@ -461,7 +472,8 @@ actor AccessibilityChannel: Channel {
             }
             let candidate = SessionPopulationObservation.FreshPopulation(
                 project: project, tracks: before.tracks, strips: before.strips,
-                fileTrackCount: metadata?.trackCount, beganAt: beganAt, endedAt: Date(), stable: stable
+                fileTrackCount: metadata?.trackCount, beganAt: beganAt, endedAt: Date(), stable: stable,
+                mixerPresentation: before.presentation?.presentation
             )
             if stable { return candidate }
             last = candidate
