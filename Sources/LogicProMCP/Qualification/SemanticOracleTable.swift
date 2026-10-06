@@ -251,6 +251,7 @@ enum SemanticOracleTable {
         .tracksSortVerified,
         // Explicit Mixer final-state mode only; omitted blind toggles remain State B.
         .navigateToggleView,
+        .navigateCaptureMarkers,
     ]
 
     /// Every mutating operation the table covers: the B1 verified-write increment
@@ -565,6 +566,7 @@ enum SemanticOracleTable {
         transportGotoPosition,
         navigateGotoBar,
         navigateGotoMarker,
+        navigateCaptureMarkers,
         navigateCreateMarker,
         navigateDeleteMarker,
         navigateRenameMarker,
@@ -1838,6 +1840,23 @@ enum SemanticOracleTable {
             .valueEquals(key: "verification_source", expected: .string("transport_state")),
             .fieldsEqual(keyA: "requested", keyB: "observed"),
             .typedField(key: "observed_time_position", type: .string),
+        ]
+    )
+
+    // AccessibilityChannel.defaultCaptureMarkers publishes State A only after the
+    // bound Marker List inventory and original UI are observed restored. An
+    // already-open list performs no write; a temporarily opened list records an
+    // attempted UI write. Empty inventories are valid. The normal getter after
+    // the owned list closes need not expose those rows, so this pins the capture
+    // receipt and does not invent an independent getter cross-check or live credit.
+    static let navigateCaptureMarkers = SafeMutationOracle.oracle(
+        .navigateCaptureMarkers,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("nav.capture_markers")),
+            .valueEquals(key: "marker_source", expected: .string("ax_marker_list")),
+            .valueEquals(key: "ui_restored", expected: .bool(true)),
+            .typedField(key: "markers", type: .array),
+            .booleanFlipped(keyA: "already_open", keyB: "write_attempted"),
         ]
     )
 

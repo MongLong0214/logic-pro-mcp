@@ -36,6 +36,7 @@ struct OperationRegistryTests {
     private static let navigateCommands: [(String, String)] = [
         ("navigate.goto_bar", "goto_bar"),
         ("navigate.goto_marker", "goto_marker"),
+        ("navigate.capture_markers", "capture_markers"),
         ("navigate.create_marker", "create_marker"),
         ("navigate.delete_marker", "delete_marker"),
         ("navigate.rename_marker", "rename_marker"),

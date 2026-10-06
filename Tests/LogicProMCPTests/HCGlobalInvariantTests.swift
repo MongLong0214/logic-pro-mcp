@@ -316,6 +316,7 @@ struct HCGlobalInvariantTests {
 
             RouteCase(tool: "logic_navigate", command: "goto_bar", params: ["bar": .int(1)], operation: "transport.goto_position", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_navigate", command: "goto_marker", params: ["index": .int(0)], operation: "transport.goto_position", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_navigate", command: "capture_markers", params: [:], operation: "nav.capture_markers", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_navigate", command: "create_marker", params: ["name": .string("HC Marker")], operation: "nav.create_marker", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_navigate", command: "delete_marker", params: ["index": .int(0)], operation: "nav.delete_marker", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_navigate", command: "rename_marker", params: ["index": .int(0), "name": .string("HC Marker Renamed")], operation: "nav.rename_marker", destinations: [], invariant: .minimumV1),

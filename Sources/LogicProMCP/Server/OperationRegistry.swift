@@ -21,6 +21,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case mixerSetOutputVerified = "mixer.set_output_verified"
     case navigateGotoBar = "navigate.goto_bar"
     case navigateGotoMarker = "navigate.goto_marker"
+    case navigateCaptureMarkers = "navigate.capture_markers"
     case navigateCreateMarker = "navigate.create_marker"
     case navigateDeleteMarker = "navigate.delete_marker"
     case navigateRenameMarker = "navigate.rename_marker"
@@ -304,6 +305,7 @@ enum OperationRegistry {
             "navigate.goto_bar", "navigate.goto_marker", "navigate.create_marker",
             "navigate.delete_marker", "navigate.rename_marker", "navigate.zoom_to_fit",
             "navigate.set_zoom", "navigate.toggle_view",
+            "navigate.capture_markers",
         ],
         ToolID.logicAudio.rawValue: [
             "audio.analyze_file",
@@ -364,6 +366,7 @@ enum OperationRegistry {
         ToolID.logicNavigate.rawValue: [
             "goto_bar", "goto_marker", "create_marker", "delete_marker", "rename_marker",
             "zoom_to_fit", "set_zoom", "toggle_view",
+            "capture_markers",
         ],
         ToolID.logicAudio.rawValue: [
             "analyze_file",
@@ -615,6 +618,7 @@ enum OperationRegistry {
     } + ([
         (.navigateGotoBar, "goto_bar", .readbackRequired, .defaultInstall, ["bar"]),
         (.navigateGotoMarker, "goto_marker", .readbackRequired, .defaultInstall, ["index", "name"]),
+        (.navigateCaptureMarkers, "capture_markers", .readbackRequired, .defaultInstall, []),
         (.navigateCreateMarker, "create_marker", .readbackRequired, .defaultInstall, ["name"]),
         (.navigateDeleteMarker, "delete_marker", .readbackRequired, .defaultInstall, ["index"]),
         (.navigateRenameMarker, "rename_marker", .readbackRequired, .defaultInstall, ["index", "name"]),

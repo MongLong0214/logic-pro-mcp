@@ -468,8 +468,8 @@ struct SemanticOracleCensusTests {
                 )
             }
         }
-        // 49 through B4, plus #575, #448 and the explicit Mixer mode of #969.
-        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 52)
+        // 49 through B4, plus #575, #448, #1118 and the explicit Mixer mode of #969.
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 53)
     }
 
     /// #373 B4 — the mutating oracle inventory is CLOSED. Every supported

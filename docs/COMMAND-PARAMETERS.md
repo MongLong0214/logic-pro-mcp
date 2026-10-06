@@ -70,6 +70,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 
 | Command | Parameters | Required | Unknown parameters | Mutability | Confirmation | Target | Verification | Retry | Availability |
 |---|---|---|---|---|---|---|---|---|---|
+| `capture_markers` | none | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `create_marker` | `name` | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `delete_marker` | `index`: integer | `index` | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `goto_bar` | `bar`: integer | `bar` | closed | mutating | none | none | readback_required | never_automatic | default_install |
