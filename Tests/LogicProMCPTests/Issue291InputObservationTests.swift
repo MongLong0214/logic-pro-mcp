@@ -114,7 +114,8 @@ struct Issue291InputObservationTests {
         let result = await LogicProServer.runWithDeadline(
             tool: "logic_project", command: "inspect_session", commandParams: params, mutationGate: gate
         ) { await handler(dependencies, params) }
-        #expect(!(result.isError ?? false))
+        let isError = result.isError ?? false
+        #expect(!isError)
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
         return try #require(sharedJSONObject(sharedToolText(result)))
     }
