@@ -174,6 +174,24 @@ func pluginTrackBindingWaitRefusesSameNameElementReplacement(_ stage: String) as
     #expect(!AXPluginTrackBinding.isStable(binding, runtime: f.runtime))
 }
 
+@Test(arguments: [" Bass ", "\tBass\n", "Bass "], [false, true])
+func pluginTrackBindingKeepsNormalizedSiblingCollisionAmbiguous(_ rawName: String, reverse: Bool) {
+    let names = reverse ? ["Bass", rawName] : [rawName, "Bass"]
+    let f = PluginBindingFixture(headerNames: [rawName], stripNames: names)
+    #expect(f.resolve(0) == nil,
+            "the legacy trimmed Arrange name cannot select the other normalized-equal strip")
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: [" Bass ", "\tBass\n", "Bass "])
+func pluginTrackBindingPreservesLegacyUniqueNormalizedJoin(_ rawName: String) throws {
+    let f = PluginBindingFixture(headerNames: [rawName], stripNames: [rawName])
+    let binding = try #require(f.resolve(0))
+    #expect(CFEqual(binding.header, f.headers[0]))
+    #expect(CFEqual(binding.strip, f.strips[0]))
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
 @Test func pluginTrackBindingRetainsTheAcquiredMixerWhenAnotherMixerIsDiscoverable() throws {
     let f = PluginBindingFixture()
     // Multi-window Arrange discovery requires the real Group rail, not the legacy AXList

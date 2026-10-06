@@ -72,7 +72,11 @@ enum AXPluginTrackBinding {
                 } else { onRefusal?("strip_name_unavailable") }
                 return nil
             }
-            if stripName == name { matching.append((index, strip)) }
+            // Arrange's legacy reader normalizes whitespace. Retain its conservative collision
+            // check here without changing the raw Mixer observation into a DAW identity claim.
+            if stripName.trimmingCharacters(in: .whitespacesAndNewlines) == name {
+                matching.append((index, strip))
+            }
         }
         guard matching.count == 1 else { onRefusal?("strip_name_not_unique"); return nil }
         return Binding(trackIndex: track, trackName: name, mixerStripIndex: matching[0].0,

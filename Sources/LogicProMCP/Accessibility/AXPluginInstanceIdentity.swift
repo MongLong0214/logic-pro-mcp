@@ -264,7 +264,9 @@ public enum AXPluginInstanceIdentity {
     /// Only a direct, semantically labelled Name text field supplies a strip name. Archived
     /// Logic 12.3 EN/KO/JA/DE censuses expose it directly under the strip; nested plug-in controls
     /// are not channel-strip name authority. Numeric user names are valid; decorated fader
-    /// values and opaque AXDescription/title metadata are not names.
+    /// values and opaque AXDescription/title metadata are not names. Preserve nonblank AXValue
+    /// bytes; byte-distinct readings are ambiguous even when Swift considers them equivalent.
+    /// This observes the displayed field, not a layout-independent DAW name.
     static func stripNameResult(
         _ strip: AXUIElement, runtime: AXHelpers.Runtime
     ) -> Result<String?, AXHelpers.AXStatusError> {
@@ -274,7 +276,7 @@ public enum AXPluginInstanceIdentity {
         case .failure(let error) where error.isDefinitiveAbsence: children = []
         case .failure(let error): return .failure(error)
         }
-        var names = Set<String>()
+        var observedName: String?
         var missingName = false
         for field in children {
             let role: String?
@@ -304,16 +306,20 @@ public enum AXPluginInstanceIdentity {
             switch AXHelpers.getAttributeResult(field, kAXValueAttribute as String, runtime: runtime)
                 as Result<String?, AXHelpers.AXStatusError> {
             case .success(let text):
-                guard let name = text?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+                guard let name = text, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     missingName = true
                     continue
                 }
-                names.insert(name)
+                if let priorName = observedName {
+                    if !priorName.utf8.elementsEqual(name.utf8) { missingName = true }
+                } else {
+                    observedName = name
+                }
             case .failure(let error) where error.isDefinitiveAbsence: missingName = true
             case .failure(let error): return .failure(error)
             }
         }
-        return .success(!missingName && names.count == 1 ? names.first : nil)
+        return .success(missingName ? nil : observedName)
     }
 
     /// Depth-first search for the first descendant whose `kAXIdentifier` starts

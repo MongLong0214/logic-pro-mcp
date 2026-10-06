@@ -514,3 +514,64 @@ private func runtimeFailingChildren(
     #expect(window.identifier == nil)
     #expect(!window.identifierReadWhole, "the identifier read failed: unknown, not absent")
 }
+
+// #965: raw Name-field observations are not layout-independent DAW identity proof.
+private func readDirectStripNameValues(
+    _ values: [String]
+) -> Result<String?, AXHelpers.AXStatusError> {
+    let b = FakeAXRuntimeBuilder()
+    let channel = strip(b, 94, name: values[0], inserts: [])
+    var fields = [b.element(949)]
+    for (offset, value) in values.dropFirst().enumerated() {
+        let field = b.element(94_100 + offset)
+        b.setAttribute(field, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        b.setAttribute(field, kAXDescriptionAttribute as String, "Name")
+        b.setAttribute(field, kAXValueAttribute as String, value)
+        fields.append(field)
+    }
+    b.setChildren(channel, fields)
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: { _, _, _ in
+            Issue.record("reading strip names attempted an AX write")
+            return false
+        },
+        performActionHandler: { _, _ in
+            Issue.record("reading strip names attempted an AX action")
+            return false
+        }
+    )
+    let result = AXPluginInstanceIdentity.stripNameResult(channel, runtime: runtime)
+    #expect(b.setCalls.isEmpty)
+    #expect(b.actionCalls.isEmpty)
+    return result
+}
+
+@Test(arguments: [" Bass ", "\tBass\n", "Caf\u{0065}\u{0301}", "0"])
+func semanticStripNamePreservesObservedBytes(_ expected: String) throws {
+    let observed = try #require(try readDirectStripNameValues([expected]).get())
+    #expect(observed.utf8.elementsEqual(expected.utf8))
+}
+
+@Test(arguments: [
+    ["Caf\u{00E9}", "Caf\u{0065}\u{0301}"],
+    ["Caf\u{0065}\u{0301}", "Caf\u{00E9}"],
+    [" Bass", "Bass "],
+    ["Bass ", " Bass"],
+])
+func semanticStripNameRefusesByteDistinctReadings(_ values: [String]) throws {
+    #expect(!values[0].utf8.elementsEqual(values[1].utf8))
+    #expect(try readDirectStripNameValues(values).get() == nil)
+}
+
+@Test(arguments: [" Bass ", "Caf\u{0065}\u{0301}"])
+func semanticStripNameAcceptsByteIdenticalDuplicateReadings(_ expected: String) throws {
+    let observed = try #require(try readDirectStripNameValues([expected, expected]).get())
+    #expect(observed.utf8.elementsEqual(expected.utf8))
+}
+
+@Test(arguments: ["", " \t\n", "\u{00A0}"])
+func semanticStripNameKeepsBlankReadingsUnknown(_ blank: String) throws {
+    for values in [[blank], ["Bass", blank], [blank, "Bass"]] {
+        #expect(try readDirectStripNameValues(values).get() == nil)
+    }
+}
