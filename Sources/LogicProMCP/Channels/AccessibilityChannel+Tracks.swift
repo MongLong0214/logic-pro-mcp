@@ -11,11 +11,14 @@ extension AccessibilityChannel {
     // MARK: - Tracks
 
     static func defaultGetTracks(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
-        encodeResult(defaultGetTrackStates(runtime: runtime))
+        guard let states = defaultGetTrackStates(runtime: runtime) else {
+            return .error("Track population unavailable: the Arrange track rail could not be read.")
+        }
+        return encodeResult(states)
     }
 
-    static func defaultGetTrackStates(runtime: AXLogicProElements.Runtime = .production) -> [TrackState] {
-        defaultGetTrackStates(runtime: runtime, stoppingWhen: { false }).states ?? []
+    static func defaultGetTrackStates(runtime: AXLogicProElements.Runtime = .production) -> [TrackState]? {
+        defaultGetTrackStates(runtime: runtime, stoppingWhen: { false }).states
     }
 
     /// #1079: the same walk, asking `stop` before each header and again inside it, right before
@@ -25,7 +28,12 @@ extension AccessibilityChannel {
     static func defaultGetTrackStates(
         runtime: AXLogicProElements.Runtime = .production, stoppingWhen stop: () -> Bool
     ) -> (states: [TrackState]?, yielded: Bool) {
-        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+        // Keep acquisition failure distinct from a successfully observed empty rail.
+        // The shared reader tolerates unrelated loading subtrees, but rejects an
+        // unreadable rail or row role rather than shifting the remaining row indices.
+        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
+              case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        else { return (nil, false) }
         var states: [TrackState] = []
         states.reserveCapacity(headers.count)
         for (index, header) in headers.enumerated() {

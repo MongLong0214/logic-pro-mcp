@@ -4116,6 +4116,9 @@ private final class LockedFlag: @unchecked Sendable {
     builder.setAttribute(window, kAXTitleAttribute as String, "Song.logicx")
     builder.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
     builder.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+    // A readable physical strip exposes its role. Missing role is acquisition
+    // failure, not permission to publish a shifted strip population.
+    builder.setRole(strip, kAXLayoutItemRole as String)
     builder.setChildren(mixer, [strip])
     builder.setChildren(strip, [fader, pan])
     // Named, because Logic names them. This fixture carried role and value only, so the strip

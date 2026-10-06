@@ -22,9 +22,10 @@ extension AccessibilityChannel {
         guard let mixer = lookup.mixer else {
             return .error(lookup.childrenUnread ? mixerChildrenUnreadMessage : "Cannot locate mixer — is it visible?")
         }
-        guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
+        guard let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: mixer, runtime: runtime.ax) else {
             return .error(mixerChildrenUnreadMessage)
         }
+        let strips = enumeration.strips
         var channelStrips: [ChannelStripState] = []
 
         for (index, strip) in strips.enumerated() {
@@ -94,9 +95,10 @@ extension AccessibilityChannel {
         guard let mixer = lookup.mixer else {
             return .error(lookup.childrenUnread ? mixerChildrenUnreadMessage : "Cannot locate mixer — is it visible?")
         }
-        guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
+        guard let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: mixer, runtime: runtime.ax) else {
             return .error(mixerChildrenUnreadMessage)
         }
+        let strips = enumeration.strips
         guard index >= 0 && index < strips.count else {
             return .error("Channel strip index \(index) out of range")
         }
