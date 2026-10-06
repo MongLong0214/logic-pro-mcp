@@ -375,6 +375,85 @@ struct Issue965MixerPresentationWitnessTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func firstLegacyGroupDoesNotSpendReadBudgetOnTrailingSubtrees(earlierScrollArea: Bool) throws {
+        enum Budget: Error { case exhausted }
+        let fixture = Fixture()
+        let wrapper = fixture.builder.element(965_996)
+        let winner = fixture.builder.element(965_997)
+        let laterGroup = fixture.builder.element(965_998)
+        let tail = fixture.builder.element(965_999)
+        let scrollArea = fixture.builder.element(965_990)
+        for node in [wrapper, winner, laterGroup, tail] {
+            fixture.builder.setRole(node, kAXGroupRole as String)
+        }
+        for node in [winner, laterGroup, scrollArea] {
+            fixture.builder.setAttribute(node, kAXIdentifierAttribute as String, "Mixer")
+        }
+        fixture.builder.setRole(scrollArea, kAXScrollAreaRole as String)
+        fixture.builder.setChildren(scrollArea, [])
+        fixture.builder.setChildren(winner, [fixture.layout])
+        fixture.builder.setChildren(wrapper, [winner])
+        fixture.builder.setChildren(fixture.owner, [wrapper])
+        fixture.builder.setChildren(laterGroup, [])
+        fixture.builder.setChildren(tail, [])
+        fixture.builder.setChildren(fixture.window,
+                                    (earlierScrollArea ? [scrollArea] : []) + [fixture.owner, laterGroup, tail])
+        let budget = StopRead()
+        let trailingReads = Counter()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueHandler: { element, _ in
+                if CFEqual(element, laterGroup) || CFEqual(element, tail) {
+                    _ = trailingReads.next()
+                    budget.observe(stop: true)
+                }
+                return nil
+            }, setAttributeHandler: nil, performActionHandler: nil,
+            executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+        )
+        do {
+            let result = try AXLogicProElements.mixerPopulationAreaLookup(
+                in: fixture.window, runtime: runtime, checking: {
+                    // A trailing read consumes the virtual budget. No clock or sleep
+                    // participates in this test's acquisition deadline.
+                    if budget.isStopped { throw Budget.exhausted }
+                }
+            )
+            let binding = try #require(result.binding)
+            #expect(CFEqual(binding.mixer, winner))
+            #expect(binding.owners.count == 1 && CFEqual(binding.owners[0], fixture.owner))
+            let expectedPath = [fixture.window, fixture.owner, wrapper, winner]
+            #expect(binding.path.count == expectedPath.count)
+            #expect(zip(binding.path, expectedPath).allSatisfy { CFEqual($0, $1) })
+        } catch Budget.exhausted {
+            Issue.record("a decisive legacy group must return before spending the trailing read budget")
+        }
+        #expect(trailingReads.next() == 1, "no later group or unrelated subtree may be read after the first legacy group")
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test func legacyGroupDiscoveryChecksCancellationBeforeItsFirstRead() throws {
+        enum Stop: Error { case requested }
+        let fixture = Fixture()
+        fixture.builder.setAttribute(fixture.owner, kAXIdentifierAttribute as String, "Mixer")
+        let reads = Counter()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app, attributeValueHandler: { _, _ in
+                _ = reads.next()
+                return nil
+            }, setAttributeHandler: nil, performActionHandler: nil,
+            executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+        )
+        do {
+            _ = try AXLogicProElements.mixerPopulationAreaLookup(
+                in: fixture.window, runtime: runtime, checking: { throw Stop.requested }
+            )
+            Issue.record("discovery must observe cancellation before selecting a legacy group")
+        } catch Stop.requested {}
+        #expect(reads.next() == 1)
+    }
+
     private func presentation(_ body: [String: Any]) throws -> [String: Any] {
         let strips = try #require(body["strips"] as? [String: Any])
         #expect(strips["coverage"] as? String == "partial")

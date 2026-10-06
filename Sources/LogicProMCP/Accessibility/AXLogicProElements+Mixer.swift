@@ -262,7 +262,7 @@ extension AXLogicProElements {
         var candidates: [MixerAreaCandidate] = []
         var sawUnreadMixerContainer = false
         var remainingNodes = 4096
-        try collectMixerAreaCandidates(
+        _ = try collectMixerAreaCandidates(
             root,
             runtime: runtime,
             depth: 0,
@@ -290,12 +290,12 @@ extension AXLogicProElements {
         checking check: () throws -> Void,
         into candidates: inout [MixerAreaCandidate],
         sawUnreadMixerContainer: inout Bool
-    ) throws {
+    ) throws -> Bool {
         try check()
-        guard depth <= 12 else { return }
+        guard depth <= 12 else { return false }
         guard remainingNodes > 0, !ancestors.contains(where: { CFEqual($0, element) }) else {
             if ancestorIsMixer { sawUnreadMixerContainer = true }
-            return
+            return false
         }
         remainingNodes -= 1
 
@@ -325,7 +325,7 @@ extension AXLogicProElements {
             if !isInspector, ancestorIsMixer || isMixerContainer {
                 sawUnreadMixerContainer = true
             }
-            return
+            return false
         }
 
         if isMixerContainer {
@@ -343,11 +343,15 @@ extension AXLogicProElements {
                     path: ancestors + [element],
                     legacyRole: legacyRole
                 ))
+                // The first legacy Group is already the ID-first lookup's winner.
+                // Retain its owner/path without reading unrelated later subtrees.
+                // A ScrollArea cannot stop the walk: a later Group takes priority.
+                if legacyRole == (kAXGroupRole as String) { return true }
             }
         }
 
         for child in children {
-            try collectMixerAreaCandidates(
+            if try collectMixerAreaCandidates(
                 child,
                 runtime: runtime,
                 depth: depth + 1,
@@ -359,8 +363,9 @@ extension AXLogicProElements {
                 checking: check,
                 into: &candidates,
                 sawUnreadMixerContainer: &sawUnreadMixerContainer
-            )
+            ) { return true }
         }
+        return false
     }
 
     private static func isMixerContainerRole(_ role: String?) -> Bool {
