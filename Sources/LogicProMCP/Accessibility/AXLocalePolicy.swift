@@ -2233,6 +2233,66 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTabBtnLabel%7C%7C%7CMixer#value"
     )
 
+    // Mixer-own toolbar descriptions, matched only inside the retained strip area's owner.
+    // EN native roles/descriptions: Docs/tickets/issue-234/axdump234.out:19-40.
+    // KO descriptions were read on the bound 12.3 Mixer on 2026-10-06. Remaining members
+    // are the installed Logic.framework rows' values, not ten-locale native qualification.
+    static let mixerPresentationSingle = LabelSet(
+        canonical: "Single", variants: ["단일", "シングル", "Einzeln", "Sencillo", "Simple", "Singolo", "Individual", "单个", "獨奏"],
+        rationale: "The Single mode radio button in the Mixer-own toolbar; read-only presentation witness.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Single#value"
+    )
+    static let mixerPresentationTracks = LabelSet(
+        canonical: "Tracks", variants: ["트랙", "トラック", "Spuren", "Pistas", "Pistes", "Tracce", "轨道", "音軌"],
+        rationale: "The Tracks mode radio button in the Mixer-own toolbar; not the Tracks main-window area.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tracks#value"
+    )
+    static let mixerPresentationAll = LabelSet(
+        canonical: "All", variants: ["모두", "すべて", "Alle", "Todo", "Tout", "Tutto", "Tudo", "全部"],
+        rationale: "The All mode radio button in the Mixer-own toolbar; does not itself prove whole population coverage.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/All#value"
+    )
+    static let mixerTypeFilterAudio = LabelSet(
+        canonical: "Audio", variants: ["오디오", "オーディオ", "Áudio", "音频", "音訊"],
+        rationale: "Mixer-own type-filter checkbox description, not an input or instrument slot.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Audio#value"
+    )
+    static let mixerTypeFilterInstrument = LabelSet(
+        canonical: "Inst", variants: ["악기", "Inst.", "Instr", "Strum.", "Instrumento", "乐器", "樂器"],
+        rationale: "Mixer-own instrument type-filter checkbox description.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Inst#value"
+    )
+    static let mixerTypeFilterAux = LabelSet(
+        canonical: "Aux", variants: ["Aux.", "辅助"],
+        rationale: "Mixer-own auxiliary type-filter checkbox description.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Aux#value"
+    )
+    static let mixerTypeFilterBus = LabelSet(
+        canonical: "Bus", variants: ["버스", "バス", "总线", "匯流排"],
+        rationale: "Mixer-own bus type-filter description; Logic's Korean row is 버스, unlike the MAMixer Bus row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Bus#value"
+    )
+    static let mixerTypeFilterInput = LabelSet(
+        canonical: "Input", variants: ["입력", "Entrada", "Entrée", "Ingresso", "输入", "輸入"],
+        rationale: "Mixer-own input type-filter checkbox; the mix-specific Input row, not a channel-strip slot.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Input%23mix#value"
+    )
+    static let mixerTypeFilterOutput = LabelSet(
+        canonical: "Output", variants: ["출력", "Salida", "Sortie", "Uscita", "Saída", "输出", "輸出"],
+        rationale: "Mixer-own output type-filter checkbox; the mix-specific Output row, not a channel-strip slot.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output%23mix#value"
+    )
+    static let mixerTypeFilterMasterVCA = LabelSet(
+        canonical: "Master/VCA", variants: ["마스터/VCA", "マスター/VCA", "Maestro/VCA", "Maître/VCA", "主轨道/VCA", "主聲道/VCA"],
+        rationale: "Mixer-own combined master/VCA type-filter checkbox description.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Master%2FVCA#value"
+    )
+    static let mixerTypeFilterMIDI = LabelSet(
+        canonical: "MIDI", variants: [],
+        rationale: "Mixer-own MIDI type-filter checkbox description; this row is MIDI in all installed locales.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/MIDI#value"
+    )
+
     /// Slider type hints (mutually exclusive groups in `sliderText`).
     static let sliderSendHint = LabelSet(
         canonical: "send",
@@ -3474,6 +3534,9 @@ enum AXLocalePolicy {
         transportSliderHints,
         mixerInspectorContext,
         mixerNamedElement,
+        mixerPresentationSingle, mixerPresentationTracks, mixerPresentationAll,
+        mixerTypeFilterAudio, mixerTypeFilterInstrument, mixerTypeFilterAux, mixerTypeFilterBus,
+        mixerTypeFilterInput, mixerTypeFilterOutput, mixerTypeFilterMasterVCA, mixerTypeFilterMIDI,
         sliderSendHint,
         sliderZoomHint,
         sliderVolumeHint,
