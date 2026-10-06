@@ -2576,8 +2576,12 @@ enum AXLocalePolicy {
     /// Choose-Project picker window title markers.
     static let projectPickerWindow = LabelSet(
         canonical: "프로젝트 선택",
-        variants: ["choose a project", "choose project", "new from template"],
-        rationale: "Distinguishes the Choose-Project picker window from a real project; read-only classifier."
+        variants: ["choose a project", "choose project", "new from template",
+                   "プロジェクトを選択", "Wähle ein Projekt aus", "Seleccionar un proyecto", "Choisir un projet",
+                   "Scegli un progetto", "Escolha um projeto", "选取项目", "選擇計畫案"],
+        rationale: "Identifies chooser-shaped AXWindow titles; a title alone is not document identity. Document counting and track readers also inspect the raw AXDocument status and payload."
+            + " The eight added titles are the own Choose a Project row's values in Logic.framework Localizable.strings, already carried by projectChooserWindowTitle. Installed Logic 12.3 (6674) arm64 CLgAppManager._openNewProjectDialogSelectingCategoryID: obtains the Logic bundle through bundleForClass(MAContentPackageManager), localizes this key and passes the result to MANewProjectDialog.window.setTitle:. The bundle getter has an explicit mainBundle fallback when bundleForClass returns nil. This is static ownership evidence, not fresh AX or ten-locale native qualification; existing canonical and legacy contains markers are retained.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Choose%20a%20Project#value"
     )
 
     /// Transport text-field description hints (tempo/position fields).
