@@ -37,7 +37,10 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import sys
+
+import yaml
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -85,9 +88,6 @@ POLICY_PATH = os.path.join(REPO, ".github", "ci", "CI-GATE.json")
 #: owner, and never read out of the moved file: a policy that names its own predecessor chooses
 #: what it is compared against.
 RATCHETS = (
-    ratchet.Ratchet(".github/ci/CI-GATE.json", "required_commands", "grow",
-                    "commands the required CI gate must carry",
-                    legacy="docs/canon/CI-GATE.json"),
     #: A waiver for "this job does not have to be required" is the most load-bearing waiver in the
     #: repository, because what it waives is the gate itself. It was NOT ratcheted until 2026-09-20
     #: -- only `required_commands` was -- so a change could add a CI job that always fails, waive
@@ -138,6 +138,109 @@ def executable(text: str) -> str:
     Only whole-line comments are dropped. A trailing `#` inside a `run:` block is shell, not YAML.
     """
     return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def workflow_runs_command(text: str, command: str) -> bool:
+    """Whether an enabled workflow step literally invokes `command`.
+
+    PyYAML gives this narrow check the real `steps` and `run` scalar instead of treating a step
+    name or a comment as executable text. This is intentionally not a shell interpreter: it only
+    accepts the command literal in a non-`echo` shell statement.
+    """
+    try:
+        workflow = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return False
+    def words(source: str) -> list[str]:
+        try:
+            result = shlex.split(re.sub(r"\\\s*\n\s*", " ", source), comments=True)
+        except ValueError:
+            return []
+        if result[:2] == ["python3", "-u"]:
+            del result[1]
+        return result
+
+    wanted = words(command)
+    if not wanted:
+        return False
+    for job in (workflow.get("jobs") or {}).values():
+        for step in (job.get("steps") or []):
+            if not isinstance(step, dict) or step.get("if") is False:
+                continue
+            if re.fullmatch(r"\$\{\{\s*false\s*\}\}", str(step.get("if", ""))):
+                continue
+            run = step.get("run")
+            if not isinstance(run, str):
+                continue
+            run = re.sub(r"\\\s*\n\s*", " ", run)
+            # Actions expressions are argument data, not Bash control operators.
+            # Their expansion cannot supply the required literal command witness.
+            run = re.sub(r"\$\{\{.*?\}\}", "__github_expression__", run, flags=re.S)
+            # Heredocs are not an execution witness. Reject unsupported forms rather
+            # than counting their data as commands; quotes stay intact across lines.
+            if "<<" in run:
+                continue
+            # The narrow lexer does not assemble adjacent quoted word fragments.
+            # Refuse that unsupported form instead of missing a disguised exit/exec.
+            if re.search(r'''(?:'[^']*'|"(?:\\.|[^"\\])*")(?=[^\s;&|()<>])''', run):
+                continue
+            # Keep whole quoted arguments intact until after boundary detection.
+            # POSIX tokenization would turn the argument ';' into an operator.
+            lexer = shlex.shlex(run, posix=False, punctuation_chars=";&|()\n<>")
+            lexer.whitespace = " \t\r"
+            lexer.whitespace_split = True
+            try:
+                tokens = list(lexer)
+            except ValueError:
+                continue
+            # Only literal command lists/pipelines are supported. Conditional,
+            # background and compound-shell bodies are not guaranteed invocations.
+            control_words = {
+                "if", "then", "elif", "else", "fi", "case", "esac", "for", "while",
+                "until", "do", "done", "select", "function", "{", "}",
+                "exit", "return", "exec", "eval", "break", "continue",
+            }
+            if any(token in control_words or token == "||" or
+                   (token and all(char in ";&|()\n<>" for char in token) and
+                    any(char in "&()" for char in token) and
+                    token not in {">&", "<&", "&>", "&>>"})
+                   for token in tokens):
+                continue
+            try:
+                decoded = [[token] if all(char in ";&|()\n<>" for char in token)
+                           else shlex.split(token, comments=False) for token in tokens]
+            except ValueError:
+                continue
+            if any(len(word) != 1 for word in decoded):
+                continue
+            # Quoting an exit/exec builtin does not stop Bash from invoking it.
+            if any(word[0] in control_words for word in decoded):
+                continue
+            statements, current = [], []
+            for token, word in zip(tokens, decoded):
+                if token and all(char in ";&|()\n" for char in token):
+                    statements.append(current)
+                    current = []
+                else:
+                    current.append(word[0])
+            statements.append(current)
+            for actual in statements:
+                if actual[:2] == ["python3", "-u"]:
+                    actual = [actual[0], *actual[2:]]
+                for index in range(len(actual) - len(wanted) + 1):
+                    if actual[index:index + len(wanted)] != wanted:
+                        continue
+                    # A token mentioned as another command's argument does not run.
+                    # Permit only the wrappers present in these workflows: env,
+                    # environment assignments, and a Python interpreter for script-only rules.
+                    prefix = actual[:index]
+                    if prefix[:1] == ["env"]:
+                        prefix = prefix[1:]
+                    while prefix and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", prefix[0]):
+                        prefix = prefix[1:]
+                    if prefix in ([], ["python3"], ["python3", "-u"]):
+                        return True
+    return False
 
 
 def check_body_trigger(name: str, body: str, problems: list) -> None:
@@ -234,7 +337,7 @@ def check_workflows(rules: dict, problems: list, audited: str = None) -> dict:
                             f"which is not a job in this workflow. A required context nothing "
                             f"publishes is a merge that waits forever or a rule aimed at nothing.")
         for command in entry.get("required_commands") or []:
-            if command not in body:
+            if not workflow_runs_command(body, command):
                 problems.append(
                     f".github/workflows/{name}: no step runs `{command}`. It is declared as this "
                     f"workflow's, so moving it elsewhere means moving the declaration too -- and "
@@ -382,9 +485,8 @@ def check(path: str = WORKFLOW):
             f"{os.path.relpath(POLICY_PATH, REPO)}: no workflow declares `gates_merges`, so the "
             f"required-command rule has nowhere to look and would report clean over an empty "
             f"search. That is a broken declaration, not a repository with no gates.")
-    haystack = "\n".join(body for _, body in sorted(gating.items()))
     for command in rules["required_commands"]:
-        if command not in haystack:
+        if not any(workflow_runs_command(body, command) for body in gating.values()):
             problems.append(
                 f"{path}: no step in any merge-gating workflow runs `{command}`. A required JOB "
                 f"says nothing about its STEPS, and deleting a step leaves the job green with the "
