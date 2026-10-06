@@ -517,9 +517,8 @@ extension AXLogicProElements {
         guard let header = findTrackHeader(at: index, runtime: runtime) else { return nil }
         let track = AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
         guard track.liveIdentityBacked else { return nil }
-        let trimmed = track.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return trimmed
+        guard !track.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return track.name
     }
 
     static func trackNames(runtime: Runtime = .production) -> [Int: String]? {
@@ -533,9 +532,8 @@ extension AXLogicProElements {
                 runtime: runtime.ax
             )
             guard track.liveIdentityBacked else { return nil }
-            let name = track.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { return nil }
-            names[index] = name
+            guard !track.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            names[index] = track.name
         }
         return names
     }

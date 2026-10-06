@@ -49,7 +49,10 @@ enum AXPluginTrackBinding {
             headerNames.append(name)
         }
         let name = headerNames[track]
-        guard headerNames.filter({ $0 == name }).count == 1 else {
+        // Preserve the conservative legacy join at this consumer, not in observations returned
+        // to inventory/reference issuance. Normalized-equal siblings remain ambiguous.
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard headerNames.filter({ $0.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedName }).count == 1 else {
             onRefusal?("arrange_name_ambiguous"); return nil
         }
 
@@ -72,9 +75,7 @@ enum AXPluginTrackBinding {
                 } else { onRefusal?("strip_name_unavailable") }
                 return nil
             }
-            // Arrange's legacy reader normalizes whitespace. Retain its conservative collision
-            // check here without changing the raw Mixer observation into a DAW identity claim.
-            if stripName.trimmingCharacters(in: .whitespacesAndNewlines) == name {
+            if stripName.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedName {
                 matching.append((index, strip))
             }
         }

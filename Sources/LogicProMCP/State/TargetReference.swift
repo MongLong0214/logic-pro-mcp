@@ -147,7 +147,9 @@ actor TargetRegistry {
                 && $0.projectEpoch == projectEpoch
                 && $0.topologyGeneration == topologyGeneration
                 && $0.descriptor == descriptor
-                && $0.observedFingerprint == fingerprint
+                && (kind == .project || $0.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8))
+                && (kind == .project ? $0.observedFingerprint == fingerprint
+                    : $0.observedFingerprint.utf8.elementsEqual(fingerprint.utf8))
         }) {
             return binding.reference
         }
@@ -203,7 +205,9 @@ actor TargetRegistry {
                 && $0.projectEpoch == projectEpoch
                 && $0.topologyGeneration == topologyGeneration
                 && $0.descriptor == descriptor
-                && $0.observedFingerprint == fingerprint
+                && (kind == .project || $0.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8))
+                && (kind == .project ? $0.observedFingerprint == fingerprint
+                    : $0.observedFingerprint.utf8.elementsEqual(fingerprint.utf8))
         })?.reference
     }
 

@@ -1,5 +1,6 @@
 @preconcurrency import ApplicationServices
 import Foundation
+import MCP
 import Testing
 @testable import LogicProMCP
 
@@ -54,6 +55,17 @@ private final class PluginBindingFixture: @unchecked Sendable {
     }
 
     var runtime: AXLogicProElements.Runtime { builder.makeLogicRuntime(appElement: app) }
+    var readOnlyRuntime: AXLogicProElements.Runtime {
+        AXLogicProElements.Runtime(
+            logicProPID: { 4242 }, ax: builder.makeAXRuntime(appElement: app,
+                setAttributeHandler: { _, _, _ in Issue.record("unexpected AX write"); return false },
+                performActionHandler: { _, _ in Issue.record("unexpected AX action"); return false }),
+            executeAppleScript: { _ in Issue.record("unexpected AppleScript"); return .error("unexpected script") },
+            onScreenWindowList: { [] },
+            postPopupMenuEscape: { Issue.record("unexpected Escape") },
+            focusedApplicationPID: { 4242 }
+        )
+    }
     func resolve(_ track: Int = 9) -> AXPluginTrackBinding.Binding? {
         AXPluginTrackBinding.resolve(track: track, mixer: mixer, runtime: runtime)
     }
@@ -190,6 +202,93 @@ func pluginTrackBindingPreservesLegacyUniqueNormalizedJoin(_ rawName: String) th
     #expect(CFEqual(binding.header, f.headers[0]))
     #expect(CFEqual(binding.strip, f.strips[0]))
     #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: [" Bass ", "\tBass\n", "Bass "])
+func pluginTrackBindingPreservesRawArrangeNameWhileJoiningNormalizedStrip(_ rawName: String) throws {
+    let f = PluginBindingFixture(headerNames: [rawName], stripNames: ["Bass"])
+    let runtime = f.readOnlyRuntime
+    let binding = try #require(AXPluginTrackBinding.resolve(track: 0, mixer: f.mixer, runtime: runtime))
+    #expect(binding.trackName.utf8.elementsEqual(rawName.utf8))
+    #expect(CFEqual(binding.header, f.headers[0]))
+    #expect(CFEqual(binding.strip, f.strips[0]))
+    #expect(AXPluginTrackBinding.isStable(binding, runtime: runtime))
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: [" Bass ", "\tBass\n", "Bass "], [false, true])
+func pluginTrackBindingKeepsNormalizedArrangeCollisionAmbiguous(_ rawName: String, reverse: Bool) {
+    let names = reverse ? ["Bass", rawName] : [rawName, "Bass"]
+    let f = PluginBindingFixture(headerNames: names, stripNames: ["Bass"])
+    let first = AXPluginTrackBinding.resolve(track: 0, mixer: f.mixer, runtime: f.readOnlyRuntime)
+    let second = AXPluginTrackBinding.resolve(track: 1, mixer: f.mixer, runtime: f.readOnlyRuntime)
+    let ambiguous = first == nil && second == nil
+    #expect(ambiguous, "raw Arrange observations must retain the legacy normalized collision refusal")
+    #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+}
+
+@Test func pluginTrackBindingRawInventoryNameIssuesAResolvableInsertReference() async throws {
+    try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        let rawName = " Bass "
+        let f = PluginBindingFixture(headerNames: [rawName], stripNames: ["Bass"])
+        let b = f.builder
+        let group = b.element(30700)
+        let bypass = b.element(30701)
+        let open = b.element(30702)
+        b.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(group, kAXDescriptionAttribute as String, "Gain")
+        b.setAttribute(group, kAXPositionAttribute as String, axPoint(100, 300))
+        b.setAttribute(group, kAXSizeAttribute as String, axSize(58, 16))
+        b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        b.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
+        b.setAttribute(bypass, kAXValueAttribute as String, 0)
+        b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+        b.setChildren(group, [bypass, open])
+        b.setChildren(f.strips[0], b.makeAXRuntime().children(f.strips[0]) + [group])
+        let runtime = f.readOnlyRuntime
+        let inventory = await AccessibilityChannel.defaultGetPluginInventory(
+            params: ["track": "0"], runtime: runtime,
+            revealMixer: { _ in (f.mixer, .alreadyVisible) }
+        )
+        #expect(inventory.isSuccess)
+        let inventoryBody = try #require(sharedJSONObject(inventory.message))
+        try #require(inventoryBody["state"] as? String == "A")
+        let complete = try #require(inventoryBody["complete"] as? Bool)
+        #expect(complete)
+        let observedName = try #require(inventoryBody["track_name"] as? String)
+        #expect(observedName.utf8.elementsEqual(rawName.utf8))
+
+        let cache = StateCache()
+        let track = AXValueExtractors.extractTrackState(from: f.headers[0], index: 0, runtime: runtime.ax)
+        #expect(track.name.utf8.elementsEqual(rawName.utf8))
+        await cache.updateTracks([track])
+        let registry = TargetRegistry()
+        let published = await PluginsDispatcher.addInventoryTargetReferences(
+            to: toolTextResult(inventory.message), cache: cache, targetRegistry: registry
+        )
+        let publishedBody = try #require(sharedJSONObject(sharedToolText(published)))
+        let plugins = try #require(publishedBody["plugins"] as? [[String: Any]])
+        try #require(plugins.count == 1)
+        let rawReference = try #require(plugins[0]["plugin_insert_ref"] as? String)
+        let reference = TargetReference(rawValue: rawReference)
+        let binding = try #require(await registry.resolve(reference))
+        #expect(binding.descriptor.trackName.utf8.elementsEqual(rawName.utf8))
+        let result = await TargetRefResolver.resolveMutationIndex(
+            ["target_ref": .string(rawReference)], targetRegistry: registry, cache: cache,
+            operation: "plugin.set_param_verified", requiredKind: .pluginInsert,
+            invalidIndexResult: toolInvalidParamsResult("fixture requires an insert reference"),
+            liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+            liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) }
+        )
+        if case .success(let resolved) = result {
+            #expect(resolved.index == 0)
+            #expect(resolved.reference == reference)
+        } else {
+            Issue.record("a raw-name inventory insert reference must resolve against the same observed track")
+        }
+        #expect(b.setCalls.isEmpty && b.actionCalls.isEmpty)
+    }
 }
 
 @Test func pluginTrackBindingRetainsTheAcquiredMixerWhenAnotherMixerIsDiscoverable() throws {

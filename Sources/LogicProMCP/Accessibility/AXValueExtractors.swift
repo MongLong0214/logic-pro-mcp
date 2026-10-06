@@ -739,10 +739,11 @@ enum AXValueExtractors {
         case .success(let census): fields = census
         case .failure(let error): return .failure(error)
         }
-        let names = Set(fields.matches.compactMap { trackNameFieldReading($0, runtime: ax) })
+        let names = Dictionary(fields.matches.compactMap { trackNameFieldReading($0, runtime: ax) }
+            .map { (Array($0.utf8), $0) }, uniquingKeysWith: { first, _ in first })
         if let error = failures.firstError { return .failure(error) }
         if names.count > 1 { return .success(nil) }
-        if let name = names.first { return .success(name) }
+        if let name = names.values.first { return .success(name) }
 
         let texts: AXHelpers.Census
         switch AXHelpers.censusDescendantResult(of: header, role: kAXStaticTextRole as String,
@@ -750,18 +751,24 @@ enum AXValueExtractors {
         case .success(let census): texts = census
         case .failure(let error): return .failure(error)
         }
-        let staticNames = Set(texts.matches.compactMap {
-            extractTextValue($0, runtime: ax)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        }.filter { !$0.isEmpty })
+        let staticNames = Dictionary(texts.matches.compactMap {
+            nonblankTrackName(extractTextValue($0, runtime: ax))
+        }.map { (Array($0.utf8), $0) }, uniquingKeysWith: { first, _ in first })
         if let error = failures.firstError { return .failure(error) }
         if staticNames.count > 1 { return .success(nil) }
-        if let name = staticNames.first { return .success(name) }
+        if let name = staticNames.values.first { return .success(name) }
         let description = AXHelpers.getDescription(header, runtime: ax)
         if let error = failures.firstError { return .failure(error) }
         if let name = description.flatMap({ extractQuotedTrackName(from: $0) }) { return .success(name) }
-        let title = AXHelpers.getTitle(header, runtime: ax)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = nonblankTrackName(AXHelpers.getTitle(header, runtime: ax))
         if let error = failures.firstError { return .failure(error) }
-        return .success(title?.isEmpty == false ? title : nil)
+        return .success(title)
+    }
+
+    /// Whitespace classifies missing readings; it must not rewrite observed identity evidence.
+    private static func nonblankTrackName(_ candidate: String?) -> String? {
+        guard let candidate, !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return candidate
     }
 
     private static func trackNameFieldReading(
@@ -772,8 +779,8 @@ enum AXValueExtractors {
             AXHelpers.getTitle(field, runtime: runtime),
             extractTextValue(field, runtime: runtime)
         ]
-        return candidates.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first { !$0.isEmpty && $0 != "0" }
+        return candidates.compactMap { nonblankTrackName($0) }
+            .first { $0.trimmingCharacters(in: .whitespacesAndNewlines) != "0" }
     }
 
     private static func extractTrackName(
@@ -794,8 +801,7 @@ enum AXValueExtractors {
         if let text = AXHelpers.findDescendant(
             of: header, role: kAXStaticTextRole, maxDepth: 3, runtime: runtime
         ),
-           let name = extractTextValue(text, runtime: runtime)?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !name.isEmpty {
+           let name = nonblankTrackName(extractTextValue(text, runtime: runtime)) {
             return (name, true)
         }
 
@@ -805,8 +811,7 @@ enum AXValueExtractors {
             return (quotedName, true)
         }
 
-        if let title = AXHelpers.getTitle(header, runtime: runtime)?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !title.isEmpty {
+        if let title = nonblankTrackName(AXHelpers.getTitle(header, runtime: runtime)) {
             return (title, true)
         }
         return ("Untitled", false)
@@ -983,8 +988,7 @@ enum AXValueExtractors {
             if let regex = try? NSRegularExpression(pattern: pattern),
                let match = regex.firstMatch(in: description, range: NSRange(description.startIndex..., in: description)),
                let range = Range(match.range(at: 1), in: description) {
-                let candidate = description[range].trimmingCharacters(in: .whitespacesAndNewlines)
-                if !candidate.isEmpty {
+                if let candidate = nonblankTrackName(String(description[range])) {
                     return candidate
                 }
             }
