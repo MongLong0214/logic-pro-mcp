@@ -99,6 +99,31 @@ enum TargetRefResolver {
                 return .failure(staleTargetReferenceResult(rawReference, operation: operation))
             }
 
+            if binding.kind == .mixerStrip {
+                let project = await cache.getProject()
+                guard let physical = binding.physicalMixerStrip,
+                      let projectPath = project.filePath,
+                      physical.projectPath?.utf8.elementsEqual(projectPath.utf8) == true,
+                      !indexKeys.contains(where: { params[$0] != nil }),
+                      await cache.getChannelStrips().contains(where: { $0.physicalBinding?.matches(physical) == true }) else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+                await beforeFinalValidation?()
+                guard !Task.isCancelled, await targetRegistry.resolve(binding.reference) != nil else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+                let currentProject = await cache.getProject()
+                guard currentProject.filePath?.utf8.elementsEqual(projectPath.utf8) == true else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+                if let failure = await validateProjectReference(params, targetRegistry: targetRegistry, operation: operation) {
+                    return .failure(failure)
+                }
+                // The writer revalidates this physical owner/membership at each action. An
+                // Arrange index/name is deliberately not part of this resolution.
+                return .success(.init(index: binding.descriptor.trackIndex, reference: binding.reference, binding: binding))
+            }
+
             if let physical = binding.physicalTrack, operation == "track.rename" {
                 guard let index = physical.currentIndex() else {
                     return .failure(staleTargetReferenceResult(rawReference, operation: operation,

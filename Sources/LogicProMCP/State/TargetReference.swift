@@ -103,6 +103,7 @@ struct TargetBinding: Sendable {
     let observedFingerprint: String
     let pluginInsertIndex: Int?
     var physicalTrack: AXTrackBinding.Binding? = nil
+    var physicalMixerStrip: AXMixerStripBinding.Binding? = nil
     let createdAt: ContinuousClock.Instant
 }
 
@@ -157,7 +158,8 @@ actor TargetRegistry {
         descriptor: TargetDescriptor,
         fingerprint: String,
         pluginInsertIndex: Int? = nil,
-        physicalTrack: AXTrackBinding.Binding? = nil
+        physicalTrack: AXTrackBinding.Binding? = nil,
+        physicalMixerStrip: AXMixerStripBinding.Binding? = nil
     ) -> TargetReference {
         if kind == .project, currentProjectDescriptor != descriptor {
             currentProjectDescriptor = descriptor
@@ -173,8 +175,15 @@ actor TargetRegistry {
                     && binding.observedFingerprint.utf8.elementsEqual(fingerprint.utf8)
                     && binding.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8)
             }
+            if let physicalMixerStrip {
+                return binding.kind == kind
+                    && binding.serverSessionID == serverSessionID
+                    && binding.projectEpoch == projectEpoch
+                    && binding.topologyGeneration == topologyGeneration
+                    && binding.physicalMixerStrip?.matches(physicalMixerStrip) == true
+            }
             return
-            binding.physicalTrack == nil && binding.kind == kind
+            binding.physicalTrack == nil && binding.physicalMixerStrip == nil && binding.kind == kind
                 && binding.serverSessionID == serverSessionID
                 && binding.projectEpoch == projectEpoch
                 && binding.topologyGeneration == topologyGeneration
@@ -201,6 +210,7 @@ actor TargetRegistry {
                 ? pluginInsertIndex ?? TargetDescriptor.pluginInsertIndex(from: fingerprint)
                 : nil,
             physicalTrack: physicalTrack,
+            physicalMixerStrip: physicalMixerStrip,
             createdAt: ContinuousClock().now
         )
         return reference
@@ -212,6 +222,7 @@ actor TargetRegistry {
         fingerprint: String,
         snapshot: TargetRegistrySnapshot,
         physicalTrack: AXTrackBinding.Binding? = nil,
+        physicalMixerStrip: AXMixerStripBinding.Binding? = nil,
         stoppingWhen stop: @Sendable () -> Bool = { false }
     ) -> TargetReference? {
         guard !Task.isCancelled, !stop(), snapshot.projectEpoch == projectEpoch,
@@ -223,7 +234,13 @@ actor TargetRegistry {
             if let projectPath = currentProjectDescriptor?.projectFilePath,
                !path.utf8.elementsEqual(projectPath.utf8) { return nil }
         }
-        return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint, physicalTrack: physicalTrack)
+        if let physicalMixerStrip {
+            guard kind == .mixerStrip, let path = physicalMixerStrip.projectPath,
+                  let observedPath = currentProjectDescriptor?.projectFilePath,
+                  path.utf8.elementsEqual(observedPath.utf8) else { return nil }
+        }
+        return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint,
+                    physicalTrack: physicalTrack, physicalMixerStrip: physicalMixerStrip)
     }
 
     /// Return a current reference that this registry has already issued for the
@@ -277,6 +294,8 @@ actor TargetRegistry {
             guard let heldPath = physicalTrack.projectPath,
                   heldPath.utf8.elementsEqual(projectPath.utf8) else { return nil }
         }
+        if let physical = binding.physicalMixerStrip, let projectPath = currentProjectDescriptor?.projectFilePath,
+           physical.projectPath?.utf8.elementsEqual(projectPath.utf8) != true { return nil }
         return binding
     }
 
@@ -314,6 +333,7 @@ actor TargetRegistry {
             observedFingerprint: descriptor.fingerprint,
             pluginInsertIndex: existing.pluginInsertIndex,
             physicalTrack: existing.physicalTrack,
+            physicalMixerStrip: existing.physicalMixerStrip,
             createdAt: existing.createdAt
         )
     }

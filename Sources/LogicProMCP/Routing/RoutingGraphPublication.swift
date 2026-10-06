@@ -15,9 +15,9 @@ enum RoutingProjectBinding: Sendable {
 
 /// Builds the read-only ADR-008 projection from one #965 capture.
 ///
-/// Identities come only from `capture.issued`, which `SessionPopulationObservation.capture` issued
-/// through `TrackReferenceIssuance` for the rows it observed — the same path `logic://tracks` uses,
-/// so the graph does not depend on which resource was read first (#291 R0).
+/// Identities come only from the shared capture: `issued` uses the existing track issuer, and
+/// `mixerReferences` uses retained physical CF/document ownership in the existing registry.
+/// Resources consume those very references; reading a resource first is not a prerequisite.
 ///
 /// The AX reader contributes an output *label*, and the label is classified, never joined: a track
 /// is never an output destination in Logic, so a track named like a bus is not one (#291). A
@@ -25,7 +25,8 @@ enum RoutingProjectBinding: Sendable {
 /// from the source's own slot description, and `main_output` coverage says so. A physical output
 /// or no output is recorded on the source node and publishes no node and no edge. No send edge is
 /// published: occupancy is read at the source strip, and the destination an assigned send's group
-/// names is not read.
+/// names is not read. Physical-strip nodes retain classification as display evidence only; no
+/// track association, bus/port identity or edge is derived from their ordinal or labels.
 ///
 /// This function is pure: it never sees the registry and never reads another resource. Every
 /// domain it cannot answer carries its reasons in `coverage`, and `partialReason` is those reasons
@@ -46,6 +47,9 @@ enum RoutingGraphPublication {
             movedReason = projectMovedReason
         } else if capture.referencesEnabled && capture.issued == nil {
             movedReason = trackReferencesMovedReason
+        } else if capture.referencesEnabled && capture.channelStrips.contains(where: { $0.physicalBinding != nil })
+                    && capture.mixerReferences == nil {
+            movedReason = "physical strip references moved during capture"
         }
         if let movedReason {
             let unstable = RoutingDomainCoverage(state: .unstable, reasons: [movedReason])
@@ -123,7 +127,7 @@ enum RoutingGraphPublication {
 
         var nodesByID: [String: RoutingNode] = [:]
         var edges: [RoutingEdge] = []
-        for strip in strips {
+        for (row, strip) in strips.enumerated() {
             let trackIndex = strip.trackIndex
 
             // nil is a strip whose descendants were not read; `[]` a strip read with no send slot.
@@ -136,6 +140,26 @@ enum RoutingGraphPublication {
             }
 
             guard let issued else { continue }
+
+            // Physical ownership supplies a source endpoint independently of Arrange. Its
+            // output is still display evidence, never a bus/port identity or an edge.
+            if strip.physicalBinding != nil {
+                if let reference = capture.mixerReference(at: row) {
+                    let label = nonEmptyObservedLabel(strip.output)
+                    nodesByID[reference.rawValue] = RoutingNode(
+                        id: reference.rawValue, kind: .physicalStrip,
+                        displayName: strip.name ?? "", busNumber: nil, targetRef: reference,
+                        observedOutputLabel: label,
+                        outputClassification: label.map { classifyOutputLabel($0).0 }
+                    )
+                } else {
+                    population.partial("physical strip membership or reference unavailable at observed row=\(row)")
+                }
+                association.partial(positionalAssociationReason)
+                mainOutput.partial(positionalAssociationReason)
+                physicalOutput.partial(positionalAssociationReason)
+                continue
+            }
 
             // Two strips claiming one track index cannot both be that track's source, and nothing
             // observed says which one is.
