@@ -34,6 +34,7 @@ struct Issue291PhysicalStripReferenceTests {
         var onAttributeRead: (@Sendable (AXUIElement, String) -> Void)?
         var attributeReadResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)?
         var childrenReadResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)?
+        var onChildrenResultRead: (@Sendable (AXUIElement) -> Void)?
         private(set) var mutations: [(AXUIElement, String)] = []
 
         init(aux: Bool = false, duplicateNames: Bool = false) throws {
@@ -174,9 +175,25 @@ struct Issue291PhysicalStripReferenceTests {
         var logic: AXLogicProElements.Runtime {
             let ax = b.makeAXRuntime(appElement: app, attributeValueHandler: { [self] element, attribute in
                 onAttributeRead?(element, attribute)
+                if let result = attributeReadResult?(element, attribute) {
+                    switch result {
+                    case .success(let value): return .some(value)
+                    case .failure: return .some(nil)
+                    }
+                }
                 return nil
             }, attributeValueResultHandler: { [self] in attributeReadResult?($0, $1) },
-            childrenResultHandler: { [self] in childrenReadResult?($0) },
+            childrenHandler: { [self] element in
+                guard let result = childrenReadResult?(element) else { return nil }
+                switch result {
+                case .success(let children): return children
+                case .failure: return []
+                }
+            },
+            childrenResultHandler: { [self] element in
+                onChildrenResultRead?(element)
+                return childrenReadResult?(element)
+            },
             setAttributeHandler: { [self] element, attribute, raw in
                 mutations.append((element, attribute))
                 guard attribute == kAXValueAttribute as String, let old = value(element), let requested = raw as? NSNumber else {
@@ -760,6 +777,107 @@ struct Issue291PhysicalStripReferenceTests {
                 #expect(identity["mixer_strip_index"] as? Int == 2)
                 #expect(fixture.mutations.allSatisfy { CFEqual($0.0, command == "set_pan" ? fixture.pans[0] : fixture.volumes[0]) })
             }
+        }
+    }
+
+    @Test(arguments: ["late_role_absent", "late_help_failed", "late_children_failed", "depth_omitted_slider"])
+    func physicalVolumeRequiresEveryPotentialCandidateExamined(shape: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            let (cache, registry, router, rows) = try await publish(fixture)
+            let reference = try #require(rows[0]["mixer_strip_ref"] as? String)
+            let late = fixture.b.element(2_915_000)
+            fixture.b.setRole(late, kAXSliderRole as String)
+            fixture.b.setAttribute(late, kAXDescriptionAttribute as String, shape == "late_help_failed" ? "" : "Volume")
+            fixture.b.setAttribute(late, kAXHelpAttribute as String, "Volume fader")
+            fixture.b.setAttribute(late, kAXValueAttribute as String, 100.0)
+            fixture.b.setAttribute(late, kAXMinValueAttribute as String, 0.0)
+            fixture.b.setAttribute(late, kAXMaxValueAttribute as String, 233.0)
+            fixture.b.setChildren(late, [])
+            var tail = late
+            let levels = shape == "depth_omitted_slider" ? 4 : (shape == "late_children_failed" ? 1 : 0)
+            for offset in 0..<levels {
+                let group = fixture.b.element(2_915_001 + offset)
+                fixture.b.setRole(group, kAXGroupRole as String)
+                fixture.b.setChildren(group, [tail])
+                tail = group
+            }
+            fixture.b.setChildren(fixture.strips[0], fixture.b.makeAXRuntime().children(fixture.strips[0]) + [tail])
+            if shape == "late_role_absent" || shape == "late_help_failed" {
+                fixture.attributeReadResult = { element, attribute in
+                    guard CFEqual(element, late) else { return nil }
+                    if shape == "late_role_absent", attribute == kAXRoleAttribute as String {
+                        return .failure(.init(raw: AXError.noValue.rawValue))
+                    }
+                    if shape == "late_help_failed", attribute == kAXHelpAttribute as String {
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
+                    return nil
+                }
+            } else if shape == "late_children_failed" {
+                let blocked = tail
+                fixture.childrenReadResult = { CFEqual($0, blocked) ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil }
+            }
+            let observed = try #require(AccessibilityChannel.defaultGetMixerStates(runtime: fixture.logic, stoppingWhen: { false }).states)
+            #expect(observed[0].volume == 0, "a failed unique fader selection must not supply a typed value")
+            let result = await MixerDispatcher.handle(command: "set_volume",
+                params: ["target_ref": .string(reference), "value": .double(AXValueExtractors.logicMixerFaderPositionToContract(110.0 / 233.0))],
+                router: router, cache: cache, targetRegistry: registry, liveTrackName: { [0: "A", 1: "B"][$0] }, liveTrackNames: { [0: "A", 1: "B"] })
+            #expect(sharedJSONObject(sharedToolText(result))?["state"] as? String == "C")
+            #expect(fixture.mutations.isEmpty)
+            #expect(fixture.value(fixture.volumes[0]) == 100)
+            #expect(fixture.value(late) == 100)
+        }
+    }
+
+    @Test(arguments: ["send", "zoom"])
+    func physicalPanEliminationCannotReacceptAnExplicitNonPan(identity: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            let (cache, registry, router, rows) = try await publish(fixture)
+            let reference = try #require(rows[0]["mixer_strip_ref"] as? String)
+            fixture.b.setChildren(fixture.pans[0], [])
+            fixture.b.setAttribute(fixture.pans[0], kAXDescriptionAttribute as String, identity == "send" ? "send knob" : "Zoom")
+            fixture.b.setAttribute(fixture.pans[0], kAXHelpAttribute as String, identity == "send"
+                ? "Send Level knob. Set the level of the signal sent to the aux channel strip." : "Zoom slider")
+            let result = await MixerDispatcher.handle(command: "set_pan", params: ["target_ref": .string(reference), "value": .double(1)],
+                router: router, cache: cache, targetRegistry: registry, liveTrackName: { [0: "A", 1: "B"][$0] }, liveTrackNames: { [0: "A", 1: "B"] })
+            #expect(sharedJSONObject(sharedToolText(result))?["state"] as? String == "C")
+            #expect(fixture.mutations.isEmpty)
+            #expect(fixture.value(fixture.pans[0]) == 0)
+            #expect(fixture.value(fixture.volumes[0]) == 100)
+        }
+    }
+
+    @Test func physicalOutputCannotVerifyAnotherStripAfterPreReadReorder() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            // Existing legacy Mixer shape makes the first children read the physical membership
+            // census, and the next the output operation's own census. Neither shape is a native claim.
+            fixture.b.setRole(fixture.mixer, kAXGroupRole as String)
+            fixture.b.setAttribute(fixture.mixer, kAXIdentifierAttribute as String, "Mixer")
+            fixture.b.setAttribute(fixture.outputs[1], kAXDescriptionAttribute as String, "Output 3-4")
+            let (cache, registry, router, rows) = try await publish(fixture)
+            let reference = try #require(rows[0]["mixer_strip_ref"] as? String)
+            let first = Once(); let second = Once()
+            fixture.onChildrenResultRead = { element in
+                guard CFEqual(element, fixture.mixer) else { return }
+                if first.take() { return }
+                if second.take() { fixture.reorder([1, 0]) }
+            }
+            defer { fixture.onChildrenResultRead = nil }
+            let result = await MixerDispatcher.handle(command: "set_output_verified",
+                params: ["target_ref": .string(reference), "destination": .object(["kind": .string("physical"), "ports": .array([.int(3), .int(4)])])],
+                router: router, cache: cache, targetRegistry: registry, liveTrackName: { [0: "A", 1: "B"][$0] }, liveTrackNames: { [0: "A", 1: "B"] })
+            let receipt = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(receipt["state"] as? String == "A")
+            let changed: Bool = try #require(receipt["changed"] as? Bool)
+            #expect(changed, "already-at-destination Arrange A cannot verify referenced physical B")
+            #expect(receipt["mixer_strip_index"] as? Int == 1)
+            #expect(fixture.b.attributeValue(fixture.outputs[0], kAXDescriptionAttribute as String) as? String == "Output 3-4")
+            #expect(!fixture.mutations.isEmpty)
+            #expect(fixture.mutations.contains { CFEqual($0.0, fixture.outputs[0]) && $0.1 == kAXPressAction as String })
+            #expect(!fixture.mutations.contains { CFEqual($0.0, fixture.outputs[1]) })
         }
     }
 }

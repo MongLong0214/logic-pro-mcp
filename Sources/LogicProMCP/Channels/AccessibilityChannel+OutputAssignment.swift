@@ -136,16 +136,31 @@ extension AccessibilityChannel {
         }
         let strips = enumeration.strips
         extras["strip_count_before"] = strips.count
-        guard index < strips.count else {
-            return refusal(.elementNotFound, "track index out of range for the visible Mixer; nothing was pressed.")
+        let strip: AXUIElement
+        if let physical {
+            let members = strips.indices.filter { CFEqual(strips[$0], physical.strip) }
+            guard members.count == 1, let observedIndex = members.first,
+                  physical.currentIndex(runtime: runtime) == observedIndex else {
+                return refusal(.staleTargetReference, "The referenced physical source did not remain uniquely bound before its output read; nothing was pressed.")
+            }
+            index = observedIndex
+            extras["mixer_strip_index"] = index
+            strip = physical.strip
+        } else {
+            guard index < strips.count else {
+                return refusal(.elementNotFound, "track index out of range for the visible Mixer; nothing was pressed.")
+            }
+            strip = strips[index]
         }
-        let strip = strips[index]
 
         // The current output, read by R1's reader. Unreadable is not absent, and a label this
         // cannot classify cannot be compared with anything, so both refuse.
         guard let beforeLabel = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax) else {
             return refusal(.readbackUnavailable, "The strip's current output did not read. Unreadable is "
                 + "not absent, so there is nothing to compare the request with; nothing was pressed.")
+        }
+        if let physical, physical.currentIndex(runtime: runtime) != index {
+            return refusal(.staleTargetReference, "The referenced source changed during its current output read; nothing was pressed.")
         }
         guard let before = OutputAssignment.observed(slotLabel: beforeLabel) else {
             return refusal(.readbackUnavailable, "The strip's current output reads as a label this "
@@ -322,7 +337,14 @@ extension AccessibilityChannel {
             afterLabel = nil
             if let enumeration, enumeration.strips.count == strips.count,
                physical == nil || physical?.currentIndex(runtime: runtime) == index {
-                afterLabel = AXLogicProElements.outputSlotDestination(in: enumeration.strips[index], runtime: runtime.ax)
+                if let physical {
+                    if CFEqual(enumeration.strips[index], physical.strip) {
+                        afterLabel = AXLogicProElements.outputSlotDestination(in: physical.strip, runtime: runtime.ax)
+                        if physical.currentIndex(runtime: runtime) != index { afterLabel = nil }
+                    }
+                } else {
+                    afterLabel = AXLogicProElements.outputSlotDestination(in: enumeration.strips[index], runtime: runtime.ax)
+                }
             }
             after = afterLabel.flatMap(OutputAssignment.observed(slotLabel:))
             if after == destination { break }

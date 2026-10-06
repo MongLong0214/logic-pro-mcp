@@ -60,7 +60,7 @@ extension AccessibilityChannel {
 
         for (index, strip) in strips.enumerated() {
             if stop() { return nil }
-            let volume = AXLogicProElements.findVolumeFader(in: strip, runtime: runtime.ax)
+            let volume = AXLogicProElements.findVolumeFader(in: strip, runtime: runtime.ax, requireUnique: window != nil && mixer != nil)
                 .flatMap { AXValueExtractors.extractLogicMixerFaderValue($0, runtime: runtime.ax) }
                 ?? 0.0
             let pan = AXLogicProElements.findPanControl(in: strip, runtime: runtime.ax, requireUnique: window != nil && mixer != nil)
@@ -212,7 +212,7 @@ extension AccessibilityChannel {
         let slider: AXUIElement?
         if let physical {
             switch target {
-            case .volume: slider = AXLogicProElements.findVolumeFader(in: physical.strip, runtime: runtime.ax)
+            case .volume: slider = AXLogicProElements.findVolumeFader(in: physical.strip, runtime: runtime.ax, requireUnique: true)
             case .pan: slider = AXLogicProElements.findPanControl(in: physical.strip, runtime: runtime.ax, requireUnique: true)
             }
         } else {
@@ -314,7 +314,7 @@ extension AccessibilityChannel {
             guard physical.currentIndex(runtime: runtime) != nil else { return false }
             let current: AXUIElement?
             switch target {
-            case .volume: current = AXLogicProElements.findVolumeFader(in: physical.strip, runtime: runtime.ax)
+            case .volume: current = AXLogicProElements.findVolumeFader(in: physical.strip, runtime: runtime.ax, requireUnique: true)
             case .pan: current = AXLogicProElements.findPanControl(in: physical.strip, runtime: runtime.ax, requireUnique: true)
             }
             return current.map { CFEqual($0, slider) } == true

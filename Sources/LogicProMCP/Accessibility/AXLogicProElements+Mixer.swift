@@ -1098,17 +1098,27 @@ extension AXLogicProElements {
 
     static func findVolumeFader(
         in strip: AXUIElement,
-        runtime: AXHelpers.Runtime = .production
+        runtime: AXHelpers.Runtime = .production,
+        requireUnique: Bool = false
     ) -> AXUIElement? {
-        let sliders = AXHelpers.findAllDescendants(
-            of: strip, role: kAXSliderRole, maxDepth: 4, runtime: runtime
-        )
+        let failures = AXPluginInstanceIdentity.FailedReads()
+        let ax = requireUnique ? AXPluginInstanceIdentity.noting(failures, over: runtime) : runtime
+        let sliders: [AXUIElement]
+        if requireUnique {
+            guard let observed = completelyReadSliders(in: strip, runtime: ax) else { return nil }
+            sliders = observed
+        } else {
+            sliders = AXHelpers.findAllDescendants(
+                of: strip, role: kAXSliderRole, maxDepth: 4, runtime: ax
+            )
+        }
         // Second atlas adoption. This site had BOTH of the shapes ADR-007 exists to remove: it
         // returned the first description match when several qualified, and it fell back to
         // `sliders.first` — position 0 — when none did. Routing it through the resolver removes
         // both, because `failClosed` refuses an ambiguous set and there is no positional path to
         // fall into.
-        let candidates = volumeFaderCandidates(among: sliders, runtime: runtime)
+        let candidates = volumeFaderCandidates(among: sliders, runtime: ax)
+        if requireUnique, failures.any { return nil }
         if candidates.count == 1 { return candidates[0] }
         if candidates.count > 1 {
             Log.info("findVolumeFader: \(candidates.count) sliders satisfy the volume selector; "
@@ -1158,6 +1168,24 @@ extension AXLogicProElements {
         ambiguityPolicy: .failClosed
     )
 
+    /// The existing bounded walk, refusing unread roles/children and unseen boundary descendants.
+    /// Physical scalar selectors share this enumeration; legacy selectors keep their old walk.
+    private static func completelyReadSliders(in strip: AXUIElement, runtime: AXHelpers.Runtime) -> [AXUIElement]? {
+        guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else { return nil }
+        var observed: [AXUIElement] = []
+        for visit in walk {
+            if visit.depth == 4 {
+                guard let children = childrenIfRead(visit.element, runtime: runtime), children.isEmpty else { return nil }
+            }
+            let role: Result<String?, AXHelpers.AXStatusError> =
+                AXHelpers.getAttributeResult(visit.element, kAXRoleAttribute as String, runtime: runtime)
+            // A missing role is a possible competing slider, not a non-slider.
+            guard case .success(.some(let value)) = role, !value.isEmpty else { return nil }
+            if value == kAXSliderRole as String { observed.append(visit.element) }
+        }
+        return observed
+    }
+
     static func findPanControl(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production,
@@ -1167,18 +1195,7 @@ extension AXLogicProElements {
         let ax = requireUnique ? AXPluginInstanceIdentity.noting(failures, over: runtime) : runtime
         let sliders: [AXUIElement]
         if requireUnique {
-            guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: ax) else { return nil }
-            var observed: [AXUIElement] = []
-            for visit in walk {
-                if visit.depth == 4 {
-                    guard let children = childrenIfRead(visit.element, runtime: ax), children.isEmpty else { return nil }
-                }
-                let role: Result<String?, AXHelpers.AXStatusError> =
-                    AXHelpers.getAttributeResult(visit.element, kAXRoleAttribute as String, runtime: ax)
-                // A missing role is a possible competing slider, not a non-slider.
-                guard case .success(.some(let value)) = role, !value.isEmpty else { return nil }
-                if value == kAXSliderRole as String { observed.append(visit.element) }
-            }
+            guard let observed = completelyReadSliders(in: strip, runtime: ax) else { return nil }
             sliders = observed
         } else {
             sliders = AXHelpers.findAllDescendants(
@@ -1194,7 +1211,11 @@ extension AXLogicProElements {
             // without assigning physical pan from a slider's position in the strip.
             let volumes = volumeFaderCandidates(among: sliders, runtime: ax)
             guard !failures.any, sliders.count == 2, volumes.count == 1 else { return nil }
-            return sliders.first { !CFEqual($0, volumes[0]) }
+            guard let candidate = sliders.first(where: { !CFEqual($0, volumes[0]) }) else { return nil }
+            let text = sliderText(candidate, runtime: ax).text
+            guard !failures.any, !AXLocalePolicy.sliderSendHint.containsAny(in: text),
+                  !AXLocalePolicy.sliderZoomHint.containsAny(in: text) else { return nil }
+            return candidate
         }
         if let only = described.first {
             if described.count > 1 {
