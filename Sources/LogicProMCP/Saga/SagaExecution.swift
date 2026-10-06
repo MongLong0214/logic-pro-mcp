@@ -204,6 +204,7 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     /// deterministic; `sampled_at` is provenance metadata and never an input to
     /// a saga decision.
     private let now: @Sendable () -> Date
+    private let approvedSessionRepair: ApprovedSessionRepair?
     /// ADR-004 / issue #287 — qualification-only fault seam. nil in all normal
     /// operation (env unset); non-nil ONLY when the operator explicitly set
     /// `LOGIC_PRO_MCP_FAULT_INJECT=partial_state` to qualify compensation. A
@@ -224,7 +225,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         liveTrackName: (@Sendable (Int) -> String?)? = nil,
         liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
         now: @escaping @Sendable () -> Date = { Date() },
-        faultSeam: SagaPartialStateFaultSeam? = nil
+        faultSeam: SagaPartialStateFaultSeam? = nil,
+        approvedSessionRepair: ApprovedSessionRepair? = nil
     ) {
         self.router = router
         self.cache = cache
@@ -235,6 +237,7 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         self.liveTrackNames = liveTrackNames
         self.now = now
         self.faultSeam = faultSeam
+        self.approvedSessionRepair = approvedSessionRepair
     }
     #else
     init(
@@ -245,7 +248,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         liveReadback: SagaLiveReadback,
         liveTrackName: (@Sendable (Int) -> String?)? = nil,
         liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        approvedSessionRepair: ApprovedSessionRepair? = nil
     ) {
         self.router = router
         self.cache = cache
@@ -255,6 +259,7 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         self.liveTrackName = liveTrackName
         self.liveTrackNames = liveTrackNames
         self.now = now
+        self.approvedSessionRepair = approvedSessionRepair
     }
     #endif
 
@@ -276,15 +281,22 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         // start would clobber the parent's registration in the shared box,
         // and child traces would be uncorrelated orphans.
         let parentTraceID = OperationTraceContext.current?.traceID
-        return await OperationTraceContext.$current.withValue(
-            OperationTraceContext(parentTraceID: parentTraceID)
-        ) {
+        let parent = OperationTraceContext.current
+        let child: OperationTraceContext
+        if approvedSessionRepair == nil { child = OperationTraceContext(parentTraceID: parentTraceID) }
+        else {
+            child = OperationTraceContext(parentTraceID: parentTraceID,
+                mutationGateAcquired: parent?.mutationGateAcquired ?? false,
+                ownsGate: { parent?.ownsGate() ?? false }, deadline: parent?.deadline,
+                cancellationRequested: { parent?.cancellationRequested() ?? true })
+        }
+        return await OperationTraceContext.$current.withValue(child) {
             await runInChildTraceScope(step)
         }
     }
 
     private func runInChildTraceScope(_ step: SagaStep) async -> StepResult {
-        guard Self.allowlist.contains(step.operationID) else {
+        guard Self.allowlist.contains(step.operationID) || approvedSessionRepair?.supports(step) == true else {
             return StepResult(
                 state: .stateC,
                 writeBoundaryCrossed: false,
@@ -301,12 +313,16 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         }
 
         var params = step.params
-        if let targetRef = step.targetRef {
+        if let targetRef = step.targetRef, approvedSessionRepair?.supports(step) != true {
             params["target_ref"] = .string(targetRef.rawValue)
         }
 
         let response: CallTool.Result
         switch step.operationID {
+        case .navigateToggleView where approvedSessionRepair?.supports(step) == true:
+            response = await ApprovedSessionRepair.$current.withValue(approvedSessionRepair) {
+                await NavigateDispatcher.handle(command: "toggle_view", params: params, router: router, cache: cache)
+            }
         case .tracksRename:
             response = await TrackDispatcher.handle(
                 command: "rename",
@@ -379,7 +395,13 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
             )
         }
 
-        return Self.mapResponse(response, operationID: step.operationID)
+        let mapped = Self.mapResponse(response, operationID: step.operationID)
+        if approvedSessionRepair?.supports(step) == true,
+           case .text(let text, _, _) = response.content.first,
+           let body = decodedJSONObject(text), let attempted = body["write_attempted"] as? Bool {
+            return .init(state: mapped.state, writeBoundaryCrossed: attempted, detail: mapped.detail)
+        }
+        return mapped
     }
 
     /// LPMCP-PRD-004: every value returned here is an INDEPENDENT live AX read.
@@ -387,6 +409,9 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     /// returns nil, which the engine treats as `unknown` (fail-closed), rather
     /// than a mirror value that could be stale by a poll interval.
     func readState(_ step: SagaStep) async -> ObservedState? {
+        if let approvedSessionRepair, approvedSessionRepair.supports(step) {
+            return await approvedSessionRepair.readState(step)
+        }
         guard Self.allowlist.contains(step.operationID),
               let targetRef = step.targetRef,
               let binding = await targetRegistry.resolve(targetRef),
@@ -570,7 +595,8 @@ extension SagaStepExecutor {
         for (index, step) in plan.steps.enumerated() {
             let singleStepPlan = SagaPlan(
                 steps: [step],
-                idempotencyKey: "\(plan.idempotencyKey)#before-state-\(index)"
+                idempotencyKey: "\(plan.idempotencyKey)#before-state-\(index)",
+                canonicalPlanID: plan.canonicalPlanID, canonicalDigest: plan.canonicalDigest
             )
             let state = await captureBeforeState(plan: singleStepPlan)[0]
             availability.append(SagaBeforeStateAvailability(stepIndex: index, state: state))

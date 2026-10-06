@@ -117,6 +117,13 @@ actor StateCache {
         return record.plan.json
     }
 
+    func retainedRepairSource(id: String, digest: String) -> (ProjectSessionAudit.CanonicalRepairPlan, RetainedInspection)? {
+        guard retainedRepairPlan(id: id, digest: digest) != nil,
+              let record = repairPlans.first(where: { $0.plan.id == id }),
+              let inspection = retainedInspection(id: record.snapshotID) else { return nil }
+        return (record.plan, inspection)
+    }
+
     /// The cache version a reader captures immediately before starting a
     /// section refresh. Present it to a conditional write when the refresh
     /// completes so the actor can reject a value from a superseded read.

@@ -252,6 +252,7 @@ enum SemanticOracleTable {
         // Explicit Mixer final-state mode only; omitted blind toggles remain State B.
         .navigateToggleView,
         .navigateCaptureMarkers,
+        .projectApplySessionRepair,
     ]
 
     /// Every mutating operation the table covers: the B1 verified-write increment
@@ -598,6 +599,7 @@ enum SemanticOracleTable {
         // `postClosureMutatingOperationIDs` for why it is kept out of the phase sets.
         editMoveToPlayhead,
         navigateSetMixerVisibility,
+        projectApplySessionRepair,
     ]
 
     static let byOperationID: [OperationID: OperationOracle] = Dictionary(
@@ -2249,6 +2251,23 @@ enum SemanticOracleTable {
             .valueEquals(key: "saga_state", expected: .string("completed")),
             .typedField(key: "idempotency_key", type: .string),
             .typedField(key: "steps", type: .array),
+            .typedField(key: "state_history", type: .array),
+        ]
+    )
+
+    // Retained, explicitly approved Mixer-view plans use the existing session
+    // journal. This receipt oracle does not qualify generic Saga view steps,
+    // routing/naming repairs, independent host getters, or native execution.
+    static let projectApplySessionRepair = SafeMutationOracle.oracle(
+        .projectApplySessionRepair,
+        semantics: [
+            .valueEquals(key: "journal_scope", expected: .string("session")),
+            .valueEquals(key: "journal_survives_process_restart", expected: .bool(false)),
+            .valueEquals(key: "saga_state", expected: .string("completed")),
+            .typedField(key: "plan_id", type: .string),
+            .typedField(key: "digest", type: .string),
+            .typedField(key: "idempotency_key", type: .string),
+            .nonEmptyArray(key: "steps"),
             .typedField(key: "state_history", type: .array),
         ]
     )
