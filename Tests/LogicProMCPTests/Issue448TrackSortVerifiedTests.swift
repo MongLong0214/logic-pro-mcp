@@ -91,6 +91,8 @@ private struct TrackSortAXFixture: @unchecked Sendable {
         orderAfterPress: [Int],
         expectedReferenceOrder: [Int]? = nil,
         names: [String] = ["Kick", "Bass", "Piano"],
+        observedNames: [String]? = nil,
+        namesAfterPress: [String]? = nil,
         pressReturnsSuccess: Bool = true,
         collapsedStackAt: Int? = nil,
         railUnreadableAfterPress: Bool = false,
@@ -124,7 +126,7 @@ private struct TrackSortAXFixture: @unchecked Sendable {
         let headers = (0..<3).map { offset -> AXUIElement in
             let header = builder.element(448_100 + offset)
             builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
-            builder.setAttribute(header, kAXTitleAttribute as String, names[offset])
+            builder.setAttribute(header, kAXTitleAttribute as String, observedNames?[offset] ?? names[offset])
             if collapsedStackAt == offset {
                 let disclosure = builder.element(448_200 + offset)
                 builder.setAttribute(disclosure, kAXRoleAttribute as String, kAXDisclosureTriangleRole as String)
@@ -150,7 +152,7 @@ private struct TrackSortAXFixture: @unchecked Sendable {
         builder.setChildren(track, [sortBy])
         builder.setChildren(sortBy, [sortByName])
 
-        runtime = builder.makeLogicRuntime(
+        let ax = builder.makeAXRuntime(
             appElement: app,
             attributeValueResultHandler: { element, attribute in
                 if let windowsReadStatus,
@@ -202,9 +204,21 @@ private struct TrackSortAXFixture: @unchecked Sendable {
                     return false
                 }
                 probe.recordPress()
+                if let namesAfterPress {
+                    for (index, name) in namesAfterPress.enumerated() {
+                        builder.setAttribute(headers[index], kAXTitleAttribute as String, name)
+                    }
+                }
                 builder.setChildren(rail, orderAfterPress.map { headers[$0] })
                 return pressReturnsSuccess
-            }
+            }, executeAppleScript: { _ in Issue.record("AppleScript forbidden in the injected sort fixture"); return .error("forbidden") }
+        )
+        runtime = AXLogicProElements.Runtime(
+            logicProPID: { 4242 }, ax: ax,
+            executeAppleScript: { _ in Issue.record("AppleScript forbidden in the injected sort fixture"); return .error("forbidden") },
+            onScreenWindowList: { [] },
+            postPopupMenuEscape: { Issue.record("global Escape forbidden in the injected sort fixture") },
+            focusedApplicationPID: { 4242 }, observeFrontmost: nil
         )
         let expected = (expectedReferenceOrder ?? orderAfterPress).map {
             TrackSortExpectedTrack(
@@ -222,6 +236,71 @@ private struct TrackSortAXFixture: @unchecked Sendable {
 
 @Suite("#448 verified track sort")
 struct Issue448TrackSortVerifiedTests {
+    @Test(arguments: ["e\u{0301}", "\u{00e9}"])
+    func byteIdenticalNonASCIINameRetainsItsSortReference(name: String) throws {
+        let fixture = TrackSortAXFixture(orderAfterPress: [1, 0, 2], names: [name, "Bass", "Piano"])
+        let result = AccessibilityChannel.defaultSortTracks(params: [
+            "criterion": "track_name", "expected_order_json": fixture.expectedOrderJSON,
+        ], runtime: fixture.runtime)
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(body["state"] as? String == "A")
+        #expect(body["after_order"] as? [String] == ["trk_1", "trk_0", "trk_2"])
+        #expect(body["actuated_menu_item_label"] as? String == "트랙 이름")
+        #expect(fixture.actionProbe.pressCount == 1)
+        let afterName = try #require(AXHelpers.getTitle(fixture.initialHeaders[0], runtime: fixture.runtime.ax))
+        #expect(afterName.utf8.elementsEqual(name.utf8))
+    }
+
+    @Test func canonicalEquivalentDuplicateNamesStillRefuseBeforePress() throws {
+        let fixture = TrackSortAXFixture(orderAfterPress: [1, 0, 2], names: ["e\u{0301}", "\u{00e9}", "Piano"])
+        let result = AccessibilityChannel.defaultSortTracks(params: [
+            "criterion": "track_name", "expected_order_json": fixture.expectedOrderJSON,
+        ], runtime: fixture.runtime)
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(body["state"] as? String == "C")
+        #expect(body["reason"] as? String == "duplicate_name_reference_identity_unprovable")
+        #expect(fixture.actionProbe.pressCount == 0)
+        let attempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!attempted)
+        let order = AccessibilityChannel.trackSortAfterOrder(
+            afterNames: ["\u{00e9}", "e\u{0301}"], beforeNames: ["e\u{0301}", "\u{00e9}"],
+            beforeReferences: ["trk_0", "trk_1"])
+        #expect(order == nil)
+    }
+
+    @Test(arguments: ["before", "after"])
+    func canonicalEquivalentRawRenameCannotKeepAnIssuedSortIdentity(phase: String) throws {
+        let issuedNames = ["e\u{0301}", "Bass", "Piano"]
+        let changedNames = ["\u{00e9}", "Bass", "Piano"]
+        let fixture = TrackSortAXFixture(orderAfterPress: [1, 0, 2], names: issuedNames,
+            observedNames: phase == "before" ? changedNames : nil,
+            namesAfterPress: phase == "after" ? changedNames : nil)
+        let result = AccessibilityChannel.defaultSortTracks(params: [
+            "criterion": "track_name", "expected_order_json": fixture.expectedOrderJSON,
+        ], runtime: fixture.runtime)
+        let body = try #require(sharedJSONObject(result.message))
+        let observedName = try #require(AXHelpers.getTitle(fixture.initialHeaders[0], runtime: fixture.runtime.ax))
+        #expect(Array(observedName.utf8) == Array(changedNames[0].utf8))
+        #expect(Array(observedName.utf8) != Array(issuedNames[0].utf8))
+        switch AXLogicProElements.logicUILocaleIdentifierRead(runtime: fixture.runtime) {
+        case .locale(let locale): #expect(locale == "ko-KR")
+        case .absent, .unreadable: Issue.record("the injected sort fixture must expose its measured Korean locale")
+        }
+        if phase == "before" {
+            #expect(fixture.actionProbe.pressCount == 0)
+            #expect(body["state"] as? String == "C")
+            #expect(body["reason"] as? String == "expected_order_track_refs_not_in_before_order")
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!attempted)
+        } else {
+            #expect(fixture.actionProbe.pressCount == 1)
+            #expect(body["state"] as? String == "B")
+            #expect(body["detail"] as? String == "after_order_unreadable")
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(attempted)
+        }
+    }
+
     @Test("an unknown sort criterion is rejected before any AX work")
     func unknownCriterionRefuses() {
         let criterion = TrackSortCriterion(rawValue: "not_a_sort_criterion")
