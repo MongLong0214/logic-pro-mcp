@@ -902,7 +902,8 @@ actor LogicProServer {
                         guard let heldMutationGate, let heldClaim else { return true }
                         return heldMutationGate.stillOwns(heldClaim)
                     },
-                    deadline: operationDeadline
+                    deadline: operationDeadline,
+                    cancellationRequested: { freshPopulationRead && callerCancellation.isCancelled }
                 )
                 let workTask = Task.detached(priority: .userInitiated) {
                     if freshPopulationRead && callerCancellation.isCancelled {

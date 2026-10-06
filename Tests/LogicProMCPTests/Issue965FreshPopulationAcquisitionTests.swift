@@ -270,6 +270,89 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect(gate.currentOperation() == nil)
     }
 
+    @Test func callerCancellationIsRememberedByTheOwnedContext() async throws {
+        let suspended = SuspendedRead()
+        let caller = Task {
+            await LogicProServer.runWithDeadline(
+                tool: "logic_project", command: "inspect_session", mutationGate: LogicMutationGate()
+            ) {
+                await suspended.suspend()
+                let context = OperationTraceContext.current
+                return toolTextResult(encodeJSON(Value.object([
+                    "caller_cancelled": .bool(context?.cancellationRequested() ?? false)
+                ])))
+            }
+        }
+        await suspended.waitForEntry()
+        caller.cancel()
+        await suspended.release()
+        let result = await caller.value
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(try #require(body["caller_cancelled"] as? Bool),
+                "owned checks must observe remembered cancellation, not just task.cancel delivery")
+    }
+
+    @Test func rememberedCancellationRefusesAnUncancelledWorker() async throws {
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(
+            mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) },
+            cancellationRequested: { true }
+        )
+        let result = await OperationTraceContext.$current.withValue(context) {
+            #expect(!Task.isCancelled,
+                    "the fixture represents cancellation remembered before worker registration")
+            #expect(context.ownsGate())
+            do {
+                try SessionPopulationObservation.requireOwnedAcquisition()
+                return toolTextResult("{\"replacement_published\":true}")
+            } catch SessionPopulationObservation.AcquisitionError.cancelled {
+                return toolStateCResult(.cancelled, extras: ["write_attempted": false])
+            } catch {
+                return toolStateCResult(.readbackUnavailable, extras: ["write_attempted": false])
+            }
+        }
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(body["error"] as? String == "cancelled")
+        #expect(body["replacement_published"] == nil)
+    }
+
+    @Test func rememberedCancellationStopsTheRegisteredProducerBeforeAX() async throws {
+        let fixture = Fixture()
+        let cache = StateCache()
+        await cache.updateProject(ProjectInfo(name: "Original project"))
+        await cache.updateTracks([TrackState(id: 0, name: "Original cached row", type: .audio)])
+        let registry = TargetRegistry()
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(
+            mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) },
+            cancellationRequested: { true }
+        )
+        let dependencies = HandlerDependencies(
+            router: ChannelRouter(), cache: cache, targetRegistry: registry,
+            poller: StatePoller(axChannel: fixture.channel(), cache: cache,
+                                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable)),
+            dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+            liveTrackNames: { [:] }, projectFileReader: .unavailable
+        )
+        let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+        let result = await OperationTraceContext.$current.withValue(context) {
+            #expect(!Task.isCancelled)
+            #expect(context.ownsGate())
+            return await handler(dependencies, ["domains": .array([.string("tracks")])])
+        }
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(body["error"] as? String == "cancelled")
+        #expect(body["snapshot_id"] == nil)
+        #expect(fixture.reads.count == 0)
+        #expect(await cache.getProject().name == "Original project")
+        #expect(await cache.getTracks().map(\.name) == ["Original cached row"])
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
     @Test(arguments: [false, true])
     func stoppedPollerCannotAcquireWithoutABackgroundLoop(awaitStop: Bool) async throws {
         let fixture = Fixture()

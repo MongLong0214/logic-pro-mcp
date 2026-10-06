@@ -97,17 +97,21 @@ final class OperationTraceContext: @unchecked Sendable {
     let ownsGate: @Sendable () -> Bool
     /// One shared monotonic deadline, including time spent waiting for the poll cycle.
     let deadline: ContinuousClock.Instant?
+    /// The caller's remembered cancellation, independent of detached-task registration.
+    let cancellationRequested: @Sendable () -> Bool
 
     init(
         parentTraceID: TraceID? = nil,
         mutationGateAcquired: Bool = false,
         ownsGate: @escaping @Sendable () -> Bool = { true },
-        deadline: ContinuousClock.Instant? = nil
+        deadline: ContinuousClock.Instant? = nil,
+        cancellationRequested: @escaping @Sendable () -> Bool = { false }
     ) {
         self.parentTraceID = parentTraceID
         self.mutationGateAcquired = mutationGateAcquired
         self.ownsGate = ownsGate
         self.deadline = deadline
+        self.cancellationRequested = cancellationRequested
     }
 
     var traceID: TraceID? {

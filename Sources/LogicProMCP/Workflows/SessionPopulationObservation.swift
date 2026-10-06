@@ -34,8 +34,11 @@ enum SessionPopulationObservation {
     }
 
     static func requireOwnedAcquisition() throws {
-        if Task.isCancelled { throw AcquisitionError.cancelled }
-        guard let context = OperationTraceContext.current,
+        let context = OperationTraceContext.current
+        if Task.isCancelled || context?.cancellationRequested() == true {
+            throw AcquisitionError.cancelled
+        }
+        guard let context,
               context.mutationGateAcquired, context.ownsGate() else {
             throw AcquisitionError.ownershipLost
         }
