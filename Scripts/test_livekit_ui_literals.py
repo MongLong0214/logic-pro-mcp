@@ -345,6 +345,25 @@ def _bindings_of(bindings):
     return (bindings,) if isinstance(bindings, str) else bindings
 
 
+for _site, _scan_one, _literal, _label, _binding, _protocol in (
+        ("engine.py", scan_verify, "all", "mixerPresentationAll",
+         "def locale_problems(locales) -> list", 'locales == "all"'),
+        ("engine.py", scan_verify, "all", "mixerPresentationAll",
+         "def required_locales(spec: dict) -> list", 'spec["locales"] == "all"'),
+        ("live_291_input_slot_is_read.py", lambda site, body, known: scan(body, known, site),
+         "input", "mixerTypeFilterInput", "for r in witness", 'r["kind"] == "input"')):
+    _known = {_literal: _label}
+    _found = _scan_one(_site, _bound(_binding, _protocol), _known)
+    case(f"{_protocol} is a pure protocol sentinel under its actual binding",
+         _found == [], f"found={_found!r}")
+    _found = _scan_one(_site, _bound(_binding, f'{_protocol} and ui_title == "{_literal}"'), _known)
+    case(f"{_protocol} does not exempt a same-word GUI title beside it",
+         [f[1] for f in _found] == [_literal], f"found={_found!r}")
+    _found = _scan_one(_site, f'ui_title = ""\nv = ui_title == "{_literal}"\n', _known)
+    case(f"the {_literal} GUI title remains rejected in the protocol's file",
+         [f[1] for f in _found] == [_literal], f"found={_found!r}")
+
+
 def _variants(expression, literal):
     """The entry with its name longer, continued by a combining mark or read from something, and
     with its operand reading something, joined by an operator or read further. The name is changed

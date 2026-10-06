@@ -270,6 +270,7 @@ actor StatePoller {
                         guard let navigationProject, let targetRegistry else { return false }
                         return await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor == navigationProject
                     },
+                    stoppingBeforeAXRead: { stop() || guardian.stopped },
                     stoppingWhen: { stop() || guardian.stopped || Self.backgroundTickYields(to: focus()) }
                 )
             }

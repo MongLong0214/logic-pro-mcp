@@ -36,19 +36,27 @@ extension AXLogicProElements {
     }
 
     static func mixerAreaLookup(in window: AXUIElement, runtime: Runtime) -> MixerAreaLookup {
-
-        // Legacy/test-path lookup. Older Logic builds and existing fake AX
-        // trees expose the mixer with AXIdentifier="Mixer".
+        // Preserve the ordinary reader's historical ID-first behavior. Request acquisition
+        // uses the same candidate walk below with per-read cancellation checks instead.
         if let mixer = AXHelpers.findDescendant(
             of: window, role: kAXGroupRole, identifier: "Mixer", runtime: runtime.ax
-        ) {
-            return .found(mixer)
-        }
+        ) { return .found(mixer) }
         if let mixer = AXHelpers.findDescendant(
             of: window, role: kAXScrollAreaRole, identifier: "Mixer", runtime: runtime.ax
-        ) {
-            return .found(mixer)
-        }
+        ) { return .found(mixer) }
+        return (try? mixerPopulationAreaLookup(in: window, runtime: runtime))?.lookup ?? .childrenUnread
+    }
+
+    struct MixerAreaBinding {
+        let mixer: AXUIElement
+        let owners: [AXUIElement]
+        var path: [AXUIElement] = []
+    }
+
+    static func mixerPopulationAreaLookup(
+        in window: AXUIElement, runtime: Runtime, checking check: () throws -> Void = {}
+    ) throws -> (lookup: MixerAreaLookup, binding: MixerAreaBinding?) {
+        try check()
 
         // #234: Logic Pro 12.2 exposes the visible bottom Mixer as:
         //   AXGroup(desc:"믹서") -> AXLayoutArea(desc:"믹서") -> AXLayoutItem strips
@@ -57,16 +65,21 @@ extension AXLogicProElements {
         // Do not fall back to the Inspector's small two-strip "믹서" area; that
         // would make a full mixer read silently return only selected-track +
         // output strips.
-        let scan = mixerAreaCandidates(in: window, runtime: runtime.ax)
-        let best = scan.candidates
+        let scan = try mixerAreaCandidates(in: window, runtime: runtime.ax, checking: check)
+        // Existing fake/older AXIdentifier contracts remain supported, including an empty
+        // ID-bound container. They no longer require separate unchecked recursive walks.
+        let legacy = scan.candidates.first { $0.legacyRole == (kAXGroupRole as String) }
+            ?? scan.candidates.first { $0.legacyRole == (kAXScrollAreaRole as String) }
+        let best = legacy ?? scan.candidates
             .sorted { lhs, rhs in
                 if lhs.stripCount != rhs.stripCount { return lhs.stripCount > rhs.stripCount }
                 return lhs.totalChildCount > rhs.totalChildCount
             }
-            .first?
-            .element
-        if let best { return .found(best) }
-        return scan.sawUnreadMixerContainer ? .childrenUnread : .notFound
+            .first
+        if let best {
+            return (.found(best.element), .init(mixer: best.element, owners: best.owners, path: best.path))
+        }
+        return (scan.sawUnreadMixerContainer ? .childrenUnread : .notFound, nil)
     }
 
     /// #107: the per-track volume fader inside the track HEADER (an AXSlider
@@ -236,20 +249,29 @@ extension AXLogicProElements {
         let element: AXUIElement
         let stripCount: Int
         let totalChildCount: Int
+        let owners: [AXUIElement]
+        let path: [AXUIElement]
+        let legacyRole: String?
     }
 
     private static func mixerAreaCandidates(
         in root: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) -> (candidates: [MixerAreaCandidate], sawUnreadMixerContainer: Bool) {
+        runtime: AXHelpers.Runtime,
+        checking check: () throws -> Void
+    ) throws -> (candidates: [MixerAreaCandidate], sawUnreadMixerContainer: Bool) {
         var candidates: [MixerAreaCandidate] = []
         var sawUnreadMixerContainer = false
-        collectMixerAreaCandidates(
+        var remainingNodes = 4096
+        _ = try collectMixerAreaCandidates(
             root,
             runtime: runtime,
             depth: 0,
             ancestorIsInspector: false,
             ancestorIsMixer: false,
+            ancestors: [],
+            owners: [],
+            remainingNodes: &remainingNodes,
+            checking: check,
             into: &candidates,
             sawUnreadMixerContainer: &sawUnreadMixerContainer
         )
@@ -262,50 +284,88 @@ extension AXLogicProElements {
         depth: Int,
         ancestorIsInspector: Bool,
         ancestorIsMixer: Bool,
+        ancestors: [AXUIElement],
+        owners: [AXUIElement],
+        remainingNodes: inout Int,
+        checking check: () throws -> Void,
         into candidates: inout [MixerAreaCandidate],
         sawUnreadMixerContainer: inout Bool
-    ) {
-        guard depth <= 12 else { return }
+    ) throws -> Bool {
+        try check()
+        guard depth <= 12 else { return false }
+        guard remainingNodes > 0, !ancestors.contains(where: { CFEqual($0, element) }) else {
+            if ancestorIsMixer { sawUnreadMixerContainer = true }
+            return false
+        }
+        remainingNodes -= 1
 
-        let text = elementSearchText(element, runtime: runtime)
+        func metadata(_ attribute: String) throws -> String? {
+            try check()
+            return AXHelpers.getAttribute(element, attribute, runtime: runtime)
+        }
+        let role = try metadata(kAXRoleAttribute)
+        let identifier = try metadata(kAXIdentifierAttribute)
+        let description = try metadata(kAXDescriptionAttribute)
+        let title = try metadata(kAXTitleAttribute)
+        let help = try metadata(kAXHelpAttribute)
+        let text = [identifier, description, title, help].compactMap { $0 }.joined(separator: " ").lowercased()
         let isInspector = ancestorIsInspector
             || AXLocalePolicy.mixerInspectorContext.containsAny(in: text)
         let isMixerContainer = !isInspector
-            && isMixerNamedElement(element, runtime: runtime)
-            && isMixerContainerRole(AXHelpers.getRole(element, runtime: runtime))
+            && [identifier, description, title].contains { AXLocalePolicy.mixerNamedElement.containsNormalized($0) }
+            && isMixerContainerRole(role)
+        let legacyRole = !isInspector && identifier == "Mixer"
+            && (role == (kAXGroupRole as String) || role == (kAXScrollAreaRole as String)) ? role : nil
         // Read once, with its status (#982). `getChildren` answers a failed read with [], which
         // made a Mixer whose children did not read look like a container with no strips. A failed
         // read inside a Mixer-named container outside the Inspector (12.3 puts an unnamed group
         // between its outer group and the layout area) hides strips that may be there.
+        try check()
         guard let children = childrenIfRead(element, runtime: runtime) else {
             if !isInspector, ancestorIsMixer || isMixerContainer {
                 sawUnreadMixerContainer = true
             }
-            return
+            return false
         }
 
         if isMixerContainer {
-            let strips = channelStripLayoutItems(children, runtime: runtime)
-            if !strips.isEmpty {
+            var stripCount = 0
+            for child in children {
+                try check()
+                if AXHelpers.getRole(child, runtime: runtime) == (kAXLayoutItemRole as String) { stripCount += 1 }
+            }
+            if stripCount > 0 || legacyRole != nil {
                 candidates.append(MixerAreaCandidate(
                     element: element,
-                    stripCount: strips.count,
-                    totalChildCount: children.count
+                    stripCount: stripCount,
+                    totalChildCount: children.count,
+                    owners: owners,
+                    path: ancestors + [element],
+                    legacyRole: legacyRole
                 ))
+                // The first legacy Group is already the ID-first lookup's winner.
+                // Retain its owner/path without reading unrelated later subtrees.
+                // A ScrollArea cannot stop the walk: a later Group takes priority.
+                if legacyRole == (kAXGroupRole as String) { return true }
             }
         }
 
         for child in children {
-            collectMixerAreaCandidates(
+            if try collectMixerAreaCandidates(
                 child,
                 runtime: runtime,
                 depth: depth + 1,
                 ancestorIsInspector: isInspector,
                 ancestorIsMixer: !isInspector && (ancestorIsMixer || isMixerContainer),
+                ancestors: ancestors + [element],
+                owners: isMixerContainer ? owners + [element] : owners,
+                remainingNodes: &remainingNodes,
+                checking: check,
                 into: &candidates,
                 sawUnreadMixerContainer: &sawUnreadMixerContainer
-            )
+            ) { return true }
         }
+        return false
     }
 
     private static func isMixerContainerRole(_ role: String?) -> Bool {
@@ -313,6 +373,163 @@ extension AXLogicProElements {
         return role == (kAXGroupRole as String)
             || role == (kAXScrollAreaRole as String)
             || role == "AXLayoutArea"
+    }
+
+    struct MixerPresentationRead {
+        let presentation: SessionPopulationObservation.MixerPresentation
+        let elements: [AXUIElement]
+    }
+
+    /// Only sibling toolbar controls belonging to the discovery's retained Mixer owner
+    /// can describe the retained strip area. No window-global radio/checkbox fallback.
+    static func mixerPresentationRead(
+        binding: MixerAreaBinding, runtime: AXHelpers.Runtime, checking check: () throws -> Void
+    ) throws -> MixerPresentationRead {
+        var result = SessionPopulationObservation.MixerPresentation()
+        var elements = [binding.mixer] + binding.owners
+        let modeLabels: [(String, AXLocalePolicy.LabelSet)] = [
+            ("single", AXLocalePolicy.mixerPresentationSingle),
+            ("tracks", AXLocalePolicy.mixerPresentationTracks),
+            ("all", AXLocalePolicy.mixerPresentationAll),
+        ]
+        let filterLabels: [(String, AXLocalePolicy.LabelSet)] = [
+            ("audio", AXLocalePolicy.mixerTypeFilterAudio),
+            ("instrument", AXLocalePolicy.mixerTypeFilterInstrument),
+            ("aux", AXLocalePolicy.mixerTypeFilterAux),
+            ("bus", AXLocalePolicy.mixerTypeFilterBus),
+            ("input", AXLocalePolicy.mixerTypeFilterInput),
+            ("output", AXLocalePolicy.mixerTypeFilterOutput),
+            ("master_vca", AXLocalePolicy.mixerTypeFilterMasterVCA),
+            ("midi", AXLocalePolicy.mixerTypeFilterMIDI),
+        ]
+        func text(_ element: AXUIElement, _ attribute: String) throws -> String? {
+            try check()
+            let read: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                element, attribute as String, runtime: runtime
+            )
+            guard case .success(let value) = read else { return nil }
+            return value
+        }
+        func children(_ element: AXUIElement) throws -> [AXUIElement]? {
+            try check()
+            guard case .success(let values) = AXHelpers.childrenResult(element, runtime: runtime),
+                  values.count <= 64, !values.contains(where: { CFEqual($0, element) }) else { return nil }
+            return values
+        }
+        func value(_ element: AXUIElement) throws -> Bool? {
+            try check()
+            let read: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                element, kAXValueAttribute as String, runtime: runtime
+            )
+            guard case .success(let raw?) = read, let number = raw as? NSNumber else { return nil }
+            switch number.doubleValue { case 0: return false; case 1: return true; default: return nil }
+        }
+        guard let owner = binding.owners.last,
+              try text(owner, kAXRoleAttribute) == (kAXGroupRole as String),
+              let ownerChildren = try children(owner) else {
+            return .init(presentation: result, elements: elements)
+        }
+        // Discovery and presentation are separate AX reads. Re-observe every retained
+        // edge from this owner to the inner area, including 12.3's unnamed wrapper.
+        guard let ownerIndex = binding.path.lastIndex(where: { CFEqual($0, owner) }),
+              let last = binding.path.last, CFEqual(last, binding.mixer),
+              ownerIndex + 1 < binding.path.count else {
+            return .init(presentation: result, elements: elements)
+        }
+        let innerPath = Array(binding.path[(ownerIndex + 1)...])
+        var membership = ownerChildren
+        for (index, descendant) in innerPath.enumerated() {
+            guard membership.filter({ CFEqual($0, descendant) }).count == 1 else {
+                return .init(presentation: result, elements: elements)
+            }
+            elements.append(descendant)
+            if index + 1 < innerPath.count {
+                guard let nested = try children(descendant) else {
+                    return .init(presentation: result, elements: elements)
+                }
+                membership = nested
+            }
+        }
+        var toolbars: [AXUIElement] = []
+        for child in ownerChildren {
+            guard let role = try text(child, kAXRoleAttribute) else {
+                return .init(presentation: result, elements: elements)
+            }
+            if role == (kAXGroupRole as String) {
+                guard let description = try text(child, kAXDescriptionAttribute) else {
+                    return .init(presentation: result, elements: elements)
+                }
+                if AXLocalePolicy.mixerNamedElement.containsNormalized(description) { toolbars.append(child) }
+            }
+        }
+        guard toolbars.count == 1, let toolbar = toolbars.first,
+              let groups = try children(toolbar) else {
+            return .init(presentation: result, elements: elements)
+        }
+        elements.append(toolbar)
+        var modes: [[(String, AXUIElement)]] = []
+        var directModes: [(String, AXUIElement)] = []
+        var filters: [[(String, AXUIElement)]] = []
+        for group in groups {
+            guard let role = try text(group, kAXRoleAttribute) else {
+                return .init(presentation: result, elements: elements)
+            }
+            // Current 12.3 also exposes mode radios directly, alongside width radios.
+            // Only exact mode descriptions belong to this set; width selection is not mode.
+            if role == (kAXRadioButtonRole as String) {
+                elements.append(group)
+                guard let description = try text(group, kAXDescriptionAttribute) else {
+                    return .init(presentation: result, elements: elements)
+                }
+                let keys = modeLabels.filter { $0.1.containsNormalized(description) }
+                if keys.count == 1 { directModes.append((keys[0].0, group)) }
+                continue
+            }
+            let isModeGroup = role == (kAXRadioGroupRole as String)
+            let isFilterGroup = role == (kAXGroupRole as String)
+            guard isModeGroup || isFilterGroup else { continue }
+            guard let controls = try children(group) else {
+                return .init(presentation: result, elements: elements)
+            }
+            elements.append(group)
+            elements.append(contentsOf: controls)
+            var matches: [(String, AXUIElement)] = []
+            for control in controls {
+                guard let controlRole = try text(control, kAXRoleAttribute) else {
+                    return .init(presentation: result, elements: elements)
+                }
+                let expectedRole = isModeGroup ? kAXRadioButtonRole : kAXCheckBoxRole
+                guard controlRole == (expectedRole as String) else { continue }
+                guard let description = try text(control, kAXDescriptionAttribute) else {
+                    return .init(presentation: result, elements: elements)
+                }
+                let labels = isModeGroup ? modeLabels : filterLabels
+                let keys = labels.filter { $0.1.containsNormalized(description) }
+                if keys.count == 1 { matches.append((keys[0].0, control)) }
+            }
+            // A partial or duplicated candidate is retained as a candidate, never discarded
+            // so that a second, convenient group could become the apparently unique one.
+            if !matches.isEmpty {
+                if isModeGroup { modes.append(matches.count == controls.count ? matches : []) }
+                else { filters.append(matches.count == controls.count ? matches : []) }
+            }
+        }
+        if !directModes.isEmpty { modes.append(directModes) }
+        if modes.count == 1, let controls = modes.first,
+           controls.count == modeLabels.count, Set(controls.map { $0.0 }).count == modeLabels.count {
+            var selected: [String] = []
+            var allRead = true
+            for (key, control) in controls {
+                if let enabled = try value(control) { if enabled { selected.append(key) } }
+                else { allRead = false }
+            }
+            if allRead, selected.count == 1 { result.mode = selected[0] }
+        }
+        if filters.count == 1, let controls = filters.first,
+           controls.count == filterLabels.count, Set(controls.map { $0.0 }).count == filterLabels.count {
+            for (key, control) in controls { result.typeFilters[key] = .some(try value(control)) }
+        }
+        return .init(presentation: result, elements: elements)
     }
 
     private static func isMixerNamedElement(
