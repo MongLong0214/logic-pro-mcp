@@ -95,7 +95,10 @@ struct Issue60LocalePhase4Tests {
             ("trackHeadersDescription", AXLocalePolicy.trackHeadersDescription.labels,
              ["track headers", "track header", "tracks header", "tracks headers", "트랙 헤더",
               "Spuren Titel", "トラックヘッダ", "Cabecera de Pistas", "En-tête Pistes", "Intestazione di Tracce", "Cabeçalho de Pistas", "轨道 标头", "音軌 標題"]),
-            ("projectPickerWindow", AXLocalePolicy.projectPickerWindow.labels, ["프로젝트 선택", "choose a project", "choose project", "new from template"]),
+            ("projectPickerWindow", AXLocalePolicy.projectPickerWindow.labels,
+             ["프로젝트 선택", "choose a project", "choose project", "new from template",
+              "プロジェクトを選択", "Wähle ein Projekt aus", "Seleccionar un proyecto", "Choisir un projet",
+              "Scegli un progetto", "Escolha um projeto", "选取项目", "選擇計畫案"]),
             ("transportTextFieldHint", AXLocalePolicy.transportTextFieldHint.labels, ["tempo", "bpm", "position", "템포", "재생헤드 위치"]),
             // `Spuren enthält` added 2026-09-12 (#876), same census, same reason as the row above.
             // Extended 2026-09-28 (#904) by composition, not from a row: Apple's `%@ contents`
