@@ -1,0 +1,164 @@
+# Synthetic hosted artifact transport exercise for #1126, not product qualification.
+# The production source of artifact wiring is release.yml at this branch's base.
+name: Release artifact rerun exercise
+
+on:
+  push:
+    branches: [ci/release-artifact-rerun-exercise]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    outputs:
+      verified_artifact_name: ${{ steps.artifact-name.outputs.name }}
+      verified_artifact_id: ${{ steps.upload-verified-release-artifacts.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Assert artifact wiring derives from the production workflow
+        run: |
+          ruby <<'RUBY'
+          require "yaml"
+          release = YAML.safe_load(File.read(".github/workflows/release.yml"), aliases: true)
+          exercise = YAML.safe_load(File.read(".github/workflows/release-artifact-rerun-exercise.yml"), aliases: true)
+          producer = release.fetch("jobs").fetch("build-release")
+          shadow = exercise.fetch("jobs").fetch("build-release")
+          raise "producer outputs differ" unless producer.fetch("outputs") == shadow.fetch("outputs")
+          %w[artifact-name upload-verified-release-artifacts].each do |id|
+            original = producer.fetch("steps").find { |step| step["id"] == id }
+            copied = shadow.fetch("steps").find { |step| step["id"] == id }
+            raise "missing producer step #{id}" unless original && copied
+            if id == "artifact-name"
+              raise "producer naming differs" unless original.fetch("run") == copied.fetch("run")
+            else
+              raise "upload pin differs" unless original.fetch("uses") == copied.fetch("uses")
+              %w[name if-no-files-found].each do |key|
+                raise "upload #{key} differs" unless original.fetch("with").fetch(key) == copied.fetch("with").fetch(key)
+              end
+            end
+          end
+          %w[validate-install publish verify-published].each do |job|
+            original = release.fetch("jobs").fetch(job).fetch("steps").find { |step| step.fetch("uses", "").start_with?("actions/download-artifact@") }
+            copied = exercise.fetch("jobs").fetch(job).fetch("steps").find { |step| step.fetch("uses", "").start_with?("actions/download-artifact@") }
+            raise "missing consumer download #{job}" unless original && copied
+            raise "download pin differs for #{job}" unless original.fetch("uses") == copied.fetch("uses")
+            raise "consumer name differs for #{job}" unless original.fetch("with").fetch("name") == copied.fetch("with").fetch("name")
+            expected_needs = release.fetch("jobs").fetch(job).fetch("needs")
+            raise "consumer dependencies differ for #{job}" unless expected_needs == exercise.fetch("jobs").fetch(job).fetch("needs")
+          end
+          puts "Production artifact outputs, naming, action pins, consumer names and dependencies match."
+          RUBY
+
+      - name: Create synthetic sentinel and producer evidence
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'Synthetic transport sentinel only; not a product binary, install, signing or notary qualification.' > sentinel.txt
+          printf 'producer_run_id=%s\nproducer_run_attempt=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > producer.txt
+          sha256sum sentinel.txt producer.txt > release-artifacts.sha256
+          cat producer.txt
+
+      - name: Name verified release artifacts
+        id: artifact-name
+        run: echo "name=verified-release-artifacts-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload verified release artifacts
+        id: upload-verified-release-artifacts
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        with:
+          name: ${{ steps.artifact-name.outputs.name }}
+          if-no-files-found: error
+          path: |
+            sentinel.txt
+            producer.txt
+            release-artifacts.sha256
+
+  validate-install:
+    # Intentional first-attempt failure occurs only after artifact download and checksum verification.
+    # This job does NOT install anything.
+    needs: build-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.build-release.outputs.verified_artifact_name }}
+
+      - name: Verify synthetic transport and report producer
+        env:
+          PRODUCER_ARTIFACT_NAME: ${{ needs.build-release.outputs.verified_artifact_name }}
+          PRODUCER_ARTIFACT_ID: ${{ needs.build-release.outputs.verified_artifact_id }}
+        run: |
+          set -euo pipefail
+          {
+            sha256sum --check release-artifacts.sha256
+            cat producer.txt
+            printf 'producer_artifact_name=%s\nproducer_artifact_id=%s\nconsumer_run_attempt=%s\n' "$PRODUCER_ARTIFACT_NAME" "$PRODUCER_ARTIFACT_ID" "$GITHUB_RUN_ATTEMPT"
+          } | tee verification.log
+
+      - name: Fail the first attempt after verified download
+        if: ${{ github.run_attempt == 1 }}
+        run: |
+          echo 'Intentional sentinel exercise failure after checksum success; rerun failed jobs to exercise retained producer outputs.'
+          exit 1
+
+      - name: Preserve intentional-failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        with:
+          name: release-exercise-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            verification.log
+            producer.txt
+            release-artifacts.sha256
+
+  publish:
+    # Synthetic checksum only: no release, tag, registry, installer or public write.
+    needs: [build-release, validate-install]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.build-release.outputs.verified_artifact_name }}
+
+      - name: No-op publish verifies the synthetic bytes
+        env:
+          PRODUCER_ARTIFACT_NAME: ${{ needs.build-release.outputs.verified_artifact_name }}
+          PRODUCER_ARTIFACT_ID: ${{ needs.build-release.outputs.verified_artifact_id }}
+        run: |
+          set -euo pipefail
+          sha256sum --check release-artifacts.sha256
+          cat producer.txt
+          printf 'producer_artifact_name=%s\nproducer_artifact_id=%s\nconsumer_run_attempt=%s\n' "$PRODUCER_ARTIFACT_NAME" "$PRODUCER_ARTIFACT_ID" "$GITHUB_RUN_ATTEMPT"
+          echo 'No-op only; nothing was published.'
+
+  verify-published:
+    # Rerun this job alone after the failed-only rerun succeeds; it still follows producer outputs.
+    needs: [build-release, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the artifact this run verified
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.build-release.outputs.verified_artifact_name }}
+
+      - name: No-op published verification reports producer evidence
+        env:
+          PRODUCER_ARTIFACT_NAME: ${{ needs.build-release.outputs.verified_artifact_name }}
+          PRODUCER_ARTIFACT_ID: ${{ needs.build-release.outputs.verified_artifact_id }}
+        run: |
+          set -euo pipefail
+          sha256sum --check release-artifacts.sha256
+          cat producer.txt
+          printf 'producer_artifact_name=%s\nproducer_artifact_id=%s\nconsumer_run_attempt=%s\n' "$PRODUCER_ARTIFACT_NAME" "$PRODUCER_ARTIFACT_ID" "$GITHUB_RUN_ATTEMPT"
+          echo 'Synthetic transport only; native, installer, signing, notary and product acceptance remain unqualified.'
