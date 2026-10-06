@@ -102,6 +102,7 @@ struct TargetBinding: Sendable {
     let descriptor: TargetDescriptor
     let observedFingerprint: String
     let pluginInsertIndex: Int?
+    var physicalTrack: AXTrackBinding.Binding? = nil
     let createdAt: ContinuousClock.Instant
 }
 
@@ -155,21 +156,30 @@ actor TargetRegistry {
         kind: TargetKind,
         descriptor: TargetDescriptor,
         fingerprint: String,
-        pluginInsertIndex: Int? = nil
+        pluginInsertIndex: Int? = nil,
+        physicalTrack: AXTrackBinding.Binding? = nil
     ) -> TargetReference {
         if kind == .project, currentProjectDescriptor != descriptor {
             currentProjectDescriptor = descriptor
             bindings = bindings.filter { $0.value.kind != .project }
         }
-        if let binding = bindings.values.first(where: {
-            $0.kind == kind
-                && $0.serverSessionID == serverSessionID
-                && $0.projectEpoch == projectEpoch
-                && $0.topologyGeneration == topologyGeneration
-                && $0.descriptor == descriptor
-                && (kind == .project || $0.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8))
-                && (kind == .project ? $0.observedFingerprint == fingerprint
-                    : $0.observedFingerprint.utf8.elementsEqual(fingerprint.utf8))
+        if let binding = bindings.values.first(where: { binding in
+            if let physicalTrack {
+                return kind == .track && binding.kind == .track
+                    && binding.serverSessionID == serverSessionID && binding.projectEpoch == projectEpoch
+                    && binding.topologyGeneration == topologyGeneration
+                    && binding.physicalTrack?.matches(physicalTrack) == true
+                    && binding.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8)
+            }
+            return
+            binding.physicalTrack == nil && binding.kind == kind
+                && binding.serverSessionID == serverSessionID
+                && binding.projectEpoch == projectEpoch
+                && binding.topologyGeneration == topologyGeneration
+                && binding.descriptor == descriptor
+                && (kind == .project || binding.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8))
+                && (kind == .project ? binding.observedFingerprint == fingerprint
+                    : binding.observedFingerprint.utf8.elementsEqual(fingerprint.utf8))
         }) {
             return binding.reference
         }
@@ -188,6 +198,7 @@ actor TargetRegistry {
             pluginInsertIndex: kind == .pluginInsert
                 ? pluginInsertIndex ?? TargetDescriptor.pluginInsertIndex(from: fingerprint)
                 : nil,
+            physicalTrack: physicalTrack,
             createdAt: ContinuousClock().now
         )
         return reference
@@ -198,13 +209,19 @@ actor TargetRegistry {
         descriptor: TargetDescriptor,
         fingerprint: String,
         snapshot: TargetRegistrySnapshot,
+        physicalTrack: AXTrackBinding.Binding? = nil,
         stoppingWhen stop: @Sendable () -> Bool = { false }
     ) -> TargetReference? {
         guard !Task.isCancelled, !stop(), snapshot.projectEpoch == projectEpoch,
               snapshot.topologyGeneration == topologyGeneration else {
             return nil
         }
-        return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint)
+        if let physicalTrack {
+            guard kind == .track, let path = physicalTrack.projectPath else { return nil }
+            if let projectPath = currentProjectDescriptor?.projectFilePath,
+               !path.utf8.elementsEqual(projectPath.utf8) { return nil }
+        }
+        return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint, physicalTrack: physicalTrack)
     }
 
     /// Return a current reference that this registry has already issued for the
@@ -253,6 +270,11 @@ actor TargetRegistry {
         else {
             return nil
         }
+        if let physicalTrack = binding.physicalTrack,
+           let projectPath = currentProjectDescriptor?.projectFilePath {
+            guard let heldPath = physicalTrack.projectPath,
+                  heldPath.utf8.elementsEqual(projectPath.utf8) else { return nil }
+        }
         return binding
     }
 
@@ -289,6 +311,7 @@ actor TargetRegistry {
             descriptor: descriptor,
             observedFingerprint: descriptor.fingerprint,
             pluginInsertIndex: existing.pluginInsertIndex,
+            physicalTrack: existing.physicalTrack,
             createdAt: existing.createdAt
         )
     }

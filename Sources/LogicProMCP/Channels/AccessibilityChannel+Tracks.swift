@@ -34,20 +34,29 @@ extension AccessibilityChannel {
         guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
               case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
         else { return (nil, false) }
-        return readTrackStates(from: headers, runtime: runtime, stoppingWhen: stop)
+        return readTrackStates(from: headers, in: window, runtime: runtime, stoppingWhen: stop)
     }
 
     /// Read the retained rail, rather than rediscovering a possibly different window.
     static func readTrackStates(
-        from headers: [AXUIElement], runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
+        from headers: [AXUIElement], in window: AXUIElement? = nil,
+        runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
     ) -> (states: [TrackState]?, yielded: Bool) {
+        let document: String?
+        if let window, case .success(let observed?) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime) {
+            document = observed
+        } else { document = nil }
         var states: [TrackState] = []
         states.reserveCapacity(headers.count)
         for (index, header) in headers.enumerated() {
             if stop() { return (nil, true) }
-            guard let state = AXValueExtractors.extractTrackState(
+            guard var state = AXValueExtractors.extractTrackState(
                 from: header, index: index, runtime: runtime.ax, stoppingBeforeHelp: stop
             ) else { return (nil, true) }
+            if let window, let document, state.liveIdentityBacked, state.placeholder != true {
+                let binding = AXTrackBinding.Binding(window: window, header: header, document: document, runtime: runtime)
+                if binding.projectPath != nil { state.physicalBinding = binding }
+            }
             states.append(state)
         }
         return (states, false)
@@ -1937,6 +1946,7 @@ extension AccessibilityChannel {
         params: [String: String], runtime: AXLogicProElements.Runtime
     ) -> ChannelResult {
         let expected = params["expected_name"]
+        let physical = AXTrackBinding.current
         var actualBefore: String?
         var attempted = false
         func refusal(_ hint: String) -> ChannelResult {
@@ -1953,35 +1963,37 @@ extension AccessibilityChannel {
               let desired = params["name"], let expected,
               let projectPath = params["expected_project_path"],
               TrackDispatcher.renameNameFailure(desired) == nil,
-              let window = AXLogicProElements.mainWindow(runtime: runtime),
-              let header = AXLogicProElements.findTrackHeader(at: index, runtime: runtime),
+              let window = physical?.window ?? AXLogicProElements.mainWindow(runtime: runtime),
+              let header = physical?.header ?? AXLogicProElements.findTrackHeader(at: index, runtime: runtime),
               let field = AXLogicProElements.trackNameField(in: header, runtime: runtime),
               AXHelpers.getRole(field, runtime: runtime.ax) == kAXTextFieldRole as String else {
             return refusal("Exact rename requires an observed project and a held track name field")
         }
 
         func targetStillHeld(requiringExclusiveSelection: Bool = false) -> Bool {
+            let position = physical?.currentIndex() ?? (physical == nil ? index : nil)
             guard ExactTrackNameAdapter.operationPermitted(),
+                  let position,
+                  AXTrackBinding.corroboratedIndex.map({ $0 == position }) ?? true,
                   let currentWindow = AXLogicProElements.mainWindow(runtime: runtime), CFEqual(currentWindow, window),
                   case .success(let document?) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
                   let documentURL = URL(string: document), documentURL.isFileURL,
                   documentURL.host == nil || documentURL.host == "" || documentURL.host == "localhost",
                   documentURL.standardizedFileURL.path.utf8.elementsEqual(
                     URL(fileURLWithPath: projectPath).standardizedFileURL.path.utf8),
-                  let currentHeader = AXLogicProElements.findTrackHeader(at: index, runtime: runtime),
-                  CFEqual(currentHeader, header),
                   let currentField = AXLogicProElements.trackNameField(in: header, runtime: runtime),
                   CFEqual(currentField, field),
                   case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime),
-                  headers.indices.contains(index), CFEqual(headers[index], header) else { return false }
+                  headers.indices.contains(position), CFEqual(headers[position], header),
+                  headers.filter({ CFEqual($0, header) }).count == 1 else { return false }
             // Do not actuate selection, or authorize renaming other selected/unread rows.
             if requiringExclusiveSelection {
                 guard headers.enumerated().allSatisfy({
-                    AXValueExtractors.extractSelectedState($0.element, runtime: runtime.ax) == ($0.offset == index)
+                    AXValueExtractors.extractSelectedState($0.element, runtime: runtime.ax) == ($0.offset == position)
                 }) else { return false }
                 // Current trk_ continuity cannot distinguish an intentional duplicate or swap.
                 // Expose that missing provider before actuation, not after creating the collision.
-                for (row, other) in headers.enumerated() where row != index {
+                for (row, other) in headers.enumerated() where physical == nil && row != position {
                     guard case .success(.some(let otherName)) = AXValueExtractors.extractTrackNameResult(
                         from: other, runtime: runtime.ax), !otherName.utf8.elementsEqual(desired.utf8) else { return false }
                 }
@@ -1990,7 +2002,7 @@ extension AccessibilityChannel {
         }
         func readHeldName() -> String? {
             guard targetStillHeld(),
-                  let name = AXLogicProElements.trackName(at: index, runtime: runtime),
+                  case .success(let name?) = AXValueExtractors.extractTrackNameResult(from: header, runtime: runtime.ax),
                   targetStillHeld() else { return nil }
             return name
         }
@@ -2020,6 +2032,7 @@ extension AccessibilityChannel {
         }
         return .success(HonestContract.encodeStateA(extras: [
             "before": boundaryName, "observed": after, "via": "ax_set_value", "write_attempted": true,
+            "track_index": physical?.currentIndex() ?? index,
         ]))
     }
 

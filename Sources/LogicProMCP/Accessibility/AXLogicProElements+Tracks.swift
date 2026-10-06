@@ -1,6 +1,46 @@
 import ApplicationServices
 import Foundation
 
+/// Issuance-time, process-local custody. Never encoded or reconstructed from a name/index.
+enum AXTrackBinding {
+    struct Binding: @unchecked Sendable {
+        let window: AXUIElement
+        let header: AXUIElement
+        let document: String
+        let runtime: AXLogicProElements.Runtime
+
+        var projectPath: String? {
+            guard let url = URL(string: document), url.isFileURL,
+                  url.host == nil || url.host == "" || url.host == "localhost" else { return nil }
+            return url.standardizedFileURL.path
+        }
+
+        func matches(_ other: Binding) -> Bool {
+            CFEqual(window, other.window) && CFEqual(header, other.header)
+                && document.utf8.elementsEqual(other.document.utf8)
+        }
+
+        func currentIndex() -> Int? {
+            guard ExactTrackNameAdapter.operationPermitted(), projectPath != nil,
+                  case .found(let currentWindow) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
+                  CFEqual(window, currentWindow),
+                  let app = AXLogicProElements.appRoot(runtime: runtime),
+                  case .success(.elements(let windows)) = AXHelpers.getAXUIElementArrayRead(
+                    app, kAXWindowsAttribute as String, runtime: runtime.ax),
+                  windows.filter({ CFEqual($0, window) }).count == 1,
+                  case .success(let currentDocument?) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
+                  document.utf8.elementsEqual(currentDocument.utf8),
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime),
+                  ExactTrackNameAdapter.operationPermitted() else { return nil }
+            let matches = headers.indices.filter { CFEqual(headers[$0], header) }
+            return matches.count == 1 ? matches[0] : nil
+        }
+    }
+
+    @TaskLocal static var current: Binding?
+    @TaskLocal static var corroboratedIndex: Int?
+}
+
 
 extension AXLogicProElements {
     // MARK: - Tracks

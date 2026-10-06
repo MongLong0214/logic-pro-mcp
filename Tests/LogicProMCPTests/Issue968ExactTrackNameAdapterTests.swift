@@ -16,6 +16,9 @@ private final class ExactNameFixture: @unchecked Sendable {
     let router = ChannelRouter()
     private(set) var writes: [String] = []
     private(set) var events: [String] = []
+    var additionalNameFields: [AXUIElement] = []
+    private(set) var actedNameFields: [AXUIElement] = []
+    var routedOperations: [String] = []
     var editOnPress: String?
     var hideReadbackAfterSet = false
     var acknowledgementOnly = false
@@ -62,22 +65,25 @@ private final class ExactNameFixture: @unchecked Sendable {
                     return nil
                 },
                 setAttributeHandler: { [self] element, attribute, value in
-                    guard CFEqual(element, field), attribute == kAXValueAttribute as String,
+                    guard ([field] + additionalNameFields).contains(where: { CFEqual($0, element) }),
+                          attribute == kAXValueAttribute as String,
                           let name = value as? String else {
                         Issue.record("Unexpected exact-name fixture setter")
                         return false
                     }
                     writes.append(name)
-                    builder.setAttribute(field, kAXDescriptionAttribute as String, name)
+                    actedNameFields.append(element)
+                    builder.setAttribute(element, kAXDescriptionAttribute as String, name)
                     return true
                 },
                 performActionHandler: { [self] element, action in
-                    guard CFEqual(element, field),
+                    guard ([field] + additionalNameFields).contains(where: { CFEqual($0, element) }),
                           [kAXPressAction as String, kAXConfirmAction as String].contains(action) else {
                         Issue.record("Unexpected exact-name fixture action")
                         return false
                     }
                     events.append(action)
+                    actedNameFields.append(element)
                     if action == kAXPressAction as String, let editOnPress {
                         builder.setAttribute(field, kAXDescriptionAttribute as String, editOnPress)
                     }
@@ -112,8 +118,22 @@ private final class ExactNameFixture: @unchecked Sendable {
         )
     }
 
-    func prepare() async throws -> (TargetReference, TargetReference) {
-        await cache.updateTracks([AXValueExtractors.extractTrackState(from: header, index: 0, runtime: runtime.ax)])
+    func mute(_ params: [String: String]) -> ChannelResult {
+        AccessibilityChannel.defaultSetTrackToggle(params: params, button: "Mute", runtime: runtime,
+            keyRuntime: .init(postMouseEvent: { _, _, _ in Issue.record("Unexpected mute mouse"); return false },
+                postKeyEvent: { _ in Issue.record("Unexpected mute key"); return false },
+                postUnicodeScalar: { _ in Issue.record("Unexpected mute typing"); return false }, sleepMicros: { _ in },
+                postFlaggedKeyEvent: { _, _ in Issue.record("Unexpected mute flagged key"); return false }),
+            processRuntime: .init(logicProPID: { 4242 }, fallbackLogicProPID: { 4242 }, logicProRunning: { true },
+                activateLogicPro: { false }, logicIsFrontmost: { true }, logicProBundleURL: { nil }), environment: [:])
+    }
+
+    func prepare(typedProducer: Bool = false) async throws -> (TargetReference, TargetReference) {
+        if typedProducer {
+            await cache.updateTracks(try #require(AccessibilityChannel.defaultGetTrackStates(runtime: runtime)))
+        } else {
+            await cache.updateTracks([AXValueExtractors.extractTrackState(from: header, index: 0, runtime: runtime.ax)])
+        }
         let snapshot = await registry.currentSnapshot
         let project = await ProjectReferenceIssuance.issue(
             cached: ProjectInfo(name: "ExactName", filePath: "/tmp/ExactName.logicx"),
@@ -129,10 +149,27 @@ private final class ExactNameFixture: @unchecked Sendable {
         return (projectRef, try #require(refs.byTrackIndex[0]))
     }
 
-    func rename(project: TargetReference, target: TargetReference, expected: String?, desired: String) async -> CallTool.Result {
+    func appendTrack(name: String, selected: Bool) -> (AXUIElement, AXUIElement) {
+        let row = builder.element(968_140)
+        let nameField = builder.element(968_141)
+        builder.setAttribute(row, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setAttribute(row, kAXSelectedAttribute as String, selected)
+        builder.setAttribute(nameField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        builder.setAttribute(nameField, kAXDescriptionAttribute as String, name)
+        builder.setAttribute(nameField, kAXValueAttribute as String, "1")
+        builder.setChildren(nameField, [])
+        builder.setChildren(row, [nameField])
+        builder.setChildren(rail, [header, row])
+        additionalNameFields.append(nameField)
+        return (row, nameField)
+    }
+
+    func rename(project: TargetReference, target: TargetReference, expected: String?, desired: String,
+                index: Int? = nil) async -> CallTool.Result {
         var params: [String: Value] = ["project_ref": .string(project.rawValue),
                                        "target_ref": .string(target.rawValue), "name": .string(desired)]
         if let expected { params["expected_name"] = .string(expected) }
+        if let index { params["index"] = .int(index) }
         let runtime = runtime
         return await TrackDispatcher.handle(
             command: "rename", params: params, router: router, cache: cache, targetRegistry: registry,
@@ -169,6 +206,8 @@ private actor ExactNameChannel: Channel {
     func stop() async {}
     func healthCheck() async -> ChannelHealth { .healthy(detail: "Injected exact-name fixture") }
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        fixture.routedOperations.append(operation)
+        if operation == "track.set_mute" { return fixture.mute(params) }
         guard operation == "track.rename" else { return .error("Unexpected route") }
         return fixture.execute(params)
     }
@@ -432,5 +471,266 @@ struct Issue968ExactTrackNameAdapterTests {
             #expect(f.writes == ["B"])
             #expect(await f.cache.getTracks().first?.name == "A")
         }
+    }
+
+    @Test func issuedTypedTrackReferenceCannotRenameSameNameReplacement() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let replacement = f.builder.element(968_130)
+            let replacementField = f.builder.element(968_131)
+            f.builder.setAttribute(replacement, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            f.builder.setAttribute(replacement, kAXSelectedAttribute as String, true)
+            f.builder.setAttribute(replacementField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+            f.builder.setAttribute(replacementField, kAXDescriptionAttribute as String, "A")
+            f.builder.setAttribute(replacementField, kAXValueAttribute as String, "0")
+            f.builder.setChildren(replacementField, [])
+            f.builder.setChildren(replacement, [replacementField])
+            // Both physical fields accept and log the real writer's actions/setter.
+            // A baseline wrong-target action must be observed, not hidden by a fake refusal.
+            f.additionalNameFields.append(replacementField)
+            f.builder.setChildren(f.rail, [replacement])
+            let receipt = await f.apply(project: project, target: target, before: "A", after: "B")
+            #expect(receipt.status == .rejectedBeforeWrite)
+            #expect(receipt.inverse == nil)
+            #expect(f.writes.isEmpty)
+            #expect(f.events.isEmpty)
+            #expect(f.actedNameFields.isEmpty)
+            #expect(AXHelpers.getDescription(f.field, runtime: f.runtime.ax) == "A")
+            #expect(AXHelpers.getDescription(replacementField, runtime: f.runtime.ax) == "A")
+            #expect(await f.cache.getTracks().first?.name == "A")
+        }
+    }
+
+    @Test func issuedDuplicateHeadersHaveIndependentUsableReferencesAndOwnedInverse() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, otherField) = f.appendTrack(name: "A", selected: true)
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
+            let (project, first) = try await f.prepare(typedProducer: true)
+            let refs = try #require(await TrackReferenceIssuance.issue(for: await f.cache.getTracks(),
+                registry: f.registry, snapshot: await f.registry.currentSnapshot))
+            let second = try #require(refs.byRow[1])
+            #expect(first != second)
+            let secondBinding = try #require(await f.registry.resolve(second))
+            #expect(CFEqual(try #require(secondBinding.physicalTrack).header, other))
+            let receipt = await f.apply(project: project, target: second, before: "A", after: "B")
+            #expect(receipt.status == .applied)
+            #expect(receipt.survivingReference == second)
+            #expect(AXHelpers.getDescription(f.field, runtime: f.runtime.ax) == "A")
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
+            #expect(f.actedNameFields.allSatisfy { CFEqual($0, otherField) })
+            #expect(await f.cache.getTracks().map(\.name) == ["A", "B"])
+            let reversed = await f.inverse(try #require(receipt.inverse))
+            #expect(reversed.status == .applied)
+            #expect(reversed.survivingReference == second)
+            #expect(await f.cache.getTracks().map(\.name) == ["A", "A"])
+            #expect(f.writes == ["B", "A"])
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func issuedHeaderSurvivesPreApplyAndEditorBoundaryReorder(atPress: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, otherField) = f.appendTrack(name: "B", selected: false)
+            let (project, target) = try await f.prepare(typedProducer: true)
+            if atPress {
+                f.onPress = { f.builder.setChildren(f.rail, [other, f.header]) }
+            } else { f.builder.setChildren(f.rail, [other, f.header]) }
+            let receipt = await f.apply(project: project, target: target, before: "A", after: "C")
+            #expect(receipt.status == .applied)
+            #expect(receipt.survivingReference == target)
+            #expect(AXHelpers.getDescription(f.field, runtime: f.runtime.ax) == "C")
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
+            #expect(f.actedNameFields.allSatisfy { CFEqual($0, f.field) })
+            #expect(await f.cache.getTracks().map(\.name) == ["C", "B"])
+            #expect(try #require(await f.registry.resolve(target)).descriptor.trackIndex == 1)
+            await f.cache.updateTracks(try #require(AccessibilityChannel.defaultGetTrackStates(runtime: f.runtime)))
+            let refs = try #require(await TrackReferenceIssuance.issue(for: await f.cache.getTracks(),
+                registry: f.registry, snapshot: await f.registry.currentSnapshot))
+            #expect(refs.byRow[1] == target)
+            let reversed = await f.inverse(try #require(receipt.inverse))
+            #expect(reversed.status == .applied)
+            #expect(await f.cache.getTracks().map(\.name) == ["B", "A"])
+        }
+    }
+
+    @Test func twoPhysicalNameActionsCanSwapAndConditionallyReverseExactNames() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, otherField) = f.appendTrack(name: "B", selected: false)
+            let (project, first) = try await f.prepare(typedProducer: true)
+            let refs = try #require(await TrackReferenceIssuance.issue(for: await f.cache.getTracks(),
+                registry: f.registry, snapshot: await f.registry.currentSnapshot))
+            let second = try #require(refs.byRow[1])
+            let firstChange = await f.apply(project: project, target: first, before: "A", after: "B")
+            #expect(firstChange.status == .applied)
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
+            f.builder.setAttribute(other, kAXSelectedAttribute as String, true)
+            let secondChange = await f.apply(project: project, target: second, before: "B", after: "A")
+            #expect(secondChange.status == .applied)
+            #expect(firstChange.survivingReference == first)
+            #expect(secondChange.survivingReference == second)
+            #expect(await f.cache.getTracks().map(\.name) == ["B", "A"])
+            #expect(AXHelpers.getDescription(f.field, runtime: f.runtime.ax) == "B")
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "A")
+            let reverseSecond = await f.inverse(try #require(secondChange.inverse))
+            #expect(reverseSecond.status == .applied)
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, true)
+            f.builder.setAttribute(other, kAXSelectedAttribute as String, false)
+            let reverseFirst = await f.inverse(try #require(firstChange.inverse))
+            #expect(reverseFirst.status == .applied)
+            #expect(await f.cache.getTracks().map(\.name) == ["A", "B"])
+            #expect(f.writes == ["B", "A", "B", "A"])
+        }
+    }
+
+    @Test(arguments: ["unchanged", "reordered", "duplicate"])
+    func typedTrackReferenceRetainsOriginalNonRenameGuards(shape: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, _) = f.appendTrack(name: shape == "duplicate" ? "A" : "B", selected: false)
+            let mute = f.builder.element(968_150)
+            f.builder.setAttribute(mute, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+            f.builder.setAttribute(mute, kAXDescriptionAttribute as String, "Mute")
+            f.builder.setAttribute(mute, kAXValueAttribute as String, 0)
+            f.builder.setChildren(mute, [])
+            f.builder.setChildren(f.header, [f.field, mute])
+            let (_, target) = try await f.prepare(typedProducer: true)
+            if shape == "reordered" { f.builder.setChildren(f.rail, [other, f.header]) }
+            let runtime = f.runtime
+            let result = await TrackDispatcher.handle(command: "mute",
+                params: ["target_ref": .string(target.rawValue), "enabled": .bool(false)],
+                router: f.router, cache: f.cache, targetRegistry: f.registry,
+                liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) })
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            if shape == "unchanged" {
+                #expect(body["state"] as? String == "A")
+                #expect(f.routedOperations == ["track.set_mute"])
+                #expect(body["action"] as? String == "no-op")
+            } else {
+                #expect(body["state"] as? String == "C")
+                #expect(f.routedOperations.isEmpty)
+            }
+            #expect(f.writes.isEmpty)
+            #expect(f.events.isEmpty)
+        }
+    }
+
+    @Test(arguments: ["missing", "duplicate", "document", "window", "external", "epoch", "topology", "json", "cancel", "ownership"])
+    func issuedPhysicalTrackMustRetainItsOriginalOwnerAndUniqueMembership(change: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (project, target) = try await f.prepare(typedProducer: true)
+            if change == "missing" { f.builder.setChildren(f.rail, []) }
+            if change == "duplicate" { f.builder.setChildren(f.rail, [f.header, f.header]) }
+            if change == "document" { f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx") }
+            if change == "window" { f.builder.setAttribute(f.app, kAXWindowsAttribute as String, [AXUIElement]()) }
+            if change == "external" { f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "User edit") }
+            if change == "epoch" { await f.registry.bumpProjectEpoch() }
+            if change == "topology" { await f.registry.bumpTopologyGeneration() }
+            if change == "json" {
+                let encoded = try JSONEncoder().encode(await f.cache.getTracks())
+                let decoded = try JSONDecoder().decode([TrackState].self, from: encoded)
+                #expect(decoded.allSatisfy { $0.physicalBinding == nil })
+                await f.cache.updateTracks(decoded)
+            }
+            let context = OperationTraceContext(mutationGateAcquired: true,
+                ownsGate: { change != "ownership" }, cancellationRequested: { change == "cancel" })
+            let receipt = await OperationTraceContext.$current.withValue(context) {
+                await f.apply(project: project, target: target, before: "A", after: "B")
+            }
+            #expect(receipt.status == .rejectedBeforeWrite)
+            #expect(receipt.inverse == nil)
+            #expect(f.writes.isEmpty)
+            #expect(f.events.isEmpty)
+            #expect(f.actedNameFields.isEmpty)
+        }
+    }
+
+    @Test(arguments: [0, 1])
+    func physicalReferenceCorroboratesAnExplicitCurrentIndex(requested: Int) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, otherField) = f.appendTrack(name: "B", selected: false)
+            let (project, target) = try await f.prepare(typedProducer: true)
+            f.builder.setChildren(f.rail, [other, f.header])
+            let result = await f.rename(project: project, target: target, expected: "A", desired: "C", index: requested)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            if requested == 1 {
+                #expect(body["state"] as? String == "A")
+                #expect(f.writes == ["C"])
+                #expect(f.actedNameFields.allSatisfy { CFEqual($0, f.field) })
+            } else {
+                #expect(body["state"] as? String == "C")
+                #expect(f.writes.isEmpty)
+                #expect(f.events.isEmpty)
+            }
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
+        }
+    }
+
+    @Test(arguments: ["same", "other"])
+    func physicalTrackReferenceCorroboratesCurrentProjectWithoutProjectRef(project: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (_, target) = try await f.prepare(typedProducer: true)
+            let snapshot = await f.registry.currentSnapshot
+            let issued = await ProjectReferenceIssuance.issue(
+                cached: ProjectInfo(name: project == "same" ? "ExactName" : "Other",
+                    filePath: project == "same" ? "/tmp/ExactName.logicx" : "/tmp/Other.logicx"),
+                registry: f.registry, snapshot: snapshot)
+            guard case .issued = issued else { Issue.record("Expected observed project"); return }
+            #expect(await f.registry.currentSnapshot == snapshot)
+            let runtime = f.runtime
+            let result = await TrackDispatcher.handle(command: "rename",
+                params: ["target_ref": .string(target.rawValue), "name": .string("B")],
+                router: f.router, cache: f.cache, targetRegistry: f.registry,
+                liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) })
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            if project == "same" {
+                #expect(body["state"] as? String == "A")
+                #expect(f.writes == ["B"])
+            } else {
+                #expect(body["state"] as? String == "C")
+                #expect(f.writes.isEmpty)
+                #expect(f.events.isEmpty)
+                #expect(f.actedNameFields.isEmpty)
+                #expect(await f.cache.getTracks().first?.name == "A")
+            }
+        }
+    }
+
+    @Test func requestOwnedProducerCarriesTheSameUnserializedHeaderWitness() async throws {
+        let f = ExactNameFixture()
+        let logic = f.runtime
+        let channel = AccessibilityChannel(runtime: .init(isTrusted: { true }, isLogicProRunning: { true },
+            hasVisibleWindow: { true }, appRoot: { f.app }, transportState: { .error("Unused transport") },
+            toggleTransportButton: { _ in .error("Unused toggle") }, setTempo: { _ in .error("Unused tempo") },
+            setCycleRange: { _ in .error("Unused cycle") }, tracks: { .error("Unused JSON tracks") },
+            selectedTrack: { .error("Unused selected") }, selectTrack: { _ in .error("Unused select") },
+            setTrackToggle: { _, _ in .error("Unused track toggle") }, renameTrack: { _ in .error("Unused rename") },
+            mixerState: { .error("Unused Mixer") }, channelStrip: { _ in .error("Unused strip") },
+            setMixerValue: { _, _ in .error("Unused Mixer write") }, projectInfo: { .error("Unused project") },
+            confirmNewTrackDialog: { Issue.record("Unexpected dialog") }, canPostEvents: { false }, logicRuntime: logic))
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { true })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await channel.readFreshSessionPopulation(request: .init(domains: [.tracks]),
+                fileReader: .unavailable, stoppingWhen: { false })
+        }
+        #expect(population.stable)
+        let row = try #require(population.tracks?.first)
+        let held = try #require(row.physicalBinding)
+        #expect(CFEqual(held.header, f.header))
+        #expect(CFEqual(held.window, f.window))
+        #expect(held.document == "file:///tmp/ExactName.logicx")
+        let decoded = try JSONDecoder().decode(TrackState.self, from: JSONEncoder().encode(row))
+        #expect(decoded.physicalBinding == nil)
+        #expect(!decoded.liveIdentityBacked)
+        #expect(f.writes.isEmpty)
+        #expect(f.events.isEmpty)
     }
 }
