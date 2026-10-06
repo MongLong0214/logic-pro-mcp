@@ -37,9 +37,9 @@ struct Issue291PhysicalStripReferenceTests {
         var onChildrenResultRead: (@Sendable (AXUIElement) -> Void)?
         private(set) var mutations: [(AXUIElement, String)] = []
 
-        init(aux: Bool = false, duplicateNames: Bool = false) throws {
+        init(aux: Bool = false, duplicateNames: Bool = false, secondAux: Bool = false) throws {
             let builder = b
-            let stripCount = aux ? 3 : 2
+            let stripCount = secondAux ? 4 : (aux ? 3 : 2)
             bundle = FileManager.default.temporaryDirectory
                 .appendingPathComponent("lpm291-physical-\(UUID().uuidString).logicx", isDirectory: true)
             try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -85,7 +85,7 @@ struct Issue291PhysicalStripReferenceTests {
                 let name = b.element(2_910_104 + i * 10)
                 b.setRole(name, kAXTextFieldRole as String)
                 b.setAttribute(name, kAXDescriptionAttribute as String, "Name")
-                b.setAttribute(name, kAXValueAttribute as String, duplicateNames ? "Same" : ["B", "A", "Aux"][i])
+                b.setAttribute(name, kAXValueAttribute as String, duplicateNames ? "Same" : ["B", "A", "Aux", "Aux 2"][i])
                 b.setChildren(name, [])
                 slider(volumes[i], value: 100, min: 0, max: 233, description: "Volume")
                 slider(pans[i], value: 0, min: -64, max: 63, description: "")
@@ -299,6 +299,234 @@ struct Issue291PhysicalStripReferenceTests {
         let result = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
                                                    targetRegistry: registry, fileReader: .unavailable)
         return try #require(sharedJSONObject(sharedResourceText(result))?["strips"] as? [[String: Any]])
+    }
+
+    @Test(arguments: ["fresh", "mixer_first", "tracks_first", "aux_only"])
+    func physicalSourceNodesUseTheSameActualReferencesAsResourcesAndInspection(order: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture(duplicateNames: true, secondAux: true)
+            if order == "aux_only" {
+                let rail = try #require(fixture.b.makeAXRuntime().children(fixture.window).first)
+                fixture.b.setChildren(rail, [])
+            }
+            fixture.b.setAttribute(fixture.outputs[0], kAXDescriptionAttribute as String, "Bus 1")
+            let cache = StateCache(); let registry = TargetRegistry(); let router = ChannelRouter()
+            let channel = fixture.channel(); await router.register(channel)
+            let poller = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, dialogPresent: { false }, blockingDialogInfo: { nil },
+                               projectFileReader: .unavailable, keyboardFocus: { .notTextEditing }))
+            #expect(await poller.refreshNow())
+            if order == "tracks_first" {
+                _ = try await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: router,
+                    targetRegistry: registry, fileReader: .unavailable)
+            }
+            // The individual resource is also a legitimate cold first reader.
+            let individual = try await ResourceHandlers.read(uri: "logic://mixer/0", cache: cache, router: router,
+                targetRegistry: registry, fileReader: .unavailable)
+            let individualRef = try #require((sharedJSONObject(sharedResourceText(individual))?["strip"] as? [String: Any])?["mixer_strip_ref"] as? String)
+            if order == "mixer_first" {
+                _ = try await resourceRows(cache, registry, router)
+            }
+            let gate = LogicMutationGate()
+            let deps = HandlerDependencies(router: router, cache: cache, targetRegistry: registry, poller: poller,
+                dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+                liveTrackNames: { [0: "A", 1: "B"] }, projectFileReader: .unavailable)
+            let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+            let params: [String: Value] = ["domains": .array([.string("tracks"), .string("strips"), .string("routing")]), "allow_ui_navigation": .bool(false)]
+            let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+                commandParams: params, mutationGate: gate) { await handler(deps, params) }
+            let isError = result.isError ?? false
+            #expect(!isError)
+            let report = try #require(sharedJSONObject(sharedToolText(result)))
+            let inspectedRows = try #require((report["strips"] as? [String: Any])?["rows"] as? [[String: Any]])
+            let resource = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
+                targetRegistry: registry, fileReader: .unavailable)
+            let object = try #require(sharedJSONObject(sharedResourceText(resource)))
+            let rows = try #require(object["strips"] as? [[String: Any]])
+            let graph = try #require(object["routing_graph"] as? [String: Any])
+            let nodes = try #require(graph["nodes"] as? [[String: Any]])
+            let references = rows.compactMap { $0["mixer_strip_ref"] as? String }
+            #expect(references.count == 4)
+            #expect(Set(references).count == 4)
+            #expect(references.first == individualRef)
+            #expect(inspectedRows.compactMap { $0["mixer_strip_ref"] as? String } == references)
+            #expect(Set(nodes.compactMap { $0["id"] as? String }) == Set(references))
+            #expect(nodes.count == 4)
+            #expect(nodes.allSatisfy { $0["kind"] as? String == "physical_strip" })
+            #expect(nodes.allSatisfy { ($0["targetRef"] as? [String: Any])?["rawValue"] as? String == $0["id"] as? String })
+            #expect(try #require(graph["edges"] as? [[String: Any]]).isEmpty)
+            let complete = try #require(graph["complete"] as? Bool)
+            #expect(!complete)
+            let routing = try #require(report["routing"] as? [String: Any])
+            #expect(Set((routing["nodes"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }) == Set(references))
+            #expect(NSDictionary(dictionary: try #require(routing["graph"] as? [String: Any]))
+                .isEqual(to: try #require(graph["coverage"] as? [String: Any])))
+            for reference in references {
+                let binding = try #require(await registry.resolve(TargetReference(rawValue: reference)))
+                #expect(binding.kind == .mixerStrip)
+                #expect(binding.physicalMixerStrip != nil)
+            }
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test func scheduledPhysicalSourceNodePublicationNeedsNoArrangeOrPreliminaryResource() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture(secondAux: true)
+            fixture.b.setChildren(fixture.b.element(2_910_003), [])
+            let cache = StateCache(); let registry = TargetRegistry(); let router = ChannelRouter()
+            let channel = fixture.channel(); await router.register(channel)
+            let (finished, completion) = AsyncStream<Void>.makeStream()
+            let poller = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, dialogPresent: { false }, sleep: { _ in
+                    completion.finish(); throw CancellationError()
+                }, blockingDialogInfo: { nil }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing }))
+            await poller.start()
+            for await _ in finished {}
+            await poller.stop()
+            #expect(await cache.getTracks().isEmpty)
+            #expect(await registry.currentProjectIdentity == nil)
+            let resource = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
+                targetRegistry: registry, fileReader: .unavailable)
+            let object = try #require(sharedJSONObject(sharedResourceText(resource)))
+            let rows = try #require(object["strips"] as? [[String: Any]])
+            let graph = try #require(object["routing_graph"] as? [String: Any])
+            let nodes = try #require(graph["nodes"] as? [[String: Any]])
+            let references = rows.compactMap { $0["mixer_strip_ref"] as? String }
+            #expect(Set(references).count == 4)
+            #expect(Set(nodes.compactMap { $0["id"] as? String }) == Set(references))
+            #expect(nodes.allSatisfy { $0["kind"] as? String == "physical_strip" })
+            #expect(try #require(graph["edges"] as? [[String: Any]]).isEmpty)
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test func physicalSourceIdentityDoesNotUseNamesOrMixerOrdinalsAndNeverGrantsTrackWriteAuthority() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture(duplicateNames: true, secondAux: true)
+            let (cache, registry, router, original) = try await publish(fixture, background: true)
+            let originalRefs = original.compactMap { $0["mixer_strip_ref"] as? String }
+            var duplicateOrdinals = await cache.getChannelStrips()
+            for i in duplicateOrdinals.indices { duplicateOrdinals[i].trackIndex = 0 }
+            await cache.updateChannelStrips(duplicateOrdinals)
+            let duplicateRows = try await resourceRows(cache, registry, router)
+            #expect(duplicateRows.compactMap { $0["mixer_strip_ref"] as? String } == originalRefs)
+            fixture.reorder([3, 1, 0, 2])
+            let channel = fixture.channel()
+            let poller = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, dialogPresent: { false }, blockingDialogInfo: { nil },
+                               projectFileReader: .unavailable, keyboardFocus: { .notTextEditing }))
+            #expect(await poller.refreshNow())
+            let resource = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
+                targetRegistry: registry, fileReader: .unavailable)
+            let object = try #require(sharedJSONObject(sharedResourceText(resource)))
+            let rows = try #require(object["strips"] as? [[String: Any]])
+            #expect(rows.compactMap { $0["mixer_strip_ref"] as? String } == [3, 1, 0, 2].map { originalRefs[$0] })
+            let graphObject = try #require(object["routing_graph"] as? [String: Any])
+            let graph = try JSONDecoder().decode(RoutingGraph.self, from: JSONSerialization.data(withJSONObject: graphObject))
+            #expect(Set(graph.nodes.map(\.id)) == Set(originalRefs))
+            #expect(graph.edges.isEmpty)
+            let decision = evaluate(.init(sourceTrackRef: TargetReference(rawValue: originalRefs[0]),
+                physicalSlot: 0, destinationBusNumber: 1, destinationRef: nil,
+                expectedProjectEpoch: graph.projectEpoch), against: graph)
+            #expect(!decision.allowed)
+            #expect(decision.rejections.contains(.sourceNotFound))
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test(arguments: ["json", "disabled", "duplicate_physical"])
+    func physicalSourcePublicationCannotManufactureUniqueOwnership(loss: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(loss != "disabled") {
+            let fixture = try Fixture()
+            let (cache, registry, router, _) = try await publish(fixture, background: true)
+            let typed = await cache.getChannelStrips()
+            if loss == "json" {
+                let data = try JSONEncoder().encode(typed)
+                await cache.updateChannelStrips(try JSONDecoder().decode([ChannelStripState].self, from: data))
+            } else if loss == "duplicate_physical" {
+                await cache.updateChannelStrips([typed[0], typed[0]])
+            }
+            let resource = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
+                targetRegistry: registry, fileReader: .unavailable)
+            let object = try #require(sharedJSONObject(sharedResourceText(resource)))
+            let rows = try #require(object["strips"] as? [[String: Any]])
+            let nodes = try #require((object["routing_graph"] as? [String: Any])?["nodes"] as? [[String: Any]])
+            #expect(rows.allSatisfy { $0["mixer_strip_ref"] == nil })
+            #expect(!nodes.contains { $0["kind"] as? String == "physical_strip" })
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test func stalePhysicalReferenceIssuanceMakesInspectionUnstableWithoutPublishingAuthority() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            fixture.reportedProjectPath = "/injected-other.logicx"
+            let cache = StateCache(); let registry = TargetRegistry()
+            let channel = fixture.channel()
+            let poller = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, dialogPresent: { false }, blockingDialogInfo: { nil },
+                               projectFileReader: .unavailable, keyboardFocus: { .notTextEditing }))
+            #expect(await poller.refreshNow())
+            let capture = await SessionPopulationObservation.capture(cache: cache, targetRegistry: registry, fileReader: .unavailable)
+            let report = SessionPopulationObservation.build(request: .init(domains: [.tracks, .strips, .routing]), capture: capture)
+            #expect(report.tracks.coverage == .partial)
+            #expect(!report.tracks.reasons.contains(.targetSnapshotStale))
+            #expect(report.tracks.rows.allSatisfy { $0.trackRef != nil })
+            #expect(report.strips.coverage == .unstable)
+            #expect(report.strips.reasons.contains(.targetSnapshotStale))
+            #expect(report.strips.rows.allSatisfy { $0.mixerStripRef == nil })
+            #expect(SessionPopulationObservation.routingGraph(capture: capture).nodes.isEmpty)
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test func physicalSourceCaptureMovementAndCancellationNeverPublishCurrentAuthority() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            let (cache, registry, _, _) = try await publish(fixture, background: true)
+            let fileReader = LogicProjectFileReader.Runtime(currentDocumentPath: {
+                await cache.updateAXOccluded(true)
+                return nil
+            }, now: Date.init, readPlistData: { _ in nil }, mtime: { _ in nil }, sleep: { _ in })
+            let moved = await SessionPopulationObservation.capture(cache: cache, targetRegistry: registry, fileReader: fileReader)
+            #expect(moved.before != moved.after)
+            let movedReport = SessionPopulationObservation.build(request: .init(domains: [.strips, .routing]), capture: moved)
+            #expect(movedReport.strips.coverage == .unstable)
+            #expect(movedReport.strips.rows.allSatisfy { $0.mixerStripRef == nil })
+            #expect(SessionPopulationObservation.routingGraph(capture: moved).nodes.isEmpty)
+            await cache.updateAXOccluded(false)
+            let cancelled = await Task {
+                withUnsafeCurrentTask { $0?.cancel() }
+                return await SessionPopulationObservation.capture(cache: cache, targetRegistry: registry, fileReader: .unavailable)
+            }.value
+            #expect(cancelled.mixerReferences == nil)
+            #expect(cancelled.referencesStale)
+            #expect(SessionPopulationObservation.routingGraph(capture: cancelled).nodes.isEmpty)
+            #expect(SessionPopulationObservation.build(request: .init(domains: [.strips]), capture: cancelled).strips.coverage == .unstable)
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test func physicalSourceReferencesReissueThroughTheSameCaptureAfterRegistryMovement() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            let (cache, registry, router, rows) = try await publish(fixture, background: true)
+            let old = rows.compactMap { $0["mixer_strip_ref"] as? String }
+            await registry.bumpTopologyGeneration()
+            let resource = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
+                targetRegistry: registry, fileReader: .unavailable)
+            let object = try #require(sharedJSONObject(sharedResourceText(resource)))
+            let newRows = try #require(object["strips"] as? [[String: Any]])
+            let references = newRows.compactMap { $0["mixer_strip_ref"] as? String }
+            #expect(Set(references).count == 2)
+            #expect(Set(references).isDisjoint(with: old))
+            let nodes = try #require((object["routing_graph"] as? [String: Any])?["nodes"] as? [[String: Any]])
+            #expect(Set(nodes.compactMap { $0["id"] as? String }) == Set(references))
+            for reference in old { #expect(await registry.resolve(TargetReference(rawValue: reference)) == nil) }
+            for reference in references { #expect(await registry.resolve(TargetReference(rawValue: reference))?.physicalMixerStrip != nil) }
+            #expect(fixture.mutations.isEmpty)
+        }
     }
 
     @Test(arguments: ["set_volume", "set_pan"], [false, true])
@@ -599,7 +827,9 @@ struct Issue291PhysicalStripReferenceTests {
                                                          targetRegistry: registry, fileReader: .unavailable)
             let graph = try #require(sharedJSONObject(sharedResourceText(resource))?["routing_graph"] as? [String: Any])
             #expect(try #require(graph["edges"] as? [[String: Any]]).isEmpty)
-            #expect(try #require(graph["nodes"] as? [[String: Any]]).isEmpty,
+            let nodes = try #require(graph["nodes"] as? [[String: Any]])
+            #expect(Set(nodes.compactMap { $0["id"] as? String }) == Set(rows.compactMap { $0["mixer_strip_ref"] as? String }))
+            #expect(nodes.allSatisfy { $0["kind"] as? String == "physical_strip" },
                     "the B strip is not proven to belong to Arrange A merely because both have ordinal zero")
             #expect(fixture.mutations.isEmpty)
         }
