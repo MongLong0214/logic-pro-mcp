@@ -58,7 +58,7 @@ extension AccessibilityChannel {
             // `logic://mixer` published a field that was always null. It is read now; `nil` still
             // means "not identified", never "routed nowhere".
             state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
-            state.input = AXLogicProElements.inputSlotSource(in: strip, runtime: runtime.ax)
+            readInputSource(of: strip, into: &state, runtime: runtime)
             // #291: occupancy per send slot, from the send-level knob beside an assigned send's
             // group. `nil` stays nil — an absent key is "nobody could look", never "no sends".
             state.sendSlots = AXLogicProElements.sendSlotObservations(in: strip, runtime: runtime.ax)
@@ -77,6 +77,23 @@ extension AccessibilityChannel {
             state.nameReadError = "the strip's Name field was not identified or was ambiguous"
         case .failure(let error):
             state.nameReadError = "the strip's Name field could not be read: \(error.diagnosticLabel)"
+        }
+    }
+
+    /// One status-preserving read feeds both the legacy value and the optional observation.
+    private static func readInputSource(
+        of strip: AXUIElement, into state: inout ChannelStripState, runtime: AXLogicProElements.Runtime
+    ) {
+        switch AXLogicProElements.inputSlotReading(in: strip, runtime: runtime.ax) {
+        case .source(let source):
+            state.input = source
+            state.inputObservation = .init(state: .observedSource, source: source)
+        case .noSlot:
+            state.input = nil
+            state.inputObservation = .init(state: .noSlot, source: nil)
+        case .unreadable:
+            state.input = nil
+            state.inputObservation = .init(state: .unreadable, source: nil)
         }
     }
 
@@ -125,7 +142,7 @@ extension AccessibilityChannel {
         readStripName(of: strip, into: &state, runtime: runtime)
         readPluginChain(of: strip, into: &state, runtime: runtime)
         state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
-        state.input = AXLogicProElements.inputSlotSource(in: strip, runtime: runtime.ax)
+        readInputSource(of: strip, into: &state, runtime: runtime)
         state.sendSlots = AXLogicProElements.sendSlotObservations(in: strip, runtime: runtime.ax)
         return encodeResult(state)
     }

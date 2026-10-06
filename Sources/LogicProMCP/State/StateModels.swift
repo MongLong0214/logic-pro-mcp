@@ -191,6 +191,9 @@ struct ChannelStripState: Sendable, Codable {
     /// this is occupancy and not a send list, and `sends` above stays absent.
     var sendSlots: [SendSlotObservation]?
     var input: String?
+    /// The existing input-slot reader's result. Nil means not read (including legacy/MCU data),
+    /// not absence. A source is the slot's display bytes, never a bus/port/aux identity.
+    var inputObservation: InputSlotObservation?
     var output: String?
     var eqEnabled: Bool = false
     var plugins: [PluginSlotState] = []
@@ -206,9 +209,22 @@ struct ChannelStripState: Sendable, Codable {
         case trackIndex, name, volume, pan, sends, input, output, eqEnabled, plugins
         case nameReadError = "name_read_error"
         case sendSlots = "send_slots"
+        case inputObservation = "input_observation"
         case pluginsSource = "plugins_source"
         case pluginsReadError = "plugins_read_error"
     }
+}
+
+enum InputSlotObservationState: String, Sendable, Codable {
+    case observedSource = "observed_source"
+    case noSlot = "no_slot"
+    case unreadable
+}
+
+/// A local input-slot observation, not a routing edge or channel-strip type observation.
+struct InputSlotObservation: Sendable, Codable, Equatable {
+    let state: InputSlotObservationState
+    let source: String?
 }
 
 /// A send on a channel strip.
