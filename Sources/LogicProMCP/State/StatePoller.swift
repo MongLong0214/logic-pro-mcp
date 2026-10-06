@@ -732,12 +732,24 @@ actor StatePoller {
         if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if transportReady.applied { cacheKeys.append(.transport) }
         if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
-        let mixerReady = await poll(
-            operation: "mixer.get_state", label: "Mixer",
-            section: .mixer,
-            axChannel: axChannel, cache: cache, as: [ChannelStripState].self
-        ) { cache, strips, observed in
-            await cache.updateChannelStrips(strips, ifCurrent: observed)
+        let mixerVersion = await cache.currentVersion(for: .mixer)
+        let focus = runtime.keyboardFocus
+        let mixerRead = await axChannel.readMixerStates(stoppingWhen: {
+            yieldingToTextEditing && Self.backgroundTickYields(to: focus())
+        })
+        if mixerRead.yielded || Self.helpReadsStopped { return yieldCycle(cacheKeys) }
+        let mixerReady: PollOutcome
+        if mixerRead.provided {
+            if let states = mixerRead.states {
+                mixerReady = PollOutcome(readable: true, applied: await cache.updateChannelStrips(states, ifCurrent: mixerVersion))
+            } else { mixerReady = PollOutcome(readable: false, applied: false) }
+        } else {
+            mixerReady = await poll(
+                operation: "mixer.get_state", label: "Mixer", section: .mixer,
+                axChannel: axChannel, cache: cache, as: [ChannelStripState].self
+            ) { cache, strips, observed in
+                await cache.updateChannelStrips(strips, ifCurrent: observed)
+            }
         }
         if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if mixerReady.applied { cacheKeys.append(.mixer) }

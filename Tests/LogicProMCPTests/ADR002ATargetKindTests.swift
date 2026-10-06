@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import Foundation
 import MCP
 import Testing
@@ -82,7 +83,14 @@ struct ADR002ATargetKindTests {
     func testMixerResourceEmitsStableFirstClassMixerStripRef() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let cache = await cacheWithTracks()
-            await cache.updateChannelStrips([ChannelStripState(trackIndex: 2)])
+            let fixture = try Issue291PhysicalStripReferenceTests.Fixture(aux: true)
+            let tracksBeforeProject = await cache.getTracks()
+            await cache.updateProject(ProjectInfo(name: "Session", filePath: fixture.bundle.path))
+            await cache.updateTracks(tracksBeforeProject)
+            let nameField = fixture.b.makeAXRuntime().children(fixture.strips[2])[0]
+            fixture.b.setAttribute(nameField, kAXValueAttribute as String, "Bass")
+            let physicalRows = try #require(AccessibilityChannel.defaultGetMixerStates(runtime: fixture.logic, stoppingWhen: { false }).states)
+            await cache.updateChannelStrips([physicalRows[2]])
             let registry = TargetRegistry()
             let router = ChannelRouter()
 
@@ -403,12 +411,21 @@ struct ADR002ATargetKindTests {
     func testMixerStripAndPluginInsertRefsResolveAndEchoFingerprintEvidence() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let cache = await cacheWithTracks()
+            let fixture = try Issue291PhysicalStripReferenceTests.Fixture(aux: true)
+            let tracksBeforeProject = await cache.getTracks()
+            await cache.updateProject(ProjectInfo(name: "Session", filePath: fixture.bundle.path))
+            await cache.updateTracks(tracksBeforeProject)
+            let nameField = fixture.b.makeAXRuntime().children(fixture.strips[2])[0]
+            fixture.b.setAttribute(nameField, kAXValueAttribute as String, "Bass")
+            let physicalRows = try #require(AccessibilityChannel.defaultGetMixerStates(runtime: fixture.logic, stoppingWhen: { false }).states)
+            await cache.updateChannelStrips([physicalRows[2]])
             let registry = TargetRegistry()
             let descriptor = TargetDescriptor(trackIndex: 2, trackName: "Bass")
             let mixerReference = await registry.bind(
                 kind: .mixerStrip,
                 descriptor: descriptor,
-                fingerprint: descriptor.fingerprint
+                fingerprint: descriptor.fingerprint,
+                physicalMixerStrip: physicalRows[2].physicalBinding
             )
             let pluginFingerprint = customPluginFingerprint(insert: 0, plugin: "logic.stock.effect.gain")
             let pluginReference = await registry.bind(

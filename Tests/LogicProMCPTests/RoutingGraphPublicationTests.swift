@@ -426,8 +426,8 @@ struct RoutingGraphPublicationTests {
         }
     }
 
-    @Test("a mixer_strip_ref is emitted only for a strip whose track id is unique and eligible")
-    func mixerStripRefRequiresAUniqueTrackObservation() async throws {
+    @Test("JSON-only strips cannot borrow physical authority from even a unique eligible track")
+    func mixerStripRefRequiresAPhysicalObservation() async throws {
         let server = await Server(
             tracks: [
                 track(index: 0, name: "First"),
@@ -446,7 +446,7 @@ struct RoutingGraphPublicationTests {
         let single = try await server.readStrip(at: 0)
 
         #expect(strips[0]["mixer_strip_ref"] == nil)
-        #expect(strips[1]["mixer_strip_ref"] as? String != nil)
+        #expect(strips[1]["mixer_strip_ref"] == nil)
         #expect(strips[2]["mixer_strip_ref"] == nil)
         #expect(single["mixer_strip_ref"] == nil)
     }
