@@ -32,6 +32,10 @@ extension AXLogicProElements {
 
     static func mixerAreaLookup(runtime: Runtime = .production) -> MixerAreaLookup {
         guard let window = mainWindow(runtime: runtime) else { return .notFound }
+        return mixerAreaLookup(in: window, runtime: runtime)
+    }
+
+    static func mixerAreaLookup(in window: AXUIElement, runtime: Runtime) -> MixerAreaLookup {
 
         // Legacy/test-path lookup. Older Logic builds and existing fake AX
         // trees expose the mixer with AXIdentifier="Mixer".

@@ -50,7 +50,9 @@ actor StateCache {
     func retainSessionReport(id: String, json: String,
                              capturedEpoch: UInt64, capturedPath: String?,
                              capture: SessionPopulationObservation.Capture? = nil,
-                             request: SessionPopulationObservation.Request? = nil) -> Bool {
+                             request: SessionPopulationObservation.Request? = nil,
+                             stoppingWhen stop: @Sendable () -> Bool = { false }) -> Bool {
+        guard !Task.isCancelled, !stop() else { return false }
         let now = sessionCaptureNow()
         sessionReports.removeAll { $0.expiresAt <= now || $0.projectEpoch != projectEpoch }
         guard Self.sessionReportHasBoundPath(capturedPath),
@@ -65,6 +67,7 @@ actor StateCache {
                     project: capture.project, tracks: capture.tracks, strips: capture.channelStrips)),
                   data.count + json.utf8.count <= Self.sessionCaptureByteLimit else { return false }
         }
+        guard !Task.isCancelled, !stop() else { return false }
         if sessionReports.count == Self.sessionCaptureLimit { sessionReports.removeFirst() }
         sessionReports.append(RetainedSessionReport(
             id: id, json: json, projectEpoch: capturedEpoch, projectPath: capturedPath,
@@ -90,7 +93,7 @@ actor StateCache {
     }
 
     func inspectionIsCurrent(_ capture: SessionPopulationObservation.Capture) -> Bool {
-        capture.before == capture.after &&
+        SessionPopulationObservation.captureMovementReason(capture: capture) == nil &&
             capture.after == captureBoundary(watching: SessionPopulationObservation.watchedSections)
     }
 
@@ -368,6 +371,40 @@ actor StateCache {
             markersFetchedAt: markersFetchedAt,
             channelStrips: channelStrips,
             mixerFetchedAt: mixerFetchedAt
+        )
+    }
+
+    /// Accept this request's native values atomically against the boundary it started with.
+    /// Failed domains may preserve the ordinary cache, but never borrow its rows into this report.
+    func acceptFreshPopulation(
+        _ population: SessionPopulationObservation.FreshPopulation,
+        ifCurrent before: CaptureBoundary,
+        stoppingWhen stop: @Sendable () -> Bool
+    ) -> SessionPopulationObservation.AcceptedPopulation? {
+        guard !stop(), captureBoundary(watching: SessionPopulationObservation.watchedSections) == before else { return nil }
+        if population.stable, let info = population.project {
+            updateProject(info)
+            updateDocumentState(true)
+            if let freshTracks = population.tracks {
+                // A completely read empty rail is positive evidence, unlike an empty failed poll.
+                tracks = freshTracks
+                tracksFetchedAt = population.endedAt
+                tracksProjectIdentity = currentProjectIdentity()
+                consecutiveEmptyPolls = 0
+                advanceSectionRevision(.tracks)
+            }
+            if let freshStrips = population.strips { updateChannelStrips(freshStrips) }
+        }
+        var state = auditSnapshot()
+        state.project = population.project ?? ProjectInfo()
+        state.tracks = population.tracks ?? []
+        state.tracksFetchedAt = population.tracks == nil ? .distantPast : population.endedAt
+        state.channelStrips = population.strips ?? []
+        state.mixerFetchedAt = population.strips == nil ? .distantPast : population.endedAt
+        return .init(
+            reading: .init(state: state, fileTrackCount: population.fileTrackCount, projectFileNotBound: false),
+            boundary: captureBoundary(watching: SessionPopulationObservation.watchedSections),
+            population: population
         )
     }
 

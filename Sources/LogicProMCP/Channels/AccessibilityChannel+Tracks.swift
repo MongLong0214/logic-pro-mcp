@@ -34,6 +34,13 @@ extension AccessibilityChannel {
         guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
               case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
         else { return (nil, false) }
+        return readTrackStates(from: headers, runtime: runtime, stoppingWhen: stop)
+    }
+
+    /// Read the retained rail, rather than rediscovering a possibly different window.
+    static func readTrackStates(
+        from headers: [AXUIElement], runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
+    ) -> (states: [TrackState]?, yielded: Bool) {
         var states: [TrackState] = []
         states.reserveCapacity(headers.count)
         for (index, header) in headers.enumerated() {

@@ -854,6 +854,7 @@ actor LogicProServer {
         work: @escaping @Sendable () async -> CallTool.Result
     ) async -> CallTool.Result {
         let deadline = deadlineOverride ?? commandDeadlineSeconds(tool: tool, command: command)
+        let operationDeadline = outerAbsoluteDeadline ?? ContinuousClock.now.advanced(by: .seconds(deadline))
         let operation = operationName(tool: tool, command: command)
         let heldMutationGate: LogicMutationGate?
         let heldClaim: LogicMutationGate.Claim?
@@ -894,7 +895,8 @@ actor LogicProServer {
                 ownsGate: { [heldMutationGate, heldClaim] in
                     guard let heldMutationGate, let heldClaim else { return true }
                     return heldMutationGate.stillOwns(heldClaim)
-                }
+                },
+                deadline: operationDeadline
             )
             let workTask = Task.detached(priority: .userInitiated) {
                 let result = await OperationTraceContext.$current.withValue(traceContext) {
@@ -933,8 +935,7 @@ actor LogicProServer {
                 }
             }
             timeoutHandle.set(timeoutTask)
-            let scheduleAfter = outerAbsoluteDeadline
-                .map { Self.secondsFromNow(until: $0) } ?? deadline
+            let scheduleAfter = Self.secondsFromNow(until: operationDeadline)
             DispatchQueue.global(qos: .userInitiated).asyncAfter(
                 deadline: .now() + scheduleAfter,
                 execute: timeoutTask

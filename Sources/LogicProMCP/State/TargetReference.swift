@@ -131,6 +131,26 @@ actor TargetRegistry {
         )
     }
 
+    /// A request-owned native project observation cannot inherit another document's bindings.
+    /// Reuse the existing project descriptor and epoch, invalidating in-flight old snapshots too.
+    func snapshotForObservedProject(
+        _ project: ProjectInfo, ifCurrent snapshot: TargetRegistrySnapshot,
+        stoppingWhen stop: @Sendable () -> Bool
+    ) -> TargetRegistrySnapshot? {
+        guard !stop(), snapshot.projectEpoch == projectEpoch,
+              snapshot.topologyGeneration == topologyGeneration else { return nil }
+        let observed = ProjectReferenceIssuance.descriptor(
+            name: project.name, filePath: project.filePath, epoch: projectEpoch
+        )
+        if observed == nil || observed != currentProjectDescriptor {
+            bumpProjectEpoch()
+            currentProjectDescriptor = ProjectReferenceIssuance.descriptor(
+                name: project.name, filePath: project.filePath, epoch: projectEpoch
+            )
+        }
+        return currentSnapshot
+    }
+
     func bind(
         kind: TargetKind,
         descriptor: TargetDescriptor,
@@ -177,9 +197,10 @@ actor TargetRegistry {
         kind: TargetKind,
         descriptor: TargetDescriptor,
         fingerprint: String,
-        snapshot: TargetRegistrySnapshot
+        snapshot: TargetRegistrySnapshot,
+        stoppingWhen stop: @Sendable () -> Bool = { false }
     ) -> TargetReference? {
-        guard snapshot.projectEpoch == projectEpoch,
+        guard !Task.isCancelled, !stop(), snapshot.projectEpoch == projectEpoch,
               snapshot.topologyGeneration == topologyGeneration else {
             return nil
         }

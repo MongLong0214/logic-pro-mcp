@@ -26,9 +26,20 @@ extension AccessibilityChannel {
             return .error(mixerChildrenUnreadMessage)
         }
         let strips = enumeration.strips
+        guard let states = readChannelStrips(from: strips, runtime: runtime, stoppingWhen: { false }) else {
+            return .error(mixerChildrenUnreadMessage)
+        }
+        return encodeResult(states)
+    }
+
+    /// The full and request-owned readers share extraction from an already-bound population.
+    static func readChannelStrips(
+        from strips: [AXUIElement], runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
+    ) -> [ChannelStripState]? {
         var channelStrips: [ChannelStripState] = []
 
         for (index, strip) in strips.enumerated() {
+            if stop() { return nil }
             let volume = AXLogicProElements.findVolumeFader(in: strip, runtime: runtime.ax)
                 .flatMap { AXValueExtractors.extractLogicMixerFaderValue($0, runtime: runtime.ax) }
                 ?? 0.0
@@ -53,7 +64,7 @@ extension AccessibilityChannel {
             state.sendSlots = AXLogicProElements.sendSlotObservations(in: strip, runtime: runtime.ax)
             channelStrips.append(state)
         }
-        return encodeResult(channelStrips)
+        return channelStrips
     }
 
     private static func readStripName(

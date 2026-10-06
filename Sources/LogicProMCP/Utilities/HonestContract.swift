@@ -64,6 +64,8 @@ enum HonestContract {
 
     /// Hard-failure category. Stable string enum.
     enum FailureError: String {
+        /// Cooperative cancellation before an operation can publish a verified result.
+        case cancelled = "cancelled"
         case axWriteFailed = "ax_write_failed"
         case elementNotFound = "element_not_found"
         case permissionDenied = "permission_denied"
