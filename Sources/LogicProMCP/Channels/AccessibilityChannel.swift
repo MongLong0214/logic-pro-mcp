@@ -889,6 +889,11 @@ actor AccessibilityChannel: Channel {
             return runtime.markers()
         case "nav.open_marker_list":
             return await runtime.openMarkerList()
+        case "nav.capture_markers":
+            return await Self.defaultCaptureMarkers(
+                runtime: runtime.logicRuntime,
+                openMarkerList: { await Self.defaultOpenMarkerListForCapture(runtime: runtime.logicRuntime) }
+            )
         case "nav.create_marker":
             return await runtime.createMarker(params)
         case "nav.rename_marker":

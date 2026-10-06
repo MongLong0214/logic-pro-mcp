@@ -233,7 +233,7 @@ private let operationTraceCensusReadRoutes: Set<String> = [
 /// paused-transport path reaches.
 private let operationTraceCensusInternalWriteRoutes: Set<String> = [
     "mmc.play", "mmc.record_strobe", "mmc.stop",
-    "nav.delete_marker", "nav.open_marker_list", "nav.rename_marker", "nav.zoom_to_fit",
+    "nav.capture_markers", "nav.delete_marker", "nav.open_marker_list", "nav.rename_marker", "nav.zoom_to_fit",
     "plugin.insert", "plugin.insert_verified", "plugin.set_eq_band_verified", "plugin.set_param_verified",
     "region.move_to_playhead",
     "track.create_audio", "track.create_drummer", "track.create_external_midi", "track.create_instrument",
@@ -347,8 +347,8 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 119)   // #291 registered mixer.set_output_verified
-        #expect(mutatingSpecs.count == 93)   // #291 mixer.set_output_verified
+        #expect(OperationRegistry.specs.count == 120)   // #1118 navigate.capture_markers
+        #expect(mutatingSpecs.count == 94)   // #1118 temporarily opens/restores UI
 
         // A mutating op that refuses BEFORE dispatch starts its trace starts no trace with the
         // coverage params (which carry no consent), so it is asserted to claim NO trace coverage
@@ -474,9 +474,9 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 119)   // #291 registered mixer.set_output_verified
+        #expect(OperationRegistry.specs.count == 120)   // #1118 navigate.capture_markers
         #expect(readOnlySpecs.count == 26)
-        // Mutability is total: the mutating census (93) and this inverse gate
+        // Mutability is total: the mutating census (94) and this inverse gate
         // (26) together account for every registered spec, so a new operation
         // cannot land outside both gates.
         #expect(readOnlySpecs.count + mutatingSpecs.count == OperationRegistry.specs.count)
