@@ -4260,7 +4260,8 @@
     "Uscita",
     "Saída",
     "输出",
-    "輸出"
+    "輸出",
+    "Ausgang"
    ],
    "rationale": "Classifies an output slot description as a physical output by its leading word;",
    "match": "exact",
@@ -5220,21 +5221,29 @@
    "variants": [
     "choose a project",
     "choose project",
-    "new from template"
+    "new from template",
+    "プロジェクトを選択",
+    "Wähle ein Projekt aus",
+    "Seleccionar un proyecto",
+    "Choisir un projet",
+    "Scegli un progetto",
+    "Escolha um projeto",
+    "选取项目",
+    "選擇計畫案"
    ],
-   "rationale": "Distinguishes the Choose-Project picker window from a real project; read-only classifier.",
+   "rationale": "Identifies chooser-shaped AXWindow titles; a title alone is not document identity. Document counting and track readers also inspect the raw AXDocument status and payload.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "quantizeGridEighthNote": {

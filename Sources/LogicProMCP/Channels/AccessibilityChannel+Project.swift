@@ -53,10 +53,10 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime
     ) -> Bool {
         guard AXLogicProElements.isProjectPickerWindow(window, runtime: runtime) else { return false }
-        let document: String? = AXHelpers.getAttribute(
-            window, kAXDocumentAttribute as String, runtime: runtime.ax
-        )
-        return document == nil
+        if case .success(nil) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime) {
+            return true
+        }
+        return false
     }
 
     static func createEmptyProjectFromQualifiedState(
