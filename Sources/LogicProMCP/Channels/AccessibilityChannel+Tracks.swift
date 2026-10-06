@@ -1498,10 +1498,11 @@ extension AccessibilityChannel {
         index: Int,
         runtime: AXLogicProElements.Runtime,
         heldHeader: AXUIElement? = nil,
-        permittingWrite: (() -> Bool)? = nil
+        permittingWrite: (() -> Bool)? = nil,
+        willWrite: (() -> Void)? = nil
     ) -> Bool {
         _ = AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime,
-            heldHeader: heldHeader, permittingWrite: permittingWrite)
+            heldHeader: heldHeader, permittingWrite: permittingWrite, willWrite: willWrite)
         for attempt in 0..<4 {
             guard permittingWrite?() ?? true else { return false }
             if selectionIsExclusive(index: index, runtime: runtime) { return true }
@@ -2036,9 +2037,10 @@ extension AccessibilityChannel {
                 permittingWrite: {
                     guard physical?.currentIndex() == position,
                           let current = readHeldName(), current.utf8.elementsEqual(expected.utf8) else { return false }
-                    attempted = true
                     return true
-                }) else { return refusal("Ordinary rename could not acquire exclusive held-track selection") }
+                }, willWrite: { attempted = true }) else {
+                    return refusal("Ordinary rename could not acquire exclusive held-track selection")
+                }
         }
         if acquire, field == nil { field = nameField() }
         if acquire, field == nil {
@@ -2074,18 +2076,20 @@ extension AccessibilityChannel {
                       let editorWindow: AXUIElement = AXHelpers.getAttribute(editor, kAXWindowAttribute, runtime: runtime.ax),
                       CFEqual(editorWindow, window), targetStillHeld(requiringExclusiveSelection: true),
                       let current = readHeldName(), current.utf8.elementsEqual(expected.utf8),
-                      case .textEditing = readLogicKeyboardFocus(runtime: runtime),
                       let finalFocus: AXUIElement = AXHelpers.getAttribute(
                         app, kAXFocusedUIElementAttribute, runtime: runtime.ax), CFEqual(finalFocus, editor) else { return false }
                 return ExactTrackNameAdapter.operationPermitted()
             }
             let typing = typeRenameName(desired,
                 focus: {
-                    editorIsHeld() ? readLogicKeyboardFocus(runtime: runtime) : .unreadable(.focusedElement)
+                    guard editorIsHeld() else { return .unreadable(.focusedElement) }
+                    let reading = readLogicKeyboardFocus(runtime: runtime)
+                    return editorIsHeld() ? reading : .unreadable(.focusedElement)
                 },
                 mouseRuntime: mouseRuntime,
                 permittingPost: {
-                    guard editorIsHeld() else { return false }
+                    guard editorIsHeld(), case .textEditing = readLogicKeyboardFocus(runtime: runtime),
+                          editorIsHeld() else { return false }
                     attempted = true
                     return true
                 })

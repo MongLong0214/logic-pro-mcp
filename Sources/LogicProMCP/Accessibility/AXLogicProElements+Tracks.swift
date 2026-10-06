@@ -200,7 +200,8 @@ extension AXLogicProElements {
         at index: Int,
         runtime: Runtime = .production,
         heldHeader: AXUIElement? = nil,
-        permittingWrite: (() -> Bool)? = nil
+        permittingWrite: (() -> Bool)? = nil,
+        willWrite: (() -> Void)? = nil
     ) -> Bool {
         guard let header = findTrackHeader(at: index, runtime: runtime),
               heldHeader.map({ CFEqual($0, header) }) ?? true else { return false }
@@ -217,6 +218,7 @@ extension AXLogicProElements {
         if let headersGroup = getTrackHeaders(runtime: runtime) {
             let arr = [header] as CFArray
             guard permitted() else { return false }
+            willWrite?()
             if AXHelpers.setAttribute(headersGroup, kAXSelectedChildrenAttribute, arr, runtime: runtime.ax) {
                 return true
             }
@@ -225,6 +227,7 @@ extension AXLogicProElements {
         // Step 2 — NSTableRow-style AXSelected=true (test-double path).
         if AXHelpers.isAttributeSettable(header, kAXSelectedAttribute, runtime: runtime.ax) == true {
             guard permitted() else { return false }
+            willWrite?()
             if AXHelpers.setAttribute(header, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax) {
                 return true
             }
@@ -232,6 +235,7 @@ extension AXLogicProElements {
 
         // Step 3 — AXPress on the header itself (test doubles that expose it).
         guard permitted() else { return false }
+        willWrite?()
         if AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) {
             return true
         }
@@ -257,6 +261,7 @@ extension AXLogicProElements {
             guard let role = AXHelpers.getRole(child, runtime: runtime.ax),
                   selectableRoles.contains(role) else { continue }
             guard permitted() else { return false }
+            willWrite?()
             if AXHelpers.performAction(child, kAXPressAction, runtime: runtime.ax) {
                 return true
             }

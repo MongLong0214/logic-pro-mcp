@@ -42,6 +42,13 @@ private final class ExactNameFixture: @unchecked Sendable {
     var observedLogicPID: pid_t = 4242
     var observedFocusedPID: pid_t = 4242
     var logicIsFrontmost = true
+    var typingSleeps: [useconds_t] = []
+    var onTypingSleep: (@Sendable (useconds_t) -> Void)?
+    var legacyHeaderRoleFailureRead: Int?
+    var legacyHeaderRoleReads = 0
+    var legacyHeaderRoleFailures = 0
+    var legacyHeaderReadsAtSelection: [Int] = []
+    var selectionReportsFailure = false
 
     init(_ name: String = "A") {
         app = builder.element(968_100)
@@ -69,7 +76,7 @@ private final class ExactNameFixture: @unchecked Sendable {
     }
 
     var runtime: AXLogicProElements.Runtime {
-        AXLogicProElements.Runtime(
+        let source = AXLogicProElements.Runtime(
             logicProPID: { [self] in observedLogicPID },
             ax: builder.makeAXRuntime(
                 appElement: app,
@@ -88,6 +95,7 @@ private final class ExactNameFixture: @unchecked Sendable {
                     if permitsSelection, CFEqual(element, rail), attribute == kAXSelectedChildrenAttribute as String,
                        let selected = value as? [AXUIElement], selected.count == 1 {
                         selectionWrites.append(selected[0])
+                        legacyHeaderReadsAtSelection.append(legacyHeaderRoleReads)
                         for row in AXHelpers.getChildren(rail, runtime: builder.makeAXRuntime()) {
                             builder.setAttribute(row, kAXSelectedAttribute as String, CFEqual(row, selected[0]))
                         }
@@ -95,7 +103,7 @@ private final class ExactNameFixture: @unchecked Sendable {
                             builder.setChildren(header, [field])
                         }
                         onSelection?()
-                        return true
+                        return !selectionReportsFailure
                     }
                     guard ([field] + additionalNameFields).contains(where: { CFEqual($0, element) }),
                           attribute == kAXValueAttribute as String,
@@ -139,10 +147,35 @@ private final class ExactNameFixture: @unchecked Sendable {
             postPopupMenuEscape: { Issue.record("Unexpected Escape") },
             focusedApplicationPID: { [self] in observedFocusedPID }
         )
+        guard legacyHeaderRoleFailureRead != nil else { return source }
+        let ax = source.ax
+        return AXLogicProElements.Runtime(logicProPID: source.logicProPID,
+            ax: AXHelpers.Runtime(axApp: ax.axApp,
+                attributeValue: { [self] element, attribute in
+                    if CFEqual(element, header), attribute == kAXRoleAttribute as String {
+                        legacyHeaderRoleReads += 1
+                        if legacyHeaderRoleReads == legacyHeaderRoleFailureRead {
+                            legacyHeaderRoleFailures += 1
+                            return nil
+                        }
+                    }
+                    return ax.attributeValue(element, attribute)
+                },
+                attributeIsSettable: ax.attributeIsSettable, setAttributeValue: ax.setAttributeValue,
+                children: ax.children, performAction: ax.performAction, childCount: ax.childCount,
+                actionNames: ax.actionNames, actionNamesResult: ax.actionNamesResult,
+                childrenResult: ax.childrenResult, attributeValueResult: ax.attributeValueResult,
+                performActionResult: ax.performActionResult),
+            executeAppleScript: source.executeAppleScript,
+            executeAppleScriptWithTimeout: source.executeAppleScriptWithTimeout,
+            onScreenWindowList: source.onScreenWindowList, postPopupMenuEscape: source.postPopupMenuEscape,
+            focusedApplicationPID: source.focusedApplicationPID, observeFrontmost: source.observeFrontmost)
     }
 
     func execute(_ params: [String: String]) -> ChannelResult {
         if acknowledgementOnly { return .success("acknowledged") }
+        legacyHeaderRoleReads = 0
+        legacyHeaderRoleFailures = 0
         return AccessibilityChannel.defaultRenameTrack(
             params: params, runtime: runtime,
             mouseRuntime: AXMouseHelper.Runtime(
@@ -166,7 +199,10 @@ private final class ExactNameFixture: @unchecked Sendable {
                     onTypedCodeUnit?()
                     return !typingPostReportsFailure
                 },
-                sleepMicros: { _ in },
+                sleepMicros: { [self] micros in
+                    typingSleeps.append(micros)
+                    onTypingSleep?(micros)
+                },
                 postFlaggedKeyEvent: { _, _ in Issue.record("Unexpected flagged key"); return false }
             ),
             processRuntime: ProcessUtils.Runtime(
@@ -892,6 +928,154 @@ struct Issue968ExactTrackNameAdapterTests {
             #expect(selected)
             #expect(!otherSelected)
         }
+    }
+
+    @Test(arguments: ["editable", "unreadable", "replacement", "ownership"])
+    func ordinaryMenuRenameWaitsForTheSameHeldEditorToBecomeEditable(readiness: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            f.builder.setAttribute(f.header, kAXTitleAttribute as String, "A")
+            f.builder.setChildren(f.header, [])
+            let bar = f.builder.element(968_210)
+            let trackMenu = f.builder.element(968_211)
+            let menu = f.builder.element(968_212)
+            let rename = f.builder.element(968_213)
+            let editor = f.builder.element(968_214)
+            f.renameMenuItem = rename
+            f.menuFocusedEditor = editor
+            f.builder.setAttribute(f.app, kAXMenuBarAttribute as String, bar)
+            for (element, role) in [(bar, kAXMenuBarRole), (trackMenu, kAXMenuBarItemRole),
+                                   (menu, kAXMenuRole), (rename, kAXMenuItemRole), (editor, kAXGroupRole)] {
+                f.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+            }
+            f.builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+            f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
+            f.builder.setAttribute(editor, kAXWindowAttribute as String, f.window)
+            f.builder.setAttribute(editor, kAXValueAttribute as String, "A")
+            f.builder.setChildren(bar, [trackMenu])
+            f.builder.setChildren(trackMenu, [menu])
+            f.builder.setChildren(menu, [rename])
+            if readiness == "unreadable" {
+                f.builder.setAttribute(editor, kAXRoleAttribute as String, NSNumber(value: 0))
+            }
+            let stranger = f.builder.element(968_215)
+            f.builder.setAttribute(stranger, kAXRoleAttribute as String, kAXTextFieldRole as String)
+            f.builder.setAttribute(stranger, kAXWindowAttribute as String, f.window)
+            f.onTypingSleep = { micros in
+                if micros == 50_000 {
+                    f.builder.setAttribute(editor, kAXInsertionPointLineNumberAttribute as String, NSNumber(value: 0))
+                    if readiness == "replacement" {
+                        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, stranger)
+                    }
+                    if readiness == "ownership" { f.boundaryOwnership = false }
+                }
+            }
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let context = OperationTraceContext(ownsGate: { f.boundaryOwnership })
+            let result = await OperationTraceContext.$current.withValue(context) {
+                await f.rename(project: project, target: target, expected: nil, desired: "C")
+            }
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            if readiness == "editable" {
+                #expect(body["state"] as? String == "A")
+                #expect(f.writes == ["C"])
+                #expect(f.typedCodeUnits == Array("C".utf16))
+                #expect(f.postedReturn)
+                #expect(f.typingSleeps == [50_000, 12_000, 50_000])
+            } else {
+                #expect(body["state"] as? String == "B")
+                #expect(f.writes.isEmpty)
+                #expect(f.typedCodeUnits.isEmpty)
+                #expect(!f.postedReturn)
+                #expect(f.typingSleeps == (readiness == "unreadable" ? [] : [50_000]))
+                #expect(await f.cache.getTracks().first?.name == "A")
+                #expect(await f.registry.resolve(target)?.descriptor.trackName == "A")
+            }
+            #expect(f.events == ["rename_menu"])
+            #expect(f.actedNameFields.isEmpty)
+        }
+    }
+
+    @Test func ordinaryRenameFinalSelectionReadFailureHasNoWriteAttemptOrUIEvent() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, otherField) = f.appendTrack(name: "B", selected: true)
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
+            f.permitsSelection = true
+            // Only legacy role reads are intercepted: the status-preserving physical
+            // and expected-name result reads remain healthy. The recorded actual
+            // producer/dispatcher/writer path reaches its first selection setter
+            // after legacy role read 21. Fail that final filter once, then keep
+            // the original unselected A and selected B readable for settle.
+            f.legacyHeaderRoleFailureRead = 21
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let result = await f.rename(project: project, target: target, expected: nil, desired: "C")
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(f.legacyHeaderRoleFailures == 1)
+            #expect(f.legacyHeaderRoleReads > 21)
+            #expect(body["state"] as? String == "C")
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!attempted)
+            #expect(f.selectionWrites.isEmpty, "Legacy header role reads at selection: \(f.legacyHeaderReadsAtSelection)")
+            #expect(f.events.isEmpty)
+            #expect(f.writes.isEmpty)
+            #expect(f.actedNameFields.isEmpty)
+            let selected = try #require(AXValueExtractors.extractSelectedState(f.header, runtime: f.runtime.ax) as Bool?)
+            let otherSelected = try #require(AXValueExtractors.extractSelectedState(other, runtime: f.runtime.ax) as Bool?)
+            #expect(!selected)
+            #expect(otherSelected)
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
+        }
+    }
+
+    @Test(arguments: [true, false])
+    func ordinarySelectionReceiptRecordsTheActualSetterEvenWithFalseAcknowledgement(acknowledged: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, _) = f.appendTrack(name: "B", selected: true)
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
+            f.permitsSelection = true
+            f.selectionReportsFailure = !acknowledged
+            f.onSelection = { f.boundaryOwnership = false }
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let context = OperationTraceContext(ownsGate: { f.boundaryOwnership })
+            let result = await OperationTraceContext.$current.withValue(context) {
+                await f.rename(project: project, target: target, expected: nil, desired: "C")
+            }
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(body["state"] as? String == "B")
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(attempted)
+            #expect(f.selectionWrites.count == 1)
+            #expect(f.selectionWrites.allSatisfy { CFEqual($0, f.header) })
+            #expect(f.events.isEmpty)
+            #expect(f.writes.isEmpty)
+            #expect(f.actedNameFields.isEmpty)
+            let selected = try #require(AXValueExtractors.extractSelectedState(f.header, runtime: f.runtime.ax) as Bool?)
+            let otherSelected = try #require(AXValueExtractors.extractSelectedState(other, runtime: f.runtime.ax) as Bool?)
+            #expect(selected)
+            #expect(!otherSelected)
+            #expect(await f.cache.getTracks().first?.name == "A")
+            #expect(await f.registry.resolve(target)?.descriptor.trackName == "A")
+        }
+    }
+
+    @Test(arguments: ["select", "confirm"])
+    func selectionBoundaryObserverPreservesTheExistingTrailingPermissionClosure(helper: String) {
+        let f = ExactNameFixture()
+        _ = f.appendTrack(name: "B", selected: true)
+        f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
+        f.permitsSelection = true
+        let selected: Bool
+        if helper == "select" {
+            selected = AXLogicProElements.selectTrackViaAX(at: 0, runtime: f.runtime, heldHeader: f.header) { false }
+        } else {
+            selected = AccessibilityChannel.confirmExclusiveSelection(index: 0, runtime: f.runtime, heldHeader: f.header) { false }
+        }
+        #expect(!selected)
+        #expect(f.selectionWrites.isEmpty)
+        #expect(f.events.isEmpty)
+        #expect(f.writes.isEmpty)
     }
 
     @Test(arguments: ["name", "ownership", "false_ack"])
