@@ -181,12 +181,15 @@ enum SessionPopulationObservation {
         /// captured project, in which case nothing was issued and the report must not be returned.
         let requestedProjectMatches: Bool?
         let referencesEnabled: Bool
-        /// The registry snapshot `issued` and `projectIssuance` were issued under; nil exactly when
-        /// `referencesEnabled` is false. `logic://mixer` binds its `mixer_strip_ref`s under it and
-        /// the routing graph reports its epoch.
+        /// The snapshot used by track, project and physical-strip issuance; nil exactly when
+        /// `referencesEnabled` is false. Resources and the graph consume this capture's refs.
         let targetSnapshot: TargetRegistrySnapshot?
         /// Nil while `referencesEnabled` means the registry moved on during issuance.
         let issued: IssuedTrackReferences?
+        /// Row-aligned references issued for retained physical strips in this very capture.
+        /// Alignment is not identity: the registry deduplicates on CF ownership and document,
+        /// never on Mixer ordinal or name. Nil means issuance was interrupted or stale.
+        let mixerReferences: [TargetReference?]?
         let projectIssuance: ProjectIssuance?
         let beganAt: Date
         let endedAt: Date
@@ -213,7 +216,8 @@ enum SessionPopulationObservation {
             beganAt: Date,
             endedAt: Date,
             captureID: String = "snap_" + UUID().uuidString,
-            freshPopulation: FreshPopulation? = nil
+            freshPopulation: FreshPopulation? = nil,
+            mixerReferences: [TargetReference?]? = nil
         ) {
             self.before = before
             self.after = after
@@ -229,11 +233,23 @@ enum SessionPopulationObservation {
             self.referencesEnabled = referencesEnabled
             self.targetSnapshot = targetSnapshot
             self.issued = issued
+            self.mixerReferences = mixerReferences
             self.projectIssuance = projectIssuance
             self.beganAt = beganAt
             self.endedAt = endedAt
             self.captureID = captureID
             self.freshPopulation = freshPopulation
+        }
+
+        func mixerReference(at row: Int) -> TargetReference? {
+            guard before == after, freshPopulation?.stable != false,
+                  let mixerReferences, mixerReferences.indices.contains(row) else { return nil }
+            return mixerReferences[row]
+        }
+
+        var referencesStale: Bool {
+            referencesEnabled && (issued == nil ||
+                (channelStrips.contains { $0.physicalBinding != nil } && mixerReferences == nil))
         }
 
     }
@@ -338,6 +354,7 @@ enum SessionPopulationObservation {
         }
 
         var issued: IssuedTrackReferences?
+        var mixerReferences: [TargetReference?]?
         var projectIssuance: ProjectIssuance?
         if !stop(), accepted?.population.stable != false,
            FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot, requestedProjectMatches != false {
@@ -365,6 +382,29 @@ enum SessionPopulationObservation {
                 }
                 if !reissued { requestedProjectMatches = false }
             }
+            if !stop(), requestedProjectMatches != false, issued != nil {
+                switch projectIssuance {
+                case .issued?:
+                    mixerReferences = await issueMixerReferences(
+                        snapshot.channelStrips, registry: targetRegistry, snapshot: targetSnapshot,
+                        stoppingWhen: stop
+                    )
+                case .unobserved?:
+                    // Readable strips without a bound project remain observations, not a moved
+                    // capture. They have no physical reference authority to publish.
+                    mixerReferences = Array(repeating: nil, count: snapshot.channelStrips.count)
+                default:
+                    break
+                }
+            }
+            // Binding awaits the registry. A movement after the final bind is still a moved
+            // capture, not permission to publish references from the previous epoch/topology.
+            let current = await targetRegistry.currentSnapshot
+            if Task.isCancelled || stop() || current != targetSnapshot {
+                issued = nil
+                mixerReferences = nil
+                projectIssuance = .stale
+            }
         }
 
         let after = await cache.captureBoundary(watching: watchedSections)
@@ -388,8 +428,35 @@ enum SessionPopulationObservation {
             projectIssuance: projectIssuance,
             beganAt: beganAt,
             endedAt: endedAt,
-            freshPopulation: accepted?.population
+            freshPopulation: accepted?.population,
+            mixerReferences: mixerReferences
         )
+    }
+
+    private static func issueMixerReferences(
+        _ strips: [ChannelStripState], registry: TargetRegistry,
+        snapshot: TargetRegistrySnapshot, stoppingWhen stop: @Sendable () -> Bool
+    ) async -> [TargetReference?]? {
+        var references: [TargetReference?] = []
+        for strip in strips {
+            guard !Task.isCancelled, !stop() else { return nil }
+            guard let physical = strip.physicalBinding else {
+                references.append(nil)
+                continue
+            }
+            // Repeated observations of the same physical element do not prove unique membership.
+            guard strips.filter({ $0.physicalBinding?.matches(physical) == true }).count == 1 else {
+                references.append(nil)
+                continue
+            }
+            let descriptor = TargetDescriptor(trackIndex: strip.trackIndex, trackName: strip.name ?? "")
+            guard let reference = await registry.bind(
+                kind: .mixerStrip, descriptor: descriptor, fingerprint: descriptor.fingerprint,
+                snapshot: snapshot, physicalMixerStrip: physical, stoppingWhen: stop
+            ) else { return nil }
+            references.append(reference)
+        }
+        return references
     }
 
     // MARK: - Report
@@ -600,6 +667,7 @@ enum SessionPopulationObservation {
         var inputStatus: String { inputObservation?.state.rawValue ?? "not_read" }
         let pluginCount: Int
         let pluginsSource: String?
+        var mixerStripRef: String? = nil
 
         enum CodingKeys: String, CodingKey {
             case stripIndex = "strip_index"
@@ -612,6 +680,7 @@ enum SessionPopulationObservation {
             case inputStatus = "input_status"
             case pluginCount = "plugin_count"
             case pluginsSource = "plugins_source"
+            case mixerStripRef = "mixer_strip_ref"
         }
 
         // Unknown and legacy not-read names remain explicit nulls, never empty names.
@@ -631,6 +700,7 @@ enum SessionPopulationObservation {
             try container.encode(inputStatus, forKey: .inputStatus)
             try container.encode(pluginCount, forKey: .pluginCount)
             try container.encodeIfPresent(pluginsSource, forKey: .pluginsSource)
+            try container.encodeIfPresent(mixerStripRef, forKey: .mixerStripRef)
         }
     }
 
@@ -651,18 +721,20 @@ enum SessionPopulationObservation {
         let reasons: [Reason]
     }
 
-    /// The routing domain (#291): the section's own coverage, and the coverage of the graph
-    /// `logic://mixer` publishes for the same capture, carried verbatim under `graph`.
+    /// The routing domain (#291): existing coverage under `graph` stays wire-compatible;
+    /// additive `nodes` carries the same publication's actual source endpoints.
     struct RoutingSection: Encodable, Sendable {
         let coverage: Coverage
         let reasons: [Reason]
         let graph: RoutingCoverage
+        let nodes: [RoutingNode]
         let snapshotId: String
 
         enum CodingKeys: String, CodingKey {
             case coverage
             case reasons
             case graph
+            case nodes
             case snapshotId = "snapshot_id"
         }
     }
@@ -864,6 +936,9 @@ enum SessionPopulationObservation {
         } else if stripSource == "mixer_not_visible" {
             stripsCoverage = .unavailable
             stripsReasons = [.mixerNotVisible]
+        } else if capture.referencesStale {
+            stripsCoverage = .unstable
+            stripsReasons = [.targetSnapshotStale]
         } else if stripSource == "cache_stale" {
             stripsCoverage = .partial
             stripsReasons = [.mixerCacheStale]
@@ -883,7 +958,7 @@ enum SessionPopulationObservation {
             reasons: stripsReasons,
             witnesses: StripWitnesses(count: capture.channelStrips.count,
                                      presentation: capture.freshPopulation?.mixerPresentation),
-            rows: capture.channelStrips.map { strip in
+            rows: capture.channelStrips.enumerated().map { row, strip in
                 StripRow(
                     stripIndex: strip.trackIndex,
                     name: strip.name,
@@ -892,7 +967,8 @@ enum SessionPopulationObservation {
                     input: strip.input,
                     inputObservation: strip.inputObservation,
                     pluginCount: strip.plugins.count,
-                    pluginsSource: strip.pluginsSource
+                    pluginsSource: strip.pluginsSource,
+                    mixerStripRef: capture.mixerReference(at: row)?.rawValue
                 )
             }
         )
@@ -1019,6 +1095,7 @@ enum SessionPopulationObservation {
             coverage: coverage,
             reasons: reasons,
             graph: graph.coverage,
+            nodes: graph.nodes,
             snapshotId: graph.snapshotId
         )
     }
