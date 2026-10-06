@@ -377,6 +377,67 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
     #expect(CFEqual(element, fixture.focus))
 }
 
+@Test(arguments: [false, true], [false, true])
+func issue1118CaptureOracleAcceptsActualRestoredEnvelopes(open: Bool, empty: Bool) async throws {
+    let fixture = Issue1118CaptureFixture(open: open, empty: empty)
+    let result = await fixture.capture()
+    let body = fixture.object(result)
+    #expect(body["state"] as? String == "A")
+    let markers = try #require(body["markers"] as? [[String: Any]])
+    #expect(markers.count == (empty ? 0 : 1))
+    let oracle = try #require(SemanticOracleTable.byOperationID[.navigateCaptureMarkers])
+    // The getter after a capture-owned close need not expose a Marker List.
+    // This oracle pins the capture/restoration receipt, not a fake getter echo.
+    let accepted = try #require(oracle.evaluate(
+        responseData: Data(result.message.utf8), readbackData: Data("{}".utf8)
+    ))
+    #expect(accepted)
+
+    let corruptions: [(String, Any)] = [
+        ("operation", "nav.create_marker"),
+        ("marker_source", "cache"),
+        ("ui_restored", false),
+        ("ui_restored", 1),
+        ("markers", NSNull()),
+        ("markers", [:] as [String: Any]),
+        ("already_open", !open),
+        ("write_attempted", open),
+        ("state", "B"),
+        ("state", "C"),
+        ("verified", false),
+        ("success", false),
+    ]
+    for (key, value) in corruptions {
+        var corrupted = body
+        corrupted[key] = value
+        let data = try JSONSerialization.data(withJSONObject: corrupted)
+        let survived = try #require(oracle.evaluate(responseData: data, readbackData: Data("{}".utf8)))
+        #expect(!survived, "capture oracle accepted corrupted \(key): \(value)")
+    }
+    for key in ["operation", "marker_source", "ui_restored", "markers", "already_open", "write_attempted"] {
+        var corrupted = body
+        corrupted.removeValue(forKey: key)
+        let data = try JSONSerialization.data(withJSONObject: corrupted)
+        let survived = try #require(oracle.evaluate(responseData: data, readbackData: Data("{}".utf8)))
+        #expect(!survived, "capture oracle accepted absent \(key)")
+    }
+}
+
+@Test(arguments: ["unread_rows", "close_remains", "unknown_initial"])
+func issue1118CaptureOracleRejectsActualRefusals(failure: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    fixture.unreadRows = failure == "unread_rows"
+    fixture.closeRemains = failure == "close_remains"
+    if failure == "unknown_initial" { fixture.unreadInitial = kAXWindowsAttribute as String }
+    let result = await fixture.capture()
+    #expect(fixture.object(result)["state"] as? String == "C")
+    let oracle = try #require(SemanticOracleTable.byOperationID[.navigateCaptureMarkers])
+    let accepted = try #require(oracle.evaluate(
+        responseData: Data(result.message.utf8), readbackData: Data("{}".utf8)
+    ))
+    #expect(!accepted)
+}
+
 @Test(arguments: [false, true])
 func issue1118CaptureAlreadyOpenLeavesTheUIUntouched(empty: Bool) async throws {
     let fixture = Issue1118CaptureFixture(open: true, empty: empty)

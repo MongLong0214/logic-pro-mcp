@@ -911,6 +911,17 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
+        // defaultCaptureMarkers: captured MarkerState rows and observed UI restoration.
+        .navigateCaptureMarkers: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"nav.capture_markers","marker_source":"ax_marker_list",\
+                "already_open":false,"write_attempted":true,"ui_restored":true,\
+                "markers":[{"id":0,"name":"Verse","position":"5.1.1.1",\
+                "positionSource":"parser"}]}
+                """,
+            readback: "{}"
+        ),
         // finalizeCreateMarkerResult (named create): observed_marker_name == requested_name,
         // count delta +1.
         .navigateCreateMarker: SemanticOracleFixture(
