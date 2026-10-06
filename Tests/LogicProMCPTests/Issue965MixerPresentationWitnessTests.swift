@@ -116,7 +116,9 @@ struct Issue965MixerPresentationWitnessTests {
         let result = await LogicProServer.runWithDeadline(
             tool: "logic_project", command: "inspect_session", commandParams: params, mutationGate: gate
         ) { await handler(dependencies, params) }
-        #expect((result.isError ?? false) == !expectSuccess)
+        let isError = result.isError ?? false
+        if expectSuccess { #expect(!isError) }
+        else { #expect(isError) }
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
         return try #require(sharedJSONObject(sharedToolText(result)))
     }
@@ -148,7 +150,8 @@ struct Issue965MixerPresentationWitnessTests {
             })
             let strips = try #require(body["strips"] as? [String: Any])
             #expect(strips["coverage"] as? String == "unstable")
-            #expect((strips["reasons"] as? [String])?.contains("live_population_moved") == true)
+            let reasons = try #require(strips["reasons"] as? [String])
+            #expect(reasons.contains("live_population_moved"))
         }
     }
 
