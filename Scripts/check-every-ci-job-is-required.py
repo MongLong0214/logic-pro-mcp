@@ -209,6 +209,9 @@ def workflow_runs_command(text: str, command: str) -> bool:
                 continue
             if any(len(word) != 1 for word in decoded):
                 continue
+            # Quoting an exit/exec builtin does not stop Bash from invoking it.
+            if any(word[0] in control_words for word in decoded):
+                continue
             statements, current = [], []
             for token, word in zip(tokens, decoded):
                 if token and all(char in ";&|()\n" for char in token):
