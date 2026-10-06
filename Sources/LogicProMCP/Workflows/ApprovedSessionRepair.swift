@@ -6,6 +6,29 @@ import MCP
 /// The native counterpart of one retained canonical view task. It is not a wire
 /// token: only the retained capture supplies its process-local AX custody.
 final class ApprovedSessionRepair: @unchecked Sendable {
+    struct ApplyRequest: Sendable {
+        let planID: String
+        let digest: String
+        let key: String
+
+        private init(planID: String, digest: String, key: String) {
+            self.planID = planID; self.digest = digest; self.key = key
+        }
+
+        static func parse(_ params: [String: Value]) -> ApplyRequest? {
+            guard Set(params.keys) == ["plan_id", "digest", "confirmed", "idempotency_key"],
+                  case .bool(true)? = params["confirmed"],
+                  let id = params["plan_id"]?.stringValue, !id.isEmpty,
+                  let digest = params["digest"]?.stringValue, digest.utf8.count == 64,
+                  let key = try? SagaWire.idempotencyKey(from: ["idempotency_key": params["idempotency_key"] ?? .null]) else { return nil }
+            return .init(planID: id, digest: digest, key: key)
+        }
+
+        static func refusal() -> CallTool.Result {
+            toolInvalidParamsResult("apply_session_repair requires the exact retained plan_id and digest, confirmed:true, and an idempotency_key", extras: ["write_attempted": false])
+        }
+    }
+
     @TaskLocal static var current: ApprovedSessionRepair?
     let plan: SagaPlan
     let before: Bool
@@ -163,14 +186,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return result
     }
 
-    static func apply(params: [String: Value], dependencies: HandlerDependencies) async -> CallTool.Result {
-        guard Set(params.keys) == ["plan_id", "digest", "confirmed", "idempotency_key"],
-              case .bool(true)? = params["confirmed"],
-              let id = params["plan_id"]?.stringValue, !id.isEmpty,
-              let digest = params["digest"]?.stringValue, digest.utf8.count == 64,
-              let key = try? SagaWire.idempotencyKey(from: ["idempotency_key": params["idempotency_key"] ?? .null]) else {
-            return toolInvalidParamsResult("apply_session_repair requires the exact retained plan_id and digest, confirmed:true, and an idempotency_key")
-        }
+    static func apply(request: ApplyRequest, dependencies: HandlerDependencies) async -> CallTool.Result {
+        let id = request.planID, digest = request.digest, key = request.key
         if let replay = await dependencies.sagaJournal.canonicalReplay(key: key, planID: id, digest: digest) {
             switch replay {
             case .completed(let outcome):
