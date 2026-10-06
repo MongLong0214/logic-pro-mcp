@@ -108,6 +108,8 @@ extension ProjectSessionAudit {
         let epochMismatch = graphEpochMismatch(graph, capture: capture)
         if let epochMismatch { reasons.insert(epochMismatch.rawValue) }
         let graphBound = gate == nil && epochMismatch == nil
+        var proposalReadReasons = reasons
+        if !request.domains.contains(.routing) { proposalReadReasons.insert("routing_not_requested") }
         if options.onAmbiguity == .reportOnly { reasons.insert("report_only_requested") }
         // Steps that create a receiving aux come before the outputs that need one
         // (destination before source), and each bus gets at most one.
@@ -213,12 +215,17 @@ extension ProjectSessionAudit {
                     }
                 }
             }
+            var proposalReasons = proposalReadReasons
+            if blocked.contains("bus_receiver_unverified") { proposalReasons.insert("bus_receiver_unverified") }
+            let proposal = try proposedExistingBusOutput(finding: finding, graph: graph, readReasons: proposalReasons)
+            blocked.formUnion(proposal.reasons)
             reasons.formUnion(blocked)
             var before: Value = .object([:])
             if let observed = finding.observed { before = try repairPlanValue(observed) }
             var step: [String: Value] = [
                 "id": .string(id), "kind": .string("main_output"),
                 "before": before, "after": try repairPlanValue(finding.expected),
+                "proposed_routing_diff": proposal.wire,
                 "blocked_reasons": .array(blocked.sorted().map(Value.string)),
                 "dependencies": .array(dependencies.map(Value.string)),
                 "required_invariants": .array([
@@ -297,6 +304,102 @@ extension ProjectSessionAudit {
         body["plan_id"] = .string(id)
         return CanonicalRepairPlan(id: id, digest: digest,
             json: try encodeJSONStrict(Value.object(body), compact: true))
+    }
+
+    /// A desired-policy delta, not an observed after-state or an audio-safety verdict. All
+    /// unrelated edges are copied unchanged; receiving-aux fanout is not a main-output duplicate.
+    private static func proposedExistingBusOutput(
+        finding: IntentFinding, graph: RoutingGraph, readReasons: Set<String>
+    ) throws -> (wire: Value, reasons: Set<String>) {
+        var reasons = readReasons
+        if finding.status != .violation {
+            reasons.formUnion(finding.reasons.map(\.rawValue))
+            reasons.insert("main_output_proposal_unverified")
+        }
+        for (name, domain) in [
+            ("population", graph.coverage.population),
+            ("strip_track_association", graph.coverage.stripTrackAssociation),
+            ("main_output", graph.coverage.mainOutput),
+            ("bus_to_aux_input", graph.coverage.busToAuxInput),
+            ("sends", graph.coverage.sends),
+        ] where domain.state != .complete {
+            reasons.insert("proposed_\(name)_coverage_incomplete")
+        }
+        func unverified(_ reason: String? = nil) -> (Value, Set<String>) {
+            if let reason { reasons.insert(reason) }
+            return (.object([
+                "status": .string("unverified"), "basis": .string("approved_policy"),
+                "observation": .string("proposed_not_observed"),
+                "reasons": .array(reasons.sorted().map(Value.string)),
+            ]), reasons)
+        }
+        guard reasons.isEmpty else { return unverified() }
+        guard finding.expected.output == .bus, let bus = finding.expected.busNumber else {
+            return unverified("main_output_proposal_unsupported")
+        }
+        guard let rawRef = finding.target.trackRef else { return unverified("proposed_source_unavailable") }
+        let sources = graph.nodes.filter { $0.targetRef?.rawValue == rawRef }
+        guard sources.count == 1, let source = sources.first,
+              graph.nodes.filter({ $0.id == source.id }).count == 1 else {
+            return unverified("proposed_source_ambiguous")
+        }
+        guard source.kind == .track else { return unverified("proposed_source_not_track") }
+        let destinations = graph.nodes.filter { $0.kind == .bus && $0.busNumber == bus }
+        guard destinations.count == 1, let destination = destinations.first,
+              graph.nodes.filter({ $0.id == destination.id }).count == 1 else {
+            return unverified("proposed_destination_not_unique_bus")
+        }
+        // routingDiff keys outputs by source (and sends by reference/slot), with last-wins
+        // dictionaries. Reject ambiguity before invoking it, including unrelated output keys.
+        let outputs = graph.edges.filter { $0.kind == .mainOutput }
+        guard Dictionary(grouping: outputs, by: \.source).values.allSatisfy({ $0.count == 1 }),
+              outputs.allSatisfy({ $0.send == nil }) else {
+            return unverified("proposed_output_assignments_ambiguous")
+        }
+        var sendSlots: [TargetReference: Set<Int>] = [:]
+        for edge in graph.edges where edge.kind == .send {
+            guard let send = edge.send,
+                  sendSlots[send.sourceTrackRef, default: []].insert(send.physicalSlot).inserted else {
+                return unverified("proposed_send_assignments_ambiguous")
+            }
+        }
+        let sourceOutputs = outputs.filter { $0.source == source.id }
+        guard sourceOutputs.count == 1, let before = sourceOutputs.first else {
+            return unverified("proposed_source_output_unavailable")
+        }
+        // The assessor already checks the observed bus number, but the proposal additionally
+        // requires an actual bus node: an aux's label/number cannot supply either endpoint.
+        let previousNodes = graph.nodes.filter { $0.id == before.destination }
+        guard previousNodes.count == 1, let previous = previousNodes.first, previous.kind == .bus else {
+            return unverified("proposed_before_destination_not_unique_bus")
+        }
+        let desired = RoutingEdge(kind: .mainOutput, source: source.id, destination: destination.id,
+                                  send: nil, provenance: .other)
+        let after = RoutingGraph(
+            projectReference: graph.projectReference, projectEpoch: graph.projectEpoch,
+            complete: graph.complete, partialReason: graph.partialReason, nodes: graph.nodes,
+            edges: graph.edges.map { $0 == before ? desired : $0 },
+            provenance: graph.provenance.contains(.other) ? graph.provenance : graph.provenance + [.other],
+            snapshotId: graph.snapshotId, coverage: graph.coverage
+        )
+        let diff = routingDiff(before: graph, after: after)
+        func changeValue(_ change: RoutingEdgeChange) throws -> Value {
+            .object([
+                "before": try change.before.map { try repairPlanValue($0) } ?? .null,
+                "after": try change.after.map { try repairPlanValue($0) } ?? .null,
+            ])
+        }
+        return (.object([
+            "status": .string("proposed"), "basis": .string("approved_policy"),
+            "observation": .string("proposed_not_observed"),
+            "output_changes": .array(try diff.outputChanges.map(changeValue)),
+            "input_changes": .array(try diff.inputChanges.map(changeValue)),
+            "added_sends": .array(try diff.addedSends.map { try repairPlanValue($0) }),
+            "removed_sends": .array(try diff.removedSends.map { try repairPlanValue($0) }),
+            "changed_sends": .array(try diff.changedSends.map {
+                .object(["before": try repairPlanValue($0.before), "after": try repairPlanValue($0.after)])
+            }),
+        ]), [])
     }
 
     enum ReceivingAux: Equatable {
