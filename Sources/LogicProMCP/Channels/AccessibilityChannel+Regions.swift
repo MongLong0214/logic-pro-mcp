@@ -37,10 +37,10 @@ extension AccessibilityChannel {
             //
             // It is now measured, and measured from the HEADERS rather than the regions: a track
             // carrying no regions produces no entry, so the highest observed `trackIndex` says
-            // nothing about the tracks above it. `allTrackHeaders` is not viewport-limited —
-            // measured on Logic 12.3, 21 of 21 while the region layer stopped at 13 — so "every
-            // header is inside the visible bounds" answers the question directly, and fails closed
-            // on a frame it cannot read.
+            // nothing about the tracks above it. The measured flat fixture exposed 21 headers while
+            // the region layer stopped at 13. A collapsed stack can instead omit its descendants
+            // from that rail, so visible header bounds also require readable, noncollapsed stack
+            // state. Unknown stack state is not a flat-track observation.
             //
             // The headers are the VERTICAL axis only. A region at bar 33 lies far to the right of a
             // window whose every track header is visible, so the count of region items dropped for
@@ -69,8 +69,7 @@ extension AccessibilityChannel {
         let regions: [(item: AXUIElement, info: RegionInfo)]
         let layoutItemCount: Int
         let nonRegionCount: Int
-        /// Every track in the project, viewport or not. `allTrackHeaders` is NOT viewport-limited —
-        /// measured on Logic 12.3, 2026-08-17: 21 headers while the region layer stopped at 13.
+        /// Headers exposed by the rail, viewport or not. A collapsed stack can omit descendants.
         let trackHeaderCount: Int
         /// How many of those headers lie inside the window's visible bounds. This is the honest
         /// denominator for a completeness claim, and it is decidable WITHOUT the regions: a track
@@ -87,8 +86,13 @@ extension AccessibilityChannel {
         /// models exactly that shape and caught it.
         let regionItemsOutsideViewport: Int
 
-        /// The enumeration saw the whole arrangement: every track was in view AND no region was
-        /// dropped for being outside it.
+        /// Exposed headers whose stack state is unreadable or whose descendants are collapsed.
+        /// Computed from those same AX headers, never from cache counts or guessed metadata.
+        let trackHeadersWithStackVisibilityGaps: Int
+
+        /// Conditional coverage of the observed arrangement: every exposed header was in view,
+        /// its stack visibility was readable/noncollapsed, and no found region was dropped.
+        /// These local checks still do not establish hidden-track or virtualized-population coverage.
         ///
         /// Zero headers is NOT complete: with nothing to bound the claim there is nothing to have
         /// covered, and reporting completeness there would make an unreadable arrangement look
@@ -97,6 +101,7 @@ extension AccessibilityChannel {
             trackHeaderCount > 0
                 && trackHeadersWithinViewport == trackHeaderCount
                 && regionItemsOutsideViewport == 0
+                && trackHeadersWithStackVisibilityGaps == 0
         }
     }
 
@@ -217,6 +222,11 @@ extension AccessibilityChannel {
         }
 
         let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+        let stackVisibilityGaps = headers.filter { header in
+            let stack = AXValueExtractors.extractTrackStackState(from: header, runtime: runtime.ax)
+            if stack.isStackHeader == false { return false }
+            return !(stack.isStackHeader == true && stack.collapsed == false)
+        }.count
         let headerYs: [(index: Int, y: CGFloat)] = headers.enumerated().compactMap { pair in
             guard let p = AXHelpers.getPosition(pair.element, runtime: runtime.ax),
                   let s = AXHelpers.getSize(pair.element, runtime: runtime.ax) else { return nil }
@@ -271,7 +281,8 @@ extension AccessibilityChannel {
             trackHeadersWithinViewport: headers.filter {
                 headerIsWithinViewport($0, within: window, runtime: runtime.ax)
             }.count,
-            regionItemsOutsideViewport: regionItemsOutsideViewport
+            regionItemsOutsideViewport: regionItemsOutsideViewport,
+            trackHeadersWithStackVisibilityGaps: stackVisibilityGaps
         ))
     }
 
