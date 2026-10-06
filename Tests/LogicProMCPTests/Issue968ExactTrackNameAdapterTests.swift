@@ -49,6 +49,10 @@ private final class ExactNameFixture: @unchecked Sendable {
     var legacyHeaderRoleFailures = 0
     var legacyHeaderReadsAtSelection: [Int] = []
     var selectionReportsFailure = false
+    var legacyHeaderRoleObservedRead: Int?
+    var legacyHeaderRoleObservations = 0
+    var onLegacyHeaderRoleRead: (@Sendable () -> Void)?
+    var boundaryCancellation = false
 
     init(_ name: String = "A") {
         app = builder.element(968_100)
@@ -147,13 +151,17 @@ private final class ExactNameFixture: @unchecked Sendable {
             postPopupMenuEscape: { Issue.record("Unexpected Escape") },
             focusedApplicationPID: { [self] in observedFocusedPID }
         )
-        guard legacyHeaderRoleFailureRead != nil else { return source }
+        guard legacyHeaderRoleFailureRead != nil || legacyHeaderRoleObservedRead != nil else { return source }
         let ax = source.ax
         return AXLogicProElements.Runtime(logicProPID: source.logicProPID,
             ax: AXHelpers.Runtime(axApp: ax.axApp,
                 attributeValue: { [self] element, attribute in
                     if CFEqual(element, header), attribute == kAXRoleAttribute as String {
                         legacyHeaderRoleReads += 1
+                        if legacyHeaderRoleReads == legacyHeaderRoleObservedRead {
+                            legacyHeaderRoleObservations += 1
+                            onLegacyHeaderRoleRead?()
+                        }
                         if legacyHeaderRoleReads == legacyHeaderRoleFailureRead {
                             legacyHeaderRoleFailures += 1
                             return nil
@@ -176,6 +184,7 @@ private final class ExactNameFixture: @unchecked Sendable {
         if acknowledgementOnly { return .success("acknowledged") }
         legacyHeaderRoleReads = 0
         legacyHeaderRoleFailures = 0
+        legacyHeaderRoleObservations = 0
         return AccessibilityChannel.defaultRenameTrack(
             params: params, runtime: runtime,
             mouseRuntime: AXMouseHelper.Runtime(
@@ -1024,6 +1033,61 @@ struct Issue968ExactTrackNameAdapterTests {
             let otherSelected = try #require(AXValueExtractors.extractSelectedState(other, runtime: f.runtime.ax) as Bool?)
             #expect(!selected)
             #expect(otherSelected)
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
+        }
+    }
+
+    @Test(arguments: ["ownership", "cancel", "deadline", "healthy"])
+    func ordinaryRenameSuccessfulFinalSelectionReadCannotOutliveOperationAuthority(loss: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, otherField) = f.appendTrack(name: "B", selected: true)
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
+            f.permitsSelection = true
+            f.legacyHeaderRoleObservedRead = 21
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(1)) : nil
+            f.onLegacyHeaderRoleRead = {
+                if loss == "ownership" { f.boundaryOwnership = false }
+                if loss == "cancel" { f.boundaryCancellation = true }
+                // Expire the actual absolute deadline inside the deciding read,
+                // not before dispatch and not by making the AX role unreadable.
+                // No elapsed-time assertion or simulated latency earns a pass.
+                if let deadline {
+                    while ContinuousClock.now < deadline { Thread.sleep(forTimeInterval: 0.001) }
+                }
+            }
+            let context = OperationTraceContext(ownsGate: { f.boundaryOwnership }, deadline: deadline,
+                                                cancellationRequested: { f.boundaryCancellation })
+            let result = await OperationTraceContext.$current.withValue(context) {
+                await f.rename(project: project, target: target, expected: nil, desired: "C")
+            }
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(f.legacyHeaderRoleObservations == 1)
+            #expect(f.legacyHeaderRoleFailures == 0)
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            let selected = try #require(AXValueExtractors.extractSelectedState(f.header, runtime: f.runtime.ax) as Bool?)
+            let otherSelected = try #require(AXValueExtractors.extractSelectedState(other, runtime: f.runtime.ax) as Bool?)
+            if loss == "healthy" {
+                #expect(body["state"] as? String == "A")
+                #expect(attempted)
+                #expect(f.selectionWrites.count == 1)
+                #expect(f.selectionWrites.allSatisfy { CFEqual($0, f.header) })
+                #expect(f.writes == ["C"])
+                #expect(selected)
+                #expect(!otherSelected)
+            } else {
+                #expect(body["state"] as? String == "C")
+                #expect(!attempted)
+                #expect(f.selectionWrites.isEmpty, "Legacy reads at selection: \(f.legacyHeaderReadsAtSelection)")
+                #expect(f.events.isEmpty)
+                #expect(f.writes.isEmpty)
+                #expect(f.actedNameFields.isEmpty)
+                #expect(!selected)
+                #expect(otherSelected)
+                #expect(await f.cache.getTracks().first?.name == "A")
+                #expect(await f.registry.resolve(target)?.descriptor.trackName == "A")
+            }
             #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
         }
     }

@@ -208,7 +208,11 @@ extension AXLogicProElements {
         func permitted() -> Bool {
             guard permittingWrite?() ?? true else { return false }
             guard let heldHeader else { return true }
-            return findTrackHeader(at: index, runtime: runtime).map({ CFEqual($0, heldHeader) }) ?? false
+            guard findTrackHeader(at: index, runtime: runtime).map({ CFEqual($0, heldHeader) }) ?? false else {
+                return false
+            }
+            // The last AX lookup can revoke custody; permission must follow it.
+            return permittingWrite?() ?? true
         }
 
         // Step 1 (v3.0.9 primary path) — AXSelectedChildren on parent group.
