@@ -76,8 +76,12 @@ struct ReleaseOrderingContractTests {
             .filter { !$0.hasPrefix("#") }
         #expect(settings.contains { $0.hasPrefix("LOGIC_PRO_MCP_LOCAL_ARCHIVE:") && $0.hasSuffix(".tar.gz") },
                 "the install validation must SET the archive to the build artifact, not merely mention it")
-        #expect(settings.contains { $0.hasPrefix("name: verified-release-artifacts") },
-                "and must download that artifact in the same run")
+        #expect(settings.contains { $0 == "name: ${{ needs.build-release.outputs.verified_artifact_name }}" },
+                "consumers must use the producer's name, including on a partial rerun")
+        #expect(settings.contains { $0 == "verified_artifact_name: ${{ steps.artifact-name.outputs.name }}" },
+                "the producer must expose the name of the artifact it uploaded")
+        #expect(settings.contains { $0 == "name: ${{ steps.artifact-name.outputs.name }}" },
+                "the uploaded name and producer output must come from the same step")
         #expect(!settings.contains { $0.contains("releases/download/$VERSION/SHA256SUMS.txt") },
                 "resolving the hash from the published release is what forced this job to run late")
     }
