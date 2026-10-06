@@ -112,6 +112,8 @@ struct TrackState: Sendable, Codable, Identifiable {
     /// compat: pre-v3.1.8 JSON snapshots lacking the field decode cleanly).
     var placeholder: Bool?
     var liveIdentityBacked: Bool = true
+    /// Typed AX observation only. Codable/MCU/placeholder rows cannot import this authority.
+    var physicalBinding: AXTrackBinding.Binding? = nil
     /// Whether this row is the main track of a track stack (#448).
     ///
     /// Read from the presence of the header's `AXDisclosureTriangle`, which Logic describes as

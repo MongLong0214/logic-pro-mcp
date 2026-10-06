@@ -102,6 +102,7 @@ struct TargetBinding: Sendable {
     let descriptor: TargetDescriptor
     let observedFingerprint: String
     let pluginInsertIndex: Int?
+    var physicalTrack: AXTrackBinding.Binding? = nil
     var physicalMixerStrip: AXMixerStripBinding.Binding? = nil
     let createdAt: ContinuousClock.Instant
 }
@@ -157,6 +158,7 @@ actor TargetRegistry {
         descriptor: TargetDescriptor,
         fingerprint: String,
         pluginInsertIndex: Int? = nil,
+        physicalTrack: AXTrackBinding.Binding? = nil,
         physicalMixerStrip: AXMixerStripBinding.Binding? = nil
     ) -> TargetReference {
         if kind == .project, currentProjectDescriptor != descriptor {
@@ -164,16 +166,31 @@ actor TargetRegistry {
             bindings = bindings.filter { $0.value.kind != .project }
         }
         if let binding = bindings.values.first(where: { binding in
-            binding.kind == kind
+            if let physicalTrack {
+                return kind == .track && binding.kind == .track
+                    && binding.serverSessionID == serverSessionID && binding.projectEpoch == projectEpoch
+                    && binding.topologyGeneration == topologyGeneration
+                    && binding.physicalTrack?.matches(physicalTrack) == true
+                    && binding.descriptor.trackIndex == descriptor.trackIndex
+                    && binding.observedFingerprint.utf8.elementsEqual(fingerprint.utf8)
+                    && binding.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8)
+            }
+            if let physicalMixerStrip {
+                return binding.kind == kind
+                    && binding.serverSessionID == serverSessionID
+                    && binding.projectEpoch == projectEpoch
+                    && binding.topologyGeneration == topologyGeneration
+                    && binding.physicalMixerStrip?.matches(physicalMixerStrip) == true
+            }
+            return
+            binding.physicalTrack == nil && binding.physicalMixerStrip == nil && binding.kind == kind
                 && binding.serverSessionID == serverSessionID
                 && binding.projectEpoch == projectEpoch
                 && binding.topologyGeneration == topologyGeneration
-                && (physicalMixerStrip.map { physical in binding.physicalMixerStrip?.matches(physical) == true }
-                    ?? (binding.physicalMixerStrip == nil && binding.descriptor == descriptor))
-                && (physicalMixerStrip != nil || binding.descriptor == descriptor)
-                && (physicalMixerStrip != nil || kind == .project || binding.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8))
-                && (physicalMixerStrip != nil || (kind == .project ? binding.observedFingerprint == fingerprint
-                    : binding.observedFingerprint.utf8.elementsEqual(fingerprint.utf8)))
+                && binding.descriptor == descriptor
+                && (kind == .project || binding.descriptor.trackName.utf8.elementsEqual(descriptor.trackName.utf8))
+                && (kind == .project ? binding.observedFingerprint == fingerprint
+                    : binding.observedFingerprint.utf8.elementsEqual(fingerprint.utf8))
         }) {
             return binding.reference
         }
@@ -192,6 +209,7 @@ actor TargetRegistry {
             pluginInsertIndex: kind == .pluginInsert
                 ? pluginInsertIndex ?? TargetDescriptor.pluginInsertIndex(from: fingerprint)
                 : nil,
+            physicalTrack: physicalTrack,
             physicalMixerStrip: physicalMixerStrip,
             createdAt: ContinuousClock().now
         )
@@ -203,6 +221,7 @@ actor TargetRegistry {
         descriptor: TargetDescriptor,
         fingerprint: String,
         snapshot: TargetRegistrySnapshot,
+        physicalTrack: AXTrackBinding.Binding? = nil,
         physicalMixerStrip: AXMixerStripBinding.Binding? = nil,
         stoppingWhen stop: @Sendable () -> Bool = { false }
     ) -> TargetReference? {
@@ -210,12 +229,18 @@ actor TargetRegistry {
               snapshot.topologyGeneration == topologyGeneration else {
             return nil
         }
+        if let physicalTrack {
+            guard kind == .track, let path = physicalTrack.projectPath else { return nil }
+            if let projectPath = currentProjectDescriptor?.projectFilePath,
+               !path.utf8.elementsEqual(projectPath.utf8) { return nil }
+        }
         if let physicalMixerStrip {
             guard kind == .mixerStrip, let path = physicalMixerStrip.projectPath,
                   let observedPath = currentProjectDescriptor?.projectFilePath,
                   path.utf8.elementsEqual(observedPath.utf8) else { return nil }
         }
-        return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint, physicalMixerStrip: physicalMixerStrip)
+        return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint,
+                    physicalTrack: physicalTrack, physicalMixerStrip: physicalMixerStrip)
     }
 
     /// Return a current reference that this registry has already issued for the
@@ -264,6 +289,11 @@ actor TargetRegistry {
         else {
             return nil
         }
+        if let physicalTrack = binding.physicalTrack,
+           let projectPath = currentProjectDescriptor?.projectFilePath {
+            guard let heldPath = physicalTrack.projectPath,
+                  heldPath.utf8.elementsEqual(projectPath.utf8) else { return nil }
+        }
         if let physical = binding.physicalMixerStrip, let projectPath = currentProjectDescriptor?.projectFilePath,
            physical.projectPath?.utf8.elementsEqual(projectPath.utf8) != true { return nil }
         return binding
@@ -302,6 +332,7 @@ actor TargetRegistry {
             descriptor: descriptor,
             observedFingerprint: descriptor.fingerprint,
             pluginInsertIndex: existing.pluginInsertIndex,
+            physicalTrack: existing.physicalTrack,
             physicalMixerStrip: existing.physicalMixerStrip,
             createdAt: existing.createdAt
         )

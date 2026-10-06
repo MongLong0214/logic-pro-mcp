@@ -1,6 +1,47 @@
 import ApplicationServices
 import Foundation
 
+/// Issuance-time, process-local custody. Never encoded or reconstructed from a name/index.
+enum AXTrackBinding {
+    struct Binding: @unchecked Sendable {
+        let window: AXUIElement
+        let header: AXUIElement
+        let document: String
+        let runtime: AXLogicProElements.Runtime
+
+        var projectPath: String? {
+            guard let url = URL(string: document), url.isFileURL,
+                  url.host == nil || url.host == "" || url.host == "localhost" else { return nil }
+            return url.standardizedFileURL.path
+        }
+
+        func matches(_ other: Binding) -> Bool {
+            CFEqual(window, other.window) && CFEqual(header, other.header)
+                && document.utf8.elementsEqual(other.document.utf8)
+        }
+
+        func currentIndex() -> Int? {
+            guard ExactTrackNameAdapter.operationPermitted(), projectPath != nil,
+                  case .found(let currentWindow) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
+                  CFEqual(window, currentWindow),
+                  let app = AXLogicProElements.appRoot(runtime: runtime),
+                  case .success(.elements(let windows)) = AXHelpers.getAXUIElementArrayRead(
+                    app, kAXWindowsAttribute as String, runtime: runtime.ax),
+                  windows.filter({ CFEqual($0, window) }).count == 1,
+                  case .success(let currentDocument?) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
+                  document.utf8.elementsEqual(currentDocument.utf8),
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime),
+                  ExactTrackNameAdapter.operationPermitted() else { return nil }
+            let matches = headers.indices.filter { CFEqual(headers[$0], header) }
+            return matches.count == 1 ? matches[0] : nil
+        }
+    }
+
+    @TaskLocal static var current: Binding?
+    @TaskLocal static var corroboratedIndex: Int?
+    @TaskLocal static var ordinaryRenameAcquisition = false
+}
+
 
 extension AXLogicProElements {
     // MARK: - Tracks
@@ -157,9 +198,22 @@ extension AXLogicProElements {
     /// selection (verified by the caller's `verifyTrackSelection`).
     static func selectTrackViaAX(
         at index: Int,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        heldHeader: AXUIElement? = nil,
+        permittingWrite: (() -> Bool)? = nil,
+        willWrite: (() -> Void)? = nil
     ) -> Bool {
-        guard let header = findTrackHeader(at: index, runtime: runtime) else { return false }
+        guard let header = findTrackHeader(at: index, runtime: runtime),
+              heldHeader.map({ CFEqual($0, header) }) ?? true else { return false }
+        func permitted() -> Bool {
+            guard permittingWrite?() ?? true else { return false }
+            guard let heldHeader else { return true }
+            guard findTrackHeader(at: index, runtime: runtime).map({ CFEqual($0, heldHeader) }) ?? false else {
+                return false
+            }
+            // The last AX lookup can revoke custody; permission must follow it.
+            return permittingWrite?() ?? true
+        }
 
         // Step 1 (v3.0.9 primary path) — AXSelectedChildren on parent group.
         // This is the one mechanism that ACTUALLY moves Logic's track selection
@@ -167,6 +221,8 @@ extension AXLogicProElements {
         // action on the track header is a no-op for selection purposes.
         if let headersGroup = getTrackHeaders(runtime: runtime) {
             let arr = [header] as CFArray
+            guard permitted() else { return false }
+            willWrite?()
             if AXHelpers.setAttribute(headersGroup, kAXSelectedChildrenAttribute, arr, runtime: runtime.ax) {
                 return true
             }
@@ -174,12 +230,16 @@ extension AXLogicProElements {
 
         // Step 2 — NSTableRow-style AXSelected=true (test-double path).
         if AXHelpers.isAttributeSettable(header, kAXSelectedAttribute, runtime: runtime.ax) == true {
+            guard permitted() else { return false }
+            willWrite?()
             if AXHelpers.setAttribute(header, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax) {
                 return true
             }
         }
 
         // Step 3 — AXPress on the header itself (test doubles that expose it).
+        guard permitted() else { return false }
+        willWrite?()
         if AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) {
             return true
         }
@@ -204,6 +264,8 @@ extension AXLogicProElements {
         for child in AXHelpers.getChildren(header, runtime: runtime.ax) {
             guard let role = AXHelpers.getRole(child, runtime: runtime.ax),
                   selectableRoles.contains(role) else { continue }
+            guard permitted() else { return false }
+            willWrite?()
             if AXHelpers.performAction(child, kAXPressAction, runtime: runtime.ax) {
                 return true
             }

@@ -124,6 +124,38 @@ enum TargetRefResolver {
                 return .success(.init(index: binding.descriptor.trackIndex, reference: binding.reference, binding: binding))
             }
 
+            if let physical = binding.physicalTrack, operation == "track.rename" {
+                guard let index = physical.currentIndex() else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation,
+                        hint: "The retained track is no longer in its issued project/window"))
+                }
+                if indexKeys.contains(where: { params[$0] != nil }),
+                   intParamOrNil(params, keys: indexKeys) != index {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+                let rows = await cache.getTracks().filter { $0.physicalBinding?.matches(physical) == true }
+                guard rows.count == 1,
+                      rows[0].name.utf8.elementsEqual(binding.descriptor.trackName.utf8),
+                      case .success(let live?) = AXValueExtractors.extractTrackNameResult(
+                        from: physical.header, runtime: physical.runtime.ax),
+                      live.utf8.elementsEqual(binding.descriptor.trackName.utf8) else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+                await beforeFinalValidation?()
+                guard await targetRegistry.resolve(binding.reference) != nil,
+                      physical.currentIndex() == index,
+                      await validateProjectReference(params, targetRegistry: targetRegistry, operation: operation) == nil else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+                return .success(Resolved(index: index, reference: binding.reference, binding: binding))
+            }
+            // Other writers retain their original ordinal/name semantics and every original
+            // guard. Physical evidence adds corroboration, never new reorder/duplicate permission.
+            if let physical = binding.physicalTrack,
+               physical.currentIndex() != binding.descriptor.trackIndex {
+                return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+            }
+
             if indexKeys.contains(where: { params[$0] != nil }) {
                 guard let requestedIndex = intParamOrNil(params, keys: indexKeys),
                       requestedIndex >= 0,
@@ -166,6 +198,10 @@ enum TargetRefResolver {
                 liveTrackNames: liveTrackNames
             ) {
                 return .failure(liveIdentityFailure)
+            }
+            if let physical = binding.physicalTrack,
+               physical.currentIndex() != binding.descriptor.trackIndex {
+                return .failure(staleTargetReferenceResult(rawReference, operation: operation))
             }
             // ADR-005: a stable-reference resolution that survived every
             // continuity/fingerprint/live-identity guard is a traced phase.
