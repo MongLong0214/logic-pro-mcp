@@ -709,6 +709,111 @@ struct Issue971ApprovedMixerSagaTests {
         }
     }
 
+    private final class DecidingMixerReplacement: @unchecked Sendable {
+        var armed = false
+        var originalDecidingReads = 0
+        var replaced = false
+        var replacementReads = 0
+    }
+
+    @Test(arguments: ["forward_hide", "owned_inverse_hide"])
+    func replacementObservedByTheFinalPermissionCannotAuthorizeHide(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let inverse = kind == "owned_inverse_hide"
+                let f = try Fixture(showing: !inverse)
+                let replacement = f.view.builder.element(971_601)
+                f.view.builder.setRole(replacement, kAXGroupRole as String)
+                f.view.builder.setAttribute(replacement, kAXIdentifierAttribute as String, "Mixer")
+                f.view.builder.setChildren(replacement, [])
+                let probe = DecidingMixerReplacement()
+                let arm: @Sendable () -> Void = {
+                    f.view.afterDecisiveMixerRead = {
+                        probe.originalDecidingReads += 1
+                        probe.armed = true
+                    }
+                    f.view.attributeReadObserver = { element, attribute in
+                        // Direction reads occur after the deciding lookup has retained M1,
+                        // before its CF check and the independent approval callback lookup.
+                        if probe.armed, CFEqual(element, f.view.toggle),
+                           attribute == kAXTitleAttribute as String {
+                            probe.armed = false
+                            probe.replaced = true
+                            f.view.builder.setChildren(f.view.window,
+                                f.view.extraWindowChildren + [f.view.rail, replacement])
+                        }
+                        if probe.replaced, CFEqual(element, replacement),
+                           attribute == kAXIdentifierAttribute as String {
+                            probe.replacementReads += 1
+                        }
+                    }
+                }
+                if inverse {
+                    await f.router.register(AfterVerifiedSetterChannel(base: f.view.channel(), journal: f.journal,
+                        cancel: true, afterVerified: { arm() }))
+                } else {
+                    await f.router.register(f.view.channel())
+                }
+                let plan = try await f.plan(desired: inverse)
+                if !inverse { arm() }
+                let outcome = try await f.call("apply_session_repair",
+                    params: f.applyParameters(plan, key: inverse ? "cancel-approved-view" : "replacement-permission-hide"))
+                #expect(probe.originalDecidingReads == 1)
+                #expect(probe.replaced)
+                #expect(!probe.armed)
+                #expect(probe.replacementReads > 0, "the independent permission lookup must actually observe M2")
+                #expect(!f.view.events.contains("hide_mixer"))
+                #expect(f.view.showing)
+                #expect(f.view.events == (inverse
+                    ? ["open_view", "show_mixer", "open_view", "cancel_view"]
+                    : ["open_view", "cancel_view"]))
+                let children = try AXHelpers.childrenResult(f.view.window, runtime: f.view.builder.makeAXRuntime()).get()
+                #expect(children.contains { CFEqual($0, replacement) })
+                #expect(!children.contains { CFEqual($0, f.view.mixer) })
+                #expect(f.view.builder.attributeValue(f.view.window, kAXDocumentAttribute as String) as? String == f.bundle.absoluteString)
+                #expect(f.view.builder.attributeValue(f.view.window, kAXTitleAttribute as String) as? String == "Visibility fixture - Tracks")
+                #expect(f.view.logicPID == 4242)
+                let readFocus: AXUIElement? = AXHelpers.getAttribute(f.view.app,
+                    kAXFocusedUIElementAttribute as String, runtime: f.view.builder.makeAXRuntime())
+                let focus = try #require(readFocus)
+                #expect(CFEqual(focus, f.view.rail))
+                #expect(f.view.builder.attributeValue(f.play, kAXValueAttribute as String) as? Int == 0)
+                #expect(f.view.builder.attributeValue(f.record, kAXValueAttribute as String) as? Int == 0)
+                #expect(try AXHelpers.childrenResult(f.view.rail, runtime: f.view.builder.makeAXRuntime()).get().isEmpty)
+                if inverse {
+                    #expect(outcome["state"] as? String == "B")
+                    #expect(outcome["saga_state"] as? String == "compensationFailed")
+                } else {
+                    // The scalar attempted refusal is B. The existing Saga reports
+                    // its independently reconciled, unapplied goal as aggregate C.
+                    #expect(outcome["state"] as? String == "C")
+                    #expect(outcome["saga_state"] as? String == "partiallyApplied")
+                    #expect(outcome["error"] as? String == "saga_execution_failed")
+                    let steps = try #require(outcome["steps"] as? [[String: Any]])
+                    let result = try #require(steps.first?["result"] as? [String: Any])
+                    #expect(result["state"] as? String == "B")
+                    let attempted = try #require(result["write_boundary_crossed"] as? Bool)
+                    #expect(attempted)
+                    let compensation = try #require(outcome["compensation"] as? [String: Any])
+                    #expect(compensation["status"] as? String == "not_needed")
+                    let summary = try #require(compensation["journal_summary"] as? [String: Any])
+                    #expect(summary["forward_write_boundary_count"] as? Int == 1)
+                    #expect(summary["compensation_write_boundary_count"] as? Int == 0)
+                    let evidence = try #require(steps.first?["evidence"] as? [String: Any])
+                    let verification = try #require(evidence["verification"] as? [String: Any])
+                    #expect(verification["disposition"] as? String == "notApplied")
+                    let readback = try #require(verification["readback"] as? [String: Any])
+                    let stillVisible = try #require(readback["observed"] as? Bool)
+                    #expect(stillVisible)
+                }
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                let menuSelected = try #require(f.view.builder.attributeValue(f.view.view, kAXSelectedAttribute as String) as? Bool)
+                #expect(!menuSelected)
+            }
+        }
+    }
+
     @Test
     func anotherMutationGateOwnerBlocksAllApprovedViewEvents() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {

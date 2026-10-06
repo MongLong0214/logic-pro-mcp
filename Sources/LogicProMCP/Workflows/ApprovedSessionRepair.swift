@@ -140,8 +140,13 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let result = await navigation.setFinalVisibility(desired, expectedBefore: expected,
             expectedMixer: expectedMixer, permittingVisibilityChange: { [self] in
                 guard await projectIsCurrent(allowPendingCancellation: ownedInverse) else { return false }
-                return await navigation.approvedVisibility(expectedTransport: binding.transport,
-                    stoppingWhen: { [self] in stop(runtime: runtime) })?.0 == expected
+                guard let observed = await navigation.approvedVisibility(expectedTransport: binding.transport,
+                    stoppingWhen: { [self] in stop(runtime: runtime) }), observed.0 == expected else { return false }
+                if expected {
+                    guard let mixer = observed.1, let expectedMixer,
+                          CFEqual(mixer, expectedMixer) else { return false }
+                }
+                return true
             }, stoppingWhen: { [self] in stop(runtime: runtime) })
         ran = true
         if case .success(let text) = result, let body = decodedJSONObject(text), body["state"] as? String == "A",
