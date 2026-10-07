@@ -85,17 +85,21 @@ struct EditDispatcher: OperationTraceDispatching {
             return await finalizeTrace(result, traceID: traceID)
 
         case "quantize":
-            guard params["value"] != nil || params["grid"] != nil else {
-                return toolInvalidParamsResult(
-                    "quantize requires explicit 'value' or 'grid'"
-                )
+            var requestedGrid: String?
+            for key in ["value", "grid"] {
+                guard let supplied = params[key] else { continue }
+                guard case .string(let grid) = supplied, validQuantizeGrids.contains(grid) else {
+                    return toolInvalidParamsResult(
+                        "quantize '\(key)' must be a string naming one of \(validQuantizeGrids.joined(separator: ", "))"
+                    )
+                }
+                if let requestedGrid, requestedGrid != grid {
+                    return toolInvalidParamsResult("quantize 'value' and 'grid' must agree when both are supplied")
+                }
+                requestedGrid = grid
             }
-            let value = stringParam(params, "value", "grid", default: "1/16")
-            guard validQuantizeGrids.contains(value) else {
-                return toolTextResult(
-                    "quantize 'value' must be one of \(validQuantizeGrids.joined(separator: ", ")) (got '\(value)')",
-                    isError: true
-                )
+            guard let value = requestedGrid else {
+                return toolInvalidParamsResult("quantize requires explicit 'value' or 'grid'")
             }
             let traceID = await startTraceIfEnabled(command: command)
             let result = await withWriteBoundaryArmed(traceID) {
