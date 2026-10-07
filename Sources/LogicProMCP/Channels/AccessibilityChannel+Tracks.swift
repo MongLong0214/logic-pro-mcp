@@ -448,7 +448,7 @@ extension AccessibilityChannel {
         var missing: [String] = []
         for expected in expectedOrder {
             guard expected.beforeIndex < tracks.count,
-                  tracks[expected.beforeIndex].name == expected.beforeName,
+                  tracks[expected.beforeIndex].name.utf8.elementsEqual(expected.beforeName.utf8),
                   order[expected.beforeIndex].isEmpty else {
                 missing.append(expected.reference)
                 continue
@@ -488,20 +488,21 @@ extension AccessibilityChannel {
         beforeReferences: [String]
     ) -> [String]? {
         guard afterNames.count == beforeNames.count,
-              beforeReferences.count == beforeNames.count else {
+              beforeReferences.count == beforeNames.count,
+              Set(beforeNames).count == beforeNames.count else {
             return nil
         }
-        var referenceByName: [String: String] = [:]
+        var referenceByName: [Data: String] = [:]
         referenceByName.reserveCapacity(beforeNames.count)
         for (name, reference) in zip(beforeNames, beforeReferences) {
-            guard referenceByName.updateValue(reference, forKey: name) == nil else {
+            guard referenceByName.updateValue(reference, forKey: Data(name.utf8)) == nil else {
                 return nil
             }
         }
         var order: [String] = []
         order.reserveCapacity(afterNames.count)
         for name in afterNames {
-            guard let reference = referenceByName[name] else {
+            guard let reference = referenceByName[Data(name.utf8)] else {
                 return nil
             }
             order.append(reference)
