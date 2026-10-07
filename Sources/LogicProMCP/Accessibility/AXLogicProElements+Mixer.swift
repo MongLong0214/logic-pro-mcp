@@ -913,6 +913,10 @@ extension AXLogicProElements {
     /// whose help begins with the send-level-knob title. Assigning the send also gave every strip
     /// in the Mixer a further empty send button, and on the assigned strip that empty button comes
     /// FIRST in the walk: the strip's children run bottom to top on screen.
+    /// With multiple assigned sends, the groups can precede ALL their knobs. A same-parent run
+    /// after an empty send button is occupied when every group has the measured checkbox/button
+    /// child shape and the following send-knob run has the same cardinality. This establishes
+    /// occupancy, not a group-to-knob pairing: levels remain unknown for that multi-group run.
     ///
     /// The first shape — a send-slot button whose pre-order successor is that knob — is what the
     /// 2026-09-13 record described. The 2026-09-27 dumps did not reproduce it in either language:
@@ -955,14 +959,95 @@ extension AXLogicProElements {
             return nil
         }
         var observations: [SendSlotObservation] = []
+        var consumedGroups: Set<Int> = []
+        var recognizedControls: [AXUIElement] = []
+        func claim(_ controls: [AXUIElement]) -> Bool {
+            for offset in controls.indices {
+                if recognizedControls.contains(where: { CFEqual($0, controls[offset]) })
+                    || controls[..<offset].contains(where: { CFEqual($0, controls[offset]) }) { return false }
+            }
+            recognizedControls.append(contentsOf: controls)
+            return true
+        }
         for (index, visit) in walk.enumerated() {
             guard case let .success(role) = slotDecidingString(
                 visit.element, kAXRoleAttribute as String, runtime: runtime
             ) else { return nil }
             if role == (kAXGroupRole as String) {
+                if consumedGroups.contains(index) { continue }
                 guard let sibling = nextSibling(of: index, in: walk) else { continue }
+                guard case let .success(siblingRole) = slotDecidingString(
+                    walk[sibling].element, kAXRoleAttribute as String, runtime: runtime
+                ) else { return nil }
+                if siblingRole == (kAXGroupRole as String) {
+                    var groups = [index, sibling]
+                    var following = nextSibling(of: sibling, in: walk)
+                    while let candidate = following {
+                        guard case let .success(candidateRole) = slotDecidingString(
+                            walk[candidate].element, kAXRoleAttribute as String, runtime: runtime
+                        ) else { return nil }
+                        guard candidateRole == (kAXGroupRole as String) else { break }
+                        groups.append(candidate)
+                        following = nextSibling(of: candidate, in: walk)
+                    }
+                    // The observed cluster follows an empty send button. Similar automation or
+                    // plug-in groups alone do not establish a send, and labels are not identity.
+                    var previous = index - 1
+                    while previous >= 0, walk[previous].depth > visit.depth { previous -= 1 }
+                    var hasSendAnchor = false
+                    if previous >= 0, walk[previous].depth == visit.depth {
+                        guard case let .success(anchorRole) = slotDecidingString(
+                            walk[previous].element, kAXRoleAttribute as String, runtime: runtime
+                        ) else { return nil }
+                        if anchorRole == (kAXButtonRole as String) {
+                            guard case let .success(anchorHelp) = slotDecidingString(
+                                walk[previous].element, kAXHelpAttribute as String, runtime: runtime
+                            ) else { return nil }
+                            hasSendAnchor = AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: (anchorHelp ?? "").lowercased())
+                        }
+                    }
+                    var groupShapes: [Bool] = []
+                    for group in groups {
+                        guard let shape = assignedSendGroupShape(walk[group].element, runtime: runtime) else { return nil }
+                        groupShapes.append(shape)
+                    }
+                    guard let firstKnob = following else {
+                        if hasSendAnchor && groupShapes.contains(true) { return nil }
+                        continue
+                    }
+                    guard let isKnob = isSendLevelKnob(walk[firstKnob].element, runtime: runtime) else { return nil }
+                    guard isKnob else {
+                        if hasSendAnchor && groupShapes.contains(true) { return nil }
+                        continue
+                    }
+                    guard hasSendAnchor else { return nil }
+                    guard groupShapes.allSatisfy({ $0 }) else { return nil }
+                    var knobs = [firstKnob]
+                    var next = nextSibling(of: firstKnob, in: walk)
+                    while let candidate = next {
+                        guard let isKnob = isSendLevelKnob(walk[candidate].element, runtime: runtime) else { return nil }
+                        guard isKnob else { break }
+                        knobs.append(candidate)
+                        next = nextSibling(of: candidate, in: walk)
+                    }
+                    guard groups.count == knobs.count else { return nil }
+                    let controls = (groups + knobs).map { walk[$0].element }
+                    guard claim(controls) else { return nil }
+                    // A depth-bounded unseen descendant cannot prove this is the complete run.
+                    for leaf in walk where leaf.depth == 4 {
+                        guard let children = childrenIfRead(leaf.element, runtime: runtime), children.isEmpty else { return nil }
+                    }
+                    for group in groups {
+                        consumedGroups.insert(group)
+                        observations.append(SendSlotObservation(
+                            ordinal: observations.count, state: .occupiedUnknownDestination
+                        ))
+                    }
+                    continue
+                }
                 guard let isKnob = isSendLevelKnob(walk[sibling].element, runtime: runtime) else { return nil }
                 if isKnob {
+                    guard claim([visit.element, walk[sibling].element]) else { return nil }
                     observations.append(
                         occupiedSendSlot(ordinal: observations.count, knob: walk[sibling].element, runtime: runtime)
                     )
@@ -977,11 +1062,29 @@ extension AXLogicProElements {
                 continue
             }
             let successor = index + 1 < walk.count ? walk[index + 1].element : nil
-            observations.append(
-                sendSlotObservation(ordinal: observations.count, following: successor, runtime: runtime)
-            )
+            let observation = sendSlotObservation(ordinal: observations.count, following: successor, runtime: runtime)
+            // The empty anchor is its own observation; a later group run claims only its
+            // groups/knobs. All occupied shapes share this one physical-control custody.
+            var controls = [visit.element]
+            if observation.state == .occupiedUnknownDestination {
+                guard let successor else { return nil }
+                controls.append(successor)
+            }
+            guard claim(controls) else { return nil }
+            observations.append(observation)
         }
         return observations
+    }
+
+    /// A capability shape, not a destination discriminator. Automation may share this shape;
+    /// only the surrounding qualified send-button/group/knob run authorizes occupancy.
+    private static func assignedSendGroupShape(_ group: AXUIElement, runtime: AXHelpers.Runtime) -> Bool? {
+        guard let children = childrenIfRead(group, runtime: runtime) else { return nil }
+        guard children.count == 2 else { return false }
+        guard case let .success(firstRole) = slotDecidingString(children[0], kAXRoleAttribute as String, runtime: runtime),
+              case let .success(secondRole) = slotDecidingString(children[1], kAXRoleAttribute as String, runtime: runtime)
+        else { return nil }
+        return firstRole == (kAXCheckBoxRole as String) && secondRole == (kAXButtonRole as String)
     }
 
     /// The index of the element after `index` at the same depth with nothing shallower between —
