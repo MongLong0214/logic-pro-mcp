@@ -766,7 +766,36 @@ extension AccessibilityChannel {
 
         /// Leave the caller's approved Mixer state in place. Only the menu acquired here is
         /// cleaned up; unlike temporary inspection, this never compensates the final view.
-        func setFinalVisibility(_ desired: Bool, stoppingWhen stop: @escaping @Sendable () -> Bool) async -> ChannelResult {
+        func approvedVisibility(expectedTransport: AXLogicProElements.ObservedTransportActivity? = nil,
+                                stoppingWhen stop: @Sendable () -> Bool) async -> (Bool, AXUIElement?)? {
+            guard await stillOwned(stoppingWhen: stop), ownedMenuFocus() else { return nil }
+            let lookup = try? AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: runtime,
+                requiresCompleteAbsence: true, checking: {
+                    try SessionPopulationObservation.requireOwnedAcquisition()
+                    if stop() { throw SessionPopulationObservation.AcquisitionError.textEditing }
+                })
+            let activity = try? AXLogicProElements.observedTransportActivity(in: window, runtime: runtime, checking: {
+                try SessionPopulationObservation.requireOwnedAcquisition()
+                if stop() { throw SessionPopulationObservation.AcquisitionError.textEditing }
+            })
+            guard let lookup, let activity, !activity.isPlaying, !activity.isRecording,
+                  await stillOwned(stoppingWhen: stop), ownedMenuFocus(), !stop(),
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
+            if let expectedTransport {
+                guard CFEqual(activity.controlBar, expectedTransport.controlBar),
+                      CFEqual(activity.play, expectedTransport.play),
+                      CFEqual(activity.record, expectedTransport.record) else { return nil }
+            }
+            switch lookup.lookup {
+            case .found(let mixer): return (true, mixer)
+            case .notFound: return (false, nil)
+            case .childrenUnread: return nil
+            }
+        }
+
+        func setFinalVisibility(_ desired: Bool, expectedBefore: Bool? = nil, expectedMixer: AXUIElement? = nil,
+                                permittingVisibilityChange: (() async -> Bool)? = nil,
+                                stoppingWhen stop: @escaping @Sendable () -> Bool) async -> ChannelResult {
             let operation = "view.set_mixer_visibility"
             var before: Bool?
             var after: Bool?
@@ -809,9 +838,19 @@ extension AccessibilityChannel {
             case .notFound: before = false
             case .childrenUnread: return result(verified: false, reason: "mixer_children_unread")
             }
+            if let expectedBefore {
+                guard before == expectedBefore,
+                      expectedBefore == false || (expectedMixer != nil && revealedMixer != nil && CFEqual(expectedMixer!, revealedMixer!)),
+                      await permittingVisibilityChange?() ?? true else {
+                    return result(verified: false, reason: "approved_view_before_changed")
+                }
+            }
             var acknowledged = true
             if before != desired {
-                acknowledged = await toggle(desiredVisibility: desired, permittingActuation: { await owned() }, stoppingWhen: stop)
+                acknowledged = await toggle(desiredVisibility: desired, permittingActuation: {
+                    guard await owned() else { return false }
+                    return await permittingVisibilityChange?() ?? true
+                }, stoppingWhen: stop)
             }
             func observe(_ lookup: AXLogicProElements.MixerAreaLookup) {
                 switch lookup {
@@ -864,6 +903,9 @@ extension AccessibilityChannel {
         guard let raw = params["visible"], raw == "true" || raw == "false" else {
             return .error(HonestContract.encodeStateC(error: .invalidParams,
                 hint: "visible must be a boolean", extras: ["write_attempted": false]))
+        }
+        if let approval = ApprovedSessionRepair.current {
+            return await approval.perform(raw == "true", runtime: runtime)
         }
         let stop: @Sendable () -> Bool = {
             (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil

@@ -327,8 +327,10 @@ actor AccessibilityChannel: Channel {
     ) async throws -> SessionPopulationObservation.FreshPopulation {
         try SessionPopulationObservation.requireOwnedAcquisition()
         var navigation: OwnedMixerObservationNavigation?
+        var originalPresentation: SessionPopulationObservation.FreshPopulation?
         if request.allowUINavigation, request.needsStrips,
            case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime) {
+            originalPresentation = try readPresentationBaseline(stoppingWhen: stopBeforeAXRead ?? stop)
             navigation = OwnedMixerObservationNavigation(
                 window: window, runtime: runtime.logicRuntime,
                 expectedProject: navigationProject, requiresProjectReference: request.projectRef != nil,
@@ -345,6 +347,20 @@ actor AccessibilityChannel: Channel {
                 if population.uiEffects.navigationPerformed && population.uiEffects.restoration != "restored" {
                     population.stable = false
                 }
+                // A temporary reveal is not the state the user approves. Bookend the
+                // original observation after restoration, without restoring an approved write.
+                let restored = try? readPresentationBaseline(stoppingWhen: stopBeforeAXRead ?? stop)
+                if let originalPresentation, let restored,
+                   originalPresentation.presentationObservation == restored.presentationObservation,
+                   let original = originalPresentation.presentationBinding,
+                   let current = restored.presentationBinding,
+                   original.matches(current) {
+                    population.presentationObservation = originalPresentation.presentationObservation
+                    population.presentationBinding = original
+                } else {
+                    population.presentationObservation = .init(mixerVisible: nil, isPlaying: nil, isRecording: nil)
+                    population.presentationBinding = nil
+                }
             } else if request.allowUINavigation && request.needsStrips {
                 population.uiEffects.reason = "navigation_baseline_unavailable"
             }
@@ -354,6 +370,38 @@ actor AccessibilityChannel: Channel {
             let effects = await navigation?.restore(stoppingWhen: stop) ?? .init()
             throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: effects)
         }
+    }
+
+    private func readPresentationBaseline(stoppingWhen stop: @Sendable () -> Bool) throws -> SessionPopulationObservation.FreshPopulation? {
+        func check() throws {
+            try SessionPopulationObservation.requireOwnedAcquisition()
+            if stop() { throw SessionPopulationObservation.AcquisitionError.textEditing }
+        }
+        try check()
+        let logic = runtime.logicRuntime
+        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: logic),
+              let title = AXHelpers.getTitle(window, runtime: logic.ax),
+              case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic) else { return nil }
+        let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic,
+            requiresCompleteAbsence: true, checking: check)
+        let transport = try AXLogicProElements.observedTransportActivity(in: window, runtime: logic, checking: check)
+        try check()
+        guard case .found(let current) = AXLogicProElements.arrangeWindowRead(runtime: logic), CFEqual(window, current),
+              AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
+              case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+              currentDocument.utf8.elementsEqual(document.utf8) else { return nil }
+        try check()
+        let visible: Bool?
+        switch lookup.lookup {
+        case .found: visible = true
+        case .notFound: visible = false
+        case .childrenUnread: visible = nil
+        }
+        let now = Date()
+        return .init(project: nil, tracks: nil, strips: nil, fileTrackCount: nil, beganAt: now, endedAt: now, stable: true,
+            presentationObservation: .init(mixerVisible: visible, isPlaying: transport?.isPlaying, isRecording: transport?.isRecording),
+            presentationBinding: .init(window: window, title: title, document: document,
+                mixer: lookup.binding?.mixer, transport: transport, runtime: logic))
     }
 
     private func readExposedSessionPopulation(
@@ -376,6 +424,8 @@ actor AccessibilityChannel: Channel {
             let tracks: [TrackState]?
             let strips: [ChannelStripState]?
             let presentation: AXLogicProElements.MixerPresentationRead?
+            let mixerVisible: Bool?
+            let transport: AXLogicProElements.ObservedTransportActivity?
         }
         func check() throws {
             try SessionPopulationObservation.requireOwnedAcquisition()
@@ -409,8 +459,16 @@ actor AccessibilityChannel: Channel {
             var stripElements: [AXUIElement]?
             var strips: [ChannelStripState]?
             var presentation: AXLogicProElements.MixerPresentationRead?
+            let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic,
+                requiresCompleteAbsence: true, checking: checkAXRead)
+            let mixerVisible: Bool?
+            switch lookup.lookup {
+            case .found: mixerVisible = true
+            case .notFound: mixerVisible = false
+            case .childrenUnread: mixerVisible = nil
+            }
+            mixer = lookup.binding?.mixer
             if wantsStrips {
-                let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic, checking: checkAXRead)
                 try check()
                 if let binding = lookup.binding {
                     mixer = binding.mixer
@@ -423,10 +481,11 @@ actor AccessibilityChannel: Channel {
                     }
                 }
             }
+            let transport = try AXLogicProElements.observedTransportActivity(in: window, runtime: logic, checking: checkAXRead)
             try check()
             return Read(title: title, document: document, documentReadable: documentReadable,
                         headers: headers, mixer: mixer, stripElements: stripElements, tracks: tracks, strips: strips,
-                        presentation: presentation)
+                        presentation: presentation, mixerVisible: mixerVisible, transport: transport)
         }
         func sameElements(_ lhs: [AXUIElement]?, _ rhs: [AXUIElement]?) -> Bool {
             switch (lhs, rhs) {
@@ -483,7 +542,7 @@ actor AccessibilityChannel: Channel {
             let stable = sameWindow && before.title != nil && before.documentReadable && after.documentReadable
                 && sameBytes(before.title, after.title) && sameBytes(before.document, after.document)
                 && sameElements(before.headers, after.headers)
-                && sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] })
+                && (!wantsStrips || sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] }))
                 && sameElements(before.stripElements, after.stripElements)
                 && sameElements(before.presentation?.elements, after.presentation?.elements)
                 && before.presentation?.presentation == after.presentation?.presentation
@@ -499,10 +558,22 @@ actor AccessibilityChannel: Channel {
             let project = before.title.map {
                 ProjectInfo(name: Self.projectName(fromWindowTitle: $0), filePath: path, source: "ax_request_read")
             }
+            let mixerStable = before.mixerVisible == after.mixerVisible
+                && sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] })
+            let transportStable = sameElements(before.transport.map { [$0.controlBar, $0.play, $0.record] },
+                after.transport.map { [$0.controlBar, $0.play, $0.record] })
+                && before.transport?.isPlaying == after.transport?.isPlaying
+                && before.transport?.isRecording == after.transport?.isRecording
             let candidate = SessionPopulationObservation.FreshPopulation(
                 project: project, tracks: before.tracks, strips: before.strips,
                 fileTrackCount: metadata?.trackCount, beganAt: beganAt, endedAt: Date(), stable: stable,
-                mixerPresentation: before.presentation?.presentation
+                mixerPresentation: before.presentation?.presentation,
+                presentationObservation: .init(mixerVisible: mixerStable ? before.mixerVisible : nil,
+                    isPlaying: transportStable ? before.transport?.isPlaying : nil,
+                    isRecording: transportStable ? before.transport?.isRecording : nil),
+                presentationBinding: stable && mixerStable && transportStable && path != nil && before.title != nil && before.document != nil
+                    ? .init(window: window, title: before.title!, document: before.document!,
+                        mixer: before.mixer, transport: before.transport, runtime: logic) : nil
             )
             if stable { return candidate }
             last = candidate
