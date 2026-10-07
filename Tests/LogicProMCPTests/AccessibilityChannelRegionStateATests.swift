@@ -97,6 +97,26 @@ private func makeRegionFixture(
 
 // MARK: - region.move_to_playhead — State A path
 
+@Test("shipped Drummer and Session Player nouns reach the actual region inventory",
+      arguments: ["鼓手", "伴奏乐手"])
+func localizedDrummerRegionKindReachesInventory(name: String) throws {
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [(name, "Region starts at 1 bar and ends at 2 bars, MIDI region.",
+                   axPoint(240, 108), axSize(320, 24), false)],
+        playheadPosition: "1.1.1.1")
+    // Independent Logic Localizable noun values; this synthetic enumeration is not
+    // a native region-kind or whole-arrangement qualification.
+    let result = AccessibilityChannel.defaultGetRegions(runtime: fixture.runtime)
+    #expect(result.isSuccess)
+    let body = decodeJSON(result.message)
+    let rows = try #require(body["regions"] as? [[String: Any]])
+    #expect(rows.count == 1)
+    let row = try #require(rows.first)
+    #expect(row["name"] as? String == name)
+    #expect(row["kind"] as? String == "drummer")
+}
+
 @Test func testMoveToPlayheadReturnsStateAOnMatch() async {
     // Pre: selected region at bar 1. Action moves it to bar 9 (matching
     // playhead). Post-read should expose post.startBar=9 and playhead=9 →

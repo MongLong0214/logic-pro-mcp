@@ -22,6 +22,85 @@ import Testing
 @Suite("Issue #628 — the transport scan's candidate list is a value")
 struct Issue628TransportAmbiguityTests {
 
+    @Test("transport container control evidence reuses the actual localized control authorities",
+          arguments: [["lecture", "Enregistrement"], ["Wiedergabe", "Aufnahme"]])
+    func localizedOwnTransportControlsQualify(labels: [String]) throws {
+        let b = FakeAXRuntimeBuilder()
+        // Independent values from Logic's play and StrTransportBtns|||Record rows.
+        // Only own buttons: no named shell, slider or text fallback can qualify this group.
+        let container = transportish(b, 904930, labels: labels)
+        let runtime = b.makeLogicRuntime()
+        let hits = AXLogicProElements.transportControlKeywordHits(in: container, runtime: b.makeAXRuntime())
+        #expect(hits.count == 2)
+        let candidates = AXLogicProElements.transportContainerCandidates(among: [container], runtime: runtime)
+        #expect(candidates.count == 1)
+        if let held = candidates.first {
+            #expect(CFEqual(held, container))
+        }
+    }
+
+    @Test("two synonyms on one actual control do not supply two transport capabilities",
+          arguments: ["メトロノームクリック", "메트로놈 클릭", "cycle loop"])
+    func oneControlSynonymsDoNotQualify(label: String) {
+        let b = FakeAXRuntimeBuilder()
+        let container = transportish(b, 904940, labels: [label])
+        let hits = AXLogicProElements.transportControlKeywordHits(in: container, runtime: b.makeAXRuntime())
+        #expect(hits.count == 1)
+        #expect(AXLogicProElements.transportContainerCandidates(
+            among: [container], runtime: b.makeLogicRuntime()).isEmpty)
+    }
+
+    @Test("nontransport controls cannot supply the second transport family",
+          arguments: ["Catch Playhead", "Playhead Position", "Playhead thumb", "Loop Browser",
+                      "Session Player", "Show/Hide Live Loops Grid", "Live Loops Grid",
+                      "재생헤드 캐치", "재생헤드 위치", "재생헤드 썸네일", "루프 브라우저",
+                      "Live Loop 그리드 보기/가리기", "Position de la tête de lecture",
+                      "Record Arm", "녹음 활성화"])
+    func nonTransportControlsDoNotSupplyAnotherFamily(label: String) {
+        let b = FakeAXRuntimeBuilder()
+        let container = transportish(b, 904950, labels: ["Cycle", label])
+        #expect(AXLogicProElements.transportControlKeywordHits(
+            in: container, runtime: b.makeAXRuntime()).count == 1)
+        #expect(AXLogicProElements.transportContainerCandidates(
+            among: [container], runtime: b.makeLogicRuntime()).isEmpty)
+    }
+
+    @Test("the position text consumer uses the existing Japanese Playhead Position authority",
+          arguments: [kAXStaticTextRole as String, kAXTextFieldRole as String])
+    func japanesePositionTextQualifiesAndReadsBack(role: String) throws {
+        let b = FakeAXRuntimeBuilder()
+        let container = transportish(b, 904980, labels: ["Play"]), field = b.element(904981)
+        b.setAttribute(field, kAXRoleAttribute as String, role)
+        // Independent Logic Playhead Position row value, not generated from the policy.
+        // The two-component value supplies neither the colon nor multidot fallback.
+        b.setAttribute(field, kAXDescriptionAttribute as String, "再生ヘッドの位置")
+        b.setAttribute(field, kAXValueAttribute as String, "37.3")
+        b.setChildren(container, [b.element(9049801), field])
+        let candidates = AXLogicProElements.transportContainerCandidates(
+            among: [container], runtime: b.makeLogicRuntime())
+        #expect(candidates.count == 1)
+        if let held = candidates.first { #expect(CFEqual(held, container)) }
+        let state = AXValueExtractors.extractTransportState(from: container, runtime: b.makeAXRuntime())
+        #expect(state.position == "37.3")
+        #expect(state.positionReadback?.observedComponents == [.bar, .beat])
+    }
+
+    @Test("localized nontransport control labels are not independent transport controls",
+          arguments: [["Cycle", "Capturer la tête de lecture"],
+                      ["Cycle", "Barre de défilement de la tête de lecture"],
+                      ["Play", "Loop-Übersicht"], ["Play", "Browser Loop"],
+                      ["Play", "Navegador de Loops"]])
+    func localizedFalseFriendsDoNotQualify(labels: [String]) {
+        let b = FakeAXRuntimeBuilder()
+        // Independent values of the respective Catch, thumb and Loop Browser rows.
+        // Each group has just one genuine capability and no metadata/field/slider fallback.
+        let container = transportish(b, 904990, labels: labels)
+        #expect(AXLogicProElements.transportControlKeywordHits(
+            in: container, runtime: b.makeAXRuntime()).count == 1)
+        #expect(AXLogicProElements.transportContainerCandidates(
+            among: [container], runtime: b.makeLogicRuntime()).isEmpty)
+    }
+
     @Test("the container predicate reuses the measured Japanese own tempo slider authority")
     func japaneseTempoSliderQualifiesTheHeldContainer() throws {
         let b = FakeAXRuntimeBuilder()

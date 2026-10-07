@@ -13,6 +13,37 @@ import Testing
 /// in both locales. None of these gate a State-A success.
 @Suite("Issue60 locale phase 4 classifier bags")
 struct Issue60LocalePhase4Tests {
+    @Test("the own zoom sliders cannot become pan by two-slider elimination",
+          arguments: ["水平缩放", "垂直缩放", "Horizontal Zoom", "Vertical Zoom"])
+    func ownZoomCannotBecomeAnInferredPan(description: String) throws {
+        let b = FakeAXRuntimeBuilder(), strip = b.element(904980)
+        let volume = b.element(904981), other = b.element(904982)
+        b.setRole(strip, kAXGroupRole as String)
+        for slider in [volume, other] {
+            b.setRole(slider, kAXSliderRole as String)
+            b.setChildren(slider, [])
+        }
+        b.setAttribute(volume, kAXDescriptionAttribute as String, "Volume")
+        b.setAttribute(other, kAXDescriptionAttribute as String, description)
+        b.setChildren(strip, [volume, other])
+        // Independent own Horizontal/Vertical Zoom row values. This is a negative
+        // selector boundary, not proof that a native Mixer strip contains these controls.
+        #expect(AXLogicProElements.findPanControl(in: strip, runtime: b.makeAXRuntime(), requireUnique: true) == nil)
+        b.setAttribute(other, kAXDescriptionAttribute as String, "Pan")
+        let pan = try #require(AXLogicProElements.findPanControl(in: strip, runtime: b.makeAXRuntime(), requireUnique: true))
+        #expect(CFEqual(pan, other))
+    }
+
+    @Test("localized Aux and Drummer tokens reach the actual header reader",
+          arguments: ["辅助", "鼓手"])
+    func localizedHeaderTypeTokensReachActualReader(description: String) {
+        let b = FakeAXRuntimeBuilder(), header = b.element(904995)
+        b.setAttribute(header, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(header, kAXDescriptionAttribute as String, description)
+        b.setChildren(header, [])
+        let track = AXValueExtractors.extractTrackState(from: header, index: 0, runtime: b.makeAXRuntime())
+        #expect(track.type == (description == "辅助" ? .aux : .drummer))
+    }
 
     // MARK: - Token-coverage guard (each bag == its original inline token list)
 
@@ -34,7 +65,10 @@ struct Issue60LocalePhase4Tests {
             ("sliderSendHint", AXLocalePolicy.sliderSendHint.labels,
              ["send", "센드", "Send Level knob", "센드 레벨 노브", "センドレベルノブ", "Send-Drehregler",
               "Botón “Nivel de envío”", "Potentiomètre Niveau d’envoi", "“发送电平”旋钮"]),
-            ("sliderZoomHint", AXLocalePolicy.sliderZoomHint.labels, ["zoom", "확대"]),
+            ("sliderZoomHint", AXLocalePolicy.sliderZoomHint.labels,
+             ["zoom", "확대", "Horizontal Zoom", "Vertical Zoom", "Horizontal-Zoom", "Vertikal-Zoom",
+              "Zoom horizontal", "Zoom vertical", "Zoom orizzontale", "Zoom verticale", "横方向にズーム", "縦方向にズーム",
+              "수평 확대/축소", "수직 확대/축소", "水平缩放", "垂直缩放", "水平縮放", "垂直縮放"]),
             // Extended 2026-09-26 (#904) from the row in `derivedFrom` -- `Volume#acc`. Ten locales
             // add two strings: `Volume` is what seven of them ship and `볼륨`/`ボリューム` were already
             // here, so only Spanish `Volumen` and the Chinese `音量` are new. `fader` stays as the
@@ -65,8 +99,16 @@ struct Issue60LocalePhase4Tests {
             // translation anybody wrote. The set stays EXACT here on purpose: that is what makes
             // this a drift guard, so a future addition still has to say where it came from.
             ("pluginAutomationLabelSubstring", AXLocalePolicy.pluginAutomationLabelSubstring.labels, ["automation", "오토메이션", "オートメーション", "automatización", "automazione", "automação", "自动化", "自動混音"]),
-            ("audioPluginSlotLabel", AXLocalePolicy.audioPluginSlotLabel.labels, ["audio plug-in", "audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン"]),
-            ("sendOrIOControlLabel", AXLocalePolicy.sendOrIOControlLabel.labels, ["send", "센드", "input", "output", "입력", "출력"]),
+            ("audioPluginSlotLabel", AXLocalePolicy.audioPluginSlotLabel.labels,
+             ["audio plug-in", "audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン", "Audio-Plug-in",
+              "módulo de audio", "plugin audio", "音频插件", "音訊外掛模組", "module audio", "plug-in de áudio",
+              "Audio Effect slot", "Audioeffekt-Slot", "Ranura de efectos de audio", "Slot d’effet audio",
+              "オーディオエフェクトスロット", "오디오 이펙트 슬롯", "音频效果插槽"]),
+            ("sendOrIOControlLabel", AXLocalePolicy.sendOrIOControlLabel.labels,
+             ["send", "센드", "input", "output", "입력", "출력", "Send slot", "센드 슬롯", "センドスロット", "Send-Slot",
+              "Ranura de envío", "Slot d’envoi", "发送插槽", "Input slot", "입력 슬롯", "入力スロット", "Input-Slot",
+              "Ranura de entrada", "Slot d’entrée", "输入插槽", "Output slot", "출력 슬롯", "出力スロット", "Output-Slot",
+              "Ranura de salida", "Slot de sortie", "输出插槽"]),
             ("nonInsertButtonText", AXLocalePolicy.nonInsertButtonText.labels, [
                 "send", "센드", "input", "입력", "output", "출력", "group", "그룹",
                 "channel mode", "채널 모드", "eq", "setting", "설정",
@@ -103,7 +145,9 @@ struct Issue60LocalePhase4Tests {
             ("tempoFieldLabel", AXLocalePolicy.tempoFieldLabel.labels,
              ["tempo", "bpm", "템포", "テンポ", "Ritmo", "Andamento", "速度", "拍速"]),
             ("playheadPositionFieldLabel", AXLocalePolicy.playheadPositionFieldLabel.labels,
-             ["position", "재생헤드 위치"]),
+             ["position", "playhead position", "재생헤드 위치", "再生ヘッドの位置", "Position der Abspielposition",
+              "Posición del cursor de reproducción", "Position de la tête de lecture", "Posizione testina di riproduzione",
+              "Posição do Cursor de Reprodução", "播放头位置", "播放磁頭位置"]),
             // `Spuren enthält` added 2026-09-12 (#876), same census, same reason as the row above.
             // Extended 2026-09-28 (#904) by composition, not from a row: Apple's `%@ contents`
             // template with the `Tracks` noun, whose Korean, Japanese and German products are the
@@ -111,7 +155,8 @@ struct Issue60LocalePhase4Tests {
             // check-new-labelsets-name-a-row.py multiplies them against this set.
             ("trackContentExplicit", AXLocalePolicy.trackContentExplicit.labels, ["트랙 콘텐츠", "track content", "track contents", "tracks content", "tracks contents", "トラックコンテンツ", "Spuren enthält", "Contenido de Pistas", "Pistes contenus", "Contenuto di Tracce", "Conteúdos de Pistas", "“轨道”内容", "音軌 內容"]),
             ("trackContentGeneric", AXLocalePolicy.trackContentGeneric.labels, ["콘텐츠", "content", "contents"]),
-            ("regionKindDrummer", AXLocalePolicy.regionKindDrummer.labels, ["drummer", "session player", "드러머", "세션 플레이어"]),
+            ("regionKindDrummer", AXLocalePolicy.regionKindDrummer.labels,
+             ["drummer", "session player", "드러머", "세션 플레이어", "Session Player", "鼓手", "伴奏乐手"]),
             ("regionKindMidi", AXLocalePolicy.regionKindMidi.labels, ["midi"]),
             // Extended 2026-09-16 (#892) from the row this LabelSet names in `derivedFrom`.
             // German, Spanish, French and Italian keep the English word, so ten locales yield six

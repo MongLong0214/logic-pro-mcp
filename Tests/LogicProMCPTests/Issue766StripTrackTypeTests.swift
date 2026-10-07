@@ -23,6 +23,18 @@ import Testing
 // a software instrument's, so the answer for that shape is no answer.
 @Suite("#766 the strip separates audio and external MIDI, and refuses the instrument family")
 struct Issue766StripTrackTypeTests {
+    @Test("the own Assign control help has the same meaning in the shipped French row")
+    func frenchAssignControlReachesActualStripReader() {
+        // INS_092_AssignControl Title, including its shipped trailing NBSP.
+        // This is synthetic slot evidence, not a native French strip qualification.
+        #expect(AXLogicProElements.reading(fromSlotKinds: ["Commande Assignation\u{00A0}"])
+                == .type(.externalMIDI))
+        #expect(AXLogicProElements.reading(fromSlotKinds: ["Commande Assignation\u{00A0}", "Slot d’envoi"])
+                == .undetermined)
+        #expect(AXLogicProElements.reading(fromSlotKinds: ["Commande Assignation\u{00A0}", "Output slot"])
+                == .undetermined)
+        #expect(AXLogicProElements.reading(fromSlotKinds: nil) == .undetermined)
+    }
     @Test("an own French send-slot help prevents the external-MIDI absence shape")
     func frenchSendSlotDoesNotFakeExternalMIDI() {
         // Independent QuickHelp INS_010_SendSlot title, not a raw native French observation.

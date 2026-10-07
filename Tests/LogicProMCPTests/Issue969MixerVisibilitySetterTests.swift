@@ -238,6 +238,41 @@ struct Issue969MixerVisibilitySetterTests {
         #expect(fixture.events.isEmpty, "repeating the desired state sends no AX events")
     }
 
+    @Test("the own dynamic Mixer action keeps its shipped French direction", arguments: [false, true])
+    func frenchMixerDirectionsReachTheRegisteredSetter(desired: Bool) async throws {
+        let fixture = Fixture(showing: !desired)
+        fixture.attributeReadObserver = { [fixture] element, attribute in
+            if CFEqual(element, fixture.toggle), attribute == kAXTitleAttribute as String {
+                fixture.builder.setAttribute(fixture.toggle, kAXTitleAttribute as String,
+                    fixture.showing ? "Masquer la table de mixage" : "Afficher la table de mixage")
+            }
+        }
+        // Independent MAMobileGeneralUI Show/Hide Mixer values, matched to the
+        // archived dynamic EN/KO actions. This injected menu is not native French qualification.
+        let body = try await set(fixture, visible: desired)
+        #expect(body["state"] as? String == "A")
+        let verified = try #require(body["verified"] as? Bool)
+        #expect(verified)
+        if desired { #expect(fixture.showing) } else { #expect(!fixture.showing) }
+        #expect(fixture.events == ["open_view", desired ? "show_mixer" : "hide_mixer"])
+    }
+
+    @Test("a translated contradictory Mixer direction cannot authorize the leaf", arguments: [false, true])
+    func contradictoryFrenchMixerDirectionsNeverPress(initial: Bool) async throws {
+        let fixture = Fixture(showing: initial)
+        fixture.attributeReadObserver = { [fixture] element, attribute in
+            if CFEqual(element, fixture.toggle), attribute == kAXTitleAttribute as String {
+                fixture.builder.setAttribute(fixture.toggle, kAXTitleAttribute as String,
+                    fixture.showing ? "Afficher la table de mixage" : "Masquer la table de mixage")
+            }
+        }
+        let body = try await set(fixture, visible: !initial)
+        #expect(body["state"] as? String != "A")
+        if initial { #expect(fixture.showing) } else { #expect(!fixture.showing) }
+        #expect(!fixture.events.contains("show_mixer"))
+        #expect(!fixture.events.contains("hide_mixer"))
+    }
+
     @Test func visibilityIsAnOptionalRegistryBooleanWithoutAddingAPublicAlias() throws {
         let spec = try #require(OperationRegistry.spec(tool: "logic_navigate", command: "toggle_view"))
         #expect(spec.allowedParams.contains("visible"))

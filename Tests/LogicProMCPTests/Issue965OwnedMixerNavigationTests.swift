@@ -169,6 +169,21 @@ struct Issue965OwnedMixerNavigationTests {
         return try #require(sharedJSONObject(sharedToolText(result)))
     }
 
+    @Test func translatedHideCannotAuthorizeTemporaryMixerReveal() async throws {
+        let fixture = Fixture()
+        fixture.afterOpen = { [fixture] in
+            fixture.builder.setAttribute(fixture.toggle, kAXTitleAttribute as String, "Masquer la table de mixage")
+        }
+        let body = try await inspect(fixture, navigation: true)
+        #expect(body["schema"] as? String == SessionPopulationObservation.schema)
+        #expect(!fixture.showing)
+        #expect(!fixture.pressed.contains("show_mixer"))
+        #expect(!fixture.pressed.contains("hide_mixer"))
+        let effects = try #require(body["ui_effects"] as? [String: Any])
+        let changed = try #require(effects["changed"] as? [String])
+        #expect(!changed.contains("mixer_visibility"))
+    }
+
     @Test func permittedNavigationReadsTheRevealedMixerAndRestoresIt() async throws {
         let fixture = Fixture()
         let body = try await inspect(fixture, navigation: true)
