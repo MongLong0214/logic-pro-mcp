@@ -240,6 +240,8 @@ extension ProjectSessionAudit {
         }
         if !assessment.questions.isEmpty { reasons.insert("unresolved_intent") }
 
+        // Matching names still require the same opted-in execution lifecycle for fresh verification.
+        if !names.isEmpty, !FeatureFlags.adr004MutationSaga { reasons.insert("mutation_saga_unavailable") }
         for desired in names {
             guard let target = policy.targets.first(where: { $0.handle == desired.target }) else {
                 throw CocoaError(.coderInvalidValue)
