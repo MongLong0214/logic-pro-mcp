@@ -2353,6 +2353,224 @@ struct QualificationRunnerTests {
         #expect(rejections.first?["actual"] as? String == "case evidence binding", "\(result.stdout)")
     }
 
+    /// Controlled #373 Q5 composition: the real release entrypoint must consume the final
+    /// candidate accepted by the actual verifier, never rebuild/sign another binary.
+    /// A test-owned optional path permits the separately built pinned Release product.
+    /// All publication/build/signing leaves are inert shell stubs; this is not host qualification.
+    @Test(.timeLimit(.minutes(2)), arguments: ["valid", "edited_bundle", "substituted_binary", "original_changed_after_freeze"])
+    func releaseConsumerUsesTheActuallyTrustedFinalCandidate(_ mutation: String) async throws {
+        let verifier = Self.releaseConsumerVerifierURL
+        try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
+        let verifierSHA = SupportBundleBuilder.sha256(try Data(contentsOf: verifier))
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let accepted = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+        try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
+        let verifiedManifestSHA = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
+        if mutation == "edited_bundle" {
+            try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+                let passed = try #require(object["passed"] as? Int)
+                object["passed"] = passed + 1
+            }
+        } else if mutation == "substituted_binary" {
+            try Data("different-final-candidate".utf8).write(to: fixture.executableURL)
+        }
+        if mutation == "edited_bundle" || mutation == "substituted_binary" {
+            let rejected = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+            #expect(rejected.exitCode != 0, "\(rejected.stdout)\(rejected.stderr)")
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", "-c", """
+        import json, sys
+        sys.path.insert(0, 'Scripts')
+        from test_release_workflow import ReleaseFinalArtifactConsumerTests
+        result, calls = ReleaseFinalArtifactConsumerTests().run_consumer(
+            'supplied', candidate=sys.argv[1], bundle_path=sys.argv[2],
+            verifier=sys.argv[3], trusted_key=sys.argv[4], commit=sys.argv[5],
+            mutate_original_bundle=sys.argv[6] == 'original_changed_after_freeze')
+        print(json.dumps({'exit': result.returncode, 'calls': calls,
+                          'stdout': result.stdout, 'stderr': result.stderr}))
+        """, fixture.executableURL.path, fixture.directory.path,
+            verifier.path,
+            fixture.trustedPublicKeyData.base64EncodedString(), fixture.commitSHA, mutation]
+        let output = Pipe()
+        let error = Pipe()
+        process.standardOutput = output
+        process.standardError = error
+        try process.run()
+        let bytes = output.fileHandleForReading.readDataToEndOfFile()
+        let diagnostics = error.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        try #require(process.terminationStatus == 0, "\(String(decoding: diagnostics, as: UTF8.self))")
+        let result = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let code = try #require(result["exit"] as? Int)
+        let calls = try #require(result["calls"] as? [String])
+        #expect(calls.contains("verifier-build \(verifierSHA)"), "\(result)")
+        let publications = calls.filter { $0.hasPrefix("git tag ") || $0.hasPrefix("git push ")
+            || $0.hasPrefix("gh release create ") }
+        if mutation == "valid" || mutation == "original_changed_after_freeze" {
+            #expect(code == 0, "\(result)")
+            #expect(publications.count == 2, "\(result)")
+            #expect(!calls.contains { $0.hasPrefix("gh release create ") }, "\(result)")
+            let tag = try #require(calls.first { $0.hasPrefix("git tag ") })
+            #expect(tag.contains("Final-candidate-SHA256: \(fixture.binarySHA256)"), "\(result)")
+            #expect(tag.contains("Qualification-manifest-SHA256: \(verifiedManifestSHA)"), "\(result)")
+            if mutation == "original_changed_after_freeze" {
+                #expect(calls.contains("original-bundle-changed"))
+                let changed = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
+                #expect(changed != verifiedManifestSHA)
+            }
+            #expect(calls.filter { $0 == "trusted-verifier" }.count >= 3, "\(result)")
+            #expect(!calls.contains { $0.hasPrefix("swift build") || $0.hasPrefix("codesign --force") }, "\(result)")
+        } else {
+            #expect(code != 0, "\(result)")
+            #expect(publications.isEmpty, "\(result)")
+        }
+    }
+
+    /// Execute the actual YAML consumer scripts with inert Git/GH/curl/build/sign leaves.
+    /// The verifier is the real selected product, and archive bytes are the actual packager's.
+    @Test(.timeLimit(.minutes(2)), arguments: ["hosted_valid", "hosted_edited_bundle", "hosted_archive_substitution", "stable_edited_bundle", "hosted_download_mode", "hosted_archive_duplicate", "hosted_archive_nonexec", "hosted_archive_script"])
+    func everyReleaseEntryPointConsumesTheTrustedFinalArtifact(_ scenario: String) async throws {
+        let verifier = Self.releaseConsumerVerifierURL
+        try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
+        let verifierSHA = SupportBundleBuilder.sha256(try Data(contentsOf: verifier))
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let accepted = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+        try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
+        if scenario.hasSuffix("edited_bundle") {
+            try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+                object["passed"] = try #require(object["passed"] as? Int) + 1
+            }
+            let rejected = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+            try #require(rejected.exitCode != 0, "\(rejected.stdout)")
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", "-c", """
+        import json, sys
+        sys.path.insert(0, 'Scripts')
+        from test_release_workflow import ReleaseFinalArtifactConsumerTests
+        result, calls = ReleaseFinalArtifactConsumerTests().run_consumer(
+            'supplied', candidate=sys.argv[1], bundle_path=sys.argv[2],
+            verifier=sys.argv[3], trusted_key=sys.argv[4], commit=sys.argv[5],
+            entrypoint='stable' if sys.argv[6].startswith('stable') else 'hosted',
+            archive_mutation={'hosted_archive_substitution': 'bytes', 'hosted_download_mode': 'mode644',
+                              'hosted_archive_duplicate': 'duplicate', 'hosted_archive_nonexec': 'nonexec',
+                              'hosted_archive_script': 'script'}.get(sys.argv[6]))
+        print(json.dumps({'exit': result.returncode, 'calls': calls,
+                          'stdout': result.stdout, 'stderr': result.stderr}))
+        """, fixture.executableURL.path, fixture.directory.path,
+            verifier.path,
+            fixture.trustedPublicKeyData.base64EncodedString(), fixture.commitSHA, scenario]
+        let output = Pipe()
+        let diagnostics = Pipe()
+        process.standardOutput = output
+        process.standardError = diagnostics
+        try process.run()
+        let bytes = output.fileHandleForReading.readDataToEndOfFile()
+        let errors = diagnostics.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        try #require(process.terminationStatus == 0, "\(String(decoding: errors, as: UTF8.self))")
+        let result = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let code = try #require(result["exit"] as? Int)
+        let calls = try #require(result["calls"] as? [String])
+        #expect(calls.contains("verifier-build \(verifierSHA)"), "\(result)")
+        if scenario == "hosted_valid" || scenario == "hosted_download_mode" {
+            #expect(code == 0, "\(result)")
+            #expect(calls.contains("hosted-release-action"), "\(result)")
+            let members = calls.filter { $0.hasPrefix("trusted-candidate ") && $0.contains(".member/LogicProMCP ") }
+            #expect(members.count >= 4, "both archive members at stage and publish: \(result)")
+            #expect(members.allSatisfy { $0.hasSuffix(fixture.binarySHA256) }, "\(result)")
+            if scenario == "hosted_download_mode" {
+                #expect(calls.contains("downloaded-mode644 \(fixture.binarySHA256) \(fixture.binarySHA256)"))
+            }
+        } else {
+            #expect(code != 0, "\(result)")
+            #expect(!calls.contains("hosted-release-action"), "\(result)")
+            #expect(!calls.contains { $0.hasPrefix("git tag ") || $0.hasPrefix("git push ") }, "\(result)")
+            if scenario == "hosted_archive_script" {
+                #expect(calls.contains("archive-member-replaced"), "\(result)")
+            }
+            if scenario == "hosted_archive_substitution" {
+                #expect(calls.contains("archive-member-replaced"), "\(result)")
+                let changedMemberWasRead = calls.contains { $0.hasPrefix("trusted-candidate ")
+                    && $0.contains("universal.tar.gz.member/LogicProMCP ")
+                    && !$0.hasSuffix(fixture.binarySHA256) }
+                #expect(changedMemberWasRead, "actual verifier must reject the extracted member, not a neighbour: \(result)")
+            }
+            if scenario == "hosted_archive_duplicate" || scenario == "hosted_archive_nonexec" {
+                let index = try #require(calls.firstIndex(of: "archive-member-replaced"))
+                let attemptedExtraction = calls.suffix(from: index + 1).contains {
+                    $0.hasPrefix("tar -xzf ") && $0.contains("universal.tar.gz.member")
+                }
+                #expect(!attemptedExtraction, "unsafe exact member must be refused before extraction: \(result)")
+            }
+        }
+    }
+
+    /// Start with a real signed/verifier-accepted stage, then replace one public
+    /// input with an owned FIFO. The Python driver always reaps its child group.
+    @Test(.timeLimit(.minutes(2)), arguments: ["direct_binary", "direct_archive", "direct_sums",
+        "hosted_binary", "hosted_archive", "hosted_manifest", "hosted_metadata", "install_archive",
+        "direct_healthy", "hosted_healthy", "install_healthy"])
+    func finalConsumerRejectsNonregularPublicInputsBeforeReading(_ scenario: String) async throws {
+        let verifier = Self.releaseConsumerVerifierURL
+        try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let accepted = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+        try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", "-c", """
+        import json, sys
+        sys.path.insert(0, 'Scripts')
+        from test_release_workflow import ReleaseFinalArtifactConsumerTests
+        entry, shape = sys.argv[6].split('_', 1)
+        target = {'binary': 'LogicProMCP', 'archive': 'LogicProMCP-macOS-universal.tar.gz',
+                  'sums': 'SHA256SUMS.txt', 'manifest': 'release-artifacts.sha256',
+                  'metadata': 'RELEASE-METADATA.json'}.get(shape)
+        result, calls = ReleaseFinalArtifactConsumerTests().run_consumer(
+            'supplied', candidate=sys.argv[1], bundle_path=sys.argv[2], verifier=sys.argv[3],
+            trusted_key=sys.argv[4], commit=sys.argv[5], entrypoint=entry,
+            public_input_shape=target, reverify_timeout=5)
+        print(json.dumps({'exit': result.returncode, 'timed_out': result.timed_out,
+                          'calls': calls, 'stdout': result.stdout, 'stderr': result.stderr}))
+        """, fixture.executableURL.path, fixture.directory.path, verifier.path,
+            fixture.trustedPublicKeyData.base64EncodedString(), fixture.commitSHA, scenario]
+        let output = Pipe()
+        let diagnostics = Pipe()
+        process.standardOutput = output
+        process.standardError = diagnostics
+        try process.run()
+        let bytes = output.fileHandleForReading.readDataToEndOfFile()
+        let errors = diagnostics.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        try #require(process.terminationStatus == 0, "\(String(decoding: errors, as: UTF8.self))")
+        let result = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let calls = try #require(result["calls"] as? [String])
+        let fault = try #require(calls.firstIndex { $0.hasPrefix("public-input-fifo ") || $0 == "public-input-healthy" })
+        let stagedMembers = calls.prefix(upTo: fault).filter {
+            $0.hasPrefix("trusted-candidate ") && $0.contains(".member/LogicProMCP ")
+        }
+        #expect(stagedMembers.count == 2, "both actual archive members passed real trust before fault: \(result)")
+        #expect(stagedMembers.allSatisfy { $0.hasSuffix(fixture.binarySHA256) })
+        let timedOut = try #require(result["timed_out"] as? Bool)
+        #expect(!timedOut, "public input reached a blocking read: \(scenario)")
+        let code = try #require(result["exit"] as? Int)
+        if scenario.hasSuffix("healthy") {
+            #expect(code == 0, "\(result)")
+            #expect(calls.contains("hosted-release-action"))
+        } else {
+            #expect(code != 0, "\(result)")
+            #expect(!calls.contains("hosted-release-action"))
+        }
+        #expect(!calls.contains { $0.hasPrefix("git tag ") || $0.hasPrefix("git push ") })
+    }
+
     /// #373 Q4 through the shipped `trusted-verifier` executable, not the in-process entry point:
     /// one signed bundle is accepted as built, rejected once a count is edited, and refused -- by
     /// returning, not by waiting for a writer -- once its attestation is a FIFO. The in-process
@@ -2641,13 +2859,21 @@ struct QualificationRunnerTests {
         isDirectory: true
     ).appendingPathComponent(".build/debug/trusted-verifier")
 
+    private static var releaseConsumerVerifierURL: URL {
+        if let path = ProcessInfo.processInfo.environment["LOGIC_PRO_MCP_TEST_RELEASE_VERIFIER"] {
+            return URL(fileURLWithPath: path)
+        }
+        return trustedVerifierExecutableURL
+    }
+
     private static func runTrustedVerifierExecutable(
         _ fixture: Fixture,
         candidateURL: URL? = nil,
-        bundleURL: URL? = nil
+        bundleURL: URL? = nil,
+        verifierURL: URL? = nil
     ) throws -> QualificationCommandResult {
         let process = Process()
-        process.executableURL = trustedVerifierExecutableURL
+        process.executableURL = verifierURL ?? trustedVerifierExecutableURL
         process.arguments = [
             "verify",
             "--candidate", (candidateURL ?? fixture.executableURL).path,
