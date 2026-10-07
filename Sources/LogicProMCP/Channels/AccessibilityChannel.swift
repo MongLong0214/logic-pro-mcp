@@ -125,6 +125,7 @@ actor AccessibilityChannel: Channel {
         // markers / tempo) don't exist in Logic 12.x; the project-file
         // fallback now lives in `ResourceHandlers.read*`.
         let logicRuntime: AXLogicProElements.Runtime
+        let observationMouseRuntime: AXMouseHelper.Runtime?
 
         init(
             isTrusted: @escaping @Sendable () -> Bool,
@@ -161,7 +162,8 @@ actor AccessibilityChannel: Channel {
             canPostEvents: @escaping @Sendable () -> Bool = {
                 CGPreflightPostEventAccess()
             },
-            logicRuntime: AXLogicProElements.Runtime = .production
+            logicRuntime: AXLogicProElements.Runtime = .production,
+            observationMouseRuntime: AXMouseHelper.Runtime? = nil
         ) {
             self.isTrusted = isTrusted
             self.isLogicProRunning = isLogicProRunning
@@ -194,6 +196,7 @@ actor AccessibilityChannel: Channel {
             self.confirmNewTrackDialog = confirmNewTrackDialog
             self.canPostEvents = canPostEvents
             self.logicRuntime = logicRuntime
+            self.observationMouseRuntime = observationMouseRuntime
         }
 
         static func axBacked(
@@ -204,6 +207,7 @@ actor AccessibilityChannel: Channel {
             controlBarMouseRuntime: AXMouseHelper.Runtime = .production,
             trackRenameMouseRuntime: AXMouseHelper.Runtime = .production,
             trackToggleKeyRuntime: AXMouseHelper.Runtime = .production,
+            observationMouseRuntime: AXMouseHelper.Runtime? = nil,
             processRuntime: ProcessUtils.Runtime = .production,
             confirmNewTrackDialog: @escaping @Sendable () -> Void = {
                 AccessibilityChannel.sendReturnKey()
@@ -294,11 +298,12 @@ actor AccessibilityChannel: Channel {
                 importMIDIFile: { await AccessibilityChannel.defaultImportMIDIFile(path: $0, runtime: logicRuntime) },
                 confirmNewTrackDialog: confirmNewTrackDialog,
                 canPostEvents: canPostEvents,
-                logicRuntime: logicRuntime
+                logicRuntime: logicRuntime,
+                observationMouseRuntime: observationMouseRuntime
             )
         }
 
-        static let production = Runtime.axBacked()
+        static let production = Runtime.axBacked(observationMouseRuntime: .production)
     }
 
     init(runtime: Runtime = .production) {
@@ -327,6 +332,7 @@ actor AccessibilityChannel: Channel {
     ) async throws -> SessionPopulationObservation.FreshPopulation {
         try SessionPopulationObservation.requireOwnedAcquisition()
         var navigation: OwnedMixerObservationNavigation?
+        var stackNavigation: OwnedTrackStackObservationNavigation?
         var originalPresentation: SessionPopulationObservation.FreshPopulation?
         if request.allowUINavigation, request.needsStrips,
            case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime) {
@@ -337,11 +343,31 @@ actor AccessibilityChannel: Channel {
                 referenceIsCurrent: navigationReferenceIsCurrent)
             await navigation?.reveal(stoppingWhen: stop)
         }
+        if request.allowUINavigation, request.needsTracks, runtime.canPostEvents(),
+           let mouse = runtime.observationMouseRuntime,
+           case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime) {
+            stackNavigation = .init(window: window, logic: runtime.logicRuntime, mouse: mouse,
+                expectedProject: navigationProject, requiresProjectReference: request.projectRef != nil,
+                referenceIsCurrent: navigationReferenceIsCurrent)
+            await stackNavigation?.expand(stoppingWhen: stop)
+        }
+        func mergedEffects(_ stack: SessionPopulationObservation.UIEffects, _ mixer: SessionPopulationObservation.UIEffects) -> SessionPopulationObservation.UIEffects {
+            guard stack.navigationPerformed else { return mixer }
+            guard mixer.navigationPerformed else { return stack }
+            var effects = stack
+            effects.attempted += mixer.attempted.filter { !effects.attempted.contains($0) }
+            effects.changed += mixer.changed.filter { !effects.changed.contains($0) }
+            if mixer.restoration != "restored" { effects.restoration = mixer.restoration }
+            effects.reason = stack.reason ?? mixer.reason
+            return effects
+        }
         do {
             var population = try await readExposedSessionPopulation(
                 request: request, fileReader: fileReader,
+                exposure: stackNavigation?.effects.navigationPerformed == true ? stackNavigation?.exposure : nil,
                 stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop
             )
+            let stackEffects = await stackNavigation?.restore(stoppingWhen: stop) ?? .init()
             if let navigation {
                 population.uiEffects = await navigation.restore(stoppingWhen: stop)
                 if population.uiEffects.navigationPerformed && population.uiEffects.restoration != "restored" {
@@ -368,10 +394,27 @@ actor AccessibilityChannel: Channel {
             } else if request.allowUINavigation && request.needsStrips {
                 population.uiEffects.reason = "navigation_baseline_unavailable"
             }
+            population.uiEffects = mergedEffects(stackEffects, population.uiEffects)
+            if stackEffects.navigationPerformed {
+                population.hasCapturedTrackExposure = true
+                // An ended capture is not a current cache reading. Independently acquire
+                // the restored rail; failure never falls back to the expanded rows.
+                if stackEffects.restoration == "restored" || stackEffects.restoration == "partially_restored",
+                   let current = try? await readExposedSessionPopulation(request: request, fileReader: fileReader,
+                    stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop), current.stable,
+                   let currentPath = current.project?.filePath, let observedPath = population.project?.filePath,
+                   currentPath.utf8.elementsEqual(observedPath.utf8),
+                   stackNavigation?.matchesRestoredTracks(current.tracks) == true {
+                    population.restoredTracks = current.tracks
+                }
+                if population.restoredTracks == nil || stackEffects.restoration != "restored" { population.stable = false }
+            }
             try SessionPopulationObservation.requireOwnedAcquisition()
             return population
         } catch {
-            let effects = await navigation?.restore(stoppingWhen: stop) ?? .init()
+            let stack = await stackNavigation?.restore(stoppingWhen: stop) ?? .init()
+            let mixer = await navigation?.restore(stoppingWhen: stop) ?? .init()
+            let effects = mergedEffects(stack, mixer)
             throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: effects)
         }
     }
@@ -434,6 +477,7 @@ actor AccessibilityChannel: Channel {
     private func readExposedSessionPopulation(
         request: SessionPopulationObservation.Request,
         fileReader: LogicProjectFileReader.Runtime,
+        exposure: AXTrackBinding.Exposure? = nil,
         stoppingBeforeAXRead stopBeforeAXRead: @escaping @Sendable () -> Bool,
         stoppingWhen stop: @escaping @Sendable () -> Bool
     ) async throws -> SessionPopulationObservation.FreshPopulation {
@@ -480,7 +524,7 @@ actor AccessibilityChannel: Channel {
             if wantsTracks,
                case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
                 headers = observed
-                tracks = Self.readTrackStates(from: observed, in: window, runtime: logic, stoppingWhen: stop).states
+                tracks = Self.readTrackStates(from: observed, in: window, runtime: logic, exposure: exposure, stoppingWhen: stop).states
             }
             try check()
             var mixer: AXUIElement?
@@ -613,9 +657,30 @@ actor AccessibilityChannel: Channel {
             if case .found(let current) = AXLogicProElements.arrangeWindowRead(runtime: logic) {
                 sameWindow = CFEqual(window, current)
             } else { sameWindow = false }
+            // The retained arrays precede the row reads. A disclosure can close during
+            // the last row's deciding read while both copied arrays still look equal.
+            var currentHeaders: [AXUIElement]?
+            var sameStackExposure = true
+            if wantsTracks, after.tracks != nil {
+                try check()
+                if case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
+                    currentHeaders = observed
+                    if let states = after.tracks, states.count == observed.count {
+                        for (header, state) in zip(observed, states) {
+                            try check()
+                            let stack = AXValueExtractors.extractTrackStackState(from: header, runtime: logic.ax)
+                            if stack.isStackHeader != state.isStackHeader || stack.collapsed != state.stackCollapsed {
+                                sameStackExposure = false
+                            }
+                        }
+                    } else { sameStackExposure = false }
+                } else { sameStackExposure = false }
+                try check()
+            }
             let stable = sameWindow && before.title != nil && before.documentReadable && after.documentReadable
                 && sameBytes(before.title, after.title) && sameBytes(before.document, after.document)
                 && sameElements(before.headers, after.headers)
+                && (!wantsTracks || after.tracks == nil || (sameElements(after.headers, currentHeaders) && sameStackExposure))
                 && (!wantsStrips || sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] }))
                 && sameElements(before.stripElements, after.stripElements)
                 && sameElements(before.presentation?.elements, after.presentation?.elements)

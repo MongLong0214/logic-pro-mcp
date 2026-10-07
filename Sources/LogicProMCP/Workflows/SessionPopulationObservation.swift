@@ -26,6 +26,10 @@ enum SessionPopulationObservation {
         var mixerPresentation: MixerPresentation? = nil
         var presentationObservation: PresentationObservation? = nil
         var presentationBinding: PresentationBinding? = nil
+        /// Temporary rows remain immutable request facts. Only an independent
+        /// post-restoration reading may become the ordinary current cache.
+        var hasCapturedTrackExposure = false
+        var restoredTracks: [TrackState]? = nil
     }
 
     struct PresentationObservation: Encodable, Equatable, Sendable {

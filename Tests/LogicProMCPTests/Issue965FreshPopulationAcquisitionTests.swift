@@ -27,12 +27,33 @@ struct Issue965FreshPopulationAcquisitionTests {
         private var attributes: [String] = []
         func record(_ attribute: String) { lock.withLock { attributes.append(attribute) } }
         var count: Int { lock.withLock { attributes.count } }
+        var recorded: [String] { lock.withLock { attributes } }
         var helpCount: Int { lock.withLock { attributes.filter { $0 == kAXHelpAttribute as String }.count } }
+    }
+
+    private final class StackBookends: @unchecked Sendable {
+        private let lock = NSLock()
+        private var titleReads = Array(repeating: 0, count: 42)
+        private var collapseReads: [Int]?
+        func readTitle(at index: Int) -> Bool {
+            lock.withLock {
+                titleReads[index] += 1
+                // The first bookend reads name/type/name, then the strict Mixer
+                // absence walk reads identifying metadata from every header.
+                // The fifth last-header title is the second bookend's name read.
+                guard index == 41, titleReads[index] == 5 else { return false }
+                collapseReads = titleReads
+                return true
+            }
+        }
+        var atCollapse: [Int]? { lock.withLock { collapseReads } }
+        var counts: [Int] { lock.withLock { titleReads } }
     }
 
     private struct Fixture {
         let builder = FakeAXRuntimeBuilder()
         let reads = Reads()
+        let events = Reads()
         let app: AXUIElement
         let window: AXUIElement
         let rail: AXUIElement
@@ -56,21 +77,367 @@ struct Issue965FreshPopulationAcquisitionTests {
             builder.setChildren(window, [rail])
         }
 
-        func channel(unreadableRail: Bool = false) -> AccessibilityChannel {
-            AccessibilityChannel(runtime: .axBacked(
-                isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true },
-                logicRuntime: builder.makeLogicRuntime(
+        func channel(unreadableRail: Bool = false, disclosure: AXUIElement? = nil,
+                     observationMouse: AXMouseHelper.Runtime? = nil,
+                     wrongDisclosureHit: Bool = false,
+                     observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil) -> AccessibilityChannel {
+            let ax = builder.makeAXRuntime(
                     appElement: app,
-                    attributeValueHandler: { _, attribute in reads.record(attribute); return nil },
+                    attributeValueHandler: { element, attribute in
+                        reads.record(attribute)
+                        observingAttribute?(element, attribute)
+                        return nil
+                    },
                     childrenResultHandler: { element in
                         unreadableRail && CFEqual(element, rail)
                             ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
                     },
-                    setAttributeHandler: nil, performActionHandler: nil,
-                    executeAppleScript: { _ in .error("fixture forbids AppleScript") }
-                )
-            ))
+                    setAttributeHandler: { _, _, _ in events.record("setter"); return false },
+                    performActionHandler: { element, action in
+                        events.record(action)
+                        // A successful AXPress is not expansion on the measured disclosure.
+                        if let disclosure, CFEqual(element, disclosure), action == kAXPressAction as String { return true }
+                        Issue.record("fixture forbids unrelated AX actions")
+                        return false
+                    },
+                    elementAtPosition: { element, point in
+                        guard CFEqual(element, app), let disclosure, point == CGPoint(x: 16, y: 26) else { return .success(nil) }
+                        return .success(wrongDisclosureHit ? header : disclosure)
+                    })
+            let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax,
+                executeAppleScript: { _ in Issue.record("fixture forbids AppleScript"); return .error("forbidden") },
+                onScreenWindowList: { [] },
+                postPopupMenuEscape: { Issue.record("fixture forbids Escape") },
+                focusedApplicationPID: { 4242 }, observeFrontmost: nil)
+            let mouse = AXMouseHelper.Runtime(
+                postMouseEvent: { _, _, _ in Issue.record("fixture has no approved mouse actuation yet"); return false },
+                postKeyEvent: { _ in Issue.record("fixture forbids keyboard events"); return false },
+                postUnicodeScalar: { _ in Issue.record("fixture forbids typing"); return false }, sleepMicros: { _ in })
+            let process = ProcessUtils.Runtime(logicProPID: { 4242 }, fallbackLogicProPID: { nil },
+                logicProRunning: { true }, activateLogicPro: { Issue.record("fixture forbids activation"); return false },
+                logicIsFrontmost: { true }, logicProBundleURL: { nil })
+            return AccessibilityChannel(runtime: .axBacked(
+                isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true },
+                logicRuntime: logic, controlBarMouseRuntime: mouse, trackRenameMouseRuntime: mouse,
+                trackToggleKeyRuntime: mouse, observationMouseRuntime: observationMouse, processRuntime: process,
+                confirmNewTrackDialog: { Issue.record("fixture forbids Return") }, canPostEvents: { observationMouse != nil },
+                runTempoFallback: { _ in Issue.record("fixture forbids fallback scripts"); return false }))
         }
+    }
+
+    @Test("permitted stack observation exposes real descendants but restores the current cache rail",
+          arguments: [false, true])
+    func registeredStackObservationDistinguishesCapturedAndRestoredMembership(navigation: Bool) async throws {
+        try await observeStack(navigation: navigation, initiallyExpanded: false)
+    }
+
+    @Test("an already expanded rail really exposes all forty-two fixture headers without navigation")
+    func registeredAlreadyExpandedStackReadsActualFullFixtureRail() async throws {
+        try await observeStack(navigation: false, initiallyExpanded: true)
+    }
+
+    @Test func registeredStackKeepsOriginalReferenceAndEndsDescendantReference() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, verifyReferences: true)
+    }
+
+    @Test(arguments: ["down_failed", "held_focus", "wrong_hit"])
+    func registeredStackPairsOnlyOwnedMouseDownAndUp(mouseCase: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, mouseCase: mouseCase)
+    }
+
+    @Test(arguments: ["gate", "cancel", "deadline"])
+    func scopedTrackBindingDoesNotReadAXAfterCutoff(cutoff: String) {
+        let fixture = Fixture()
+        let disclosure = fixture.builder.element(965_450)
+        fixture.builder.setRole(disclosure, kAXDisclosureTriangleRole as String)
+        fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+        fixture.builder.setChildren(fixture.header, [disclosure])
+        let ax = fixture.builder.makeAXRuntime(attributeValueHandler: { _, attribute in
+            fixture.reads.record(attribute); return nil
+        }, setAttributeHandler: { _, _, _ in Issue.record("no setters"); return false },
+           performActionHandler: { _, _ in Issue.record("no actions"); return false })
+        let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax,
+            executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") },
+            onScreenWindowList: { [] }, postPopupMenuEscape: { Issue.record("no keys") },
+            focusedApplicationPID: { 4242 }, observeFrontmost: nil)
+        let exposure = AXTrackBinding.Exposure(header: fixture.header, disclosure: disclosure, runtime: logic)
+        let binding = AXTrackBinding.Binding(window: fixture.window, header: fixture.header,
+            document: "file:///tmp/Stopped.logicx", runtime: logic, exposure: exposure)
+        let context = OperationTraceContext(ownsGate: { cutoff != "gate" },
+            deadline: cutoff == "deadline" ? ContinuousClock.now : nil,
+            cancellationRequested: { cutoff == "cancel" })
+        let index = OperationTraceContext.$current.withValue(context) { binding.currentIndex() }
+        #expect(index == nil)
+        #expect(fixture.reads.count == 0, "a live exposure must not read disclosure custody after the operation cutoff")
+    }
+
+    @Test("known ended exposure cannot publish writable authority for recycled duplicate-name headers")
+    func registeredLateCollapseCannotResurrectRecycledDescendantReference() async throws {
+        let fixture = Fixture()
+        let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-ended-\(UUID().uuidString).logicx")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        let headers = (1...42).map { fixture.builder.element(965_300 + $0) }
+        let disclosure = fixture.builder.element(965_400)
+        fixture.builder.setRole(disclosure, kAXDisclosureTriangleRole as String)
+        fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+        fixture.builder.setChildren(disclosure, [])
+        for (index, header) in headers.enumerated() {
+            fixture.builder.setRole(header, kAXLayoutItemRole as String)
+            fixture.builder.setAttribute(header, kAXTitleAttribute as String,
+                index == 1 || index == 2 ? "Repeated child" : "Track \(index + 1)")
+            fixture.builder.setAttribute(header, kAXSelectedAttribute as String, index == 0)
+            fixture.builder.setChildren(header, index == 0 ? [disclosure] : [])
+        }
+        let collapsed = [headers[0]] + Array(headers[24...])
+        fixture.builder.setChildren(fixture.rail, headers)
+        fixture.builder.setAttribute(fixture.rail, kAXSelectedChildrenAttribute as String, [headers[0]])
+        fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [fixture.window])
+        fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.rail)
+        fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, true)
+        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, bundle.absoluteString)
+        let controlBar = fixture.builder.element(965_410)
+        let play = fixture.builder.element(965_411)
+        let record = fixture.builder.element(965_412)
+        fixture.builder.setRole(controlBar, kAXGroupRole as String)
+        fixture.builder.setAttribute(controlBar, kAXDescriptionAttribute as String, AXLocalePolicy.controlBarGroupLabel.canonical)
+        for (control, labels) in [(play, AXLocalePolicy.transportPlayControl), (record, AXLocalePolicy.transportRecordControl)] {
+            fixture.builder.setRole(control, kAXCheckBoxRole as String)
+            fixture.builder.setAttribute(control, kAXDescriptionAttribute as String, labels.canonical)
+            fixture.builder.setAttribute(control, kAXValueAttribute as String, 0)
+        }
+        fixture.builder.setChildren(controlBar, [play, record])
+        fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar])
+        let bookends = StackBookends()
+        let channel = fixture.channel(disclosure: disclosure, observingAttribute: { element, attribute in
+            guard attribute == kAXTitleAttribute as String,
+                  let index = headers.firstIndex(where: { CFEqual($0, element) }),
+                  bookends.readTitle(at: index) else { return }
+            fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
+            fixture.builder.setChildren(fixture.rail, collapsed)
+        })
+        let cache = StateCache()
+        let registry = TargetRegistry()
+        let gate = LogicMutationGate()
+        let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
+            poller: StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
+            dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+            liveTrackNames: { [:] }, projectFileReader: .unavailable)
+        let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+        let params: [String: Value] = ["domains": .array([.string("tracks")]), "allow_ui_navigation": .bool(false)]
+        let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+            commandParams: params, mutationGate: gate) {
+                await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
+            }
+        let atCollapse = try #require(bookends.atCollapse)
+        #expect(Array(atCollapse.prefix(41)) == Array(repeating: 7, count: 41))
+        #expect(atCollapse[41] == 5)
+        #expect(bookends.counts.allSatisfy { $0 >= 7 })
+        #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 19)
+        #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let tracks = try #require(body["tracks"] as? [String: Any])
+        let rows = try #require(tracks["rows"] as? [[String: Any]])
+        let childRows = rows.filter { ($0["name"] as? String)?.utf8.elementsEqual("Repeated child".utf8) == true }
+        let childReference = childRows.first?["track_ref"] as? String
+        // Reuse the exact CF handles, bytes and ordinal after the known disappearance.
+        // This is not a fresh inspection or an approved reacquisition.
+        fixture.builder.setChildren(fixture.rail, headers)
+        fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+        let recycled = fixture.builder.makeAXRuntime().children(fixture.rail)
+        #expect(recycled.count == 42 && CFEqual(recycled[1], headers[1]))
+        #expect(fixture.builder.attributeValue(recycled[1], kAXTitleAttribute as String) as? String == "Repeated child")
+        var mutationAuthority = false
+        if let childReference {
+            #expect(childRows.count == 2)
+            let binding = try #require(await registry.resolve(TargetReference(rawValue: childReference)))
+            let physical = try #require(binding.physicalTrack)
+            #expect(CFEqual(physical.header, headers[1]) && binding.descriptor.trackIndex == 1)
+            #expect(physical.document.utf8.elementsEqual(bundle.absoluteString.utf8))
+            let outcome = await FeatureFlags.withAdr002TargetRefForTests(true) {
+                await TargetRefResolver.resolveMutationIndex(["target_ref": .string(childReference)],
+                    targetRegistry: registry, cache: cache, operation: "track.rename",
+                    invalidIndexResult: toolInvalidParamsResult("explicit index required"))
+            }
+            if case .success(let resolved) = outcome {
+                #expect(resolved.index == 1)
+                mutationAuthority = true
+            }
+        } else {
+            let coverage = tracks["coverage"] as? String
+            if coverage == "partial" {
+                #expect(childRows.isEmpty)
+                #expect((tracks["reasons"] as? [String])?.contains("collapsed_track_stack") == true)
+                #expect(rows.first?["stack_collapsed"] as? Bool == true)
+            } else {
+                #expect(coverage == "unavailable" || coverage == "unstable")
+            }
+        }
+        #expect(!mutationAuthority, "a known ended exposure must not become writable again through recycled CF/name/index")
+        #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+        #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+        #expect(fixture.events.count == 0 && fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        #expect(gate.currentOperation() == nil)
+    }
+
+    private func observeStack(navigation: Bool, initiallyExpanded: Bool,
+                              verifyReferences: Bool = false, mouseCase: String? = nil) async throws {
+        let fixture = Fixture()
+        let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        let headers = (1...42).map { fixture.builder.element(965_100 + $0) }
+        let disclosure = fixture.builder.element(965_200)
+        fixture.builder.setRole(disclosure, kAXDisclosureTriangleRole as String)
+        fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, initiallyExpanded ? 1 : 0)
+        fixture.builder.setFrame(disclosure, x: 10, y: 20, width: 12, height: 12)
+        fixture.builder.setActionNames(disclosure, [kAXPressAction as String])
+        for (index, header) in headers.enumerated() {
+            fixture.builder.setRole(header, kAXLayoutItemRole as String)
+            fixture.builder.setAttribute(header, kAXTitleAttribute as String,
+                                         index == 1 || index == 2 ? "Repeated child" : "Track \(index + 1)")
+            fixture.builder.setAttribute(header, kAXSelectedAttribute as String, index == 0)
+            fixture.builder.setChildren(header, index == 0 ? [disclosure] : [])
+        }
+        let collapsed = [headers[0]] + Array(headers[24...])
+        fixture.builder.setChildren(fixture.rail, initiallyExpanded ? headers : collapsed)
+        fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [fixture.window])
+        fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.rail)
+        fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, true)
+        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, bundle.absoluteString)
+        fixture.builder.setAttribute(fixture.rail, kAXSelectedChildrenAttribute as String, [headers[0]])
+        let controlBar = fixture.builder.element(965_210)
+        fixture.builder.setRole(controlBar, kAXGroupRole as String)
+        fixture.builder.setAttribute(controlBar, kAXDescriptionAttribute as String, AXLocalePolicy.controlBarGroupLabel.canonical)
+        let play = fixture.builder.element(965_211)
+        let record = fixture.builder.element(965_212)
+        for (control, labels) in [(play, AXLocalePolicy.transportPlayControl), (record, AXLocalePolicy.transportRecordControl)] {
+            fixture.builder.setRole(control, kAXCheckBoxRole as String)
+            fixture.builder.setAttribute(control, kAXDescriptionAttribute as String, labels.canonical)
+            fixture.builder.setAttribute(control, kAXValueAttribute as String, 0)
+        }
+        fixture.builder.setChildren(controlBar, [play, record])
+        fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar])
+        let observationMouse = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
+            guard (type == .leftMouseDown || type == .leftMouseUp), point == CGPoint(x: 16, y: 26), clicks == 1 else {
+                Issue.record("unexpected disclosure event"); return false
+            }
+            fixture.events.record(type == .leftMouseDown ? "disclosure_down" : "disclosure_up")
+            if type == .leftMouseDown {
+                if mouseCase == "down_failed" { return false }
+                if mouseCase == "held_focus" {
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, disclosure)
+                }
+            }
+            if type == .leftMouseUp {
+                let expanded = (fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, expanded ? 0 : 1)
+                fixture.builder.setChildren(fixture.rail, expanded ? collapsed : headers)
+            }
+            return true
+        }, postKeyEvent: { _ in Issue.record("fixture forbids keys"); return false },
+           postUnicodeScalar: { _ in Issue.record("fixture forbids typing"); return false }, sleepMicros: { _ in })
+        let cache = StateCache()
+        let registry = TargetRegistry()
+        let gate = LogicMutationGate()
+        let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
+            poller: StatePoller(axChannel: fixture.channel(disclosure: disclosure, observationMouse: observationMouse,
+                wrongDisclosureHit: mouseCase == "wrong_hit"), cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
+            dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+            liveTrackNames: { [:] }, projectFileReader: .unavailable)
+        let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+        let params: [String: Value] = ["domains": .array([.string("tracks")]), "allow_ui_navigation": .bool(navigation)]
+        let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+            commandParams: params, mutationGate: gate) {
+                await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
+            }
+        if let mouseCase {
+            let expectedEvents = mouseCase == "wrong_hit" ? [] : mouseCase == "down_failed" ? ["disclosure_down"]
+                : ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"]
+            #expect(fixture.events.recorded == expectedEvents)
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 19)
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                                                            runtime: fixture.builder.makeAXRuntime())
+            #expect(focus.map { CFEqual($0, mouseCase == "held_focus" ? disclosure : fixture.rail) } == true)
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+            #expect(gate.currentOperation() == nil)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            if mouseCase == "held_focus" {
+                #expect(effects["restoration"] as? String == "partially_restored")
+                #expect(effects["reason"] as? String == "keyboard_focus_not_restored")
+                #expect((effects["changed"] as? [String])?.contains("keyboard_focus") == true)
+            }
+            return
+        }
+        let isError = result.isError ?? false
+        #expect(!isError)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let tracks = try #require(body["tracks"] as? [String: Any])
+        let rows = try #require(tracks["rows"] as? [[String: Any]])
+        let expectedHeaders = initiallyExpanded || navigation ? headers : collapsed
+        #expect(rows.count == expectedHeaders.count)
+        #expect(rows.compactMap { $0["name"] as? String } == expectedHeaders.compactMap {
+            fixture.builder.attributeValue($0, kAXTitleAttribute as String) as? String
+        })
+        #expect(rows.compactMap { $0["track_ref"] as? String }.count == expectedHeaders.count)
+        #expect(tracks["coverage"] as? String == "partial", "exposure alone does not prove hidden/nested/global completion")
+        let current = await cache.getTracks()
+        #expect(current.count == (initiallyExpanded ? 42 : 19), "collapsed descendants must not become ordinary current cache rows")
+        if verifyReferences {
+            for (index, shouldResolve) in [(0, true), (1, false)] {
+                let reference = try #require(rows[index]["track_ref"] as? String)
+                let held = try #require(await registry.resolve(TargetReference(rawValue: reference)))
+                #expect(held.physicalTrack.map { CFEqual($0.header, headers[index]) } == true)
+                if index == 1 {
+                    // Recycle the same physical header and raw name at its captured
+                    // ordinal BEFORE its first mutation lookup, without reacquisition.
+                    fixture.builder.setChildren(fixture.rail, headers)
+                    fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+                    let physical = try #require(held.physicalTrack)
+                    #expect(physical.exposure != nil)
+                    #expect(physical.currentIndex() == nil, "ended custody cannot resurrect on the same recycled owner")
+                    // Corroborate the probe against exactly these readable injected
+                    // owners, without issuing this fresh test-only scope as authority.
+                    let live = AXTrackBinding.Exposure(header: headers[0], disclosure: disclosure,
+                        runtime: physical.runtime, originalHeaders: collapsed)
+                    let fresh = AXTrackBinding.Binding(window: physical.window, header: physical.header,
+                        document: physical.document, runtime: physical.runtime, exposure: live)
+                    #expect(fresh.currentIndex() == 1)
+                    live.end()
+                }
+                let outcome = await FeatureFlags.withAdr002TargetRefForTests(true) {
+                    await TargetRefResolver.resolveMutationIndex(["target_ref": .string(reference)],
+                        targetRegistry: registry, cache: cache, operation: "track.rename",
+                        invalidIndexResult: toolInvalidParamsResult("explicit index required"))
+                }
+                var resolved = false
+                if case .success(let target) = outcome { resolved = true; #expect(target.index == index) }
+                #expect(resolved == shouldResolve)
+                if index == 1 {
+                    fixture.builder.setChildren(fixture.rail, collapsed)
+                    fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
+                }
+            }
+        }
+        #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == (initiallyExpanded ? 42 : 19))
+        #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == (initiallyExpanded ? 1 : 0))
+        #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+        #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+        #expect(fixture.builder.attributeValue(headers[0], kAXSelectedAttribute as String) as? Bool == true)
+        let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                                                        runtime: fixture.builder.makeAXRuntime())
+        #expect(focus.map { CFEqual($0, fixture.rail) } == true)
+        if !navigation { #expect(fixture.events.count == 0) }
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        #expect(gate.currentOperation() == nil)
     }
 
     private func inspect(

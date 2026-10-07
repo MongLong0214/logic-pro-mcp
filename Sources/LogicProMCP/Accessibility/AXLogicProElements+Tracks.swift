@@ -3,11 +3,41 @@ import Foundation
 
 /// Issuance-time, process-local custody. Never encoded or reconstructed from a name/index.
 enum AXTrackBinding {
+    /// Only the owned temporary disclosure can create this non-Codable scope.
+    /// Restoration or an observed loss ends it irreversibly, including recycled AX handles.
+    final class Exposure: @unchecked Sendable {
+        private let lock = NSLock()
+        private var ended = false
+        let header: AXUIElement
+        let disclosure: AXUIElement
+        let runtime: AXLogicProElements.Runtime
+        let originalHeaders: [AXUIElement]
+        init(header: AXUIElement, disclosure: AXUIElement, runtime: AXLogicProElements.Runtime,
+             originalHeaders: [AXUIElement] = []) {
+            self.header = header; self.disclosure = disclosure; self.runtime = runtime
+            self.originalHeaders = originalHeaders
+        }
+        func end() { lock.withLock { ended = true } }
+        var isCurrent: Bool {
+            guard !lock.withLock({ ended }),
+                  AXLogicProElements.heldTrackDisclosureValue(header: header, disclosure: disclosure, runtime: runtime) == 1
+            else { end(); return false }
+            return !lock.withLock { ended }
+        }
+    }
+
     struct Binding: @unchecked Sendable {
         let window: AXUIElement
         let header: AXUIElement
         let document: String
         let runtime: AXLogicProElements.Runtime
+        let exposure: Exposure?
+
+        init(window: AXUIElement, header: AXUIElement, document: String, runtime: AXLogicProElements.Runtime,
+             exposure: Exposure? = nil) {
+            self.window = window; self.header = header; self.document = document
+            self.runtime = runtime; self.exposure = exposure
+        }
 
         var projectPath: String? {
             guard let url = URL(string: document), url.isFileURL,
@@ -18,10 +48,12 @@ enum AXTrackBinding {
         func matches(_ other: Binding) -> Bool {
             CFEqual(window, other.window) && CFEqual(header, other.header)
                 && document.utf8.elementsEqual(other.document.utf8)
+                && exposure === other.exposure
         }
 
         func currentIndex() -> Int? {
-            guard ExactTrackNameAdapter.operationPermitted(), projectPath != nil,
+            guard ExactTrackNameAdapter.operationPermitted(), exposure?.isCurrent ?? true,
+                  projectPath != nil,
                   case .found(let currentWindow) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
                   CFEqual(window, currentWindow),
                   let app = AXLogicProElements.appRoot(runtime: runtime),
@@ -31,7 +63,9 @@ enum AXTrackBinding {
                   case .success(let currentDocument?) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
                   document.utf8.elementsEqual(currentDocument.utf8),
                   case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime),
-                  ExactTrackNameAdapter.operationPermitted() else { return nil }
+                  ExactTrackNameAdapter.operationPermitted(),
+                  exposure?.isCurrent ?? true,
+                  ExactTrackNameAdapter.operationPermitted() else { exposure?.end(); return nil }
             let matches = headers.indices.filter { CFEqual(headers[$0], header) }
             return matches.count == 1 ? matches[0] : nil
         }
@@ -174,6 +208,32 @@ extension AXLogicProElements {
         let rows = allTrackHeaders(runtime: runtime)
         guard index >= 0 && index < rows.count else { return nil }
         return rows[index]
+    }
+
+    /// Owned disclosure navigation reuses the shared status-preserving rail discovery,
+    /// but cannot choose the first of competing named rails.
+    static func uniqueTrackHeaderRail(in window: AXUIElement, runtime: Runtime) -> AXUIElement? {
+        guard case .complete(let candidates) = verifiedTrackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax) else { return nil }
+        let rails = !candidates.lists.isEmpty ? candidates.lists
+            : !candidates.scrollAreas.isEmpty ? candidates.scrollAreas : candidates.groups
+        guard rails.count == 1,
+              case .read = enumerateTrackHeaderRows(in: rails[0], runtime: runtime.ax) else { return nil }
+        return rails[0]
+    }
+
+    static func heldTrackDisclosureValue(header: AXUIElement, disclosure: AXUIElement, runtime: Runtime) -> Int? {
+        guard case .success(let children) = AXHelpers.childrenResult(header, runtime: runtime.ax) else { return nil }
+        var triangles: [AXUIElement] = []
+        for child in children {
+            guard case .success(.some(let role)) = AXHelpers.getAttributeResult(
+                child, kAXRoleAttribute as String, runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError> else { return nil }
+            if role == kAXDisclosureTriangleRole as String { triangles.append(child) }
+        }
+        guard triangles.count == 1, CFEqual(triangles[0], disclosure),
+              case .success(.some(let value)) = AXHelpers.getAttributeResult(
+                disclosure, kAXValueAttribute as String, runtime: runtime.ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
+              value == 0 || value == 1 else { return nil }
+        return value.intValue
     }
 
     /// Select a track using Apple's standard AX API before falling back to

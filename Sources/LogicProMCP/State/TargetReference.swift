@@ -322,7 +322,7 @@ actor TargetRegistry {
     /// would forfeit that external-change protection; hence rebind-on-proof, not
     /// a thinner fingerprint.
     func rebind(_ reference: TargetReference, to descriptor: TargetDescriptor) {
-        guard let existing = resolve(reference) else { return }
+        guard let existing = resolve(reference), existing.physicalTrack?.exposure?.isCurrent ?? true else { return }
         bindings[reference] = TargetBinding(
             reference: existing.reference,
             kind: existing.kind,

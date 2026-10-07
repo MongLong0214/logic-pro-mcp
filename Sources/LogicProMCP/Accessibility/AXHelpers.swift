@@ -28,6 +28,9 @@ enum AXHelpers {
         /// Boolean action seam for existing test runtimes that cannot report an
         /// AXError status.
         let performActionResult: (@Sendable (AXUIElement, String) -> Result<Void, AXStatusError>)?
+        /// Observation navigation must hit the retained disclosure, not just a coordinate.
+        /// Omission refuses; an injected runtime never falls through to native hit testing.
+        let elementAtPosition: (@Sendable (AXUIElement, CGPoint) -> Result<AXUIElement?, AXStatusError>)?
 
         /// Explicit memberwise initializer, replacing the compiler-synthesized one so
         /// `childrenResult` can default to `nil`. Every existing construction that omits
@@ -44,7 +47,8 @@ enum AXHelpers {
             actionNamesResult: (@Sendable (AXUIElement) -> Result<[String], AXStatusError>)? = nil,
             childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)? = nil,
             attributeValueResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXStatusError>)? = nil,
-            performActionResult: (@Sendable (AXUIElement, String) -> Result<Void, AXStatusError>)? = nil
+            performActionResult: (@Sendable (AXUIElement, String) -> Result<Void, AXStatusError>)? = nil,
+            elementAtPosition: (@Sendable (AXUIElement, CGPoint) -> Result<AXUIElement?, AXStatusError>)? = nil
         ) {
             self.axApp = axApp
             self.attributeValue = attributeValue
@@ -58,6 +62,7 @@ enum AXHelpers {
             self.childrenResult = childrenResult
             self.attributeValueResult = attributeValueResult
             self.performActionResult = performActionResult
+            self.elementAtPosition = elementAtPosition
         }
 
         static let production = Runtime(
@@ -141,6 +146,12 @@ enum AXHelpers {
                     return .failure(AXStatusError(raw: status.rawValue))
                 }
                 return .success(())
+            },
+            elementAtPosition: { app, point in
+                var element: AXUIElement?
+                let status = AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &element)
+                guard status == .success else { return .failure(AXStatusError(raw: status.rawValue)) }
+                return .success(element)
             }
         )
     }

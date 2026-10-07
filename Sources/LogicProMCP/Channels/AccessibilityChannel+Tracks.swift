@@ -40,7 +40,7 @@ extension AccessibilityChannel {
     /// Read the retained rail, rather than rediscovering a possibly different window.
     static func readTrackStates(
         from headers: [AXUIElement], in window: AXUIElement? = nil,
-        runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
+        runtime: AXLogicProElements.Runtime, exposure: AXTrackBinding.Exposure? = nil, stoppingWhen stop: () -> Bool
     ) -> (states: [TrackState]?, yielded: Bool) {
         let document: String?
         if let window, case .success(let observed?) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime) {
@@ -54,12 +54,245 @@ extension AccessibilityChannel {
                 from: header, index: index, runtime: runtime.ax, stoppingBeforeHelp: stop
             ) else { return (nil, true) }
             if let window, let document, state.liveIdentityBacked, state.placeholder != true {
-                let binding = AXTrackBinding.Binding(window: window, header: header, document: document, runtime: runtime)
+                // Baseline rows were already exposed and keep ordinary custody. Only
+                // newly acquired headers depend on this temporary disclosure's lifetime.
+                let scope = exposure.flatMap { value in
+                    value.originalHeaders.contains(where: { CFEqual($0, header) }) ? nil : value
+                }
+                let binding = AXTrackBinding.Binding(window: window, header: header, document: document, runtime: runtime, exposure: scope)
                 if binding.projectPath != nil { state.physicalBinding = binding }
             }
             states.append(state)
         }
         return (states, false)
+    }
+
+    /// One request's observed disclosure. No selection, focus, viewport or musical
+    /// writes are used to recover custody. Conflicting UI is left to its owner.
+    final class OwnedTrackStackObservationNavigation {
+        let logic: AXLogicProElements.Runtime
+        let mouse: AXMouseHelper.Runtime
+        let pid: pid_t
+        let app: AXUIElement
+        let window: AXUIElement
+        let title: String
+        let document: String
+        let rail: AXUIElement
+        let header: AXUIElement
+        let disclosure: AXUIElement
+        let originalHeaders: [AXUIElement]
+        let originalFocus: AXUIElement
+        let selected: [AXUIElement]
+        let transport: AXLogicProElements.ObservedTransportActivity
+        let referenceIsCurrent: @Sendable () async -> Bool
+        private struct Viewport { let control: AXUIElement; let value: Double }
+        private let viewport: [Viewport]
+        private var observedFocus: AXUIElement
+        private var expandedHeaders: [AXUIElement]?
+        private(set) var exposure: AXTrackBinding.Exposure?
+        private(set) var effects = SessionPopulationObservation.UIEffects()
+
+        init?(window: AXUIElement, logic: AXLogicProElements.Runtime, mouse: AXMouseHelper.Runtime,
+              expectedProject: TargetDescriptor?, requiresProjectReference: Bool,
+              referenceIsCurrent: @escaping @Sendable () async -> Bool) {
+            guard let pid = logic.logicProPID(), logic.focusedApplicationPID() == pid,
+                  let app = AXLogicProElements.appRoot(runtime: logic),
+                  let title = AXHelpers.getTitle(window, runtime: logic.ax),
+                  case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                  let url = URL(string: document), url.isFileURL,
+                  url.host == nil || url.host == "" || url.host == "localhost",
+                  let rail = AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic),
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  let selected = Self.selectedHeaders(headers, ax: logic.ax),
+                  let viewport = Self.readViewport(window, ax: logic.ax),
+                  let transport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
+                    checking: { try SessionPopulationObservation.requireOwnedAcquisition() }),
+                  !transport.isPlaying, !transport.isRecording else { return nil }
+            if requiresProjectReference {
+                guard expectedProject?.projectName?.utf8.elementsEqual(AccessibilityChannel.projectName(fromWindowTitle: title).utf8) == true,
+                      expectedProject?.projectFilePath?.utf8.elementsEqual(url.path.utf8) == true else { return nil }
+            }
+            var collapsed: [(AXUIElement, AXUIElement)] = []
+            for header in headers {
+                guard case .success(let children) = AXHelpers.childrenResult(header, runtime: logic.ax) else { return nil }
+                var triangles: [AXUIElement] = []
+                for child in children {
+                    guard case .success(.some(let role)) = AXHelpers.getAttributeResult(
+                        child, kAXRoleAttribute as String, runtime: logic.ax) as Result<String?, AXHelpers.AXStatusError> else { return nil }
+                    if role == kAXDisclosureTriangleRole as String { triangles.append(child) }
+                }
+                guard triangles.count <= 1 else { return nil }
+                if let triangle = triangles.first {
+                    guard case .success(.some(let value)) = AXHelpers.getAttributeResult(
+                        triangle, kAXValueAttribute as String, runtime: logic.ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
+                          value == 0 || value == 1 else { return nil }
+                    if value == 0 { collapsed.append((header, triangle)) }
+                }
+            }
+            // This increment acquires one unambiguous existing stack; nested/multiple
+            // disclosure traversal and global hidden membership remain unqualified.
+            guard collapsed.count == 1 else { return nil }
+            self.logic = logic; self.mouse = mouse; self.pid = pid; self.app = app
+            self.window = window; self.title = title; self.document = document; self.rail = rail
+            header = collapsed[0].0; disclosure = collapsed[0].1; originalHeaders = headers
+            originalFocus = focus; observedFocus = focus; self.selected = selected
+            self.transport = transport; self.viewport = viewport; self.referenceIsCurrent = referenceIsCurrent
+        }
+
+        private static func selectedHeaders(_ headers: [AXUIElement], ax: AXHelpers.Runtime) -> [AXUIElement]? {
+            var selected: [AXUIElement] = []
+            for header in headers {
+                guard case .success(.some(let value)) = AXHelpers.getAttributeResult(
+                    header, kAXSelectedAttribute as String, runtime: ax) as Result<Bool?, AXHelpers.AXStatusError> else { return nil }
+                if value { selected.append(header) }
+            }
+            return selected
+        }
+
+        private static func readViewport(_ rail: AXUIElement, ax: AXHelpers.Runtime) -> [Viewport]? {
+            guard case .success(let census) = AXHelpers.censusDescendantResult(of: rail, role: kAXScrollBarRole as String,
+                maxDepth: 32, runtime: ax, requiresCompleteTraversal: true) else { return nil }
+            var values: [Viewport] = []
+            for control in census.matches {
+                guard case .success(.some(let value)) = AXHelpers.getAttributeResult(
+                    control, kAXValueAttribute as String, runtime: ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
+                      value.doubleValue.isFinite else { return nil }
+                values.append(.init(control: control, value: value.doubleValue))
+            }
+            return values
+        }
+
+        private func same(_ a: [AXUIElement], _ b: [AXUIElement]) -> Bool {
+            a.count == b.count && zip(a, b).allSatisfy { CFEqual($0, $1) }
+        }
+
+        private func value() -> Int? {
+            AXLogicProElements.heldTrackDisclosureValue(header: header, disclosure: disclosure, runtime: logic)
+        }
+
+        private func owned(expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  await referenceIsCurrent(), logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
+                  let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(app, currentApp),
+                  case .success(.elements(let windows)) = AXHelpers.getAXUIElementArrayRead(app, kAXWindowsAttribute as String, runtime: logic.ax),
+                  windows.filter({ CFEqual($0, window) }).count == 1,
+                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: logic.ax) as Bool? == true,
+                  let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
+                  let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
+                  CFEqual(main, window), CFEqual(focusedWindow, window),
+                  AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
+                  case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                  doc.utf8.elementsEqual(document.utf8), !AXLogicProElements.dialogPresent(runtime: logic),
+                  AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic).map({ CFEqual($0, rail) }) == true,
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                  headers.filter({ CFEqual($0, header) }).count == 1,
+                  same(headers.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders),
+                  expectedHeaders.map({ same(headers, $0) }) ?? true,
+                  let currentSelection = Self.selectedHeaders(headers, ax: logic.ax), same(currentSelection, selected),
+                  let currentValue = value(), expectedValue.map({ $0 == currentValue }) ?? true,
+                  let currentViewport = Self.readViewport(window, ax: logic.ax), currentViewport.count == viewport.count,
+                  zip(currentViewport, viewport).allSatisfy({ CFEqual($0.control, $1.control) && $0.value == $1.value }),
+                  let currentTransport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
+                    checking: { try SessionPopulationObservation.requireOwnedAcquisition() }),
+                  CFEqual(currentTransport.controlBar, transport.controlBar), CFEqual(currentTransport.play, transport.play),
+                  CFEqual(currentTransport.record, transport.record), !currentTransport.isPlaying, !currentTransport.isRecording,
+                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  CFEqual(focus, observedFocus), !stop(), logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            return true
+        }
+
+        private func frame() -> CGRect? {
+            guard case .success(let position) = AXHelpers.getAttributeResult(disclosure, kAXPositionAttribute as String, runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
+                  case .success(let size) = AXHelpers.getAttributeResult(disclosure, kAXSizeAttribute as String, runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
+                  let point = AXHelpers.point(fromRawAttribute: position), let extent = AXHelpers.size(fromRawAttribute: size),
+                  point.x.isFinite, point.y.isFinite, extent.width.isFinite, extent.height.isFinite,
+                  extent.width > 0, extent.height > 0 else { return nil }
+            return CGRect(origin: point, size: extent)
+        }
+
+        private func event(_ event: CGEventType, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            guard await owned(expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
+                  let frame = frame(), let hitTest = logic.ax.elementAtPosition,
+                  case .success(.some(let hit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(hit, disclosure),
+                  await owned(expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
+                  self.frame() == frame,
+                  case .success(.some(let finalHit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(finalHit, disclosure),
+                  case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                  doc.utf8.elementsEqual(document.utf8),
+                  let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax), CFEqual(main, window),
+                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax), CFEqual(focus, observedFocus),
+                  !stop(), logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            effects.navigationPerformed = true; effects.restoration = "not_restored"
+            if !effects.attempted.contains("stack_disclosure") { effects.attempted.append("stack_disclosure") }
+            return mouse.postMouseEvent(event, CGPoint(x: frame.midX, y: frame.midY), 1)
+        }
+
+        func expand(stoppingWhen stop: @Sendable () -> Bool) async {
+            exposure = .init(header: header, disclosure: disclosure, runtime: logic, originalHeaders: originalHeaders)
+            guard await event(.leftMouseDown, expectedHeaders: originalHeaders, expectedValue: 0, stoppingWhen: stop),
+                  acceptHeldGestureFocus() else { effects.reason = "stack_expansion_unverified"; return }
+            _ = await event(.leftMouseUp, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop)
+            guard value() == 1,
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                  same(headers.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders) else {
+                effects.reason = "stack_expansion_unverified"; return
+            }
+            // A changed focus is reported, never written back or treated as full restoration.
+            if let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax) {
+                if !CFEqual(focus, observedFocus) { effects.changed.append("keyboard_focus") }
+                guard CFEqual(focus, originalFocus) || CFEqual(focus, disclosure) || CFEqual(focus, header) else {
+                    effects.reason = "stack_navigation_focus_conflict"; exposure?.end(); return
+                }
+                observedFocus = focus
+            }
+            guard await owned(expectedHeaders: headers, expectedValue: 1, stoppingWhen: stop) else {
+                effects.reason = "stack_navigation_ownership_lost"; return
+            }
+            expandedHeaders = headers
+            effects.changed.append("stack_disclosure")
+        }
+
+        func restore(stoppingWhen stop: @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
+            defer { exposure?.end() }
+            guard effects.navigationPerformed else { return effects }
+            guard let expandedHeaders, await owned(expectedHeaders: expandedHeaders, expectedValue: 1, stoppingWhen: stop) else {
+                effects.reason = "stack_navigation_ownership_lost"; return effects
+            }
+            guard await event(.leftMouseDown, expectedHeaders: expandedHeaders, expectedValue: 1, stoppingWhen: stop),
+                  acceptHeldGestureFocus() else { effects.reason = "stack_restoration_unverified"; return effects }
+            _ = await event(.leftMouseUp, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop)
+            if let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+               CFEqual(focus, originalFocus) || CFEqual(focus, disclosure) || CFEqual(focus, header) {
+                observedFocus = focus
+            }
+            guard value() == 0,
+                  await owned(expectedHeaders: originalHeaders, expectedValue: 0, stoppingWhen: stop) else {
+                effects.reason = "stack_restoration_unverified"; return effects
+            }
+            effects.restoration = CFEqual(observedFocus, originalFocus) ? "restored" : "partially_restored"
+            if effects.restoration != "restored" { effects.reason = "keyboard_focus_not_restored" }
+            return effects
+        }
+
+        /// A successful Down may focus its held target. Corroborate that limited
+        /// effect before the Up's full ownership/hit-test checks; never write focus.
+        private func acceptHeldGestureFocus() -> Bool {
+            guard let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  CFEqual(focus, observedFocus) || CFEqual(focus, disclosure) || CFEqual(focus, header) else { return false }
+            if !CFEqual(focus, observedFocus), !effects.changed.contains("keyboard_focus") { effects.changed.append("keyboard_focus") }
+            observedFocus = focus
+            return true
+        }
+
+        func matchesRestoredTracks(_ tracks: [TrackState]?) -> Bool {
+            guard let tracks, tracks.count == originalHeaders.count else { return false }
+            return zip(tracks, originalHeaders).allSatisfy { row, header in
+                row.physicalBinding.map { CFEqual($0.header, header) && $0.exposure == nil } == true
+            }
+        }
     }
 
     // MARK: - Verified track sort (#448)
