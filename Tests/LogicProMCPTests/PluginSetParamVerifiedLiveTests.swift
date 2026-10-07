@@ -3920,6 +3920,7 @@ private final class Counter: @unchecked Sendable {
 private func parameterReadRuntime(
     _ fixture: LiveFixture,
     onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = { [] },
+    actionNamesRead: (@Sendable (AXUIElement) -> Result<[String], AXHelpers.AXStatusError>?)? = nil,
     attributeRead: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil
 ) -> AXLogicProElements.Runtime {
     let original = fixture.runtime.ax
@@ -3927,7 +3928,9 @@ private func parameterReadRuntime(
         axApp: original.axApp, attributeValue: original.attributeValue,
         attributeIsSettable: original.attributeIsSettable, setAttributeValue: original.setAttributeValue,
         children: original.children, performAction: original.performAction, childCount: original.childCount,
-        actionNames: original.actionNames, actionNamesResult: original.actionNamesResult,
+        actionNames: original.actionNames, actionNamesResult: { element in
+            actionNamesRead?(element) ?? original.actionNamesResult?(element) ?? .success(original.actionNames(element))
+        },
         childrenResult: original.childrenResult,
         attributeValueResult: { element, attribute in
             attributeRead?(element, attribute) ?? original.attributeValueResult!(element, attribute)
@@ -4412,4 +4415,70 @@ func testIssue955ReadsEveryDeclaredEQNativeSlider(_ param: String) async throws 
     #expect(object["observed_display"] as? String == "51 %")
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+private actor Issue955ReviewReadStartLatch {
+    private var suspended: CheckedContinuation<Void, Never>?
+    private var ready: CheckedContinuation<Void, Never>?
+    func waitForRelease() async {
+        await withCheckedContinuation { continuation in
+            suspended = continuation
+            ready?.resume()
+            ready = nil
+        }
+    }
+    func waitUntilSuspended() async {
+        if suspended != nil { return }
+        await withCheckedContinuation { ready = $0 }
+    }
+    func release() {
+        suspended?.resume()
+        suspended = nil
+    }
+}
+
+@Test func testIssue955ReviewCancelledReadCannotOpenAnEditor() async throws {
+    let fixture = LiveFixture(pluginWindowPresent: false, openWindowOnSlotPress: true)
+    fixture.builder.setAttribute(fixture.builder.element(1001), kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString)
+    let latch = Issue955ReviewReadStartLatch()
+    let task = Task {
+        await latch.waitForRelease()
+        #expect(Task.isCancelled)
+        return await AccessibilityChannel.defaultGetParamVerified(
+            params: parameterReadParams(), runtime: parameterReadRuntime(fixture))
+    }
+    await latch.waitUntilSuspended()
+    task.cancel()
+    await latch.release()
+    let result = await task.value
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String != "A")
+    #expect(fixture.targetOpenControlPressCount.value == 0)
+    #expect(fixture.axActions.value.isEmpty)
+}
+
+@Test(arguments: ["threshold", "limiter_on"], ["project", "slot"])
+func testIssue955ReadAcquisitionStopsWhenRankingEndsCustody(_ param: String, _ changed: String) async throws {
+    let fixture = LiveFixture(pluginWindowPresent: false, openWindowOnSlotPress: true)
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let ended = MutableBox(false)
+    let runtime = parameterReadRuntime(fixture, actionNamesRead: { element in
+        if CFEqual(element, b.element(13062)), !ended.value {
+            ended.value = true
+            if changed == "project" {
+                b.setAttribute(b.element(1001), kAXDocumentAttribute as String, "file:///tmp/another.logicx/")
+            } else {
+                b.setAttribute(b.element(1306), kAXDescriptionAttribute as String, "Noise Gate")
+            }
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(param), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(ended.value)
+    #expect(object["state"] as? String == "C")
+    #expect(fixture.targetOpenControlPressCount.value == 0)
+    #expect(fixture.axActions.value.isEmpty)
 }

@@ -1569,17 +1569,21 @@ extension AccessibilityChannel {
     /// A read has no requested value and cannot enter the setter/walker branch.
     /// UI acquisition and its owned view/editor cleanup are shared with writers.
     private enum VerifiedParameterAccess {
-        case read(unit: String, contextIsCurrent: () -> Bool)
+        case read(unit: String, contextIsCurrent: () -> Bool, openerOverride: PluginWindowOpener?)
         case write(requested: Double, walkTarget: SliderIncrementWalk.Target?, displayUnit: String, budget: Int)
 
         var isRead: Bool { if case .read = self { return true }; return false }
+        var readOpenerOverride: PluginWindowOpener? {
+            if case let .read(_, _, opener) = self { return opener }
+            return nil
+        }
     }
 
     static func defaultGetParamVerified(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
         entryLookup: VerifiedPluginCatalog.EntryLookup = VerifiedPluginCatalog.productionEntryLookup,
-        pluginWindowOpener: PluginWindowOpener = livePluginWindowOpener
+        pluginWindowOpener: PluginWindowOpener? = nil
     ) async -> ChannelResult {
         let operation = "logic_plugins.get_param_verified"
         guard params["value"] == nil, params["mode"] == nil,
@@ -1640,9 +1644,9 @@ extension AccessibilityChannel {
         let result = await performVerifiedParameterAccess(
             operation: operation, referenceParams: params, track: track, insert: insert,
             pluginID: pluginID, paramKey: paramKey, paramAlias: suppliedParam,
-            access: .read(unit: rawUnit, contextIsCurrent: contextIsCurrent),
+            access: .read(unit: rawUnit, contextIsCurrent: contextIsCurrent, openerOverride: pluginWindowOpener),
             writeMethod: metadata.writeMethod ?? "", runtime: runtime, entryLookup: entryLookup,
-            pluginWindowOpener: pluginWindowOpener, pluginPopupMenuCleaner: popupCheck
+            pluginWindowOpener: pluginWindowOpener ?? livePluginWindowOpener, pluginPopupMenuCleaner: popupCheck
         )
         guard contextIsCurrent() else {
             return parameterReadContextFailure(result, error: .projectIdentityMismatch, operation: operation)
@@ -1663,7 +1667,8 @@ extension AccessibilityChannel {
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             for (key, value) in object where key.hasPrefix("plugin_view_")
                 || key == "editor_close_observed" || key == "editor_close_attempted"
-                || key == "editor_cleanup_unobserved" || key == "editor_still_open" || key == "recovery_hint" {
+                || key == "editor_cleanup_unobserved" || key == "editor_still_open" || key == "recovery_hint"
+                || key == "opener_action_attempted" {
                 extras[key] = value
             }
         }
@@ -1888,8 +1893,24 @@ extension AccessibilityChannel {
         var constructedWindowsNeedingCleanup: [AXUIElement] = []
         var restorePluginViewOnExit: (() -> ControlsViewBooleanParameterWriter.ViewRestoration)?
         var readContextEnded = false
+        var acquisitionActionAttempted = false
+        func acquisitionAllowed() -> Bool {
+            guard case let .read(_, contextIsCurrent, _) = access else { return true }
+            guard !readContextEnded, contextIsCurrent(),
+                  targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
+                    originalSlot: slots[insert].element, runtime: runtime) else {
+                readContextEnded = true
+                return false
+            }
+            return true
+        }
+        func beginAcquisitionAction() -> Bool {
+            guard acquisitionAllowed() else { return false }
+            acquisitionActionAttempted = true
+            return true
+        }
         func editorCloseAllowed(_ window: AXUIElement) -> Bool {
-            guard case let .read(_, contextIsCurrent) = access else { return true }
+            guard case let .read(_, contextIsCurrent, _) = access else { return true }
             guard !readContextEnded, contextIsCurrent(),
                   targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
                     originalSlot: slots[insert].element, runtime: runtime),
@@ -1939,6 +1960,12 @@ extension AccessibilityChannel {
         }
 
         func appendOwnedEditorCleanup(to extras: inout [String: Any]) {
+            if access.isRead {
+                extras["opener_action_attempted"] = acquisitionActionAttempted
+                if constructedWindowsNeedingCleanup.isEmpty, acquisitionActionAttempted, readContextEnded {
+                    extras["editor_cleanup_unobserved"] = true
+                }
+            }
             guard !constructedWindowsNeedingCleanup.isEmpty else { return }
             let windows = constructedWindowsNeedingCleanup
             var closeAttempted = false
@@ -2121,13 +2148,18 @@ extension AccessibilityChannel {
                     phase: "the complete editor census before target-slot AXPress"
                 ))
             }
+            guard beginAcquisitionAction() else {
+                return .error(windowIdentityUnresolvedStateC(operation, identity,
+                    "the read's acquired context ended before opening its editor"))
+            }
             _ = pressElement(targetOpenControl, runtime: runtime.ax)
             let matchingEditorsAfterPress: [AXUIElement]
             switch await pollMatchingPluginEditorWindows(
                 trackName: trackName,
                 pluginID: pluginID,
                 runtime: runtime,
-                timeoutMs: 1_250
+                timeoutMs: 1_250,
+                contextIsCurrent: acquisitionAllowed
             ) {
             case let .success(observed):
                 matchingEditorsAfterPress = observed
@@ -2251,16 +2283,22 @@ extension AccessibilityChannel {
             // It cannot require the native slider because the remembered view
             // may be Controls; the requested view is selected below.
             openedCandidate = AXUIElementSendable(boundWindow)
-        } else if controlsViewCheckbox {
+        } else if controlsViewCheckbox || (access.isRead && access.readOpenerOverride == nil) {
             openedCandidate = await openPluginWindowFromTargetSlot(
                 slots[insert].element,
                 pluginID: pluginID,
                 trackName: trackName,
                 axDescription: controlsViewEditorAnchor ?? "",
                 requiringMatchingSlider: false,
-                runtime: runtime
+                runtime: runtime,
+                allowingChanges: beginAcquisitionAction,
+                contextIsCurrent: acquisitionAllowed
             )
         } else {
+            guard beginAcquisitionAction() else {
+                return .error(windowIdentityUnresolvedStateC(operation, identity,
+                    "the read's acquired context ended before its editor opener"))
+            }
             openedCandidate = await pluginWindowOpener(
                 AXUIElementSendable(slots[insert].element),
                 pluginID,
@@ -2394,7 +2432,7 @@ extension AccessibilityChannel {
         }
         let viewSession: ControlsViewBooleanParameterWriter.ViewSession
         func viewChangesAllowed() -> Bool {
-            guard case let .read(_, contextIsCurrent) = access else { return true }
+            guard case let .read(_, contextIsCurrent, _) = access else { return true }
             guard !readContextEnded, contextIsCurrent(),
                   targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
                     originalSlot: slots[insert].element, runtime: runtime),
@@ -2493,7 +2531,7 @@ extension AccessibilityChannel {
             ) {
                 return .error(failure)
             }
-            if case let .read(rawUnit, contextIsCurrent) = access {
+            if case let .read(rawUnit, contextIsCurrent, _) = access {
                 let checkbox: AXUIElement
                 switch ControlsViewBooleanParameterWriter.locate(label: controlsViewRowLabel, in: window, runtime: runtime.ax) {
                 case .found(.checkBox(let control)): checkbox = control
@@ -2621,7 +2659,7 @@ extension AccessibilityChannel {
             return .error(failure)
         }
 
-        if case let .read(rawUnit, contextIsCurrent) = access {
+        if case let .read(rawUnit, contextIsCurrent, _) = access {
             func currentControl() -> Bool {
                 guard contextIsCurrent(),
                       targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
@@ -3596,7 +3634,9 @@ extension AccessibilityChannel {
         trackName: String,
         axDescription: String,
         requiringMatchingSlider: Bool = true,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        allowingChanges: () -> Bool = { true },
+        contextIsCurrent: () -> Bool = { true }
     ) async -> AXUIElementSendable? {
         switch AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
@@ -3612,12 +3652,13 @@ extension AccessibilityChannel {
         case .pluginIdentityMismatch:
             return nil
         case let .unique(window):
-            guard demotePluginWindowBeforeAcquisition(window, runtime: runtime) else {
+            guard demotePluginWindowBeforeAcquisition(window, runtime: runtime, allowingChanges: allowingChanges) else {
                 return nil
             }
             // Live measurement: `열기` opens and fronts the editor; after
             // demotion, pressing `열기` again removes it from AXWindows. The
             // slot's open control is a toggle, so raise the known editor instead.
+            guard allowingChanges() else { return nil }
             _ = AXHelpers.performAction(window, kAXRaiseAction as String, runtime: runtime.ax)
             if pluginWindowIsFront(window, runtime: runtime.ax) {
                 return AXUIElementSendable(window)
@@ -3638,6 +3679,7 @@ extension AccessibilityChannel {
             // continue`) skips past a control that DID open the window. Honest-
             // contract: trust the OBSERVED window, not the unreliable return —
             // only advance to the next ranked control if the poll shows no window.
+            guard allowingChanges() else { return nil }
             _ = pressElement(element, runtime: runtime.ax)
             switch await pollOpenPluginWindow(
                 pluginID: pluginID,
@@ -3645,7 +3687,8 @@ extension AccessibilityChannel {
                 axDescription: axDescription,
                 requiringMatchingSlider: requiringMatchingSlider,
                 runtime: runtime,
-                timeoutMs: 1_250
+                timeoutMs: 1_250,
+                contextIsCurrent: contextIsCurrent
             ) {
             case .unreadable:
                 return nil
@@ -3667,11 +3710,14 @@ extension AccessibilityChannel {
 
     private static func demotePluginWindowBeforeAcquisition(
         _ window: AXUIElement,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        allowingChanges: () -> Bool = { true }
     ) -> Bool {
+        guard allowingChanges() else { return false }
         let mainCleared = AXHelpers.setAttribute(
             window, kAXMainAttribute as String, false as CFTypeRef, runtime: runtime.ax
         )
+        guard allowingChanges() else { return false }
         let focusCleared = AXHelpers.setAttribute(
             window, kAXFocusedAttribute as String, false as CFTypeRef, runtime: runtime.ax
         )
@@ -3679,6 +3725,7 @@ extension AccessibilityChannel {
             return true
         }
         guard let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime),
+              allowingChanges(),
               AXHelpers.performAction(arrangeWindow, kAXRaiseAction as String, runtime: runtime.ax) else { return false }
         return !pluginWindowIsFront(window, runtime: runtime.ax)
     }
@@ -3893,7 +3940,8 @@ extension AccessibilityChannel {
         axDescription: String,
         requiringMatchingSlider: Bool = true,
         runtime: AXLogicProElements.Runtime,
-        timeoutMs: Int
+        timeoutMs: Int,
+        contextIsCurrent: () -> Bool = { true }
     ) async -> AXLogicProElements.PluginWindowMatch {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000.0)
         var lastUniqueWindow: AXUIElement?
@@ -3916,7 +3964,7 @@ extension AccessibilityChannel {
             case .none:
                 lastUniqueWindow = nil
             }
-            guard Date() < deadline else { break }
+            guard contextIsCurrent(), Date() < deadline else { break }
             try? await Task.sleep(for: .milliseconds(100))
         } while Date() < deadline
         if let lastUniqueWindow {
@@ -3932,7 +3980,8 @@ extension AccessibilityChannel {
         trackName: String,
         pluginID: String,
         runtime: AXLogicProElements.Runtime,
-        timeoutMs: Int
+        timeoutMs: Int,
+        contextIsCurrent: () -> Bool = { true }
     ) async -> Result<[AXUIElement], AXHelpers.AXStatusError> {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000.0)
         var matchingEditors: [AXUIElement] = []
@@ -3950,7 +3999,7 @@ extension AccessibilityChannel {
             if !matchingEditors.isEmpty {
                 return .success(matchingEditors)
             }
-            guard Date() < deadline else { break }
+            guard contextIsCurrent(), Date() < deadline else { break }
             try? await Task.sleep(for: .milliseconds(100))
         } while Date() < deadline
         return .success(matchingEditors)
