@@ -154,6 +154,10 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, knownOuterReopen: true)
     }
 
+    @Test func registeredSingleStackSampledReplacementCannotRestoreItsOldDisclosureInverse() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, knownOuterReplacement: true)
+    }
+
     @Test(arguments: ["down_failed", "held_focus", "wrong_hit"])
     func registeredStackPairsOnlyOwnedMouseDownAndUp(mouseCase: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, mouseCase: mouseCase)
@@ -305,13 +309,17 @@ struct Issue965FreshPopulationAcquisitionTests {
 
     private func observeStack(navigation: Bool, initiallyExpanded: Bool,
                               verifyReferences: Bool = false, mouseCase: String? = nil,
-                              releaseCase: String? = nil, knownOuterReopen: Bool = false) async throws {
+                              releaseCase: String? = nil, knownOuterReopen: Bool = false,
+                              knownOuterReplacement: Bool = false) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: bundle) }
         let headers = (1...42).map { fixture.builder.element(965_100 + $0) }
         let disclosure = fixture.builder.element(965_200)
+        let substitutedDisclosure = fixture.builder.element(965_223)
+        fixture.builder.setRole(substitutedDisclosure, kAXDisclosureTriangleRole as String)
+        fixture.builder.setAttribute(substitutedDisclosure, kAXValueAttribute as String, 1)
         fixture.builder.setRole(disclosure, kAXDisclosureTriangleRole as String)
         fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, initiallyExpanded ? 1 : 0)
         fixture.builder.setFrame(disclosure, x: 10, y: 20, width: 12, height: 12)
@@ -379,14 +387,16 @@ struct Issue965FreshPopulationAcquisitionTests {
         let cache = StateCache()
         let registry = TargetRegistry()
         let gate = LogicMutationGate()
-        let fileReader: LogicProjectFileReader.Runtime = knownOuterReopen ? .init(
+        let fileReader: LogicProjectFileReader.Runtime = (knownOuterReopen || knownOuterReplacement) ? .init(
             currentDocumentPath: { nil }, now: Date.init, readPlistData: { _ in nil },
             mtime: { _ in
-                guard fixture.reads.recorded.contains("outer_extractor_returned_zero") else { return nil }
+                guard fixture.reads.recorded.contains("outer_extractor_returned_zero")
+                    || fixture.reads.recorded.contains("replacement_disclosure_value_read") else { return nil }
                 fixture.reads.record("closed_population_metadata")
                 if fixture.reads.recorded.filter({ $0 == "closed_population_metadata" }).count == 2 {
                     fixture.reads.record("same_outer_reopened_on_retry")
                     fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+                    fixture.builder.setChildren(headers[0], [disclosure])
                     fixture.builder.setChildren(fixture.rail, headers)
                 }
                 return nil
@@ -396,6 +406,17 @@ struct Issue965FreshPopulationAcquisitionTests {
                 wrongDisclosureHit: mouseCase == "wrong_hit", observingAttribute: { element, attribute in
                     if knownOuterReopen, fixture.events.count == 2, CFEqual(element, headers[0]),
                        attribute == kAXHelpAttribute as String { fixture.reads.record("outer_row_help_before_stack_read") }
+                    if knownOuterReplacement, fixture.events.count == 2, CFEqual(element, headers[0]),
+                       attribute == kAXHelpAttribute as String,
+                       !fixture.reads.recorded.contains("replacement_disclosure_installed") {
+                        fixture.reads.record("replacement_disclosure_installed")
+                        fixture.builder.setChildren(headers[0], [substitutedDisclosure])
+                        fixture.builder.setChildren(fixture.rail, collapsed)
+                    }
+                    if knownOuterReplacement, CFEqual(element, substitutedDisclosure) {
+                        if attribute == kAXRoleAttribute as String { fixture.reads.record("replacement_disclosure_role_read") }
+                        if attribute == kAXValueAttribute as String { fixture.reads.record("replacement_disclosure_value_read") }
+                    }
                 }, readingAttribute: { element, attribute in
                     guard knownOuterReopen, fixture.events.count == 2, CFEqual(element, disclosure),
                           attribute == kAXValueAttribute as String,
@@ -406,8 +427,17 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.reads.record("outer_extractor_returned_zero")
                     return .success(NSNumber(value: 0))
                 }, observingChildren: { element in
-                    if knownOuterReopen, CFEqual(element, fixture.rail),
-                       fixture.reads.recorded.contains("outer_extractor_returned_zero"),
+                    if knownOuterReplacement, CFEqual(element, headers[0]),
+                       fixture.reads.recorded.contains("replacement_disclosure_installed"),
+                       !fixture.reads.recorded.contains("same_outer_reopened_on_retry") {
+                        let children = fixture.builder.makeAXRuntime().children(headers[0])
+                        if children.count == 1, CFEqual(children[0], substitutedDisclosure), !CFEqual(children[0], disclosure) {
+                            fixture.reads.record("replacement_disclosure_children_read")
+                        }
+                    }
+                    if (knownOuterReopen || knownOuterReplacement), CFEqual(element, fixture.rail),
+                       (fixture.reads.recorded.contains("outer_extractor_returned_zero")
+                        || fixture.reads.recorded.contains("replacement_disclosure_value_read")),
                        !fixture.reads.recorded.contains("same_outer_reopened_on_retry"),
                        fixture.builder.makeAXRuntime().children(fixture.rail).count == 19 {
                         fixture.reads.record("closed_rail_actually_read")
@@ -422,9 +452,17 @@ struct Issue965FreshPopulationAcquisitionTests {
             commandParams: params, mutationGate: gate) {
                 await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
-        if knownOuterReopen {
-            #expect(fixture.reads.recorded.filter { $0 == "outer_extractor_returned_zero" }.count == 1)
-            #expect(fixture.reads.recorded.contains("outer_row_help_before_stack_read"))
+        if knownOuterReopen || knownOuterReplacement {
+            if knownOuterReopen {
+                #expect(fixture.reads.recorded.filter { $0 == "outer_extractor_returned_zero" }.count == 1)
+                #expect(fixture.reads.recorded.contains("outer_row_help_before_stack_read"))
+            } else {
+                #expect(!CFEqual(substitutedDisclosure, disclosure))
+                #expect(fixture.reads.recorded.filter { $0 == "replacement_disclosure_installed" }.count == 1)
+                #expect(fixture.reads.recorded.contains("replacement_disclosure_children_read"))
+                #expect(fixture.reads.recorded.contains("replacement_disclosure_role_read"))
+                #expect(fixture.reads.recorded.contains("replacement_disclosure_value_read"))
+            }
             #expect(fixture.reads.recorded.contains("closed_rail_actually_read"))
             #expect(fixture.reads.recorded.filter { $0 == "closed_population_metadata" }.count >= 2)
             #expect(fixture.reads.recorded.filter { $0 == "same_outer_reopened_on_retry" }.count == 1)

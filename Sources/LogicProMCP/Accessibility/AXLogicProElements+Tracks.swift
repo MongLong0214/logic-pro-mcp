@@ -30,6 +30,9 @@ enum AXTrackBinding {
         func observeStackState(header: AXUIElement, isStackHeader: Bool?, collapsed: Bool?) {
             if CFEqual(self.header, header), collapsed == true || isStackHeader == false { lose() }
         }
+        func observeDisclosureChildren(header: AXUIElement, children: [AXUIElement]) {
+            if CFEqual(self.header, header), children.filter({ CFEqual($0, disclosure) }).count != 1 { lose() }
+        }
         var isCurrent: Bool {
             guard !lock.withLock({ ended }) else { return false }
             guard AXLogicProElements.heldTrackDisclosureValue(header: header, disclosure: disclosure, runtime: runtime) == 1

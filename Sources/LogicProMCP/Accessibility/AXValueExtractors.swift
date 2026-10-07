@@ -324,6 +324,7 @@ enum AXValueExtractors {
         from header: AXUIElement,
         index: Int,
         runtime: AXHelpers.Runtime = .production,
+        observingStackChildren: (([AXUIElement]) -> Void)? = nil,
         stoppingBeforeHelp stop: () -> Bool
     ) -> TrackState? {
         let extractedName = extractTrackName(from: header, runtime: runtime)
@@ -342,7 +343,7 @@ enum AXValueExtractors {
         guard let trackType = inferTrackType(from: header, runtime: runtime, stoppingBeforeHelp: stop) else {
             return nil
         }
-        let stack = extractTrackStackState(from: header, runtime: runtime)
+        let stack = extractTrackStackState(from: header, runtime: runtime, observingChildren: observingStackChildren)
 
         return TrackState(
             id: index,
@@ -381,12 +382,14 @@ enum AXValueExtractors {
     /// an absence becomes a claim.
     static func extractTrackStackState(
         from header: AXUIElement,
-        runtime: AXHelpers.Runtime = .production
+        runtime: AXHelpers.Runtime = .production,
+        observingChildren: (([AXUIElement]) -> Void)? = nil
     ) -> (isStackHeader: Bool?, collapsed: Bool?) {
         switch AXHelpers.childrenResult(header, runtime: runtime) {
         case .failure:
             return (nil, nil)
         case .success(let children):
+            observingChildren?(children)
             var triangle: AXUIElement?
             // A child whose ROLE will not read is a child we cannot rule out. `getRole` collapses
             // every failure into `nil`, so using it here would let "this child did not answer" pass
