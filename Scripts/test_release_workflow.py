@@ -7,6 +7,7 @@ import io
 import json
 from pathlib import Path
 import shutil
+import signal
 import stat
 import subprocess
 import tempfile
@@ -27,6 +28,73 @@ APPLE_CREDENTIALS = (
     "APPLE_NOTARY_TEAM_ID",
     "APPLE_NOTARY_APP_PASSWORD",
 )
+
+
+def run_bounded(arguments, *, cwd=None, env=None, timeout=30):
+    """Reap the entire owned command group even if an input read wedges."""
+    process = subprocess.Popen(arguments, cwd=cwd, env=env, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True, start_new_session=True)
+    timed_out = False
+    try:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                stdout, stderr = process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                stdout, stderr = process.communicate()
+        result = subprocess.CompletedProcess(arguments, process.returncode, stdout, stderr)
+        result.timed_out = timed_out
+        return result
+    finally:
+        # The group is exclusively this test's child and its descendants.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+
+
+class FinalConsumerInputTypeTests(unittest.TestCase):
+    def test_candidate_fifo_is_rejected_before_copy_or_verifier(self):
+        with tempfile.TemporaryDirectory(prefix="final-input-type-") as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            os.mkfifo(candidate)
+            result, invoked = self.invoke(root, candidate)
+            self.assertFalse(result.timed_out, "Consumer blocked opening the FIFO before verification")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(invoked)
+
+    def test_regular_mode644_candidate_reaches_verifier_without_execution(self):
+        with tempfile.TemporaryDirectory(prefix="final-input-type-") as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            candidate.write_bytes(b"opaque candidate, never executed")
+            candidate.chmod(0o644)
+            result, invoked = self.invoke(root, candidate)
+            self.assertFalse(result.timed_out)
+            self.assertNotEqual(result.returncode, 0)  # The spy always rejects; no trust credit.
+            self.assertTrue(invoked)
+
+    def invoke(self, root, candidate):
+        bundle = root / "bundle"
+        bundle.mkdir()
+        invoked = root / "verifier-invoked"
+        verifier = root / "verifier"
+        verifier.write_text('#!/bin/bash\ntouch "$VERIFIER_INVOKED"\nexit 78\n')
+        verifier.chmod(0o755)
+        result = run_bounded(
+            ["bash", str(WORKFLOW.parents[2] / "Scripts/release-consume-final.sh"),
+             "verify", "1.2.3", "a" * 40, str(candidate), str(bundle), str(verifier),
+             str(root / "public")], timeout=2, env={
+                "PATH": "/usr/bin:/bin", "VERIFIER_INVOKED": str(invoked),
+                "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": "test-only-nonempty-anchor",
+            })
+        return result, invoked.exists()
 
 
 class QualifiedInputPrivacyTests(unittest.TestCase):
@@ -122,7 +190,7 @@ class ReleaseFinalArtifactConsumerTests(unittest.TestCase):
     def run_consumer(self, bundle_kind, *, candidate=None, bundle_path=None,
                      verifier=None, trusted_key=None, commit=None,
                      mutate_original_bundle=False, entrypoint="local",
-                     archive_mutation=None):
+                     archive_mutation=None, public_input_shape=None, reverify_timeout=30):
         with tempfile.TemporaryDirectory(prefix="release-final-consumer-") as directory:
             root = Path(directory)
             repo = root / "repo"
@@ -221,9 +289,8 @@ fi
             arguments = ["bash", str(scripts / "release.sh"), "v1.2.3"]
             if candidate is not None:
                 arguments.extend((str(candidate), str(bundle), str(tool)))
-            def run(arguments):
-                return subprocess.run(arguments, cwd=repo, env=environment,
-                                      capture_output=True, text=True, timeout=30, check=False)
+            def run(arguments, timeout=30):
+                return run_bounded(arguments, cwd=repo, env=environment, timeout=timeout)
 
             if entrypoint == "stable":
                 arguments[1] = str(scripts / "release-stable.sh")
@@ -231,7 +298,7 @@ fi
                 (root / "bin/python3").write_text("#!/bin/bash\nexit 0\n")
                 (root / "bin/python3").chmod(0o755)
                 result = run(arguments)
-            elif entrypoint == "hosted":
+            elif entrypoint in ("hosted", "direct", "install"):
                 shutil.copy2(candidate, repo / "LogicProMCP")
                 bundle_zip = root / "private-owner-bundle.zip"
                 with zipfile.ZipFile(bundle_zip, "w") as archive:
@@ -306,9 +373,22 @@ cp "$input" "$output"
                     (repo / "release-artifacts.sha256").write_text("".join(
                         hashlib.sha256((repo / name).read_bytes()).hexdigest() + "  " + name + "\n"
                         for name in files))
-                    reverify = next(step for step in workflow["jobs"]["publish"]["steps"]
+                    if public_input_shape is not None:
+                        target = repo / public_input_shape
+                        target.unlink()
+                        os.mkfifo(target)
+                        with calls.open("a") as log:
+                            log.write("public-input-fifo " + public_input_shape + "\n")
+                    else:
+                        with calls.open("a") as log:
+                            log.write("public-input-healthy\n")
+                    reverify = next(step for step in workflow["jobs"]["validate-install" if entrypoint == "install" else "publish"]["steps"]
                                     if step.get("name") == "Reverify downloaded release artifact")
-                    result = run(["bash", "-e", "-o", "pipefail", "-c", reverify["run"]])
+                    arguments = (["bash", str(scripts / "release-consume-final.sh"), "verify", "1.2.3",
+                                  sha, str(candidate), str(bundle), str(tool), str(repo)]
+                                 if entrypoint == "direct" else
+                                 ["bash", "-e", "-o", "pipefail", "-c", reverify["run"]])
+                    result = run(arguments, timeout=reverify_timeout)
                     if result.returncode == 0:
                         with calls.open("a") as log:
                             log.write("hosted-release-action\n")

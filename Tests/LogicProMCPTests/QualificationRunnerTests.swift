@@ -2511,6 +2511,66 @@ struct QualificationRunnerTests {
         }
     }
 
+    /// Start with a real signed/verifier-accepted stage, then replace one public
+    /// input with an owned FIFO. The Python driver always reaps its child group.
+    @Test(.timeLimit(.minutes(2)), arguments: ["direct_binary", "direct_archive", "direct_sums",
+        "hosted_binary", "hosted_archive", "hosted_manifest", "hosted_metadata", "install_archive",
+        "direct_healthy", "hosted_healthy", "install_healthy"])
+    func finalConsumerRejectsNonregularPublicInputsBeforeReading(_ scenario: String) async throws {
+        let verifier = Self.releaseConsumerVerifierURL
+        try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let accepted = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+        try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", "-c", """
+        import json, sys
+        sys.path.insert(0, 'Scripts')
+        from test_release_workflow import ReleaseFinalArtifactConsumerTests
+        entry, shape = sys.argv[6].split('_', 1)
+        target = {'binary': 'LogicProMCP', 'archive': 'LogicProMCP-macOS-universal.tar.gz',
+                  'sums': 'SHA256SUMS.txt', 'manifest': 'release-artifacts.sha256',
+                  'metadata': 'RELEASE-METADATA.json'}.get(shape)
+        result, calls = ReleaseFinalArtifactConsumerTests().run_consumer(
+            'supplied', candidate=sys.argv[1], bundle_path=sys.argv[2], verifier=sys.argv[3],
+            trusted_key=sys.argv[4], commit=sys.argv[5], entrypoint=entry,
+            public_input_shape=target, reverify_timeout=5)
+        print(json.dumps({'exit': result.returncode, 'timed_out': result.timed_out,
+                          'calls': calls, 'stdout': result.stdout, 'stderr': result.stderr}))
+        """, fixture.executableURL.path, fixture.directory.path, verifier.path,
+            fixture.trustedPublicKeyData.base64EncodedString(), fixture.commitSHA, scenario]
+        let output = Pipe()
+        let diagnostics = Pipe()
+        process.standardOutput = output
+        process.standardError = diagnostics
+        try process.run()
+        let bytes = output.fileHandleForReading.readDataToEndOfFile()
+        let errors = diagnostics.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        try #require(process.terminationStatus == 0, "\(String(decoding: errors, as: UTF8.self))")
+        let result = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let calls = try #require(result["calls"] as? [String])
+        let fault = try #require(calls.firstIndex { $0.hasPrefix("public-input-fifo ") || $0 == "public-input-healthy" })
+        let stagedMembers = calls.prefix(upTo: fault).filter {
+            $0.hasPrefix("trusted-candidate ") && $0.contains(".member/LogicProMCP ")
+        }
+        #expect(stagedMembers.count == 2, "both actual archive members passed real trust before fault: \(result)")
+        #expect(stagedMembers.allSatisfy { $0.hasSuffix(fixture.binarySHA256) })
+        let timedOut = try #require(result["timed_out"] as? Bool)
+        #expect(!timedOut, "public input reached a blocking read: \(scenario)")
+        let code = try #require(result["exit"] as? Int)
+        if scenario.hasSuffix("healthy") {
+            #expect(code == 0, "\(result)")
+            #expect(calls.contains("hosted-release-action"))
+        } else {
+            #expect(code != 0, "\(result)")
+            #expect(!calls.contains("hosted-release-action"))
+        }
+        #expect(!calls.contains { $0.hasPrefix("git tag ") || $0.hasPrefix("git push ") })
+    }
+
     /// #373 Q4 through the shipped `trusted-verifier` executable, not the in-process entry point:
     /// one signed bundle is accepted as built, rejected once a count is edited, and refused -- by
     /// returning, not by waiting for a writer -- once its attestation is a FIFO. The in-process

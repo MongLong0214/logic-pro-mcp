@@ -227,7 +227,13 @@ jobs:
           TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
         run: |
           set -euo pipefail
-          test -f release-artifacts.sha256
+          # Check declared outer file types before checksums can open them.
+          for artifact in LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt release-artifacts.sha256; do
+            if [ ! -f "$artifact" ] || [ -L "$artifact" ]; then
+              echo "Downloaded release input must be a regular non-link file" >&2
+              exit 1
+            fi
+          done
           shasum -a 256 --check release-artifacts.sha256
           private=$(mktemp -d)
           trap 'rm -rf "$private"' EXIT
@@ -288,7 +294,13 @@ jobs:
         working-directory: ${{ runner.temp }}/artifact
         run: |
           set -euo pipefail
-          test -f release-artifacts.sha256
+          # Check declared outer file types before checksums can open them.
+          for artifact in LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt release-artifacts.sha256; do
+            if [ ! -f "$artifact" ] || [ -L "$artifact" ]; then
+              echo "Downloaded release input must be a regular non-link file" >&2
+              exit 1
+            fi
+          done
           shasum -a 256 --check release-artifacts.sha256
 
       - name: Record what this runner actually is

@@ -15,9 +15,18 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 [[ "$mode" = stage || "$mode" = verify ]] || exit 1
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || exit 1
 [[ "$commit" =~ ^[a-f0-9]{40}$ ]] || exit 1
-test -f "$candidate" && test -x "$candidate" && test ! -L "$candidate"
-test -d "$bundle" && test ! -L "$bundle"
-test -f "$verifier" && test -x "$verifier" && test ! -L "$verifier"
+if [ ! -f "$candidate" ] || [ -L "$candidate" ]; then
+  echo "Final candidate must be a regular non-link file" >&2
+  exit 1
+fi
+if [ ! -d "$bundle" ] || [ -L "$bundle" ]; then
+  echo "Evidence bundle must be a non-link directory" >&2
+  exit 1
+fi
+if [ ! -f "$verifier" ] || [ ! -x "$verifier" ] || [ -L "$verifier" ]; then
+  echo "Trusted verifier must be a regular non-link executable" >&2
+  exit 1
+fi
 test -n "${LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY:-}"
 bundle="$(cd "$bundle" && pwd -P)"
 verifier="$(cd "$(dirname "$verifier")" && pwd -P)/$(basename "$verifier")"
@@ -58,7 +67,14 @@ if [ "$mode" = stage ]; then
   (cd "$public" && bash "$repo_root/Scripts/release-verify-formula-install-paths.sh")
 fi
 
-test -f "$public/LogicProMCP" && test ! -L "$public/LogicProMCP"
+# Reject outer file types before cmp, archive opening or checksum reads. Member
+# validation and trusted verification cannot protect an earlier blocking read.
+for artifact in LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt; do
+  if [ ! -f "$public/$artifact" ] || [ -L "$public/$artifact" ]; then
+    echo "Final-artifact input must be a regular non-link file" >&2
+    exit 1
+  fi
+done
 cmp "$private/LogicProMCP" "$public/LogicProMCP"
 codesign --verify --strict --verbose=2 "$public/LogicProMCP"
 verify_candidate "$public/LogicProMCP"
@@ -102,7 +118,10 @@ PY
   extraction="$private/$archive.member"
   mkdir "$extraction"
   tar -xzf "$public/$archive" -C "$extraction" LogicProMCP
-  test -f "$extraction/LogicProMCP" && test ! -L "$extraction/LogicProMCP"
+  if [ ! -f "$extraction/LogicProMCP" ] || [ -L "$extraction/LogicProMCP" ]; then
+    echo "Extracted candidate must be a regular non-link file" >&2
+    exit 1
+  fi
   verify_candidate "$extraction/LogicProMCP"
   cmp "$public/LogicProMCP" "$extraction/LogicProMCP"
 done
