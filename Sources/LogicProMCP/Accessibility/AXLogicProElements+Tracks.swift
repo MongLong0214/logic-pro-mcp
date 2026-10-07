@@ -427,7 +427,8 @@ extension AXLogicProElements {
     /// destructive mutation.
     static func allTrackHeadersRead(
         in window: AXUIElement,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> TrackHeaderRead {
         guard !projectPickerPreventsTrackRead(window, runtime: runtime) else {
             return .unavailable
@@ -436,7 +437,8 @@ extension AXLogicProElements {
         // Preserve this shared reader's historic tolerance for an unrelated
         // subtree being mid-load. `allTrackHeadersVerifiedRead` below is the
         // fail-closed variant used by a mutation verdict.
-        let candidates = trackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax)
+        let candidates = trackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax,
+                                              observingExposure: observingExposure)
         return readTrackHeaderCandidates(candidates, runtime: runtime.ax)
     }
 
@@ -528,13 +530,15 @@ extension AXLogicProElements {
     private static func trackHeaderCandidates(
         in root: AXUIElement,
         maxDepth: Int,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> TrackHeaderCandidates {
         var candidates = TrackHeaderCandidates()
 
         func visit(_ element: AXUIElement, remainingDepth: Int) {
             switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
             case .success(.some(let role)):
+                observingExposure?.observeRole(element: element, role: role)
                 if role == (kAXListRole as String),
                    case .success(let identifier) = trackStringAttribute(
                         element, kAXIdentifierAttribute as String, runtime: runtime
@@ -554,6 +558,7 @@ extension AXLogicProElements {
                     candidates.outlinesAndTables.append(element)
                 }
             case .success(.none), .failure:
+                observingExposure?.observeRole(element: element, role: nil)
                 break
             }
 
@@ -561,6 +566,7 @@ extension AXLogicProElements {
             guard case .success(let children) = AXHelpers.childrenResult(element, runtime: runtime) else {
                 return
             }
+            observingExposure?.observeChildren(element: element, children: children)
             for child in children {
                 visit(child, remainingDepth: remainingDepth - 1)
             }

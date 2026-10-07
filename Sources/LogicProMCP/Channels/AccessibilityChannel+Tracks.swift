@@ -295,7 +295,8 @@ extension AccessibilityChannel {
                 }
                 releaseUnverified = false
                 guard value(target) == 1,
-                      case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                      case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic,
+                        observingExposure: forwardExposure),
                       same(headers.filter { row in beforeHeaders.contains { CFEqual($0, row) } }, beforeHeaders) else {
                     effects.reason = "stack_expansion_unverified"; return
                 }

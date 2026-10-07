@@ -527,7 +527,8 @@ actor AccessibilityChannel: Channel {
             var headers: [AXUIElement]?
             var tracks: [TrackState]?
             if wantsTracks,
-               case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
+               case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic,
+                   observingExposure: exposure) {
                 headers = observed
                 exposure?.observeHeaders(observed)
                 tracks = Self.readTrackStates(from: observed, in: window, runtime: logic, exposure: exposure, stoppingWhen: stop).states
@@ -669,7 +670,8 @@ actor AccessibilityChannel: Channel {
             var sameStackExposure = true
             if wantsTracks, after.tracks != nil {
                 try check()
-                if case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
+                if case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic,
+                    observingExposure: exposure) {
                     currentHeaders = observed
                     exposure?.observeHeaders(observed)
                     if let states = after.tracks, states.count == observed.count {
