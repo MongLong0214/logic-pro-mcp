@@ -529,6 +529,7 @@ actor AccessibilityChannel: Channel {
             if wantsTracks,
                case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
                 headers = observed
+                exposure?.observeHeaders(observed)
                 tracks = Self.readTrackStates(from: observed, in: window, runtime: logic, exposure: exposure, stoppingWhen: stop).states
             }
             try check()
@@ -670,10 +671,12 @@ actor AccessibilityChannel: Channel {
                 try check()
                 if case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
                     currentHeaders = observed
+                    exposure?.observeHeaders(observed)
                     if let states = after.tracks, states.count == observed.count {
                         for (header, state) in zip(observed, states) {
                             try check()
                             let stack = AXValueExtractors.extractTrackStackState(from: header, runtime: logic.ax)
+                            exposure?.observeStackState(header: header, isStackHeader: stack.isStackHeader, collapsed: stack.collapsed)
                             if stack.isStackHeader != state.isStackHeader || stack.collapsed != state.stackCollapsed {
                                 sameStackExposure = false
                             }

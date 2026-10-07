@@ -81,16 +81,26 @@ struct Issue965FreshPopulationAcquisitionTests {
                      additionalDisclosure: AXUIElement? = nil,
                      observationMouse: AXMouseHelper.Runtime? = nil,
                      wrongDisclosureHit: Bool = false,
-                     observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil) -> AccessibilityChannel {
+                     observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil,
+                     readingAttribute: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+                     observingChildren: (@Sendable (AXUIElement) -> Void)? = nil) -> AccessibilityChannel {
             let ax = builder.makeAXRuntime(
                     appElement: app,
                     attributeValueHandler: { element, attribute in
                         reads.record(attribute)
                         observingAttribute?(element, attribute)
+                        if let read = readingAttribute?(element, attribute) {
+                            switch read {
+                            case .success(let value): return .some(value)
+                            case .failure: return .some(nil)
+                            }
+                        }
                         return nil
                     },
+                    attributeValueResultHandler: readingAttribute,
                     childrenResultHandler: { element in
-                        unreadableRail && CFEqual(element, rail)
+                        observingChildren?(element)
+                        return unreadableRail && CFEqual(element, rail)
                             ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
                     },
                     setAttributeHandler: { _, _, _ in events.record("setter"); return false },
@@ -162,6 +172,15 @@ struct Issue965FreshPopulationAcquisitionTests {
     @Test(arguments: ["expansion", "restoration"])
     func registeredNestedStackStopsAllGesturesAfterAnUnpostedInnerRelease(nestedRelease: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, nested: true, nestedRelease: nestedRelease)
+    }
+
+    @Test(arguments: ["expansion", "restoration"])
+    func registeredNestedStackNeverRestoresPastATrueDownWithUnreadFocus(downFocusRead: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true, downFocusRead: downFocusRead)
+    }
+
+    @Test func registeredNestedStackKnownClosedExposureCannotReopenItsOldInverse() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true, knownInnerReopen: true)
     }
 
     @Test(arguments: ["inner_closed", "replacement"])
@@ -364,7 +383,8 @@ struct Issue965FreshPopulationAcquisitionTests {
     private func observeStack(navigation: Bool, initiallyExpanded: Bool,
                               verifyReferences: Bool = false, mouseCase: String? = nil,
                               releaseCase: String? = nil, nested: Bool = false,
-                              nestedRelease: String? = nil, nestedFault: String? = nil) async throws {
+                              nestedRelease: String? = nil, nestedFault: String? = nil,
+                              downFocusRead: String? = nil, knownInnerReopen: Bool = false) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -457,6 +477,9 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
             if type == .leftMouseDown {
                 if mouseCase == "down_failed" { return false }
+                if let downFocusRead, isInner, eventCount == (downFocusRead == "expansion" ? 3 : 5) {
+                    fixture.reads.record("true_inner_down")
+                }
                 if mouseCase == "held_focus" || mouseCase == "held_focus_returned" {
                     fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, disclosure)
                 }
@@ -495,10 +518,26 @@ struct Issue965FreshPopulationAcquisitionTests {
         let cache = StateCache()
         let registry = TargetRegistry()
         let gate = LogicMutationGate()
+        let fileReader: LogicProjectFileReader.Runtime = knownInnerReopen ? .init(
+            currentDocumentPath: { nil }, now: Date.init, readPlistData: { _ in nil },
+            mtime: { _ in
+                guard fixture.reads.recorded.contains("inner_extractor_returned_zero") else { return nil }
+                fixture.reads.record("closed_population_metadata")
+                if fixture.reads.recorded.filter({ $0 == "closed_population_metadata" }).count == 2 {
+                    fixture.reads.record("same_inner_reopened_on_retry")
+                    fixture.builder.setAttribute(inner, kAXValueAttribute as String, 1)
+                    fixture.builder.setChildren(fixture.rail, fullyExposed)
+                }
+                return nil
+            }, sleep: { _ in }) : .unavailable
         let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
             poller: StatePoller(axChannel: fixture.channel(disclosure: disclosure,
                 additionalDisclosure: nested ? inner : nil, observationMouse: observationMouse,
                 wrongDisclosureHit: mouseCase == "wrong_hit", observingAttribute: { element, attribute in
+                    if knownInnerReopen, fixture.events.count == 4, CFEqual(element, headers[1]),
+                       attribute == kAXHelpAttribute as String {
+                        fixture.reads.record("inner_row_help_before_stack_read")
+                    }
                     guard let nestedFault, ["inner_closed", "replacement"].contains(nestedFault),
                           fixture.events.count == 4, attribute == kAXTitleAttribute as String,
                           CFEqual(element, grandchildren[1]) else { return }
@@ -513,10 +552,33 @@ struct Issue965FreshPopulationAcquisitionTests {
                         changed[2] = replacement
                         fixture.builder.setChildren(fixture.rail, changed)
                     }
+                }, readingAttribute: { element, attribute in
+                    if knownInnerReopen, fixture.events.count == 4, CFEqual(element, inner),
+                       attribute == kAXValueAttribute as String,
+                       fixture.reads.recorded.contains("inner_row_help_before_stack_read"),
+                       !fixture.reads.recorded.contains("inner_extractor_returned_zero") {
+                        fixture.builder.setAttribute(inner, kAXValueAttribute as String, 0)
+                        fixture.builder.setChildren(fixture.rail, headers)
+                        fixture.reads.record("inner_extractor_returned_zero")
+                        return .success(NSNumber(value: 0))
+                    }
+                    guard let downFocusRead, CFEqual(element, fixture.app),
+                          attribute == kAXFocusedUIElementAttribute as String,
+                          fixture.events.count == (downFocusRead == "expansion" ? 3 : 5),
+                          !fixture.reads.recorded.contains("focus_read_missing_after_true_down") else { return nil }
+                    fixture.reads.record("focus_read_missing_after_true_down")
+                    return .success(nil)
+                }, observingChildren: { element in
+                    if knownInnerReopen, CFEqual(element, fixture.rail),
+                       fixture.reads.recorded.contains("inner_extractor_returned_zero"),
+                       !fixture.reads.recorded.contains("same_inner_reopened_on_retry"),
+                       fixture.builder.makeAXRuntime().children(fixture.rail).count == 42 {
+                        fixture.reads.record("closed_rail_actually_read")
+                    }
                 }), cache: cache,
-                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: fileReader, keyboardFocus: { .notTextEditing })),
             dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
-            liveTrackNames: { [:] }, projectFileReader: .unavailable)
+            liveTrackNames: { [:] }, projectFileReader: fileReader)
         let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
         let params: [String: Value] = ["domains": .array([.string("tracks")]), "allow_ui_navigation": .bool(navigation)]
         let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
@@ -536,6 +598,59 @@ struct Issue965FreshPopulationAcquisitionTests {
                 }
                 return await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
+        if knownInnerReopen {
+            #expect(fixture.reads.recorded.filter { $0 == "inner_extractor_returned_zero" }.count == 1)
+            #expect(fixture.reads.recorded.contains("inner_row_help_before_stack_read"))
+            #expect(fixture.reads.recorded.contains("closed_rail_actually_read"))
+            #expect(fixture.reads.recorded.filter { $0 == "closed_population_metadata" }.count >= 2)
+            #expect(fixture.reads.recorded.filter { $0 == "same_inner_reopened_on_retry" }.count == 1)
+            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up"],
+                    "observed disclosure loss cannot renew the earlier inverse after the same controls reopen")
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 44)
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored")
+            let current = await cache.getTracks()
+            #expect(current.isEmpty)
+            if let tracks = body["tracks"] as? [String: Any], let rows = tracks["rows"] as? [[String: Any]] {
+                for row in rows where row["name"] as? String == "Repeated grandchild" {
+                    let reference = try #require(row["track_ref"] as? String)
+                    let binding = try #require(await registry.resolve(TargetReference(rawValue: reference)))
+                    let physical = try #require(binding.physicalTrack)
+                    #expect(physical.currentIndex() == nil)
+                }
+            } else {
+                #expect(body["state"] as? String == "C")
+                #expect(body["snapshot_id"] == nil)
+            }
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            return
+        }
+        if let downFocusRead {
+            #expect(fixture.reads.recorded.filter { $0 == "true_inner_down" }.count == 1)
+            #expect(fixture.reads.recorded.filter { $0 == "focus_read_missing_after_true_down" }.count == 1)
+            let expected = ["disclosure_down", "disclosure_up", "inner_down"]
+                + (downFocusRead == "restoration" ? ["inner_up", "inner_down"] : [])
+            #expect(fixture.events.recorded == expected,
+                    "no inverse or additional gesture is owned while a TRUE-posted Down is unreleased")
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == (downFocusRead == "expansion" ? 42 : 44))
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == (downFocusRead == "expansion" ? 0 : 1))
+            let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                runtime: fixture.builder.makeAXRuntime())
+            #expect(CFEqual(try #require(focus), fixture.rail), "subsequent focus reads return the original healthy owner")
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored")
+            let current = await cache.getTracks()
+            #expect(current.isEmpty, "a pending mouse release cannot certify current rows")
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            return
+        }
         if let nestedFault {
             let lastReadFault = ["inner_closed", "replacement"].contains(nestedFault)
             #expect(fixture.reads.recorded.filter { $0 == (lastReadFault ? "last_grandchild_fault" : "child_custody_fault") }.count == 1)

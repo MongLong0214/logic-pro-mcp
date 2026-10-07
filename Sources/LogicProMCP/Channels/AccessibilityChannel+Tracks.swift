@@ -53,6 +53,7 @@ extension AccessibilityChannel {
             guard var state = AXValueExtractors.extractTrackState(
                 from: header, index: index, runtime: runtime.ax, stoppingBeforeHelp: stop
             ) else { return (nil, true) }
+            exposure?.observeStackState(header: header, isStackHeader: state.isStackHeader, collapsed: state.stackCollapsed)
             if let window, let document, state.liveIdentityBacked, state.placeholder != true {
                 // Baseline rows were already exposed and keep ordinary custody. Only
                 // newly acquired headers depend on this temporary disclosure's lifetime.
@@ -251,13 +252,18 @@ extension AccessibilityChannel {
             var target: Disclosure = (header, disclosure)
             var beforeHeaders = originalHeaders
             while true {
-                guard await event(.leftMouseDown, target: target, expectedHeaders: beforeHeaders, expectedValue: 0, stoppingWhen: stop),
-                      acceptHeldGestureFocus(target) else { effects.reason = "stack_expansion_unverified"; return }
+                guard await event(.leftMouseDown, target: target, expectedHeaders: beforeHeaders, expectedValue: 0, stoppingWhen: stop)
+                else { effects.reason = "stack_expansion_unverified"; return }
+                // A TRUE-posted Down is outstanding before the next fallible read.
+                // Only a known posted paired Up can clear this cleanup latch.
+                releaseUnverified = true
+                guard acceptHeldGestureFocus(target) else { effects.reason = "stack_mouse_release_unverified"; return }
                 guard await event(.leftMouseUp, target: target, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop) else {
                     releaseUnverified = true
                     effects.reason = "stack_mouse_release_unverified"
                     return
                 }
+                releaseUnverified = false
                 guard value(target) == 1,
                       case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
                       same(headers.filter { row in beforeHeaders.contains { CFEqual($0, row) } }, beforeHeaders) else {
@@ -295,6 +301,9 @@ extension AccessibilityChannel {
             guard effects.navigationPerformed else { return effects }
             // Do not start another gesture while the earlier release is unverified.
             guard !releaseUnverified else { return effects }
+            guard exposure?.hasObservedLoss != true else {
+                effects.reason = "stack_navigation_ownership_lost"; return effects
+            }
             guard expandedHeaders != nil, !acquired.isEmpty else {
                 effects.reason = "stack_navigation_ownership_lost"; return effects
             }
@@ -302,13 +311,16 @@ extension AccessibilityChannel {
                 guard await owned(target: entry.target, expectedHeaders: entry.afterHeaders, expectedValue: 1, stoppingWhen: stop) else {
                     effects.reason = "stack_navigation_ownership_lost"; return effects
                 }
-                guard await event(.leftMouseDown, target: entry.target, expectedHeaders: entry.afterHeaders, expectedValue: 1, stoppingWhen: stop),
-                      acceptHeldGestureFocus(entry.target) else { effects.reason = "stack_restoration_unverified"; return effects }
+                guard await event(.leftMouseDown, target: entry.target, expectedHeaders: entry.afterHeaders, expectedValue: 1, stoppingWhen: stop)
+                else { effects.reason = "stack_restoration_unverified"; return effects }
+                releaseUnverified = true
+                guard acceptHeldGestureFocus(entry.target) else { effects.reason = "stack_mouse_release_unverified"; return effects }
                 guard await event(.leftMouseUp, target: entry.target, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop) else {
                     releaseUnverified = true
                     effects.reason = "stack_mouse_release_unverified"
                     return effects
                 }
+                releaseUnverified = false
                 guard acceptHeldGestureFocus(entry.target), value(entry.target) == 0,
                       await owned(target: entry.target, expectedHeaders: entry.beforeHeaders, expectedValue: 0, stoppingWhen: stop) else {
                     effects.reason = "stack_restoration_unverified"; return effects

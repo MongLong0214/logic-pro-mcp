@@ -8,6 +8,7 @@ enum AXTrackBinding {
     final class Exposure: @unchecked Sendable {
         private let lock = NSLock()
         private var ended = false
+        private var observedLoss = false
         let header: AXUIElement
         let disclosure: AXUIElement
         let runtime: AXLogicProElements.Runtime
@@ -20,6 +21,19 @@ enum AXTrackBinding {
             controls = [(header, disclosure)]
         }
         func end() { lock.withLock { ended = true } }
+        var hasObservedLoss: Bool { lock.withLock { observedLoss } }
+        private func lose() { lock.withLock { ended = true; observedLoss = true } }
+
+        /// Consume the actual collector's sampled facts; a later retry cannot
+        /// erase a positively observed closed/missing acquired disclosure.
+        func observeHeaders(_ headers: [AXUIElement]) {
+            let held = lock.withLock { controls }
+            if held.contains(where: { target in headers.filter { CFEqual($0, target.header) }.count != 1 }) { lose() }
+        }
+        func observeStackState(header: AXUIElement, isStackHeader: Bool?, collapsed: Bool?) {
+            let owned = lock.withLock { controls.contains { CFEqual($0.header, header) } }
+            if owned, collapsed == true || isStackHeader == false { lose() }
+        }
         func retainAcquiredDisclosure(header: AXUIElement, disclosure: AXUIElement) -> Bool {
             lock.withLock {
                 guard !ended, !controls.contains(where: {
@@ -31,10 +45,11 @@ enum AXTrackBinding {
         }
         var isCurrent: Bool {
             let held = lock.withLock { ended ? [] : controls }
-            guard !held.isEmpty, held.allSatisfy({
+            guard !held.isEmpty else { return false }
+            guard held.allSatisfy({
                 AXLogicProElements.heldTrackDisclosureValue(header: $0.header, disclosure: $0.disclosure, runtime: runtime) == 1
             })
-            else { end(); return false }
+            else { lose(); return false }
             return !lock.withLock { ended }
         }
     }
