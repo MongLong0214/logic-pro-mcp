@@ -53,6 +53,7 @@ extension AccessibilityChannel {
             guard var state = AXValueExtractors.extractTrackState(
                 from: header, index: index, runtime: runtime.ax,
                 observingStackChildren: { exposure?.observeDisclosureChildren(header: header, children: $0, selected: $1) },
+                observingExposure: exposure,
                 stoppingBeforeHelp: stop
             ) else { return (nil, true) }
             exposure?.observeStackState(header: header, isStackHeader: state.isStackHeader, collapsed: state.stackCollapsed)
@@ -99,7 +100,9 @@ extension AccessibilityChannel {
         private var observedFocus: AXUIElement
         private var expandedHeaders: [AXUIElement]?
         private var releaseUnverified = false
+        private var restorationStarted = false
         private var acquired: [AcquiredDisclosure] = []
+        private var pending: [Disclosure]
         private(set) var exposure: AXTrackBinding.Exposure?
         private(set) var effects = SessionPopulationObservation.UIEffects()
 
@@ -124,10 +127,11 @@ extension AccessibilityChannel {
                 guard expectedProject?.projectName?.utf8.elementsEqual(AccessibilityChannel.projectName(fromWindowTitle: title).utf8) == true,
                       expectedProject?.projectFilePath?.utf8.elementsEqual(url.path.utf8) == true else { return nil }
             }
-            guard let collapsed = Self.collapsedDisclosures(in: headers, runtime: logic), collapsed.count == 1 else { return nil }
+            guard let collapsed = Self.collapsedDisclosures(in: headers, runtime: logic), !collapsed.isEmpty else { return nil }
             self.logic = logic; self.mouse = mouse; self.pid = pid; self.app = app
             self.window = window; self.title = title; self.document = document; self.rail = rail
             header = collapsed[0].header; disclosure = collapsed[0].disclosure; originalHeaders = headers
+            pending = collapsed
             originalFocus = focus; observedFocus = focus; self.selected = selected
             self.transport = transport; self.viewport = viewport; self.referenceIsCurrent = referenceIsCurrent
         }
@@ -149,7 +153,13 @@ extension AccessibilityChannel {
                     guard case .success(.some(let value)) = AXHelpers.getAttributeResult(
                         triangle, kAXValueAttribute as String, runtime: logic.ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
                           value == 0 || value == 1 else { return nil }
-                    if value == 0 { collapsed.append((header, triangle)) }
+                    if value == 0 {
+                        // Two rows cannot authorize two gestures on one physical control.
+                        guard !collapsed.contains(where: {
+                            CFEqual($0.header, header) || CFEqual($0.disclosure, triangle)
+                        }) else { return nil }
+                        collapsed.append((header, triangle))
+                    }
                 }
             }
             return collapsed
@@ -165,9 +175,12 @@ extension AccessibilityChannel {
             return selected
         }
 
-        private static func readViewport(_ rail: AXUIElement, ax: AXHelpers.Runtime) -> [Viewport]? {
+        private static func readViewport(_ rail: AXUIElement, ax: AXHelpers.Runtime,
+                                         exposure: AXTrackBinding.Exposure? = nil) -> [Viewport]? {
             guard case .success(let census) = AXHelpers.censusDescendantResult(of: rail, role: kAXScrollBarRole as String,
-                maxDepth: 32, runtime: ax, requiresCompleteTraversal: true) else { return nil }
+                maxDepth: 32, runtime: ax, requiresCompleteTraversal: true,
+                observingRole: { exposure?.observeRole(element: $0, role: $1) },
+                observingChildren: { exposure?.observeChildren(element: $0, children: $1) }) else { return nil }
             var values: [Viewport] = []
             for control in census.matches {
                 guard case .success(.some(let value)) = AXHelpers.getAttributeResult(
@@ -183,7 +196,23 @@ extension AccessibilityChannel {
         }
 
         private func value(_ target: Disclosure) -> Int? {
-            AXLogicProElements.heldTrackDisclosureValue(header: target.header, disclosure: target.disclosure, runtime: logic)
+            let observed = AXLogicProElements.heldTrackDisclosureValue(header: target.header, disclosure: target.disclosure, runtime: logic)
+            if !restorationStarted, acquired.contains(where: {
+                CFEqual($0.target.header, target.header) && CFEqual($0.target.disclosure, target.disclosure)
+            }) {
+                exposure?.observeValue(header: target.header, disclosure: target.disclosure, value: observed)
+            }
+            return observed
+        }
+
+        private var forwardExposure: AXTrackBinding.Exposure? {
+            restorationStarted || acquired.isEmpty ? nil : exposure
+        }
+
+        private func acquiredHeadersRemainOwned(_ headers: [AXUIElement]) -> Bool {
+            guard let forwardExposure else { return true }
+            forwardExposure.observeHeaders(headers)
+            return !forwardExposure.hasObservedLoss
         }
 
         private func owned(target: Disclosure, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
@@ -196,11 +225,15 @@ extension AccessibilityChannel {
                   let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
                   let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
                   CFEqual(main, window), CFEqual(focusedWindow, window),
+                  restorationStarted || acquired.isEmpty || exposure?.isCurrent == true,
                   AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
                   case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
                   doc.utf8.elementsEqual(document.utf8), !AXLogicProElements.dialogPresent(runtime: logic),
-                  AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic).map({ CFEqual($0, rail) }) == true,
-                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                  AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic,
+                    observingExposure: forwardExposure).map({ CFEqual($0, rail) }) == true,
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic,
+                    observingExposure: forwardExposure),
+                  acquiredHeadersRemainOwned(headers),
                   headers.filter({ CFEqual($0, target.header) }).count == 1,
                   acquired.allSatisfy({ entry in
                       headers.filter({ CFEqual($0, entry.target.header) }).count == 1
@@ -210,9 +243,10 @@ extension AccessibilityChannel {
                   expectedHeaders.map({ same(headers, $0) }) ?? true,
                   let currentSelection = Self.selectedHeaders(headers, ax: logic.ax), same(currentSelection, selected),
                   let currentValue = value(target), expectedValue.map({ $0 == currentValue }) ?? true,
-                  let currentViewport = Self.readViewport(window, ax: logic.ax), currentViewport.count == viewport.count,
+                  let currentViewport = Self.readViewport(window, ax: logic.ax, exposure: forwardExposure), currentViewport.count == viewport.count,
                   zip(currentViewport, viewport).allSatisfy({ CFEqual($0.control, $1.control) && $0.value == $1.value }),
                   let currentTransport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
+                    observingExposure: forwardExposure,
                     checking: { try SessionPopulationObservation.requireOwnedAcquisition() }),
                   CFEqual(currentTransport.controlBar, transport.controlBar), CFEqual(currentTransport.play, transport.play),
                   CFEqual(currentTransport.record, transport.record), !currentTransport.isPlaying, !currentTransport.isRecording,
@@ -251,9 +285,8 @@ extension AccessibilityChannel {
 
         func expand(stoppingWhen stop: @Sendable () -> Bool) async {
             exposure = .init(header: header, disclosure: disclosure, runtime: logic, originalHeaders: originalHeaders)
-            var target: Disclosure = (header, disclosure)
             var beforeHeaders = originalHeaders
-            while true {
+            while let target = pending.first {
                 guard await event(.leftMouseDown, target: target, expectedHeaders: beforeHeaders, expectedValue: 0, stoppingWhen: stop)
                 else { effects.reason = "stack_expansion_unverified"; return }
                 // A TRUE-posted Down is outstanding before the next fallible read.
@@ -267,7 +300,8 @@ extension AccessibilityChannel {
                 }
                 releaseUnverified = false
                 guard value(target) == 1,
-                      case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                      case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic,
+                        observingExposure: forwardExposure),
                       same(headers.filter { row in beforeHeaders.contains { CFEqual($0, row) } }, beforeHeaders) else {
                     effects.reason = "stack_expansion_unverified"; return
                 }
@@ -280,19 +314,21 @@ extension AccessibilityChannel {
                     effects.reason = "stack_navigation_ownership_lost"; return
                 }
                 acquired.append(.init(target: target, beforeHeaders: beforeHeaders, afterHeaders: headers))
+                pending.removeFirst()
                 expandedHeaders = headers
                 if !effects.changed.contains("stack_disclosure") { effects.changed.append("stack_disclosure") }
                 let newlyExposed = headers.filter { row in !beforeHeaders.contains { CFEqual($0, row) } }
                 guard let collapsed = Self.collapsedDisclosures(in: newlyExposed, runtime: logic) else {
                     effects.reason = "stack_disclosure_unreadable"; return
                 }
-                guard collapsed.count <= 1 else { effects.reason = "stack_disclosure_ambiguous"; return }
-                guard let next = collapsed.first else { return }
-                guard !acquired.contains(where: { CFEqual($0.target.header, next.header) || CFEqual($0.target.disclosure, next.disclosure) }) else {
+                guard collapsed.allSatisfy({ next in
+                    !pending.contains(where: { CFEqual($0.header, next.header) || CFEqual($0.disclosure, next.disclosure) })
+                        && !acquired.contains(where: { CFEqual($0.target.header, next.header) || CFEqual($0.target.disclosure, next.disclosure) })
+                }) else {
                     effects.reason = "stack_navigation_ownership_lost"; return
                 }
+                pending.append(contentsOf: collapsed)
                 beforeHeaders = headers
-                target = next
             }
         }
 
@@ -300,6 +336,7 @@ extension AccessibilityChannel {
             // Captured descendant authority ends before the first inverse gesture.
             // Cleanup is guarded by the separate held navigation facts below.
             exposure?.end()
+            restorationStarted = true
             guard effects.navigationPerformed else { return effects }
             // Do not start another gesture while the earlier release is unverified.
             guard !releaseUnverified else { return effects }

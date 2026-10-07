@@ -40,6 +40,22 @@ enum AXTrackBinding {
             guard let selected, CFEqual(selected, held.disclosure),
                   children.filter({ CFEqual($0, held.disclosure) }).count == 1 else { lose(); return }
         }
+        /// Forward ownership checks consume their actual samples, including
+        /// discovery reads made before a later successful control reread.
+        func observeRole(element: AXUIElement, role: String?) {
+            let owned = lock.withLock { controls.contains { CFEqual($0.disclosure, element) } }
+            if owned, role != kAXDisclosureTriangleRole as String { lose() }
+        }
+        func observeChildren(element: AXUIElement, children: [AXUIElement]) {
+            let held = lock.withLock { controls.first { CFEqual($0.header, element) } }
+            if let held, children.filter({ CFEqual($0, held.disclosure) }).count != 1 { lose() }
+        }
+        func observeValue(header: AXUIElement, disclosure: AXUIElement, value: Int?) {
+            let owned = lock.withLock { controls.contains {
+                CFEqual($0.header, header) && CFEqual($0.disclosure, disclosure)
+            } }
+            if owned, value != 1 { lose() }
+        }
         func retainAcquiredDisclosure(header: AXUIElement, disclosure: AXUIElement) -> Bool {
             lock.withLock {
                 guard !ended, !controls.contains(where: {
@@ -246,8 +262,10 @@ extension AXLogicProElements {
 
     /// Owned disclosure navigation reuses the shared status-preserving rail discovery,
     /// but cannot choose the first of competing named rails.
-    static func uniqueTrackHeaderRail(in window: AXUIElement, runtime: Runtime) -> AXUIElement? {
-        guard case .complete(let candidates) = verifiedTrackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax) else { return nil }
+    static func uniqueTrackHeaderRail(in window: AXUIElement, runtime: Runtime,
+                                      observingExposure: AXTrackBinding.Exposure? = nil) -> AXUIElement? {
+        guard case .complete(let candidates) = verifiedTrackHeaderCandidates(in: window, maxDepth: 32,
+            runtime: runtime.ax, observingExposure: observingExposure) else { return nil }
         let rails = !candidates.lists.isEmpty ? candidates.lists
             : !candidates.scrollAreas.isEmpty ? candidates.scrollAreas : candidates.groups
         guard rails.count == 1,
@@ -409,7 +427,8 @@ extension AXLogicProElements {
     /// destructive mutation.
     static func allTrackHeadersRead(
         in window: AXUIElement,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> TrackHeaderRead {
         guard !projectPickerPreventsTrackRead(window, runtime: runtime) else {
             return .unavailable
@@ -418,7 +437,8 @@ extension AXLogicProElements {
         // Preserve this shared reader's historic tolerance for an unrelated
         // subtree being mid-load. `allTrackHeadersVerifiedRead` below is the
         // fail-closed variant used by a mutation verdict.
-        let candidates = trackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax)
+        let candidates = trackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax,
+                                              observingExposure: observingExposure)
         return readTrackHeaderCandidates(candidates, runtime: runtime.ax)
     }
 
@@ -428,12 +448,14 @@ extension AXLogicProElements {
     /// the legacy reader's best-effort contract for its existing callers.
     static func allTrackHeadersVerifiedRead(
         in window: AXUIElement,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> VerifiedTrackHeaderRead {
         guard !projectPickerPreventsTrackRead(window, runtime: runtime) else {
             return .unavailable
         }
-        switch verifiedTrackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax) {
+        switch verifiedTrackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax,
+                                             observingExposure: observingExposure) {
         case .complete(let candidates):
             switch readTrackHeaderCandidates(candidates, runtime: runtime.ax) {
             case .read(let headers):
@@ -508,13 +530,15 @@ extension AXLogicProElements {
     private static func trackHeaderCandidates(
         in root: AXUIElement,
         maxDepth: Int,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> TrackHeaderCandidates {
         var candidates = TrackHeaderCandidates()
 
         func visit(_ element: AXUIElement, remainingDepth: Int) {
             switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
             case .success(.some(let role)):
+                observingExposure?.observeRole(element: element, role: role)
                 if role == (kAXListRole as String),
                    case .success(let identifier) = trackStringAttribute(
                         element, kAXIdentifierAttribute as String, runtime: runtime
@@ -534,6 +558,7 @@ extension AXLogicProElements {
                     candidates.outlinesAndTables.append(element)
                 }
             case .success(.none), .failure:
+                observingExposure?.observeRole(element: element, role: nil)
                 break
             }
 
@@ -541,6 +566,7 @@ extension AXLogicProElements {
             guard case .success(let children) = AXHelpers.childrenResult(element, runtime: runtime) else {
                 return
             }
+            observingExposure?.observeChildren(element: element, children: children)
             for child in children {
                 visit(child, remainingDepth: remainingDepth - 1)
             }
@@ -561,7 +587,8 @@ extension AXLogicProElements {
     private static func verifiedTrackHeaderCandidates(
         in root: AXUIElement,
         maxDepth: Int,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> TrackHeaderCandidatesRead {
         var candidates = TrackHeaderCandidates()
         var encounteredUnreadableAX = false
@@ -581,6 +608,7 @@ extension AXLogicProElements {
             var diagnosticRole = "absent"
             switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
             case .success(.some(let role)):
+                observingExposure?.observeRole(element: element, role: role)
                 // Popup text controls can refuse AXChildren while the original
                 // Arrange rail remains readable. They cannot contain an Arrange
                 // rail; track/strip names are still independently read afterward.
@@ -610,8 +638,10 @@ extension AXLogicProElements {
                     candidates.outlinesAndTables.append(element)
                 }
             case .success(.none):
+                observingExposure?.observeRole(element: element, role: nil)
                 break
             case .failure(let error):
+                observingExposure?.observeRole(element: element, role: nil)
                 encounteredUnreadableAX = true
                 unreadableStage = "track_header_candidate_role"
                 unreadableStatus = error.diagnosticLabel
@@ -621,6 +651,7 @@ extension AXLogicProElements {
             guard remainingDepth > 0 else { return }
             switch AXHelpers.childrenResult(element, runtime: runtime) {
             case .success(let children):
+                observingExposure?.observeChildren(element: element, children: children)
                 for (index, child) in children.enumerated() {
                     visit(child, remainingDepth: remainingDepth - 1, path: path + [index])
                 }
@@ -836,10 +867,13 @@ extension AXLogicProElements {
         in header: AXUIElement,
         labels: [String],
         legacyTitle: String,
-        ax: AXHelpers.Runtime
+        ax: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> AXUIElement? {
         let checkboxes = AXHelpers.findAllDescendants(
-            of: header, role: kAXCheckBoxRole, maxDepth: 4, runtime: ax
+            of: header, role: kAXCheckBoxRole, maxDepth: 4, runtime: ax,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }
         )
         let candidates = trackToggleCandidates(among: checkboxes, labels: labels, runtime: ax)
         if let match = candidates.first {
@@ -847,11 +881,13 @@ extension AXLogicProElements {
         }
         // Legacy fallback: AXButton with description prefix / single-letter title.
         for label in labels {
-            if let button = findButtonByDescriptionPrefix(in: header, prefix: label, runtime: ax) {
+            if let button = findButtonByDescriptionPrefix(in: header, prefix: label, runtime: ax, observingExposure: observingExposure) {
                 return button
             }
         }
-        return AXHelpers.findDescendant(of: header, role: kAXButtonRole, title: legacyTitle, runtime: ax)
+        return AXHelpers.findDescendant(of: header, role: kAXButtonRole, title: legacyTitle, runtime: ax,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) })
     }
 
     /// The record-enable control inside one track header.
@@ -860,9 +896,12 @@ extension AXLogicProElements {
     /// cannot name different controls. They did until #1020: the poller matched the header by
     /// `trackRecordButton`, whose Spanish member `Grabar` is not inside `Activar grabación`, so
     /// `logic://tracks` read every Spanish track as disarmed while the write verified its arm.
-    static func trackArmControl(in header: AXUIElement, ax: AXHelpers.Runtime) -> AXUIElement? {
+    static func trackArmControl(
+        in header: AXUIElement, ax: AXHelpers.Runtime, observingExposure: AXTrackBinding.Exposure? = nil
+    ) -> AXUIElement? {
         findTrackToggleControl(
-            in: header, labels: AXLocalePolicy.trackRecordEnableCheckbox.labels, legacyTitle: "R", ax: ax
+            in: header, labels: AXLocalePolicy.trackRecordEnableCheckbox.labels, legacyTitle: "R", ax: ax,
+            observingExposure: observingExposure
         )
     }
 

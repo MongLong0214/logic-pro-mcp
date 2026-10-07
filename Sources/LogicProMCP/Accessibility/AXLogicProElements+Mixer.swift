@@ -111,6 +111,7 @@ extension AXLogicProElements {
 
     static func mixerPopulationAreaLookup(
         in window: AXUIElement, runtime: Runtime, requiresCompleteAbsence: Bool = false,
+        observingExposure: AXTrackBinding.Exposure? = nil,
         checking check: () throws -> Void = {}
     ) throws -> (lookup: MixerAreaLookup, binding: MixerAreaBinding?) {
         try check()
@@ -123,7 +124,7 @@ extension AXLogicProElements {
         // would make a full mixer read silently return only selected-track +
         // output strips.
         let scan = try mixerAreaCandidates(in: window, runtime: runtime.ax,
-            requiresCompleteAbsence: requiresCompleteAbsence, checking: check)
+            requiresCompleteAbsence: requiresCompleteAbsence, observingExposure: observingExposure, checking: check)
         // Existing fake/older AXIdentifier contracts remain supported, including an empty
         // ID-bound container. They no longer require separate unchecked recursive walks.
         let legacy = scan.candidates.first { $0.legacyRole == (kAXGroupRole as String) }
@@ -240,8 +241,13 @@ extension AXLogicProElements {
     /// Only the Korean help string is measured. On a locale whose `AXHelp` carries none of the
     /// hint's variants the predicate yields nothing, and this falls through to elimination exactly
     /// as it did before — so an unmeasured locale is no worse off, and never silently better.
-    static func findPanControlInHeader(_ header: AXUIElement, runtime: AXHelpers.Runtime = .production) -> AXUIElement? {
-        let sliders = AXHelpers.findAllDescendants(of: header, role: kAXSliderRole, maxDepth: 4, runtime: runtime)
+    static func findPanControlInHeader(
+        _ header: AXUIElement, runtime: AXHelpers.Runtime = .production,
+        observingExposure: AXTrackBinding.Exposure? = nil
+    ) -> AXUIElement? {
+        let sliders = AXHelpers.findAllDescendants(of: header, role: kAXSliderRole, maxDepth: 4, runtime: runtime,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) })
         let candidates = headerPanSliderCandidates(among: sliders, runtime: runtime)
 
         if candidates.count == 1 { return candidates[0] }
@@ -317,6 +323,7 @@ extension AXLogicProElements {
         in root: AXUIElement,
         runtime: AXHelpers.Runtime,
         requiresCompleteAbsence: Bool,
+        observingExposure: AXTrackBinding.Exposure?,
         checking check: () throws -> Void
     ) throws -> (candidates: [MixerAreaCandidate], sawUnreadMixerContainer: Bool, sawIncompleteAbsence: Bool) {
         var candidates: [MixerAreaCandidate] = []
@@ -333,6 +340,7 @@ extension AXLogicProElements {
             owners: [],
             remainingNodes: &remainingNodes,
             requiresCompleteAbsence: requiresCompleteAbsence,
+            observingExposure: observingExposure,
             checking: check,
             into: &candidates,
             sawUnreadMixerContainer: &sawUnreadMixerContainer,
@@ -351,6 +359,7 @@ extension AXLogicProElements {
         owners: [AXUIElement],
         remainingNodes: inout Int,
         requiresCompleteAbsence: Bool,
+        observingExposure: AXTrackBinding.Exposure?,
         checking check: () throws -> Void,
         into candidates: inout [MixerAreaCandidate],
         sawUnreadMixerContainer: inout Bool,
@@ -385,6 +394,7 @@ extension AXLogicProElements {
             return AXHelpers.getAttribute(element, attribute, runtime: runtime)
         }
         let role = try metadata(kAXRoleAttribute)
+        observingExposure?.observeRole(element: element, role: role)
         let identifier = try metadata(kAXIdentifierAttribute)
         let description = try metadata(kAXDescriptionAttribute)
         let title = try metadata(kAXTitleAttribute)
@@ -409,12 +419,15 @@ extension AXLogicProElements {
             }
             return false
         }
+        observingExposure?.observeChildren(element: element, children: children)
 
         if isMixerContainer {
             var stripCount = 0
             for child in children {
                 try check()
-                if AXHelpers.getRole(child, runtime: runtime) == (kAXLayoutItemRole as String) { stripCount += 1 }
+                let childRole = AXHelpers.getRole(child, runtime: runtime)
+                observingExposure?.observeRole(element: child, role: childRole)
+                if childRole == (kAXLayoutItemRole as String) { stripCount += 1 }
             }
             if stripCount > 0 || legacyRole != nil {
                 candidates.append(MixerAreaCandidate(
@@ -443,6 +456,7 @@ extension AXLogicProElements {
                 owners: isMixerContainer ? owners + [element] : owners,
                 remainingNodes: &remainingNodes,
                 requiresCompleteAbsence: requiresCompleteAbsence,
+                observingExposure: observingExposure,
                 checking: check,
                 into: &candidates,
                 sawUnreadMixerContainer: &sawUnreadMixerContainer,
@@ -1505,7 +1519,8 @@ extension AXLogicProElements {
     static func findVolumeFader(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production,
-        requireUnique: Bool = false
+        requireUnique: Bool = false,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> AXUIElement? {
         let failures = AXPluginInstanceIdentity.FailedReads()
         let ax = requireUnique ? AXPluginInstanceIdentity.noting(failures, over: runtime) : runtime
@@ -1515,7 +1530,9 @@ extension AXLogicProElements {
             sliders = observed
         } else {
             sliders = AXHelpers.findAllDescendants(
-                of: strip, role: kAXSliderRole, maxDepth: 4, runtime: ax
+                of: strip, role: kAXSliderRole, maxDepth: 4, runtime: ax,
+                observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+                observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }
             )
         }
         // Second atlas adoption. This site had BOTH of the shapes ADR-007 exists to remove: it

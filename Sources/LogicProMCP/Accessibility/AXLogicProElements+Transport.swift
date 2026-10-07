@@ -17,6 +17,7 @@ extension AXLogicProElements {
     /// TransportState's compatibility defaults or the first matching checkbox.
     static func observedTransportActivity(
         in window: AXUIElement, runtime: Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil,
         checking check: () throws -> Void
     ) throws -> ObservedTransportActivity? {
         let permits = { (try? check()) != nil }
@@ -31,7 +32,9 @@ extension AXLogicProElements {
         }
         guard case .success(let groups) = AXHelpers.censusDescendantResult(
             of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime.ax,
-            requiresCompleteTraversal: true, permittingRead: permits) else {
+            requiresCompleteTraversal: true, permittingRead: permits,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }) else {
             try check(); return nil
         }
         var labelled: [AXUIElement] = []

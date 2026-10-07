@@ -527,7 +527,8 @@ actor AccessibilityChannel: Channel {
             var headers: [AXUIElement]?
             var tracks: [TrackState]?
             if wantsTracks,
-               case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
+               case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic,
+                   observingExposure: exposure) {
                 headers = observed
                 exposure?.observeHeaders(observed)
                 tracks = Self.readTrackStates(from: observed, in: window, runtime: logic, exposure: exposure, stoppingWhen: stop).states
@@ -538,7 +539,7 @@ actor AccessibilityChannel: Channel {
             var strips: [ChannelStripState]?
             var presentation: AXLogicProElements.MixerPresentationRead?
             let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic,
-                requiresCompleteAbsence: true, checking: checkAXRead)
+                requiresCompleteAbsence: true, observingExposure: exposure, checking: checkAXRead)
             let mixerVisible: Bool?
             switch lookup.lookup {
             case .found: mixerVisible = true
@@ -559,7 +560,8 @@ actor AccessibilityChannel: Channel {
                     }
                 }
             }
-            let transport = try AXLogicProElements.observedTransportActivity(in: window, runtime: logic, checking: checkAXRead)
+            let transport = try AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
+                observingExposure: exposure, checking: checkAXRead)
             let locale = try readObservedUILocale(in: window, checking: checkAXRead)
             try check()
             return Read(title: title, document: document, documentReadable: documentReadable,
@@ -669,7 +671,8 @@ actor AccessibilityChannel: Channel {
             var sameStackExposure = true
             if wantsTracks, after.tracks != nil {
                 try check()
-                if case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic) {
+                if case .read(let observed) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: logic,
+                    observingExposure: exposure) {
                     currentHeaders = observed
                     exposure?.observeHeaders(observed)
                     if let states = after.tracks, states.count == observed.count {
