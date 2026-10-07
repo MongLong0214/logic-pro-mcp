@@ -13,10 +13,12 @@ enum AXTrackBinding {
         let disclosure: AXUIElement
         let runtime: AXLogicProElements.Runtime
         let originalHeaders: [AXUIElement]
+        private var controls: [(header: AXUIElement, disclosure: AXUIElement)]
         init(header: AXUIElement, disclosure: AXUIElement, runtime: AXLogicProElements.Runtime,
              originalHeaders: [AXUIElement] = []) {
             self.header = header; self.disclosure = disclosure; self.runtime = runtime
             self.originalHeaders = originalHeaders
+            controls = [(header, disclosure)]
         }
         func end() { lock.withLock { ended = true } }
         var hasObservedLoss: Bool { lock.withLock { observedLoss } }
@@ -25,19 +27,34 @@ enum AXTrackBinding {
         /// Consume the actual collector's sampled facts; a later retry cannot
         /// erase a positively observed closed/missing acquired disclosure.
         func observeHeaders(_ headers: [AXUIElement]) {
-            if headers.filter({ CFEqual($0, header) }).count != 1 { lose() }
+            let held = lock.withLock { controls }
+            if held.contains(where: { target in headers.filter { CFEqual($0, target.header) }.count != 1 }) { lose() }
         }
         func observeStackState(header: AXUIElement, isStackHeader: Bool?, collapsed: Bool?) {
-            if CFEqual(self.header, header), collapsed == true || isStackHeader == false { lose() }
+            let owned = lock.withLock { controls.contains { CFEqual($0.header, header) } }
+            if owned, collapsed == true || isStackHeader == false { lose() }
         }
         func observeDisclosureChildren(header: AXUIElement, children: [AXUIElement], selected: AXUIElement?) {
-            guard CFEqual(self.header, header) else { return }
-            guard let selected, CFEqual(selected, disclosure),
-                  children.filter({ CFEqual($0, disclosure) }).count == 1 else { lose(); return }
+            let held = lock.withLock { controls.first { CFEqual($0.header, header) } }
+            guard let held else { return }
+            guard let selected, CFEqual(selected, held.disclosure),
+                  children.filter({ CFEqual($0, held.disclosure) }).count == 1 else { lose(); return }
+        }
+        func retainAcquiredDisclosure(header: AXUIElement, disclosure: AXUIElement) -> Bool {
+            lock.withLock {
+                guard !ended, !controls.contains(where: {
+                    CFEqual($0.header, header) || CFEqual($0.disclosure, disclosure)
+                }) else { return false }
+                controls.append((header, disclosure))
+                return true
+            }
         }
         var isCurrent: Bool {
-            guard !lock.withLock({ ended }) else { return false }
-            guard AXLogicProElements.heldTrackDisclosureValue(header: header, disclosure: disclosure, runtime: runtime) == 1
+            let held = lock.withLock { ended ? [] : controls }
+            guard !held.isEmpty else { return false }
+            guard held.allSatisfy({
+                AXLogicProElements.heldTrackDisclosureValue(header: $0.header, disclosure: $0.disclosure, runtime: runtime) == 1
+            })
             else { lose(); return false }
             return !lock.withLock { ended }
         }
