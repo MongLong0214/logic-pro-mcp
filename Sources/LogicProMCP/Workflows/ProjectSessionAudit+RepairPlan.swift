@@ -408,7 +408,7 @@ extension ProjectSessionAudit {
             ]), reasons)
         }
         guard reasons.isEmpty else { return unverified() }
-        guard finding.expected.output == .bus, let bus = finding.expected.busNumber else {
+        guard finding.expected.output == .bus || finding.expected.output == .noOutput else {
             return unverified("main_output_proposal_unsupported")
         }
         guard let rawRef = finding.target.trackRef else { return unverified("proposed_source_unavailable") }
@@ -418,10 +418,20 @@ extension ProjectSessionAudit {
             return unverified("proposed_source_ambiguous")
         }
         guard source.kind == .track else { return unverified("proposed_source_not_track") }
-        let destinations = graph.nodes.filter { $0.kind == .bus && $0.busNumber == bus }
-        guard destinations.count == 1, let destination = destinations.first,
-              graph.nodes.filter({ $0.id == destination.id }).count == 1 else {
-            return unverified("proposed_destination_not_unique_bus")
+        guard source.outputClassification == .bus else {
+            return unverified("proposed_before_output_not_bus")
+        }
+        var destination: RoutingNode?
+        if finding.expected.output == .bus {
+            guard let bus = finding.expected.busNumber else {
+                return unverified("main_output_proposal_unsupported")
+            }
+            let destinations = graph.nodes.filter { $0.kind == .bus && $0.busNumber == bus }
+            guard destinations.count == 1, let unique = destinations.first,
+                  graph.nodes.filter({ $0.id == unique.id }).count == 1 else {
+                return unverified("proposed_destination_not_unique_bus")
+            }
+            destination = unique
         }
         // routingDiff keys outputs by source (and sends by reference/slot), with last-wins
         // dictionaries. Reject ambiguity before invoking it, including unrelated output keys.
@@ -447,12 +457,15 @@ extension ProjectSessionAudit {
         guard previousNodes.count == 1, let previous = previousNodes.first, previous.kind == .bus else {
             return unverified("proposed_before_destination_not_unique_bus")
         }
-        let desired = RoutingEdge(kind: .mainOutput, source: source.id, destination: destination.id,
-                                  send: nil, provenance: .other)
+        // An approved no-output intent removes this exact observed edge, not its bus or receivers.
+        let desired = destination.map {
+            RoutingEdge(kind: .mainOutput, source: source.id, destination: $0.id,
+                        send: nil, provenance: .other)
+        }
         let after = RoutingGraph(
             projectReference: graph.projectReference, projectEpoch: graph.projectEpoch,
             complete: graph.complete, partialReason: graph.partialReason, nodes: graph.nodes,
-            edges: graph.edges.map { $0 == before ? desired : $0 },
+            edges: graph.edges.compactMap { $0 == before ? desired : $0 },
             provenance: graph.provenance.contains(.other) ? graph.provenance : graph.provenance + [.other],
             snapshotId: graph.snapshotId, coverage: graph.coverage
         )
