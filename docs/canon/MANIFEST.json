@@ -109,12 +109,12 @@
     "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/quickhelp.tsv": "d1f97be3a324c18b05512624bf6d740fb124f8b126f9ec006f235d920e2518bc",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/strings.tsv": "8e072ebe023f998b05928390a51afc9a5dff77ec3f499695b045451175495e5c",
+    "index/strings.tsv": "a8ffc9baf21c0eef4a56f239a88e5c9152834937ed054e210ee53f263010a56d",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "ledger/casefold.tsv": "5a4cac54b5c343b9056d7322bcdd9df45880e45572a738b9dece5cab7d403b4d",
-    "ledger/presence.tsv": "dabaff55be11a68b242c5a4967521dcd101af8d4b3e25a1cef670a66d62cf19c"
+    "ledger/presence.tsv": "3c62a6488295809c7a3c64195388191dc12731701de2bb1928386efd14609d61"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
@@ -197,7 +197,7 @@
       "de": 183,
       "en": 194,
       "es": 193,
-      "fr": 177,
+      "fr": 178,
       "it": 187,
       "ja": 195,
       "ko": 201,

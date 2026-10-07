@@ -714,16 +714,16 @@ enum AXValueExtractors {
             let desc = (AXHelpers.getDescription(slider, runtime: runtime) ?? "").lowercased()
             if AXLocalePolicy.barSliderLabel.containsAny(in: desc),
                let value = extractSliderValue(slider, runtime: runtime) {
-                barValue = Int(value)
+                barValue = Int(exactly: value.rounded(.towardZero))
             } else if AXLocalePolicy.beatSliderLabel.containsAny(in: desc),
                       let value = extractSliderValue(slider, runtime: runtime) {
-                beatValue = Int(value)
+                beatValue = Int(exactly: value.rounded(.towardZero))
             } else if AXLocalePolicy.subdivisionSliderLabel.containsAny(in: desc),
                       let value = extractSliderValue(slider, runtime: runtime) {
-                subdivisionValue = Int(value)
+                subdivisionValue = Int(exactly: value.rounded(.towardZero))
             } else if AXLocalePolicy.tickSliderLabel.matches(desc, mode: .exact),
                       let value = extractSliderValue(slider, runtime: runtime) {
-                tickValue = Int(value)
+                tickValue = Int(exactly: value.rounded(.towardZero))
             }
         }
         // HOW MANY components the Playhead Position group exposes is a property of the control

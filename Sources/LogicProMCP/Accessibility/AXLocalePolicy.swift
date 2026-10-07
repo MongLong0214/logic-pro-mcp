@@ -1862,9 +1862,9 @@ enum AXLocalePolicy {
 
     static let tickSliderLabel = LabelSet(
         canonical: "tick",
-        variants: ["틱", "ティック", "tic"],
-        rationale: "Identifies the tick slider in the Playhead Position group; whole description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats. MAApplication's `tick` row supplies all ten locale values in Logic 12.3 (6674); canonical `tick` also covers case-only `Tick`. Unlike neighbouring Logic.framework rows, this row says `ティック` in Japanese and `tic` in French. Bundle derivation does not claim native readback in those locales.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAApplication.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/tick#value"
+        variants: ["틱", "tic", "coche"],
+        rationale: "Identifies the tick slider in the Playhead Position group; whole description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats. For this bars/beats path, TransportSegmentedScrubberCell uses the inherited singular tick description from TransportDisplayClockFormatter and Logic.framework's bundle. Its `tick` row supplies the ten locale values in Logic 12.3 (6674); canonical `tick` also covers case-only `Tick`. Japanese is `tick` and French is `coche`, not MAApplication's values. Source and bundle derivation do not claim native Japanese/French readback or qualification of every display mode.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/tick#value"
     )
 
     /// The current project-key popup; its observed value remains opaque and localized.
