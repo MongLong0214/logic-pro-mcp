@@ -64,6 +64,9 @@ private actor OwnershipAXGotoChannel: Channel {
     func healthCheck() async -> ChannelHealth { .healthy(detail: "owned helper-delegating fixture") }
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
         operations.append(operation)
+        if operation == "transport.get_state" {
+            return .error("owned pre-position read unavailable")
+        }
         guard operation == "transport.goto_position" else {
             Issue.record("post-refusal operation must not execute: \(operation)")
             return .error("owned unexpected operation")
@@ -387,7 +390,7 @@ extension OperationTraceTests {
                 settleReadback: { followups.record("settle") })
         }
         let operations = await ax.recordedOperations()
-        #expect(operations == ["transport.goto_position"])
+        #expect(operations == ["transport.get_state", "transport.goto_position"])
         #expect(operations.filter { $0 == "midi.import_file" }.count == 0)
         #expect(followups.total == 0)
         #expect(b.actionCalls.isEmpty)
@@ -410,7 +413,11 @@ extension OperationTraceTests {
         let writeAttempted = try #require(cgEnvelope["write_attempted"] as? Bool)
         #expect(!writeAttempted)
         let trace = try #require(await OperationTraceStore.shared.trace(id))
-        let completed = trace.events.filter { $0.phase == .channelCompleted }
+        // The fresh position pre-read has no ownership actuation receipt. Preserve the exact
+        // two goto attempt snapshots independently from that harmless unavailable read.
+        let completed = trace.events.filter {
+            $0.phase == .channelCompleted && $0.attributes["frontmost_preparation"] != nil
+        }
         #expect(completed.count == 2)
         #expect(completed.first?.attributes["channel"] == ChannelID.accessibility.rawValue)
         #expect(completed.first?.attributes["frontmost_keyboard_owner_pid"] == "77")
