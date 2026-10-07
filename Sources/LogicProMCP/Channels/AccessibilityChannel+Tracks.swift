@@ -174,9 +174,12 @@ extension AccessibilityChannel {
             return selected
         }
 
-        private static func readViewport(_ rail: AXUIElement, ax: AXHelpers.Runtime) -> [Viewport]? {
+        private static func readViewport(_ rail: AXUIElement, ax: AXHelpers.Runtime,
+                                         exposure: AXTrackBinding.Exposure? = nil) -> [Viewport]? {
             guard case .success(let census) = AXHelpers.censusDescendantResult(of: rail, role: kAXScrollBarRole as String,
-                maxDepth: 32, runtime: ax, requiresCompleteTraversal: true) else { return nil }
+                maxDepth: 32, runtime: ax, requiresCompleteTraversal: true,
+                observingRole: { exposure?.observeRole(element: $0, role: $1) },
+                observingChildren: { exposure?.observeChildren(element: $0, children: $1) }) else { return nil }
             var values: [Viewport] = []
             for control in census.matches {
                 guard case .success(.some(let value)) = AXHelpers.getAttributeResult(
@@ -239,7 +242,7 @@ extension AccessibilityChannel {
                   expectedHeaders.map({ same(headers, $0) }) ?? true,
                   let currentSelection = Self.selectedHeaders(headers, ax: logic.ax), same(currentSelection, selected),
                   let currentValue = value(target), expectedValue.map({ $0 == currentValue }) ?? true,
-                  let currentViewport = Self.readViewport(window, ax: logic.ax), currentViewport.count == viewport.count,
+                  let currentViewport = Self.readViewport(window, ax: logic.ax, exposure: forwardExposure), currentViewport.count == viewport.count,
                   zip(currentViewport, viewport).allSatisfy({ CFEqual($0.control, $1.control) && $0.value == $1.value }),
                   let currentTransport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
                     checking: { try SessionPopulationObservation.requireOwnedAcquisition() }),

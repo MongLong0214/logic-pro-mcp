@@ -201,6 +201,11 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeSiblingStacks(navigation: true, postReleaseOwnershipLoss: "collector_" + loss)
     }
 
+    @Test(arguments: ["role_loss", "replacement"])
+    func registeredSiblingViewportCensusLossCannotResumeAnOldInverse(loss: String) async throws {
+        try await observeSiblingStacks(navigation: true, postReleaseOwnershipLoss: "viewport_" + loss)
+    }
+
     @Test func registeredNewlyRevealedSiblingDisclosuresAcquireEveryHeldChild() async throws {
         try await observeSiblingStacks(navigation: true, siblingCase: "revealed")
     }
@@ -261,7 +266,9 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture.builder.setChildren(controlBar, [play, record])
         fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar])
         let collectorLoss = postReleaseOwnershipLoss?.hasPrefix("collector_") == true
-        let censusLossKind = collectorLoss ? postReleaseOwnershipLoss?.dropFirst("collector_".count).description : postReleaseOwnershipLoss
+        let viewportLoss = postReleaseOwnershipLoss?.hasPrefix("viewport_") == true
+        let censusLossKind = collectorLoss ? postReleaseOwnershipLoss?.dropFirst("collector_".count).description
+            : viewportLoss ? postReleaseOwnershipLoss?.dropFirst("viewport_".count).description : postReleaseOwnershipLoss
         let mouse = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
             let isSecond = point == CGPoint(x: 26, y: 36)
             let isThird = revealed && point == CGPoint(x: 36, y: 46)
@@ -292,7 +299,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                     return
                     (firstOpen || !(1...7).contains($0.offset)) && (secondOpen || !(17...23).contains($0.offset))
                 }.map(\.element))
-                if let censusLossKind, !collectorLoss, fixture.events.count == 4 {
+                if let censusLossKind, !collectorLoss, !viewportLoss, fixture.events.count == 4 {
                     fixture.reads.record("post_release_loss_installed")
                     if censusLossKind == "role_loss" { fixture.builder.setRole(first, kAXButtonRole as String) }
                     if censusLossKind == "replacement" { fixture.builder.setChildren(headers[0], [replacement]) }
@@ -304,13 +311,14 @@ struct Issue965FreshPopulationAcquisitionTests {
         let channel = fixture.channel(disclosure: first, additionalDisclosure: second,
             thirdDisclosure: revealed ? third : nil, wrongAdditionalDisclosureHit: siblingCase == "wrong_hit", observationMouse: mouse,
             observingAttribute: { element, attribute in
-                if collectorLoss, fixture.events.count == 4,
+                if collectorLoss || viewportLoss, fixture.events.count == 4,
                    !fixture.reads.recorded.contains("post_release_loss_installed") {
                     if CFEqual(element, second), attribute == kAXValueAttribute as String {
                         fixture.reads.record("collector_value_read")
                     }
-                    if CFEqual(element, fixture.window), attribute == kAXTitleAttribute as String,
-                       fixture.reads.recorded.filter({ $0 == "collector_value_read" }).count >= 2 {
+                    if fixture.reads.recorded.filter({ $0 == "collector_value_read" }).count >= 2,
+                       (collectorLoss && CFEqual(element, fixture.window) && attribute == kAXTitleAttribute as String)
+                        || (viewportLoss && censusLossKind == "role_loss" && CFEqual(element, first) && attribute == kAXRoleAttribute as String) {
                         fixture.reads.record("post_release_loss_installed")
                         if censusLossKind == "role_loss" { fixture.builder.setRole(first, kAXButtonRole as String) }
                         if censusLossKind == "replacement" { fixture.builder.setChildren(headers[0], [replacement]) }
@@ -391,6 +399,13 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.reads.record("sibling_title_\(index)")
                 }
             }, observingChildren: { element in
+                if viewportLoss, censusLossKind == "replacement", CFEqual(element, headers[0]),
+                   fixture.events.count == 4,
+                   fixture.reads.recorded.filter({ $0 == "collector_value_read" }).count >= 2,
+                   !fixture.reads.recorded.contains("post_release_loss_installed") {
+                    fixture.builder.setChildren(headers[0], [replacement])
+                    fixture.reads.record("post_release_loss_installed")
+                }
                 if censusLossKind == "replacement", CFEqual(element, headers[0]),
                    fixture.reads.recorded.contains("post_release_loss_installed"),
                    !fixture.reads.recorded.contains("post_release_loss_returned"),
