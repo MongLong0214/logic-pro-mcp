@@ -108,7 +108,8 @@ struct Issue971ApprovedMixerSagaTests {
         let record: AXUIElement
         let dependencies: HandlerDependencies
 
-        init(showing: Bool, cache: StateCache = StateCache(), journal: SagaJournal = SagaJournal()) throws {
+        init(showing: Bool, cache: StateCache = StateCache(), journal: SagaJournal = SagaJournal(),
+             fileReader: (@Sendable (Issue969MixerVisibilitySetterTests.Fixture) -> LogicProjectFileReader.Runtime)? = nil) throws {
             self.cache = cache; self.journal = journal
             view = .init(showing: showing)
             bundle = FileManager.default.temporaryDirectory
@@ -132,15 +133,16 @@ struct Issue971ApprovedMixerSagaTests {
             view.extraWindowChildren = [transport]
             view.updateVisibility()
             let channel = view.channel()
+            let projectFileReader = fileReader?(view) ?? .unavailable
             dependencies = HandlerDependencies(router: router, cache: cache, targetRegistry: registry,
                 poller: StatePoller(axChannel: channel, cache: cache,
-                    runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable,
+                    runtime: .init(hasVisibleWindow: { true }, projectFileReader: projectFileReader,
                                    keyboardFocus: { .notTextEditing })),
                 dialogPresent: { false }, supportBundleExporter: nil, sagaJournal: journal,
                 mutationGate: gate,
                 projectLifecycleExecute: { _ in .init(executionError: "forbidden", timedOut: false,
                                                      terminationStatus: 1, stderrOutput: "") },
-                liveTrackNames: { [:] }, projectFileReader: .unavailable)
+                liveTrackNames: { [:] }, projectFileReader: projectFileReader)
         }
 
         deinit { try? FileManager.default.removeItem(at: bundle) }
@@ -802,6 +804,372 @@ struct Issue971ApprovedMixerSagaTests {
             let retained = try #require(await fixture.cache.retainedInspection(id: snapshot))
             #expect(retained.capture.freshPopulation != nil)
             #expect(retained.capture.project.filePath == fixture.bundle.path)
+        }
+    }
+
+    @Test
+    func supportedSortIntentRetainsItsWholeRequestWithoutPromotingPartialPopulation() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let fixture = try Fixture(showing: false)
+                let observedNames = ["Piano", "Bass"]
+                let headers = observedNames.enumerated().map { index, name in
+                    let header = fixture.view.builder.element(971_100 + index)
+                    fixture.view.builder.setRole(header, kAXLayoutItemRole as String)
+                    fixture.view.builder.setAttribute(header, kAXTitleAttribute as String, name)
+                    fixture.view.builder.setAttribute(header, kAXSelectedAttribute as String, false)
+                    fixture.view.builder.setChildren(header, [])
+                    return header
+                }
+                fixture.view.builder.setChildren(fixture.view.rail, headers)
+                let report = try await fixture.call("inspect_session", params: [
+                    "domains": .array([.string("tracks"), .string("strips")])])
+                let snapshot = try #require(report["snapshot_id"] as? String)
+                let project = try #require(report["project"] as? [String: Any])
+                let projectRef = try #require(project["project_ref"] as? String)
+                let tracks = try #require(report["tracks"] as? [String: Any])
+                #expect(tracks["coverage"] as? String == "partial")
+                let rows = try #require(tracks["rows"] as? [[String: Any]])
+                #expect(rows.compactMap { $0["name"] as? String } == observedNames)
+                let originalOrder = try rows.map { try #require($0["track_ref"] as? String) }
+                #expect(originalOrder.count == 2)
+                #expect(Set(originalOrder).count == 2)
+                let expectedOrder = Array(originalOrder.reversed())
+                let policy: Value = .object([
+                    "schema": .string(ProjectSessionAudit.intentPolicySchema),
+                    "project_ref": .string(projectRef), "targets": .array([]),
+                    "roles": .array([]), "outputs": .array([]),
+                    "presentation": .object(["sort": .object([
+                        "criterion": .string("track_name"),
+                        "expected_order": .array(expectedOrder.map(Value.string)),
+                        "inverse_criterion": .string("creation_date")])])])
+                let plan = try await fixture.call("plan_session_repair", params: [
+                    "snapshot_id": .string(snapshot), "policy": policy])
+                #expect(plan["schema"] as? String == ProjectSessionAudit.sessionRepairPlanSchema)
+                let steps = try #require(plan["steps"] as? [[String: Any]])
+                #expect(steps.count == 1)
+                let step = try #require(steps.first)
+                #expect(step["kind"] as? String == "track_sort")
+                #expect(step["target_ref"] as? String == projectRef)
+                let before = try #require(step["before"] as? [String: Any])
+                let after = try #require(step["after"] as? [String: Any])
+                let inverse = try #require(step["inverse"] as? [String: Any])
+                #expect(before["order"] as? [String] == originalOrder)
+                #expect(after["criterion"] as? String == "track_name")
+                #expect(after["order"] as? [String] == expectedOrder)
+                #expect(inverse["criterion"] as? String == "creation_date")
+                #expect(inverse["expected_order"] as? [String] == originalOrder)
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(!executable)
+                let reasons = try #require(plan["reasons"] as? [String])
+                #expect(reasons.contains("track_population_incomplete"))
+                let preview = try #require(plan["preview"] as? [[String: Any]])
+                #expect(NSDictionary(dictionary: ["steps": steps]) == NSDictionary(dictionary: ["steps": preview]))
+                let id = try #require(plan["plan_id"] as? String)
+                let digest = try #require(plan["digest"] as? String)
+                let retained = try await fixture.call("plan_session_repair", params: [
+                    "plan_id": .string(id), "digest": .string(digest)])
+                #expect(NSDictionary(dictionary: retained) == NSDictionary(dictionary: plan))
+                #expect(fixture.view.events.isEmpty)
+            }
+        }
+    }
+
+    private func observedSortInput(_ fixture: Fixture) async throws -> (snapshot: String, project: String, order: [String]) {
+        let names = ["Piano", "Bass"]
+        let headers = names.enumerated().map { index, name in
+            let header = fixture.view.builder.element(971_100 + index)
+            fixture.view.builder.setRole(header, kAXLayoutItemRole as String)
+            fixture.view.builder.setAttribute(header, kAXTitleAttribute as String, name)
+            fixture.view.builder.setAttribute(header, kAXSelectedAttribute as String, false)
+            fixture.view.builder.setChildren(header, [])
+            return header
+        }
+        fixture.view.builder.setChildren(fixture.view.rail, headers)
+        let report = try await fixture.call("inspect_session", params: ["domains": .array([.string("tracks"), .string("strips")])])
+        let tracks = try #require(report["tracks"] as? [String: Any])
+        #expect(tracks["coverage"] as? String == "partial")
+        let rows = try #require(tracks["rows"] as? [[String: Any]])
+        #expect(rows.compactMap { $0["name"] as? String } == names)
+        let order = try rows.map { try #require($0["track_ref"] as? String) }
+        try #require(order.count == names.count)
+        return (try #require(report["snapshot_id"] as? String),
+                try #require((report["project"] as? [String: Any])?["project_ref"] as? String),
+                order)
+    }
+
+    private func sortPolicy(project: String, presentation: Value) -> Value {
+        .object(["schema": .string(ProjectSessionAudit.intentPolicySchema), "project_ref": .string(project),
+            "targets": .array([]), "roles": .array([]), "outputs": .array([]), "presentation": presentation])
+    }
+
+    @Test(arguments: ["missing_inverse", "unsupported_forward", "unsupported_inverse", "wrong_inverse_type",
+                      "missing_order", "wrong_order_type", "empty_order", "duplicate_order", "non_track_ref",
+                      "unknown_sort_key", "empty_presentation", "unknown_presentation_key"])
+    func invalidSortIntentRefusesTheWholeDraftBeforeAnyViewAction(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let fixture = try Fixture(showing: false)
+                let input = try await observedSortInput(fixture)
+                var sort: [String: Value] = ["criterion": .string("track_name"),
+                    "expected_order": .array(input.order.reversed().map(Value.string)),
+                    "inverse_criterion": .string("creation_date")]
+                switch kind {
+                case "missing_inverse": sort.removeValue(forKey: "inverse_criterion")
+                case "unsupported_forward": sort["criterion"] = .string("arbitrary")
+                case "unsupported_inverse": sort["inverse_criterion"] = .string("previous")
+                case "wrong_inverse_type": sort["inverse_criterion"] = .int(1)
+                case "missing_order": sort.removeValue(forKey: "expected_order")
+                case "wrong_order_type": sort["expected_order"] = .string("Piano,Bass")
+                case "empty_order": sort["expected_order"] = .array([])
+                case "duplicate_order": sort["expected_order"] = .array([.string(input.order[0]), .string(input.order[0])])
+                case "non_track_ref": sort["expected_order"] = .array([.string(input.project)])
+                case "unknown_sort_key": sort["allow_partial"] = .bool(true)
+                case "empty_presentation", "unknown_presentation_key": break
+                default: Issue.record("unknown fixture case")
+                }
+                var presentation: [String: Value] = ["mixer_visible": .bool(true), "sort": .object(sort)]
+                if kind == "empty_presentation" { presentation = [:] }
+                if kind == "unknown_presentation_key" { presentation["arbitrary_order"] = .array([]) }
+                let result = try await fixture.call("plan_session_repair", params: ["snapshot_id": .string(input.snapshot),
+                    "policy": sortPolicy(project: input.project, presentation: .object(presentation))])
+                #expect(result["state"] as? String == "C")
+                #expect(result["plan_id"] == nil)
+                #expect(fixture.view.events.isEmpty)
+                #expect(!fixture.view.showing)
+            }
+        }
+    }
+
+    @Test(arguments: ["foreign", "missing", "extra"])
+    func aSortOrderMustBeTheCapturedReferencePermutationWithoutDroppingTheViewTask(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let fixture = try Fixture(showing: false)
+                await fixture.router.register(fixture.view.channel())
+                let input = try await observedSortInput(fixture)
+                let requested: [String]
+                switch kind {
+                case "foreign": requested = [input.order[0], "trk_other_capture"]
+                case "missing": requested = [input.order[0]]
+                case "extra": requested = input.order + ["trk_other_capture"]
+                default: throw CocoaError(.coderInvalidValue)
+                }
+                let plan = try await fixture.call("plan_session_repair", params: ["snapshot_id": .string(input.snapshot),
+                    "policy": sortPolicy(project: input.project, presentation: .object([
+                        "mixer_visible": .bool(true), "sort": .object(["criterion": .string("track_name"),
+                            "expected_order": .array(requested.map(Value.string)), "inverse_criterion": .string("creation_date")])]))])
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(!executable)
+                let steps = try #require(plan["steps"] as? [[String: Any]])
+                #expect(steps.compactMap { $0["kind"] as? String } == ["track_sort", "mixer_visibility"])
+                let step = try #require(steps.first)
+                #expect((step["before"] as? [String: Any])?["order"] as? [String] == input.order)
+                #expect((step["before"] as? [String: Any])?["coverage"] as? String == "partial")
+                #expect((step["after"] as? [String: Any])?["order"] as? [String] == requested)
+                let blocked = try #require(step["blocked_reasons"] as? [String])
+                #expect(blocked.contains("sort_expected_order_not_capture_permutation"))
+                let result = try await fixture.call("apply_session_repair", params: fixture.applyParameters(plan, key: "invalid-sort-view"))
+                #expect(result["state"] as? String == "C")
+                #expect(await fixture.journal.record(for: "invalid-sort-view") == nil)
+                #expect(fixture.view.events.isEmpty)
+                #expect(!fixture.view.showing)
+            }
+        }
+    }
+
+    @Test
+    func explicitSortInverseChangesTheCanonicalDigestButCannotTurnPartialCurrentOrderIntoExecutable() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let fixture = try Fixture(showing: false)
+                let input = try await observedSortInput(fixture)
+                var digests: [String] = []
+                for inverse in ["creation_date", "track_name"] {
+                    let plan = try await fixture.call("plan_session_repair", params: ["snapshot_id": .string(input.snapshot),
+                        "policy": sortPolicy(project: input.project, presentation: .object(["sort": .object([
+                            "criterion": .string("track_name"), "expected_order": .array(input.order.map(Value.string)),
+                            "inverse_criterion": .string(inverse)])]))])
+                    let executable = try #require(plan["executable"] as? Bool)
+                    #expect(!executable)
+                    let step = try #require((plan["steps"] as? [[String: Any]])?.first)
+                    #expect((step["before"] as? [String: Any])?["coverage"] as? String == "partial")
+                    #expect((step["inverse"] as? [String: Any])?["criterion"] as? String == inverse)
+                    let blocked = try #require(step["blocked_reasons"] as? [String])
+                    #expect(blocked.contains("sort_locale_measurement_unavailable"))
+                    #expect(blocked.contains("sort_coupled_footprint_unavailable"))
+                    #expect(blocked.contains("sort_preservation_adapter_unavailable"))
+                    digests.append(try #require(plan["digest"] as? String))
+                }
+                #expect(digests[0] != digests[1])
+                #expect(fixture.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test(arguments: ["ko-KR", "en-US"])
+    func capturedMenuLocaleDistinguishesMeasuredSortFromAnUnsupportedLanguage(locale: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let fixture = try Fixture(showing: false)
+                let titles = locale == "ko-KR" ? ["파일", "편집", "트랙"] : ["File", "Edit", "Track"]
+                let menus = titles.enumerated().map { index, title in
+                    let menu = fixture.view.builder.element(971_200 + index)
+                    fixture.view.builder.setRole(menu, kAXMenuBarItemRole as String)
+                    fixture.view.builder.setAttribute(menu, kAXTitleAttribute as String, title)
+                    fixture.view.builder.setChildren(menu, [])
+                    return menu
+                }
+                fixture.view.builder.setChildren(fixture.view.menuBar, menus + [fixture.view.view])
+                let input = try await observedSortInput(fixture)
+                let retained = try #require(await fixture.cache.retainedInspection(id: input.snapshot))
+                #expect(retained.capture.freshPopulation != nil)
+                let json = try #require(await fixture.cache.retainedSessionReport(id: input.snapshot))
+                let report = try #require(sharedJSONObject(json))
+                let observed = try #require(report["presentation_observation"] as? [String: Any])
+                #expect(observed["ui_locale"] as? String == locale)
+                let plan = try await fixture.call("plan_session_repair", params: ["snapshot_id": .string(input.snapshot),
+                    "policy": sortPolicy(project: input.project, presentation: .object(["sort": .object([
+                        "criterion": .string("track_name"), "expected_order": .array(input.order.reversed().map(Value.string)),
+                        "inverse_criterion": .string("creation_date")])]))])
+                let blocked = try #require(((plan["steps"] as? [[String: Any]])?.first)?["blocked_reasons"] as? [String])
+                let localeBlockedAsExpected = blocked.contains("sort_locale_measurement_unavailable") == (locale != "ko-KR")
+                #expect(localeBlockedAsExpected)
+                #expect(blocked.contains("track_population_incomplete"))
+                #expect(blocked.contains("sort_coupled_footprint_unavailable"))
+                #expect(blocked.contains("sort_preservation_adapter_unavailable"))
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(!executable)
+                #expect(fixture.view.events.isEmpty)
+            }
+        }
+    }
+
+    @discardableResult
+    private static func installLocaleMenus(_ view: Issue969MixerVisibilitySetterTests.Fixture,
+                                           titles: [String]) -> [AXUIElement] {
+        let menus = titles.enumerated().map { index, title in
+            let menu = view.builder.element(971_200 + index)
+            view.builder.setRole(menu, kAXMenuBarItemRole as String)
+            view.builder.setAttribute(menu, kAXTitleAttribute as String, title)
+            view.builder.setChildren(menu, [])
+            return menu
+        }
+        view.builder.setChildren(view.menuBar, menus + [view.view])
+        return menus
+    }
+
+    @Test(arguments: ["absent", "unread_title", "ambiguous"])
+    func unknownMenuLocaleBlocksOnlySortCapability(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let fixture = try Fixture(showing: false)
+                if kind != "absent" {
+                    let titles = kind == "ambiguous" ? ["파일", "편집", "트랙", "File", "Edit", "Track"] : ["파일", "편집", "트랙"]
+                    let menus = Self.installLocaleMenus(fixture.view, titles: titles)
+                    if kind == "unread_title" { fixture.view.failedMetadata = (menus[0], kAXTitleAttribute as String) }
+                }
+                let input = try await observedSortInput(fixture)
+                let retained = try #require(await fixture.cache.retainedInspection(id: input.snapshot))
+                let fresh = try #require(retained.capture.freshPopulation)
+                #expect(fresh.presentationObservation?.uiLocale == nil)
+                #expect(fresh.presentationBinding != nil)
+                let plan = try await fixture.call("plan_session_repair", params: ["snapshot_id": .string(input.snapshot),
+                    "policy": sortPolicy(project: input.project, presentation: .object(["sort": .object([
+                        "criterion": .string("track_name"), "expected_order": .array(input.order.reversed().map(Value.string)),
+                        "inverse_criterion": .string("creation_date")])]))])
+                let blocked = try #require(((plan["steps"] as? [[String: Any]])?.first)?["blocked_reasons"] as? [String])
+                #expect(blocked.contains("sort_locale_measurement_unavailable"))
+                #expect(blocked.contains("track_population_incomplete"))
+                #expect(fixture.view.events.isEmpty)
+            }
+        }
+    }
+
+    private final class LocaleChange: @unchecked Sendable {
+        private let lock = NSLock()
+        private var reads = 0
+        var count: Int { lock.withLock { reads } }
+        func consume() { lock.withLock { reads += 1 } }
+    }
+
+    @Test
+    func localeDriftBetweenActualPopulationReadsRetainsTracksButNotSortLocale() async throws {
+        let hook = LocaleChange()
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let fixture = try Fixture(showing: false, fileReader: { view in
+                    Self.installLocaleMenus(view, titles: ["파일", "편집", "트랙"])
+                    return .init(currentDocumentPath: { nil }, now: Date.init, readPlistData: { _ in nil },
+                        mtime: { _ in
+                            hook.consume()
+                            Self.installLocaleMenus(view, titles: ["File", "Edit", "Track"])
+                            return nil
+                        }, sleep: { _ in })
+                })
+                let input = try await observedSortInput(fixture)
+                #expect(hook.count == 1)
+                let retained = try #require(await fixture.cache.retainedInspection(id: input.snapshot))
+                let fresh = try #require(retained.capture.freshPopulation)
+                #expect(fresh.stable)
+                #expect(fresh.presentationObservation?.uiLocale == nil)
+                let binding = try #require(fresh.presentationBinding)
+                #expect(binding.uiLocale == nil)
+                let plan = try await fixture.call("plan_session_repair", params: ["snapshot_id": .string(input.snapshot),
+                    "policy": sortPolicy(project: input.project, presentation: .object(["sort": .object([
+                        "criterion": .string("track_name"), "expected_order": .array(input.order.reversed().map(Value.string)),
+                        "inverse_criterion": .string("creation_date")])]))])
+                let blocked = try #require(((plan["steps"] as? [[String: Any]])?.first)?["blocked_reasons"] as? [String])
+                #expect(blocked.contains("sort_locale_measurement_unavailable"))
+                #expect(fixture.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func temporaryNavigationLocaleDriftDoesNotInvalidateApprovedMixerCustody(drift: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let fixture = try Fixture(showing: false)
+                Self.installLocaleMenus(fixture.view, titles: ["파일", "편집", "트랙"])
+                let hook = LocaleChange()
+                fixture.view.afterVisibilityChange = { [view = fixture.view] in
+                    if view.showing, drift {
+                        hook.consume()
+                        Self.installLocaleMenus(view, titles: ["File", "Edit", "Track"])
+                    }
+                }
+                let report = try await fixture.call("inspect_session", params: ["domains": .array([.string("strips")]),
+                    "allow_ui_navigation": .bool(true)])
+                #expect(hook.count == (drift ? 1 : 0))
+                let observed = try #require(report["presentation_observation"] as? [String: Any])
+                if drift { #expect(observed["ui_locale"] is NSNull) }
+                else { #expect(observed["ui_locale"] as? String == "ko-KR") }
+                let visible = try #require(observed["mixer_visible"] as? Bool)
+                let playing = try #require(observed["is_playing"] as? Bool)
+                let recording = try #require(observed["is_recording"] as? Bool)
+                #expect(!visible)
+                #expect(!playing)
+                #expect(!recording)
+                #expect(!fixture.view.showing)
+                #expect(fixture.view.events.filter { $0 == "show_mixer" || $0 == "hide_mixer" } == ["show_mixer", "hide_mixer"])
+                #expect((report["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+                let snapshot = try #require(report["snapshot_id"] as? String)
+                let retained = try #require(await fixture.cache.retainedInspection(id: snapshot))
+                let binding = try #require(retained.capture.freshPopulation?.presentationBinding)
+                #expect(binding.uiLocale == "ko-KR")
+                let project = try #require((report["project"] as? [String: Any])?["project_ref"] as? String)
+                let plan = try await fixture.call("plan_session_repair", params: ["snapshot_id": .string(snapshot),
+                    "policy": sortPolicy(project: project, presentation: .object(["mixer_visible": .bool(true)]))])
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                fixture.view.afterVisibilityChange = nil
+                await fixture.router.register(fixture.view.channel())
+                let result = try await fixture.call("apply_session_repair", params: fixture.applyParameters(plan, key: "locale-drift-view"))
+                #expect(result["saga_state"] as? String == "completed")
+                #expect(fixture.view.showing)
+                #expect(fixture.view.events.filter { $0 == "show_mixer" || $0 == "hide_mixer" } == ["show_mixer", "hide_mixer", "show_mixer"])
+            }
         }
     }
 

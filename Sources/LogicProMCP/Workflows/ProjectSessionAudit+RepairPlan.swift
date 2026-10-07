@@ -98,7 +98,7 @@ extension ProjectSessionAudit {
         // receiving-aux branches are reachable only through a graph that carries one.
         let graph = graphOverride ?? SessionPopulationObservation.routingGraph(capture: capture)
         let assessment = assessIntent(policy: policy, capture: capture, graph: graph)
-        let viewOnly = policy.mixerVisible != nil && policy.targets.isEmpty && policy.roles.isEmpty
+        let viewOnly = policy.mixerVisible != nil && policy.trackSort == nil && policy.targets.isEmpty && policy.roles.isEmpty
             && policy.outputs.isEmpty && policy.receivers.isEmpty && names.isEmpty
         var reasons = Set<String>()
         if !snapshotCurrent { reasons.insert("snapshot_changed") }
@@ -286,6 +286,49 @@ extension ProjectSessionAudit {
             "target": .string($0.target), "name": .string($0.name)
         ]) }
         steps = auxSteps + steps
+        if let sort = policy.trackSort {
+            let tracks = SessionPopulationObservation.build(request: request, capture: capture).tracks
+            let originalOrder = tracks.rows.compactMap(\.trackRef)
+            // A readable rail is not proof of the whole project. Preserve that scope in the
+            // proposed inverse; no live locale/footprint/adapter is invented by this draft.
+            var blocked: Set<String> = ["sort_coupled_footprint_unavailable", "sort_preservation_adapter_unavailable"]
+            let locale = capture.freshPopulation?.presentationObservation?.uiLocale
+            if locale != capture.freshPopulation?.presentationBinding?.uiLocale
+                || sort.criterion.measuredLabel(for: locale) == nil
+                || sort.inverseCriterion.measuredLabel(for: locale) == nil {
+                blocked.insert("sort_locale_measurement_unavailable")
+            }
+            if tracks.coverage != .complete { blocked.insert("track_population_incomplete") }
+            if originalOrder.count != tracks.rows.count || Set(originalOrder).count != originalOrder.count {
+                blocked.insert("sort_track_references_unavailable")
+            }
+            if originalOrder.count != sort.expectedOrder.count || Set(originalOrder) != Set(sort.expectedOrder) {
+                blocked.insert("sort_expected_order_not_capture_permutation")
+            }
+            if case .issued(let reference)? = capture.projectIssuance {
+                if policy.projectRef != reference { blocked.insert("approved_project_reference_required") }
+            } else { blocked.insert("approved_project_reference_required") }
+            let observation = capture.freshPopulation?.presentationObservation
+            if observation?.isPlaying == nil || observation?.isRecording == nil {
+                blocked.insert("transport_state_unobserved")
+            } else if observation?.isPlaying != false || observation?.isRecording != false {
+                blocked.insert("transport_not_stopped")
+            }
+            reasons.formUnion(blocked)
+            steps.append(.object([
+                "id": .string("track_sort"), "kind": .string("track_sort"),
+                "target_ref": policy.projectRef.map { .string($0.rawValue) } ?? .null,
+                "before": .object(["order": .array(originalOrder.map(Value.string)),
+                    "coverage": .string(tracks.coverage.rawValue)]),
+                "after": .object(["criterion": .string(sort.criterion.rawValue),
+                    "order": .array(sort.expectedOrder.map(Value.string))]),
+                "inverse": .object(["criterion": .string(sort.inverseCriterion.rawValue),
+                    "expected_order": .array(originalOrder.map(Value.string))]),
+                "dependencies": .array([]), "blocked_reasons": .array(blocked.sorted().map(Value.string)),
+                "required_invariants": .array(["complete_issued_track_order", "observed_stopped_non_recording",
+                    "measured_sort_menu", "conditional_inverse_order", "coupled_sort_preservation"].map(Value.string))
+            ]))
+        }
         if let desired = policy.mixerVisible {
             var blocked = Set<String>()
             if !FeatureFlags.adr004MutationSaga { blocked.insert("mutation_saga_unavailable") }
