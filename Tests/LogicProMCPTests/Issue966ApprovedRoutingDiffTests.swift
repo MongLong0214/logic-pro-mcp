@@ -34,10 +34,10 @@ struct Issue966ApprovedRoutingDiffTests {
         )
     }
 
-    private func nodes() -> [RoutingNode] {
+    private func nodes(output: RoutingOutputClassification = .bus) -> [RoutingNode] {
         [
             RoutingNode(id: "source_opaque", kind: .track, displayName: "Same", busNumber: nil,
-                        targetRef: source, outputClassification: .bus),
+                        targetRef: source, outputClassification: output),
             RoutingNode(id: "other_opaque", kind: .track, displayName: "Same", busNumber: nil,
                         targetRef: other, outputClassification: .bus),
             RoutingNode(id: "destination_opaque", kind: .bus, displayName: "Same", busNumber: 3, targetRef: nil),
@@ -74,12 +74,14 @@ struct Issue966ApprovedRoutingDiffTests {
                             snapshotId: snapshot, coverage: coverage)
     }
 
-    private func plan(_ graph: RoutingGraph, bus: Int = 3, snapshotCurrent: Bool = true,
+    private func plan(_ graph: RoutingGraph, bus: Int = 3, noOutput: Bool = false, snapshotCurrent: Bool = true,
                       request: Observation.Request = Observation.Request(domains: [.tracks, .strips, .routing])) throws -> [String: Value] {
         let raw: [String: Value] = [
             "schema": .string(Audit.intentPolicySchema), "project_ref": .string(project.rawValue),
             "targets": .array([.object(["handle": .string("approved"), "track_ref": .string(source.rawValue)])]),
-            "outputs": .array([.object(["target": .string("approved"), "bus": .int(bus)])]),
+            "outputs": .array([.object(noOutput
+                ? ["target": .string("approved"), "output": .string("no_output")]
+                : ["target": .string("approved"), "bus": .int(bus)])]),
         ]
         guard case .accepted(let policy) = Audit.parseIntentPolicy(raw) else {
             Issue.record("valid explicit policy rejected")
@@ -100,6 +102,140 @@ struct Issue966ApprovedRoutingDiffTests {
 
     private func decodeEdge(_ value: Value) throws -> RoutingEdge {
         try JSONDecoder().decode(RoutingEdge.self, from: Data(encodeJSONStrict(value, compact: true).utf8))
+    }
+
+    @Test func approvedBusFourToNoOutputHasOneMinimalProposedRemoval() throws {
+        let body = try plan(graph(), noOutput: true)
+        let delta = try proposal(body)
+        #expect(delta["status"]?.stringValue == "proposed")
+        #expect(delta["basis"]?.stringValue == "approved_policy")
+        #expect(delta["observation"]?.stringValue == "proposed_not_observed")
+        let changes = try #require(delta["output_changes"]?.arrayValue)
+        #expect(changes.count == 1)
+        let change = try #require(changes.first?.objectValue)
+        #expect(try decodeEdge(#require(change["before"]))
+                == edge(.mainOutput, "source_opaque", "previous_opaque"))
+        #expect(change["after"] == .null)
+        #expect(body["steps"] == body["preview"])
+        let step = try #require(body["steps"]?.arrayValue?.first?.objectValue)
+        #expect(step["target_ref"]?.stringValue == source.rawValue)
+        #expect(step["after"]?.objectValue?["output"]?.stringValue == "no_output")
+        let blocked = try #require(step["blocked_reasons"]?.arrayValue)
+        #expect(blocked.contains(.string("exact_target_routing_adapter_unavailable")))
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+    }
+
+    @Test func alreadyNoOutputRemainsUnchangedWithoutAProposedRemoval() throws {
+        let assignments = edges().filter { $0.kind != .mainOutput || $0.source != "source_opaque" }
+        let body = try plan(graph(nodes: nodes(output: .noOutput), edges: assignments), noOutput: true)
+        #expect(body["steps"]?.arrayValue == [])
+        #expect(body["preview"]?.arrayValue == [])
+        #expect(body["unchanged_tasks"]?.arrayValue == [.string("main_output.target.approved")])
+        #expect(body["new_object_inventory"]?.arrayValue == [])
+    }
+
+    @Test func noOutputRemovalPreservesUnrelatedOutputSendAndReceiverFanout() throws {
+        let before = graph()
+        let delta = try proposal(plan(before, noOutput: true))
+        for field in ["added_sends", "removed_sends", "changed_sends", "input_changes"] {
+            #expect(delta[field]?.arrayValue == [])
+        }
+        let changes = try #require(delta["output_changes"]?.arrayValue)
+        #expect(changes.count == 1)
+        let change = try #require(changes.first?.objectValue)
+        let removed = try decodeEdge(#require(change["before"]))
+        #expect(change["after"] == .null)
+        let proposedEdges = before.edges.filter { $0 != removed }
+        #expect(proposedEdges.filter { $0.kind == .mainOutput }
+                == [edge(.mainOutput, "other_opaque", "previous_opaque")])
+        #expect(proposedEdges.filter { $0.kind == .inputAssignment }
+                == before.edges.filter { $0.kind == .inputAssignment })
+        #expect(proposedEdges.filter { $0.kind == .send } == before.edges.filter { $0.kind == .send })
+    }
+
+    @Test(arguments: ["missing_source", "duplicate_source_ref", "duplicate_source_id", "missing_output",
+                      "duplicate_output", "duplicate_unrelated_output", "duplicate_send", "missing_before_bus",
+                      "aux_before_bus", "contradictory_source_classification"])
+    func noOutputDoesNotBypassAssignmentOrClassificationGuards(_ fault: String) throws {
+        var candidates = nodes(output: fault == "contradictory_source_classification" ? .physicalOutput : .bus)
+        var assignments = edges()
+        switch fault {
+        case "missing_source": candidates.removeAll { $0.targetRef == source }
+        case "duplicate_source_ref":
+            candidates.append(RoutingNode(id: "source_again", kind: .track, displayName: "Same", busNumber: nil,
+                                          targetRef: source, outputClassification: .bus))
+        case "duplicate_source_id":
+            candidates.append(RoutingNode(id: "source_opaque", kind: .track, displayName: "Same", busNumber: nil,
+                                          targetRef: other, outputClassification: .bus))
+        case "missing_output": assignments.removeAll { $0.kind == .mainOutput && $0.source == "source_opaque" }
+        case "duplicate_output": assignments.append(edge(.mainOutput, "source_opaque", "destination_opaque"))
+        case "duplicate_unrelated_output": assignments.append(edge(.mainOutput, "other_opaque", "destination_opaque"))
+        case "duplicate_send": assignments.append(try #require(assignments.last))
+        case "missing_before_bus": candidates.removeAll { $0.id == "previous_opaque" }
+        case "aux_before_bus":
+            candidates.removeAll { $0.id == "previous_opaque" }
+            candidates.append(RoutingNode(id: "previous_opaque", kind: .aux, displayName: "Bus 4",
+                                          busNumber: 4, targetRef: nil))
+        default: break
+        }
+        let body = try plan(graph(nodes: candidates, edges: assignments), noOutput: true)
+        let delta = try proposal(body)
+        #expect(delta["status"]?.stringValue == "unverified")
+        #expect(delta["output_changes"] == nil)
+        let reasons = try #require(delta["reasons"]?.arrayValue)
+        #expect(!reasons.isEmpty)
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+    }
+
+    @Test(arguments: ["snapshot", "project", "epoch", "unrequested", "population", "association", "outputs", "inputs", "sends"])
+    func noOutputRequiresFreshCompleteAffectedObservations(_ fault: String) throws {
+        let partial = RoutingDomainCoverage(state: .partial, reasons: ["not completely observed"])
+        let coverage = RoutingCoverage(population: fault == "population" ? partial : complete,
+                                       stripTrackAssociation: fault == "association" ? partial : complete,
+                                       mainOutput: fault == "outputs" ? partial : complete,
+                                       physicalOutput: complete,
+                                       busToAuxInput: fault == "inputs" ? partial : complete,
+                                       sends: fault == "sends" ? partial : complete)
+        let candidate = graph(coverage: coverage, epoch: fault == "epoch" ? 4 : 3,
+                              project: fault == "project" ? TargetReference(rawValue: "prj_foreign") : project)
+        let body = try plan(candidate, noOutput: true, snapshotCurrent: fault != "snapshot",
+                            request: Observation.Request(domains: fault == "unrequested" ? [.tracks] : [.tracks, .strips, .routing]))
+        let delta = try proposal(body)
+        #expect(delta["status"]?.stringValue == "unverified")
+        #expect(delta["output_changes"] == nil)
+        let reasons = try #require(delta["reasons"]?.arrayValue)
+        #expect(!reasons.isEmpty)
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+    }
+
+    @Test(arguments: [false, true])
+    func contradictoryPhysicalClassificationCannotSupplyABusBeforeEdge(noOutput: Bool) throws {
+        let body = try plan(graph(nodes: nodes(output: .physicalOutput)), noOutput: noOutput)
+        let delta = try proposal(body)
+        #expect(delta["status"]?.stringValue == "unverified")
+        #expect(delta["output_changes"] == nil)
+        let reasons = try #require(delta["reasons"]?.arrayValue)
+        #expect(reasons.contains(.string("proposed_before_output_not_bus")))
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+    }
+
+    @Test func noOutputPreviewAndDigestBindTheExactRemoval() throws {
+        let original = try plan(graph(), noOutput: true)
+        var repeated = try plan(graph(), noOutput: true)
+        let busAssignment = try plan(graph())
+        #expect(original["digest"] == repeated["digest"])
+        #expect(original["digest"] != busAssignment["digest"])
+        #expect(original["steps"] == original["preview"])
+        #expect(original["steps"] != busAssignment["steps"])
+        let digest = try #require(repeated.removeValue(forKey: "digest")?.stringValue)
+        repeated.removeValue(forKey: "plan_id")
+        let bytes = try encodeJSONStrict(Value.object(repeated), compact: true)
+        let calculated = SHA256.hash(data: Data(bytes.utf8)).map { String(format: "%02x", $0) }.joined()
+        #expect(digest == calculated)
     }
 
     @Test func wrongBusFourToThreeHasOneMinimalProposedReplacementAndNoObservationClaim() throws {
