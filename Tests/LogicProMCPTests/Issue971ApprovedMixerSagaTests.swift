@@ -633,6 +633,78 @@ struct Issue971ApprovedMixerSagaTests {
     }
 
     @Test
+    func registeredMatchingNamesAndMixerVisibilityExecuteAllApprovedGoals() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                await f.router.register(f.view.channel())
+                let names = ["Bass", "  e\u{301}, \"Lead\"  "]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])])
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                let planned = try #require(plan["steps"] as? [[String: Any]])
+                #expect(planned.count == 1)
+                #expect(planned.first?["kind"] as? String == "mixer_visibility")
+                #expect((plan["approved_names"] as? [[String: Any]])?.count == names.count)
+                #expect((plan["unchanged_tasks"] as? [String])?.count == names.count)
+                #expect(f.view.events.isEmpty)
+                let reads = headers.map { _ in DecidingMixerReplacement() }
+                f.view.attributeReadObserver = { element, attribute in
+                    if attribute == kAXTitleAttribute as String,
+                       let index = headers.firstIndex(where: { CFEqual($0, element) }) {
+                        reads[index].originalDecidingReads += 1
+                    }
+                }
+                let params = try f.applyParameters(plan, key: "matching-names-and-view")
+                let outcome = try await f.call("apply_session_repair", params: params)
+                #expect(outcome["saga_state"] as? String == "completed")
+                let verified = outcome["verified"] as? Bool ?? false
+                #expect(verified)
+                #expect(f.view.events == ["open_view", "show_mixer"])
+                #expect(f.view.showing)
+                for counter in reads { #expect(counter.originalDecidingReads > 0) }
+                let actions = f.view.events
+                let replay = try await f.call("apply_session_repair", params: params)
+                #expect(replay["saga_state"] as? String == "completed")
+                let duplicate = replay["duplicate"] as? Bool ?? false
+                #expect(duplicate)
+                #expect(f.view.events == actions)
+                guard case .completed(let stored)? = await f.journal.record(for: "matching-names-and-view") else {
+                    Issue.record("the composed approval must use the same existing journal"); return
+                }
+                let storedBody = try #require(sharedJSONObject(stored.body))
+                #expect(storedBody["saga_state"] as? String == "completed")
+                let evidence = try #require(outcome["goal_evidence"] as? [[String: Any]])
+                #expect(evidence.count == names.count)
+                for (index, item) in evidence.enumerated() {
+                    let before = try #require(item["before"] as? [String: Any])
+                    let read = try #require(item["read"] as? [String: Any])
+                    for sample in [before, read] {
+                        #expect(sample["read_source"] as? String == SagaReadSource.axTrackName.rawValue)
+                        #expect(sample["provenance"] as? String == SagaProvenance.liveIndependent.rawValue)
+                        let observed = try #require(sample["observed"] as? String)
+                        #expect(observed.utf8.elementsEqual(names[index].utf8))
+                    }
+                }
+                #expect(HonestContract.jsonString(["goal_evidence": storedBody["goal_evidence"] as Any])
+                    == HonestContract.jsonString(["goal_evidence": evidence]))
+                let steps = try #require(outcome["steps"] as? [[String: Any]])
+                let viewEvidence = try #require(steps.first?["evidence"] as? [String: Any])
+                let before = try #require(viewEvidence["before_state"] as? [String: Any])
+                let verification = try #require(viewEvidence["verification"] as? [String: Any])
+                let readback = try #require(verification["readback"] as? [String: Any])
+                let wasVisible = try #require(before["observed"] as? Bool)
+                let isVisible = try #require(readback["observed"] as? Bool)
+                #expect(!wasVisible)
+                #expect(isVisible)
+                #expect(readback["read_source"] as? String == SagaReadSource.axProjectMixerVisibility.rawValue)
+            }
+        }
+    }
+
+    @Test
     func aMixerTaskCannotSilentlyDiscardTheSamePlansApprovedNames() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             try await FeatureFlags.withAdr004MutationSagaForTests(true) {
@@ -654,6 +726,303 @@ struct Issue971ApprovedMixerSagaTests {
                 let attempted = try #require(outcome["write_attempted"] as? Bool)
                 #expect(!attempted)
                 #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func composedMatchingNamesKeepBothViewDirectionsAndNoOpReceipts(initial: Bool, desired: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: initial)
+                await f.router.register(f.view.channel())
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(desired)])])
+                let beforeReads = headers.map { _ in DecidingMixerReplacement() }
+                let afterReads = headers.map { _ in DecidingMixerReplacement() }
+                f.view.attributeReadObserver = { element, attribute in
+                    if attribute == kAXTitleAttribute as String,
+                       let index = headers.firstIndex(where: { CFEqual($0, element) }) {
+                        let counters = f.view.events.isEmpty ? beforeReads : afterReads
+                        counters[index].originalDecidingReads += 1
+                    }
+                }
+                let params = try f.applyParameters(plan, key: "composed-directions")
+                let outcome = try await f.call("apply_session_repair", params: params)
+                #expect(outcome["saga_state"] as? String == "completed")
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(verified)
+                for counter in beforeReads { #expect(counter.originalDecidingReads > 0) }
+                if initial != desired {
+                    for counter in afterReads { #expect(counter.originalDecidingReads > 0) }
+                    #expect(f.view.events == ["open_view", desired ? "show_mixer" : "hide_mixer"])
+                } else { #expect(f.view.events.isEmpty) }
+                let matches = f.view.showing == desired
+                #expect(matches)
+                let steps = try #require(outcome["steps"] as? [[String: Any]])
+                let result = try #require(steps.first?["result"] as? [String: Any])
+                #expect(result["state"] as? String == "A")
+                let crossed = try #require(result["write_boundary_crossed"] as? Bool)
+                let matchesBoundary = crossed == (initial != desired)
+                #expect(matchesBoundary)
+                let evidence = try #require(outcome["goal_evidence"] as? [[String: Any]])
+                #expect(evidence.count == names.count)
+                for (index, item) in evidence.enumerated() {
+                    for field in ["before", "read"] {
+                        let read = try #require(item[field] as? [String: Any])
+                        let observed = try #require(read["observed"] as? String)
+                        #expect(observed.utf8.elementsEqual(names[index].utf8))
+                    }
+                }
+                let events = f.view.events
+                let replay = try await f.call("apply_session_repair", params: params)
+                #expect(replay["saga_state"] as? String == "completed")
+                #expect(f.view.events == events)
+            }
+        }
+    }
+
+    @Test(arguments: ["after_forward", "during_final_set", "cancel_after_forward", "no_op_goal_loss"])
+    func composedViewNeverOverwritesOrCertifiesAHumanNameEdit(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let noOp = kind == "no_op_goal_loss"
+                let f = try Fixture(showing: noOp)
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let hook = DecidingMixerReplacement()
+                let beforeReads = headers.map { _ in DecidingMixerReplacement() }
+                let afterReads = headers.map { _ in DecidingMixerReplacement() }
+                let channel = AfterVerifiedSetterChannel(base: f.view.channel(), journal: f.journal,
+                    cancel: kind == "cancel_after_forward", afterExecution: {
+                        if !hook.armed {
+                            hook.armed = true
+                            if kind != "during_final_set" {
+                                hook.replaced = true
+                                f.view.builder.setAttribute(headers[1], kAXTitleAttribute as String, "Human edit")
+                            }
+                        }
+                    })
+                await f.router.register(channel)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])])
+                f.view.attributeReadObserver = { element, attribute in
+                    guard attribute == kAXTitleAttribute as String,
+                          let index = headers.firstIndex(where: { CFEqual($0, element) }) else { return }
+                    if !hook.armed {
+                        beforeReads[index].originalDecidingReads += 1
+                        return
+                    }
+                    afterReads[index].originalDecidingReads += 1
+                    if kind == "during_final_set", index == 1, !hook.replaced {
+                        hook.replaced = true
+                        f.view.builder.setAttribute(headers[0], kAXTitleAttribute as String, "Human edit")
+                    }
+                }
+                let params = try f.applyParameters(plan, key: "cancel-approved-view")
+                let outcome = try await f.call("apply_session_repair", params: params)
+                #expect(hook.armed)
+                #expect(hook.replaced)
+                for counter in beforeReads { #expect(counter.originalDecidingReads > 0) }
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                #expect(outcome["state"] as? String == "C")
+                if noOp {
+                    // Existing Saga A/no-op reconciliation verifies an event-free
+                    // inverse, so its truthful terminal is fullyCompensated.
+                    #expect(outcome["saga_state"] as? String == "fullyCompensated")
+                    #expect(f.view.events.isEmpty)
+                    #expect(f.view.showing)
+                } else {
+                    #expect(await channel.verifiedForwards == 1)
+                    #expect(outcome["saga_state"] as? String == "fullyCompensated")
+                    #expect(f.view.events == ["open_view", "show_mixer", "open_view", "hide_mixer"])
+                    #expect(!f.view.showing)
+                }
+                if kind != "cancel_after_forward" {
+                    for counter in afterReads { #expect(counter.originalDecidingReads > 0) }
+                    #expect(outcome["goal_verification_failure"] as? String == "approved_name_or_mixer_goal_unverified")
+                } else { #expect(await channel.cancelResult == .requested) }
+                let editedIndex = kind == "during_final_set" ? 0 : 1
+                #expect(f.view.builder.attributeValue(headers[editedIndex], kAXTitleAttribute as String) as? String == "Human edit")
+                let events = f.view.events
+                let replay = try await f.call("apply_session_repair", params: params)
+                #expect(replay["saga_state"] as? String == outcome["saga_state"] as? String)
+                #expect(f.view.events == events)
+            }
+        }
+    }
+
+    @Test
+    func composedNameEditAtTheMenuLeafDeniesTheForwardWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                await f.router.register(f.view.channel())
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])])
+                let hook = DecidingMixerReplacement()
+                f.view.attributeReadObserver = { element, attribute in
+                    if CFEqual(element, f.view.toggle), attribute == kAXEnabledAttribute as String,
+                       f.view.events == ["open_view"], !hook.replaced {
+                        hook.replaced = true
+                        f.view.builder.setAttribute(headers[1], kAXTitleAttribute as String, "Human edit")
+                    }
+                }
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "composed-leaf-loss"))
+                #expect(hook.replaced)
+                #expect(f.view.events == ["open_view", "cancel_view"])
+                #expect(!f.view.showing)
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                #expect(outcome["saga_state"] as? String == "partiallyApplied")
+                let steps = try #require(outcome["steps"] as? [[String: Any]])
+                let result = try #require(steps.first?["result"] as? [String: Any])
+                #expect(result["state"] as? String == "B")
+                let attempted = try #require(result["write_boundary_crossed"] as? Bool)
+                #expect(attempted)
+            }
+        }
+    }
+
+    @Test(arguments: ["changed_second", "raw_bytes", "replacement", "unread", "project"])
+    func composedPreflightRequiresEveryOriginalNameAndPhysicalTarget(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                await f.router.register(f.view.channel())
+                let names = ["e\u{301}", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])])
+                switch kind {
+                case "changed_second": f.view.builder.setAttribute(headers[1], kAXTitleAttribute as String, "Human edit")
+                case "raw_bytes": f.view.builder.setAttribute(headers[0], kAXTitleAttribute as String, "é")
+                case "replacement":
+                    let replacement = f.view.builder.element(971_950)
+                    f.view.builder.setRole(replacement, kAXLayoutItemRole as String)
+                    f.view.builder.setAttribute(replacement, kAXTitleAttribute as String, names[1])
+                    f.view.builder.setAttribute(replacement, kAXSelectedAttribute as String, false)
+                    f.view.builder.setChildren(replacement, [])
+                    f.view.builder.setChildren(f.view.rail, [headers[0], replacement])
+                case "unread": f.view.failedMetadata = (headers[1], kAXTitleAttribute as String)
+                case "project": f.view.builder.setAttribute(f.view.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                default: Issue.record("unknown composed preflight control"); return
+                }
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "composed-preflight"))
+                #expect(outcome["state"] as? String == "C")
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                let attempted = try #require(outcome["write_attempted"] as? Bool)
+                #expect(!attempted)
+                #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test
+    func composedFinalNameReadUsesTheSharedDeadlineAndCannotActLate() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let hook = DecidingMixerReplacement()
+                let channel = AfterVerifiedSetterChannel(base: f.view.channel(), journal: f.journal,
+                    cancel: false, afterVerified: { hook.armed = true })
+                await f.router.register(channel)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])])
+                let blocked = BlockedRead()
+                defer { blocked.unblock() }
+                f.view.attributeReadObserver = { element, attribute in
+                    if hook.armed, CFEqual(element, headers[0]), attribute == kAXTitleAttribute as String {
+                        hook.replaced = true
+                        blocked.blockOnce()
+                    }
+                }
+                let params = try f.applyParameters(plan, key: "composed-wedged-final")
+                let outcome = try await f.call("apply_session_repair", params: params,
+                    lifecycleDeadline: .now.advanced(by: .seconds(1)))
+                #expect(hook.armed)
+                #expect(hook.replaced)
+                #expect(blocked.entered)
+                #expect(await channel.verifiedForwards == 1)
+                #expect(outcome["error"] as? String == HonestContract.FailureError.operationTimeout.rawValue)
+                #expect(f.view.events == ["open_view", "show_mixer"])
+                let events = f.view.events
+                let successor = try #require(f.gate.tryAcquire(operation: "composed-successor", now: .distantFuture))
+                defer { f.gate.release(successor) }
+                blocked.unblock()
+                let replay = try await f.call("apply_session_repair", params: params)
+                #expect(replay["error"] as? String == outcome["error"] as? String)
+                #expect(f.gate.stillOwns(successor))
+                #expect(f.view.events == events)
+                guard case .completed(let stored)? = await f.journal.record(for: "composed-wedged-final") else {
+                    Issue.record("the shared deadline must remain the journal winner"); return
+                }
+                #expect(sharedJSONObject(stored.body)?["error"] as? String == outcome["error"] as? String)
+            }
+        }
+    }
+
+    @Test(arguments: ["declined_leaf", "lost_readback"])
+    func composedViewRefusalCannotCertifyTheWholeApprovedGoal(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let hook = DecidingMixerReplacement()
+                let channel = AfterVerifiedSetterChannel(base: f.view.channel(), journal: f.journal,
+                    cancel: false, afterVerified: {
+                        if kind == "lost_readback" {
+                            hook.replaced = true
+                            f.view.unknownWindowChildren = true
+                        }
+                    })
+                await f.router.register(channel)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])])
+                if kind == "declined_leaf" {
+                    f.view.leafAcknowledged = false
+                    f.view.leafChangesVisibility = false
+                    f.view.attributeReadObserver = { element, attribute in
+                        if CFEqual(element, f.view.toggle), attribute == kAXTitleAttribute as String,
+                           f.view.events == ["open_view"],
+                           f.view.builder.attributeValue(element, attribute) as? String == AXLocalePolicy.showMixerMenuItem.canonical {
+                            hook.armed = true
+                        }
+                    }
+                }
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "composed-view-refused"))
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                if kind == "declined_leaf" {
+                    #expect(hook.armed)
+                    // This fixture labels a leaf by its resulting visibility.
+                    // The declined Show still leaves false, hence "hide_mixer";
+                    // exactly one leaf and no inverse were dispatched.
+                    #expect(f.view.events == ["open_view", "hide_mixer"])
+                    #expect(await channel.verifiedForwards == 0)
+                    #expect(outcome["saga_state"] as? String == "partiallyApplied")
+                    #expect(outcome["state"] as? String == "C")
+                    #expect(!f.view.showing)
+                } else {
+                    #expect(f.view.events == ["open_view", "show_mixer"])
+                    #expect(hook.replaced)
+                    #expect(await channel.verifiedForwards == 1)
+                    #expect(outcome["saga_state"] as? String == "rollbackUncertain")
+                    #expect(outcome["state"] as? String == "B")
+                    #expect(f.view.showing)
+                }
+                for (index, header) in headers.enumerated() {
+                    #expect(f.view.builder.attributeValue(header, kAXTitleAttribute as String) as? String == names[index])
+                }
             }
         }
     }
