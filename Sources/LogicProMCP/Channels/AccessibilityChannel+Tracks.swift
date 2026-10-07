@@ -51,7 +51,9 @@ extension AccessibilityChannel {
         for (index, header) in headers.enumerated() {
             if stop() { return (nil, true) }
             guard var state = AXValueExtractors.extractTrackState(
-                from: header, index: index, runtime: runtime.ax, stoppingBeforeHelp: stop
+                from: header, index: index, runtime: runtime.ax,
+                observingStackChildren: { exposure?.observeDisclosureChildren(header: header, children: $0) },
+                stoppingBeforeHelp: stop
             ) else { return (nil, true) }
             exposure?.observeStackState(header: header, isStackHeader: state.isStackHeader, collapsed: state.stackCollapsed)
             if let window, let document, state.liveIdentityBacked, state.placeholder != true {

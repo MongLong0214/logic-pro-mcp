@@ -183,6 +183,10 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, nested: true, knownInnerReopen: true)
     }
 
+    @Test func registeredNestedStackSampledReplacementCannotRestoreItsOldDisclosureInverse() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true, knownInnerReplacement: true)
+    }
+
     @Test(arguments: ["inner_closed", "replacement"])
     func registeredNestedStackCorroboratesTheRailAfterItsLastGrandchildRead(nestedFault: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, nested: true, nestedFault: nestedFault)
@@ -384,7 +388,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                               verifyReferences: Bool = false, mouseCase: String? = nil,
                               releaseCase: String? = nil, nested: Bool = false,
                               nestedRelease: String? = nil, nestedFault: String? = nil,
-                              downFocusRead: String? = nil, knownInnerReopen: Bool = false) async throws {
+                              downFocusRead: String? = nil, knownInnerReopen: Bool = false,
+                              knownInnerReplacement: Bool = false) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -404,6 +409,9 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
         let collapsed = [headers[0]] + Array(headers[24...])
         let inner = fixture.builder.element(965_220)
+        let substitutedDisclosure = fixture.builder.element(965_223)
+        fixture.builder.setRole(substitutedDisclosure, kAXDisclosureTriangleRole as String)
+        fixture.builder.setAttribute(substitutedDisclosure, kAXValueAttribute as String, 1)
         let grandchildren = nested ? [fixture.builder.element(965_221), fixture.builder.element(965_222)] : []
         let fullyExposed = Array(headers.prefix(2)) + grandchildren + Array(headers.dropFirst(2))
         if nested {
@@ -518,14 +526,16 @@ struct Issue965FreshPopulationAcquisitionTests {
         let cache = StateCache()
         let registry = TargetRegistry()
         let gate = LogicMutationGate()
-        let fileReader: LogicProjectFileReader.Runtime = knownInnerReopen ? .init(
+        let fileReader: LogicProjectFileReader.Runtime = (knownInnerReopen || knownInnerReplacement) ? .init(
             currentDocumentPath: { nil }, now: Date.init, readPlistData: { _ in nil },
             mtime: { _ in
-                guard fixture.reads.recorded.contains("inner_extractor_returned_zero") else { return nil }
+                guard fixture.reads.recorded.contains("inner_extractor_returned_zero")
+                    || fixture.reads.recorded.contains("replacement_disclosure_value_read") else { return nil }
                 fixture.reads.record("closed_population_metadata")
                 if fixture.reads.recorded.filter({ $0 == "closed_population_metadata" }).count == 2 {
                     fixture.reads.record("same_inner_reopened_on_retry")
                     fixture.builder.setAttribute(inner, kAXValueAttribute as String, 1)
+                    fixture.builder.setChildren(headers[1], [inner])
                     fixture.builder.setChildren(fixture.rail, fullyExposed)
                 }
                 return nil
@@ -537,6 +547,17 @@ struct Issue965FreshPopulationAcquisitionTests {
                     if knownInnerReopen, fixture.events.count == 4, CFEqual(element, headers[1]),
                        attribute == kAXHelpAttribute as String {
                         fixture.reads.record("inner_row_help_before_stack_read")
+                    }
+                    if knownInnerReplacement, fixture.events.count == 4, CFEqual(element, headers[1]),
+                       attribute == kAXHelpAttribute as String,
+                       !fixture.reads.recorded.contains("replacement_disclosure_installed") {
+                        fixture.reads.record("replacement_disclosure_installed")
+                        fixture.builder.setChildren(headers[1], [substitutedDisclosure])
+                        fixture.builder.setChildren(fixture.rail, headers)
+                    }
+                    if knownInnerReplacement, CFEqual(element, substitutedDisclosure) {
+                        if attribute == kAXRoleAttribute as String { fixture.reads.record("replacement_disclosure_role_read") }
+                        if attribute == kAXValueAttribute as String { fixture.reads.record("replacement_disclosure_value_read") }
                     }
                     guard let nestedFault, ["inner_closed", "replacement"].contains(nestedFault),
                           fixture.events.count == 4, attribute == kAXTitleAttribute as String,
@@ -569,8 +590,17 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.reads.record("focus_read_missing_after_true_down")
                     return .success(nil)
                 }, observingChildren: { element in
-                    if knownInnerReopen, CFEqual(element, fixture.rail),
-                       fixture.reads.recorded.contains("inner_extractor_returned_zero"),
+                    if knownInnerReplacement, CFEqual(element, headers[1]),
+                       fixture.reads.recorded.contains("replacement_disclosure_installed"),
+                       !fixture.reads.recorded.contains("same_inner_reopened_on_retry") {
+                        let children = fixture.builder.makeAXRuntime().children(headers[1])
+                        if children.count == 1, CFEqual(children[0], substitutedDisclosure), !CFEqual(children[0], inner) {
+                            fixture.reads.record("replacement_disclosure_children_read")
+                        }
+                    }
+                    if (knownInnerReopen || knownInnerReplacement), CFEqual(element, fixture.rail),
+                       (fixture.reads.recorded.contains("inner_extractor_returned_zero")
+                        || fixture.reads.recorded.contains("replacement_disclosure_value_read")),
                        !fixture.reads.recorded.contains("same_inner_reopened_on_retry"),
                        fixture.builder.makeAXRuntime().children(fixture.rail).count == 42 {
                         fixture.reads.record("closed_rail_actually_read")
@@ -598,9 +628,17 @@ struct Issue965FreshPopulationAcquisitionTests {
                 }
                 return await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
-        if knownInnerReopen {
-            #expect(fixture.reads.recorded.filter { $0 == "inner_extractor_returned_zero" }.count == 1)
-            #expect(fixture.reads.recorded.contains("inner_row_help_before_stack_read"))
+        if knownInnerReopen || knownInnerReplacement {
+            if knownInnerReopen {
+                #expect(fixture.reads.recorded.filter { $0 == "inner_extractor_returned_zero" }.count == 1)
+                #expect(fixture.reads.recorded.contains("inner_row_help_before_stack_read"))
+            } else {
+                #expect(!CFEqual(substitutedDisclosure, inner))
+                #expect(fixture.reads.recorded.filter { $0 == "replacement_disclosure_installed" }.count == 1)
+                #expect(fixture.reads.recorded.contains("replacement_disclosure_children_read"))
+                #expect(fixture.reads.recorded.contains("replacement_disclosure_role_read"))
+                #expect(fixture.reads.recorded.contains("replacement_disclosure_value_read"))
+            }
             #expect(fixture.reads.recorded.contains("closed_rail_actually_read"))
             #expect(fixture.reads.recorded.filter { $0 == "closed_population_metadata" }.count >= 2)
             #expect(fixture.reads.recorded.filter { $0 == "same_inner_reopened_on_retry" }.count == 1)
