@@ -505,6 +505,113 @@ struct Issue291PhysicalStripReferenceTests {
         }
     }
 
+    private final class RetryInputTrace: @unchecked Sendable {
+        private let lock = NSLock()
+        private var events: [String] = []
+        private var unreadArmed = false
+        func record(_ event: String) -> Int {
+            lock.withLock { events.append(event); return events.filter { $0 == event }.count }
+        }
+        func count(_ event: String) -> Int { lock.withLock { events.filter { $0 == event }.count } }
+        func armUnread() { lock.withLock { unreadArmed = true } }
+        func consumeUnread() -> Bool {
+            lock.withLock { if !unreadArmed { return false }; unreadArmed = false; return true }
+        }
+    }
+
+    @Test(arguments: ["title_retry", "unread_population_retry"])
+    func earlierInputSampleCannotBeForgottenAcrossPopulationRetries(gap: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture(duplicateNames: true)
+            // The existing legacy-ID shape gives this fixture a decisive Mixer lookup, so
+            // unread_population_retry fails the population enumeration, not an unrelated walk.
+            fixture.b.setRole(fixture.mixer, kAXGroupRole as String)
+            fixture.b.setAttribute(fixture.mixer, kAXIdentifierAttribute as String, "Mixer")
+            let originalChildren = fixture.b.makeAXRuntime().children(fixture.strips[0])
+            let old = addInput(fixture, strip: fixture.strips[0], id: 2_911_600)
+            let replacement = fixture.b.element(2_911_601)
+            fixture.b.setButton(replacement, description: "Bus 1",
+                help: "Input slot. Choose the channel strip input source.", x: 0, y: 0, width: 1, height: 1)
+            fixture.b.setChildren(replacement, [])
+            _ = addInput(fixture, strip: fixture.strips[1], id: 2_911_602, source: "Input 3")
+            let trace = RetryInputTrace(); let metadataGap = Once()
+            fixture.onAttributeRead = { element, attribute in
+                guard attribute == kAXDescriptionAttribute as String else { return }
+                if CFEqual(element, old) {
+                    let count = trace.record("old_deciding_read")
+                    if gap == "title_retry", count == 2 {
+                        #expect(trace.count("metadata_gap") == 1)
+                        _ = trace.record("replacement")
+                        // The current walk retained C1 and still reads its unchanged value;
+                        // the next actual sample traverses the newly installed C2 instead.
+                        fixture.b.setChildren(fixture.strips[0], originalChildren + [replacement])
+                    }
+                }
+                if CFEqual(element, replacement) { _ = trace.record("replacement_deciding_read") }
+            }
+            fixture.childrenReadResult = { element in
+                guard CFEqual(element, fixture.mixer), trace.consumeUnread() else { return nil }
+                _ = trace.record("population_unread")
+                #expect(trace.count("old_deciding_read") == 1)
+                _ = trace.record("replacement")
+                fixture.b.setChildren(fixture.strips[0], originalChildren + [replacement])
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+            defer { fixture.onAttributeRead = nil; fixture.childrenReadResult = nil }
+            let fileReader = LogicProjectFileReader.Runtime(currentDocumentPath: { nil }, now: Date.init,
+                readPlistData: { _ in nil }, mtime: { _ in
+                    if metadataGap.take() {
+                        _ = trace.record("metadata_gap")
+                        #expect(trace.count("old_deciding_read") == 1)
+                        if gap == "title_retry" {
+                            fixture.b.setAttribute(fixture.window, kAXTitleAttribute as String, "Session - Tracks (retry)")
+                        } else { trace.armUnread() }
+                    }
+                    return nil
+                }, sleep: { _ in })
+            let cache = StateCache(); let registry = TargetRegistry(); let router = ChannelRouter()
+            let channel = fixture.channel(); await router.register(channel)
+            let poller = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, dialogPresent: { false }, blockingDialogInfo: { nil },
+                               projectFileReader: fileReader, keyboardFocus: { .notTextEditing }))
+            let gate = LogicMutationGate()
+            let deps = HandlerDependencies(router: router, cache: cache, targetRegistry: registry, poller: poller,
+                dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+                liveTrackNames: { [:] }, projectFileReader: fileReader)
+            let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+            let params: [String: Value] = ["domains": .array([.string("strips"), .string("routing")]),
+                                         "allow_ui_navigation": .bool(false)]
+            let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+                commandParams: params, mutationGate: gate) { await handler(deps, params) }
+            let isError = result.isError ?? false
+            #expect(!isError)
+            #expect(trace.count("metadata_gap") == 1 && trace.count("replacement") == 1)
+            #expect(trace.count("old_deciding_read") == (gap == "title_retry" ? 2 : 1))
+            #expect(trace.count("replacement_deciding_read") == 2, "the retry must actually sample C2 before and after")
+            #expect(trace.count("population_unread") == (gap == "unread_population_retry" ? 1 : 0))
+            #expect(fixture.b.attributeValue(fixture.window, kAXDocumentAttribute as String) as? String == fixture.bundle.absoluteString)
+            let observedFocus = try #require(fixture.b.makeAXRuntime().attributeValue(fixture.app, kAXFocusedWindowAttribute as String))
+            #expect(CFEqual(observedFocus, fixture.window))
+            let report = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect((report["strips"] as? [String: Any])?["coverage"] as? String == "partial")
+            let inspected = try #require((report["strips"] as? [String: Any])?["rows"] as? [[String: Any]])
+            try #require(inspected.count == 2)
+            #expect(inspected[0]["input_status"] as? String == "unreadable")
+            #expect(inspected[0]["input"] == nil)
+            #expect(inspected[1]["input"] as? String == "Input 3")
+            let nodes = try #require((report["routing"] as? [String: Any])?["nodes"] as? [[String: Any]])
+            let reference = try #require(inspected[0]["mixer_strip_ref"] as? String)
+            #expect(try #require(nodes.first { $0["id"] as? String == reference })["observed_input_slot"] == nil)
+            let resource = try await inputGraph(cache, registry, router)
+            #expect(resource.rows.compactMap { $0["mixer_strip_ref"] as? String } == inspected.compactMap { $0["mixer_strip_ref"] as? String })
+            #expect(try #require(resource.graph.nodes.first { $0.id == reference }).observedInputSlot == nil)
+            let unaffectedRef = try #require(inspected[1]["mixer_strip_ref"] as? String)
+            #expect(resource.graph.nodes.first { $0.id == unaffectedRef }?.observedInputSlot?.source == "Input 3")
+            #expect(resource.graph.edges.isEmpty && resource.graph.coverage.busToAuxInput.state == .notObserved)
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
     private func addInput(_ fixture: Fixture, strip: AXUIElement, id: Int, source: String = "Bus 1") -> AXUIElement {
         let input = fixture.b.element(id)
         fixture.b.setButton(input, description: source,

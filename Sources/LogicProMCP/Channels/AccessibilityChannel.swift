@@ -520,7 +520,19 @@ actor AccessibilityChannel: Channel {
         // A retry may stabilize the population, but must not adopt another input control
         // after this acquisition observed custody loss on the same physical owner.
         var changedInputOwners: [AXMixerStripBinding.Binding] = []
+        var firstInputSlots: [AXMixerInputSlotBinding] = []
         func observeInputContinuity(_ before: [ChannelStripState]?, _ after: [ChannelStripState]?) {
+            // A stable pair can still precede another population retry. Keep its first
+            // native witness; an unread population cannot erase an earlier deciding read.
+            for strip in (before ?? []) + (after ?? []) {
+                guard let slot = strip.inputSlotBinding else { continue }
+                let initial = firstInputSlots.filter { $0.owner.matches(slot.owner) }
+                if initial.isEmpty { firstInputSlots.append(slot) }
+                else if !initial.allSatisfy({ $0.matches(slot) }),
+                        !changedInputOwners.contains(where: { $0.matches(slot.owner) }) {
+                    changedInputOwners.append(slot.owner)
+                }
+            }
             for strip in before ?? [] {
                 guard let owner = strip.physicalBinding else { continue }
                 let matches = (after ?? []).filter { $0.physicalBinding?.matches(owner) == true }
