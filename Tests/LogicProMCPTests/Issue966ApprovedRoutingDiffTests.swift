@@ -76,6 +76,7 @@ struct Issue966ApprovedRoutingDiffTests {
 
     private func plan(_ graph: RoutingGraph, bus: Int = 3, noOutput: Bool = false, sends: [Value]? = nil,
                       options: Audit.PlanningOptions = Audit.PlanningOptions(), snapshotCurrent: Bool = true,
+                      policyExtras: [String: Value] = [:], names: [Audit.ApprovedName] = [],
                       request: Observation.Request = Observation.Request(domains: [.tracks, .strips, .routing])) throws -> [String: Value] {
         var raw: [String: Value] = [
             "schema": .string(Audit.intentPolicySchema), "project_ref": .string(project.rawValue),
@@ -88,11 +89,12 @@ struct Issue966ApprovedRoutingDiffTests {
             raw["outputs"] = .array([])
             raw["sends"] = .array(sends)
         }
+        raw.merge(policyExtras) { _, new in new }
         guard case .accepted(let policy) = Audit.parseIntentPolicy(raw) else {
             Issue.record("valid explicit policy rejected: \(String(describing: Audit.parseIntentPolicy(raw)))")
             throw CocoaError(.coderInvalidValue)
         }
-        let result = try Audit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw), names: [],
+        let result = try Audit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw), names: names,
                                                        capture: capture(), request: request, snapshotCurrent: snapshotCurrent, options: options,
                                                        graphOverride: graph)
         let wire = try JSONDecoder().decode(Value.self, from: Data(result.json.utf8))
@@ -113,6 +115,142 @@ struct Issue966ApprovedRoutingDiffTests {
         ["schema": .string(Audit.intentPolicySchema), "project_ref": .string(project.rawValue),
          "targets": .array([.object(["handle": .string("approved"), "track_ref": .string(source.rawValue)])]),
          "sends": sends]
+    }
+
+    private var finalPresentation: Value {
+        .object(["mixer_visible": .bool(true), "sort": .object([
+            "criterion": .string("track_name"),
+            "expected_order": .array([.string(other.rawValue), .string(source.rawValue)]),
+            "inverse_criterion": .string("creation_date")])])
+    }
+
+    /// Declared dependencies must agree with the canonical destination/repair/presentation order.
+    /// The injected graph provides facts for planning, not runtime adapter or native qualification.
+    @Test(arguments: ["output", "send", "both", "aux_only"])
+    func finalPresentationDependsOnThePrecedingApprovedRepairs(_ kind: String) throws {
+        var extras: [String: Value] = ["presentation": finalPresentation]
+        if kind == "send" || kind == "aux_only" { extras["outputs"] = .array([]) }
+        if kind == "send" || kind == "both" {
+            extras["sends"] = .array([.object([
+                "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])])
+        }
+        if kind == "aux_only" {
+            extras["receivers"] = .array([.object(["bus": .int(3), "aux": .string("new")])])
+        }
+        var options = Audit.PlanningOptions(); options.allowCreateAux = true; options.allowReplaceSend = true
+        let candidate = kind == "aux_only" ? graph(edges: []) : graph()
+        let body = try plan(candidate, options: options, policyExtras: extras,
+            names: [.init(target: "approved", name: "Approved, literal name 🎛️")])
+        let steps = try #require(body["steps"]?.arrayValue).map { try #require($0.objectValue) }
+        let topology = steps.filter { ["create_aux", "main_output", "send_assignment"].contains($0["kind"]?.stringValue ?? "") }
+        let topologyIDs = try topology.map { try #require($0["id"]?.stringValue) }.sorted()
+        #expect(topology.count == (kind == "both" ? 2 : 1))
+        var preceding: [String] = []
+        for step in steps {
+            let id = try #require(step["id"]?.stringValue)
+            let stepKind = try #require(step["kind"]?.stringValue)
+            if ["name", "track_sort", "mixer_visibility"].contains(stepKind) {
+                let dependencies = try #require(step["dependencies"]?.arrayValue).compactMap(\.stringValue)
+                #expect(dependencies == (stepKind == "name" ? topologyIDs : preceding.sorted()))
+                #expect(Set(dependencies).count == dependencies.count)
+                #expect(!dependencies.contains(id))
+            }
+            preceding.append(id)
+        }
+        #expect(steps.suffix(3).compactMap { $0["kind"]?.stringValue } == ["name", "track_sort", "mixer_visibility"])
+        #expect(body["preview"] == body["steps"])
+        let executable = try #require(body["executable"]?.boolValue as Bool?); #expect(!executable)
+        let reasons = try #require(body["reasons"]?.arrayValue)
+        #expect(reasons.contains(.string(kind == "aux_only" ? "aux_creation_adapter_unavailable"
+            : kind == "send" ? "exact_target_send_adapter_unavailable" : "exact_target_routing_adapter_unavailable")))
+        let repeated = try plan(candidate, options: options, policyExtras: extras,
+            names: [.init(target: "approved", name: "Approved, literal name 🎛️")])
+        #expect(repeated["digest"] == body["digest"])
+        #expect(repeated["steps"] == body["steps"])
+    }
+
+    @Test(arguments: ["output", "send", "receiver"])
+    func unchangedTopologyCannotLeaveDanglingPresentationDependencies(_ kind: String) throws {
+        var extras: [String: Value] = ["presentation": .object(["mixer_visible": .bool(true)])]
+        if kind != "output" { extras["outputs"] = .array([]) }
+        if kind == "send" {
+            extras["sends"] = .array([.object([
+                "target": .string("approved"), "physical_slot": .int(5), "bus": .int(4)])])
+        }
+        if kind == "receiver" {
+            extras["receivers"] = .array([.object(["bus": .int(3), "aux": .string("keep")])])
+        }
+        let body = try plan(graph(edges: edges(correct: true)), policyExtras: extras)
+        let steps = try #require(body["steps"]?.arrayValue)
+        #expect(steps.count == 1)
+        let view = try #require(steps.first?.objectValue)
+        #expect(view["kind"]?.stringValue == "mixer_visibility")
+        #expect(view["dependencies"]?.arrayValue == [])
+        #expect(body["new_object_inventory"]?.arrayValue == [])
+        if kind != "receiver" { #expect(body["unchanged_tasks"]?.arrayValue?.count == 1) }
+        #expect(body["preview"] == body["steps"])
+    }
+
+    @Test(arguments: ["sort", "view"])
+    func presentationOnlyDoesNotInventRepairDependencies(_ kind: String) throws {
+        let all = try #require(finalPresentation.objectValue)
+        let presentation: Value = .object(kind == "sort" ? ["sort": try #require(all["sort"])]
+            : ["mixer_visible": .bool(true)])
+        let body = try plan(graph(), policyExtras: ["outputs": .array([]), "presentation": presentation])
+        let steps = try #require(body["steps"]?.arrayValue)
+        #expect(steps.count == 1)
+        let step = try #require(steps.first?.objectValue)
+        #expect(step["kind"]?.stringValue == (kind == "sort" ? "track_sort" : "mixer_visibility"))
+        #expect(step["dependencies"]?.arrayValue == [])
+        #expect(body["preview"] == body["steps"])
+        #expect(body["new_object_inventory"]?.arrayValue == [])
+    }
+
+    @Test func registeredPresentationDependenciesAreRetainedWithoutExecutingABlockedSubset() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Issue971ApprovedMixerSagaTests.Fixture(showing: false)
+                await f.router.register(f.view.channel())
+                _ = f.installNameHeaders(["Piano", "Bass"])
+                let inspection = try await f.call("inspect_session", params: [
+                    "domains": .array([.string("tracks"), .string("strips"), .string("routing")])])
+                let snapshot = try #require(inspection["snapshot_id"] as? String)
+                let projectRef = try #require((inspection["project"] as? [String: Any])?["project_ref"] as? String)
+                let rows = try #require((inspection["tracks"] as? [String: Any])?["rows"] as? [[String: Any]])
+                let refs = try rows.map { try #require($0["track_ref"] as? String) }
+                #expect(refs.count == 2)
+                let policy: Value = .object([
+                    "schema": .string(Audit.intentPolicySchema), "project_ref": .string(projectRef),
+                    "targets": .array(refs.enumerated().map { .object([
+                        "handle": .string("t\($0.offset)"), "track_ref": .string($0.element)]) }),
+                    "outputs": .array([.object(["target": .string("t0"), "bus": .int(3)])]),
+                    "sends": .array([.object(["target": .string("t1"), "physical_slot": .int(5), "bus": .int(3)])]),
+                    "presentation": .object(["mixer_visible": .bool(true), "sort": .object([
+                        "criterion": .string("track_name"), "expected_order": .array(refs.reversed().map(Value.string)),
+                        "inverse_criterion": .string("creation_date")])])])
+                let plan = try await f.call("plan_session_repair", params: ["snapshot_id": .string(snapshot),
+                    "policy": policy, "names": .array([.object(["target": .string("t0"), "name": .string("Keys")])])])
+                let steps = try #require(plan["steps"] as? [[String: Any]])
+                #expect(steps.compactMap { $0["kind"] as? String } == ["main_output", "send_assignment", "name", "track_sort", "mixer_visibility"])
+                for index in 2..<steps.count {
+                    let dependencies = try #require(steps[index]["dependencies"] as? [String])
+                    #expect(dependencies == steps.prefix(index).compactMap { $0["id"] as? String }.sorted())
+                }
+                let preview = try #require(plan["preview"] as? [[String: Any]])
+                #expect(NSDictionary(dictionary: ["steps": steps]) == NSDictionary(dictionary: ["steps": preview]))
+                let retained = try await f.call("plan_session_repair", params: [
+                    "plan_id": .string(try #require(plan["plan_id"] as? String)),
+                    "digest": .string(try #require(plan["digest"] as? String))])
+                #expect(NSDictionary(dictionary: retained) == NSDictionary(dictionary: plan))
+                let executable = try #require(plan["executable"] as? Bool); #expect(!executable)
+                let key = "blocked-final-presentation-dependencies"
+                let result = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: key))
+                #expect(result["state"] as? String == "C")
+                let attempted = try #require(result["write_attempted"] as? Bool); #expect(!attempted)
+                #expect(await f.journal.record(for: key) == nil)
+                #expect(f.view.events.isEmpty)
+            }
+        }
     }
 
     @Test(arguments: ["not_array", "not_object", "unknown", "missing_target", "foreign_target",
