@@ -13,6 +13,43 @@ struct SemanticOracleEngineTests {
 
     // MARK: - constraint semantics
 
+    @Test func arrayElementsChecksEveryRowWithoutTreatingEmptyEvidenceAsProof() {
+        let clauses: [OracleConstraint] = [
+            .typedField(key: "observed", type: .string),
+            .valueEquals(key: "source", expected: .string("live")),
+        ]
+        let every = OracleConstraint.arrayElements(key: "rows", constraints: clauses)
+        let good = root(#"{"rows":[{"observed":"A","source":"live"},{"observed":"B","source":"live"}]}"#)
+        #expect(every.isSatisfied(by: good))
+        #expect(every.isValueConstraint)
+        for bad in [#"{}"#, #"{"rows":false}"#, #"{"rows":[{"observed":"A","source":"live"},null]}"#,
+                    #"{"rows":[{"observed":"A","source":"live"},{"observed":"B","source":"cached"}]}"#,
+                    #"{"rows":[{"observed":"A","source":"live"},{"source":"live"}]}"#] {
+            #expect(!every.isSatisfied(by: root(bad)))
+        }
+        let empty = root(#"{"rows":[]}"#)
+        #expect(every.isSatisfied(by: empty))
+        #expect(!OracleConstraint.nonEmptyArray(key: "rows").isSatisfied(by: empty))
+        #expect(!OracleConstraint.arrayElements(key: "rows", constraints: []).isSatisfied(by: good))
+        let mutants = JSONMutator.mutants(for: every, in: good)
+        #expect(mutants.contains { $0.label.hasPrefix("element 1:") })
+        for mutant in mutants { #expect(!every.isSatisfied(by: mutant.json)) }
+    }
+
+    @Test func alternativeMutantsCorruptOnlyTheActuallySatisfiedMode() {
+        let constraint = OracleConstraint.anyOf([
+            [.valueEquals(key: "mode", expected: .string("write")), .nonEmptyArray(key: "steps")],
+            [.valueEquals(key: "mode", expected: .string("read")), .emptyArray(key: "steps"), .nonEmptyArray(key: "evidence")],
+        ])
+        for json in [#"{"mode":"write","steps":[1]}"#, #"{"mode":"read","steps":[],"evidence":[1]}"#] {
+            let good = root(json)
+            #expect(constraint.isSatisfied(by: good))
+            let mutants = JSONMutator.mutants(for: constraint, in: good)
+            #expect(!mutants.isEmpty)
+            for mutant in mutants { #expect(!constraint.isSatisfied(by: mutant.json)) }
+        }
+    }
+
     @Test func valueEqualsMatchesEachPrimitiveAndRejectsMismatches() {
         let object = root(#"{"s":"x","n":4,"b":true,"z":null}"#)
         #expect(OracleConstraint.valueEquals(key: "s", expected: .string("x")).isSatisfied(by: object))
@@ -1182,9 +1219,10 @@ struct SemanticOracleMutationTests {
         let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
         guard oracle.strength != .custom else { return }
         let root = try #require(JSONInspector.parse(fixture.responseData))
+        let readback = JSONInspector.parse(fixture.readbackData)
 
         for constraint in oracle.constraints {
-            let mutants = JSONMutator.mutants(for: constraint, in: root)
+            let mutants = JSONMutator.mutants(for: constraint, in: root, readback: readback)
             #expect(
                 !mutants.isEmpty,
                 "\(operationID.rawValue): no mutant generated for \(constraint.key)"
@@ -1514,7 +1552,7 @@ enum JSONMutator {
     }
 
     /// Derives, from the constraint itself, the corruptions it claims to catch.
-    static func mutants(for constraint: OracleConstraint, in root: Any) -> [Mutant] {
+    static func mutants(for constraint: OracleConstraint, in root: Any, readback: Any? = nil) -> [Mutant] {
         let key = constraint.key
         var mutants: [Mutant] = []
         if !key.isEmpty, let dropped = remove(root, keyPath: key) {
@@ -1670,9 +1708,25 @@ enum JSONMutator {
                 ]))
             }
         case let .anyOf(alternatives):
-            for alternative in alternatives {
+            // A valid other-mode shape is not a corruption of this fixture's mode.
+            for alternative in alternatives where alternative.allSatisfy({ $0.isSatisfied(by: root, readback: readback) }) {
                 for branchConstraint in alternative {
-                    mutants.append(contentsOf: Self.mutants(for: branchConstraint, in: root))
+                    mutants.append(contentsOf: Self.mutants(for: branchConstraint, in: root, readback: readback))
+                }
+            }
+        case let .arrayElements(arrayKey, constraints):
+            mutants.append(contentsOf: replacements(root, arrayKey, [("not an array", "not-an-array")]))
+            if let rows = JSONPath.resolve(root, keyPath: arrayKey) as? [Any] {
+                for index in rows.indices {
+                    for child in constraints {
+                        for mutation in Self.mutants(for: child, in: rows[index], readback: readback) {
+                            var changed = rows
+                            changed[index] = mutation.json
+                            if let json = set(root, keyPath: arrayKey, to: changed) {
+                                mutants.append(Mutant(label: "element \(index): \(mutation.label)", json: json))
+                            }
+                        }
+                    }
                 }
             }
         }

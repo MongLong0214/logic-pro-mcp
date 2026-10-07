@@ -2255,8 +2255,8 @@ enum SemanticOracleTable {
         ]
     )
 
-    // Retained, explicitly approved Mixer-view plans use the existing session
-    // journal. This receipt oracle does not qualify generic Saga view steps,
+    // Retained Mixer-view plans and independently observed names-only no-change
+    // goals use the existing session journal. This receipt oracle does not qualify generic Saga view steps,
     // routing/naming repairs, independent host getters, or native execution.
     static let projectApplySessionRepair = SafeMutationOracle.oracle(
         .projectApplySessionRepair,
@@ -2267,7 +2267,27 @@ enum SemanticOracleTable {
             .typedField(key: "plan_id", type: .string),
             .typedField(key: "digest", type: .string),
             .typedField(key: "idempotency_key", type: .string),
-            .nonEmptyArray(key: "steps"),
+            .anyOf([
+                [.nonEmptyArray(key: "steps")],
+                [
+                    .emptyArray(key: "steps"),
+                    .valueEquals(key: "write_attempted", expected: .bool(false)),
+                    .valueEquals(key: "writes_performed", expected: .number(0)),
+                    .nonEmptyArray(key: "goal_evidence"),
+                    .arrayElements(key: "goal_evidence", constraints: [
+                        .typedField(key: "target_ref", type: .string),
+                        .valueEquals(key: "before.read_source", expected: .string("ax_track_name")),
+                        .valueEquals(key: "before.provenance", expected: .string("live_independent")),
+                        .valueEquals(key: "before.field", expected: .string("name")),
+                        .typedField(key: "before.observed", type: .string),
+                        .valueEquals(key: "read.read_source", expected: .string("ax_track_name")),
+                        .valueEquals(key: "read.provenance", expected: .string("live_independent")),
+                        .valueEquals(key: "read.field", expected: .string("name")),
+                        .typedField(key: "read.observed", type: .string),
+                        .fieldsEqual(keyA: "before.observed", keyB: "read.observed"),
+                    ]),
+                ],
+            ]),
             .typedField(key: "state_history", type: .array),
         ]
     )

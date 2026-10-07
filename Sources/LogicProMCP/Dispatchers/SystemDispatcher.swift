@@ -1077,6 +1077,19 @@ struct SystemDispatcher: OperationTraceDispatching {
                     // and fail the saga closed as feature-disabled.
                     let workTask = Task(priority: .userInitiated) {
                         await OperationTraceContext.$current.withValue(outerTraceContext) {
+                            // Only a retained, fully accounted names-only approval can
+                            // reconcile an empty canonical task list. Generic empty Saga
+                            // plans still pass through their unchanged rejection below.
+                            if let approval = approvedSessionRepair, approval.verifiesMatchingNamesOnly {
+                                let proposed = await approval.verifyMatchingNames()
+                                let (winner, _) = await sagaJournal.finalizeReturningWinner(
+                                    journalClaim, proposed: proposed, verifiedIfCancelled: true
+                                )
+                                let didWin = race.resume(continuation,
+                                    returning: toolTextResult(winner.body, isError: winner.isError))
+                                if didWin { timeoutHandle.cancel() }
+                                return
+                            }
                             // Availability includes synchronous AX reads. It belongs to
                             // the same lifecycle race as execution, not before its timer.
                             let preflight = await saga.preflight(plan)

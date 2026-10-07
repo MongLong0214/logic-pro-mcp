@@ -152,6 +152,9 @@ enum OracleConstraint: Sendable {
     /// planes explicit: accepting a checkbox envelope must not relax any slider
     /// invariant, and vice versa.
     indirect case anyOf([[OracleConstraint]])
+    /// Every element of a readable array satisfies the same clauses, relative to that element.
+    /// Pair with `nonEmptyArray` when an empty array cannot establish the operation's evidence.
+    indirect case arrayElements(key: String, constraints: [OracleConstraint])
 
     /// The primary RESPONSE-side key path — the one the generic mutator drops
     /// and error messages cite. For the relational cases it is the response side
@@ -172,7 +175,8 @@ enum OracleConstraint: Sendable {
              .numericNear(let key, _, _),
              .emptyArray(let key),
              .booleanFlipped(let key, _),
-             .numericEqualsOffset(let key, _, _):
+             .numericEqualsOffset(let key, _, _),
+             .arrayElements(let key, _):
             return key
         case .anyOf:
             // Alternatives have no single response key. Mutators recurse into
@@ -197,6 +201,8 @@ enum OracleConstraint: Sendable {
             return alternatives.allSatisfy { branch in
                 branch.contains { $0.isValueConstraint }
             }
+        case let .arrayElements(_, constraints):
+            return constraints.contains { $0.isValueConstraint }
         case .nonEmptyArray, .typedField, .emptyArray:
             return false
         }
@@ -337,6 +343,11 @@ enum OracleConstraint: Sendable {
         case let .anyOf(alternatives):
             return alternatives.contains { alternative in
                 alternative.allSatisfy { $0.isSatisfied(by: root, readback: readback) }
+            }
+        case let .arrayElements(key, constraints):
+            guard let array = JSONPath.resolve(root, keyPath: key) as? [Any], !constraints.isEmpty else { return false }
+            return array.allSatisfy { element in
+                constraints.allSatisfy { $0.isSatisfied(by: element, readback: readback) }
             }
         }
     }

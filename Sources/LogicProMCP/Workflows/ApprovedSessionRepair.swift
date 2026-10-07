@@ -30,11 +30,21 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
 
     @TaskLocal static var current: ApprovedSessionRepair?
+    private struct MixerTask: Sendable {
+        let before: Bool
+        let desired: Bool
+        let binding: SessionPopulationObservation.PresentationBinding
+    }
+    private struct NameGoal: Sendable {
+        let reference: TargetReference
+        let name: String
+        let binding: AXTrackBinding.Binding
+    }
     let plan: SagaPlan
-    let before: Bool
-    let desired: Bool
     let projectRef: TargetReference
-    let binding: SessionPopulationObservation.PresentationBinding
+    private let mixerTask: MixerTask?
+    private let nameGoals: [NameGoal]
+    private let document: String
     private let cache: StateCache
     private let registry: TargetRegistry
     private let journal: SagaJournal
@@ -43,11 +53,11 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     private var ownedVisibility: Bool?
     private var ownedMixer: AXUIElement?
 
-    private init(plan: SagaPlan, before: Bool, desired: Bool, projectRef: TargetReference,
-                 binding: SessionPopulationObservation.PresentationBinding, projectEpoch: UInt64,
+    private init(plan: SagaPlan, projectRef: TargetReference, document: String,
+                 mixerTask: MixerTask? = nil, nameGoals: [NameGoal] = [], projectEpoch: UInt64,
                  cache: StateCache, registry: TargetRegistry, journal: SagaJournal) {
-        self.plan = plan; self.before = before; self.desired = desired; self.projectRef = projectRef
-        self.binding = binding; self.projectEpoch = projectEpoch
+        self.plan = plan; self.projectRef = projectRef; self.document = document
+        self.mixerTask = mixerTask; self.nameGoals = nameGoals; self.projectEpoch = projectEpoch
         self.cache = cache; self.registry = registry; self.journal = journal
     }
 
@@ -60,14 +70,64 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               var object = try? JSONDecoder().decode(Value.self, from: data).objectValue,
               object["executable"]?.boolValue == true,
               object["plan_id"]?.stringValue == id, object["digest"]?.stringValue == digest,
-              let steps = object["steps"]?.arrayValue, steps.count == 1,
-              object["preview"]?.arrayValue == steps,
+              let steps = object["steps"]?.arrayValue,
+              object["preview"]?.arrayValue == steps else { return nil }
+        object.removeValue(forKey: "plan_id"); object.removeValue(forKey: "digest")
+        guard let encoded = try? encodeJSONStrict(Value.object(object), compact: true),
+              SHA256.hash(data: Data(encoded.utf8)).map({ String(format: "%02x", $0) }).joined() == digest else { return nil }
+        if steps.isEmpty {
+            guard let policyObject = object["approved_policy"]?.objectValue,
+                  policyObject["presentation"] == nil,
+                  case .accepted(let policy) = ProjectSessionAudit.parseIntentPolicy(policyObject),
+                  policy.mixerVisible == nil, policy.roles.isEmpty, policy.outputs.isEmpty, policy.receivers.isEmpty,
+                  let names = ProjectSessionAudit.parseApprovedNames(object["approved_names"], policy: policy),
+                  !names.isEmpty, names.count == policy.targets.count,
+                  ["reasons", "questions", "receiver_questions", "findings", "new_object_inventory"].allSatisfy({
+                      object[$0]?.arrayValue?.isEmpty == true
+                  }),
+                  let unchanged = object["unchanged_tasks"]?.arrayValue,
+                  unchanged.count == names.count,
+                  Set(unchanged.compactMap(\.stringValue)) == Set(names.map { "name_" + $0.target }),
+                  case .issued(let issued)? = source.capture.projectIssuance, policy.projectRef == issued,
+                  source.request.domains.contains(.tracks),
+                  SessionPopulationObservation.trackRowReadbackReasons(capture: source.capture).isEmpty,
+                  let references = source.capture.issued,
+                  let projectPath = source.capture.project.filePath,
+                  source.capture.freshPopulation?.stable == true else { return nil }
+            var goals: [NameGoal] = []
+            for name in names {
+                guard let target = policy.targets.first(where: { $0.handle == name.target }),
+                      case .located(let index) = ProjectSessionAudit.locate(target.trackRef, in: references) else { return nil }
+                let rows = source.capture.tracks.filter { $0.id == index }
+                guard rows.count == 1, let row = rows.first,
+                      row.name.utf8.elementsEqual(name.name.utf8), let binding = row.physicalBinding,
+                      let current = await registry.resolve(target.trackRef), current.kind == .track,
+                      current.physicalTrack?.matches(binding) == true,
+                      binding.projectPath?.utf8.elementsEqual(projectPath.utf8) == true,
+                      goals.allSatisfy({ !CFEqual($0.binding.header, binding.header) }) else { return nil }
+                goals.append(.init(reference: target.trackRef, name: name.name, binding: binding))
+            }
+            guard let document = goals.first?.binding.document,
+                  goals.allSatisfy({ $0.binding.document.utf8.elementsEqual(document.utf8)
+                      && CFEqual($0.binding.window, goals[0].binding.window) }) else { return nil }
+            return .init(plan: .init(steps: [], idempotencyKey: key, canonicalPlanID: id, canonicalDigest: digest),
+                projectRef: issued, document: document, nameGoals: goals, projectEpoch: source.capture.projectEpoch,
+                cache: cache, registry: registry, journal: journal)
+        }
+        guard steps.count == 1,
               let step = steps[0].objectValue, step["kind"]?.stringValue == "mixer_visibility",
               step["blocked_reasons"]?.arrayValue?.isEmpty == true,
               let rawRef = step["target_ref"]?.stringValue,
               case .issued(let issued)? = source.capture.projectIssuance, issued.rawValue == rawRef,
               let before = step["before"]?.objectValue?["visible"]?.boolValue,
               let desired = step["after"]?.objectValue?["visible"]?.boolValue,
+              let policyObject = object["approved_policy"]?.objectValue,
+              case .accepted(let policy) = ProjectSessionAudit.parseIntentPolicy(policyObject),
+              policy.projectRef == issued, policy.mixerVisible == desired,
+              policy.targets.isEmpty, policy.roles.isEmpty, policy.outputs.isEmpty, policy.receivers.isEmpty,
+              policyObject["presentation"]?.objectValue.map({ Set($0.keys) == ["mixer_visible"] }) == true,
+              object["approved_names"]?.arrayValue?.isEmpty == true,
+              object["unchanged_tasks"]?.arrayValue?.isEmpty == true,
               let fresh = source.capture.freshPopulation, fresh.stable,
               fresh.presentationObservation?.mixerVisible == before,
               fresh.presentationObservation?.isPlaying == false,
@@ -76,19 +136,17 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               binding.navigationBaseline != nil, binding.transport != nil,
               binding.pid != nil, binding.app != nil, binding.focus != nil
         else { return nil }
-        object.removeValue(forKey: "plan_id"); object.removeValue(forKey: "digest")
-        guard let encoded = try? encodeJSONStrict(Value.object(object), compact: true),
-              SHA256.hash(data: Data(encoded.utf8)).map({ String(format: "%02x", $0) }).joined() == digest else { return nil }
         let saga = SagaPlan(steps: [.init(operationID: .navigateToggleView, targetRef: issued,
             params: ["view": .string("mixer"), "visible": .bool(desired)],
             expectedInverse: .init(operationID: .navigateToggleView, valueParameter: "visible"))],
             idempotencyKey: key, canonicalPlanID: id, canonicalDigest: digest)
-        return .init(plan: saga, before: before, desired: desired, projectRef: issued, binding: binding,
+        return .init(plan: saga, projectRef: issued, document: binding.document,
+            mixerTask: .init(before: before, desired: desired, binding: binding),
             projectEpoch: source.capture.projectEpoch, cache: cache, registry: registry, journal: journal)
     }
 
     func supports(_ step: SagaStep) -> Bool {
-        step.operationID == .navigateToggleView && step.targetRef == projectRef
+        mixerTask != nil && step.operationID == .navigateToggleView && step.targetRef == projectRef
             && Set(step.params.keys) == ["view", "visible"] && step.params["view"] == .string("mixer")
             && step.params["visible"]?.boolValue != nil
             && step.expectedInverse.operationID == .navigateToggleView && step.expectedInverse.valueParameter == "visible"
@@ -101,7 +159,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         guard let target = await registry.resolve(projectRef), target.kind == .project,
               target.projectEpoch == projectEpoch,
-              let url = URL(string: binding.document), url.isFileURL,
+              let url = URL(string: document), url.isFileURL,
               url.host == nil || url.host == "" || url.host == "localhost",
               target.descriptor.projectFilePath?.utf8.elementsEqual(url.path.utf8) == true,
               await cache.getProject().filePath?.utf8.elementsEqual(url.path.utf8) == true,
@@ -110,7 +168,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
 
     private func navigation(runtime: AXLogicProElements.Runtime, allowPendingCancellation: Bool = false) async -> AccessibilityChannel.OwnedMixerObservationNavigation? {
-        guard await projectIsCurrent(allowPendingCancellation: allowPendingCancellation), let pid = binding.pid, runtime.logicProPID() == pid,
+        guard let binding = mixerTask?.binding,
+              await projectIsCurrent(allowPendingCancellation: allowPendingCancellation), let pid = binding.pid, runtime.logicProPID() == pid,
               let app = binding.app, let currentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, currentApp),
               let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
               let originalFocus = binding.focus, CFEqual(focus, originalFocus),
@@ -133,6 +192,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
 
     private func reading() async -> (Bool, AXUIElement?)? {
+        guard let binding = mixerTask?.binding else { return nil }
         let runtime = binding.runtime
         // Pending journal cancellation must not suppress the independent reads
         // needed to verify a forward effect or conditionally restore our own one.
@@ -149,13 +209,87 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return .init(value: .bool(value), evidence: evidence.summary, read: evidence)
     }
 
+    var verifiesMatchingNamesOnly: Bool { !nameGoals.isEmpty && mixerTask == nil && plan.steps.isEmpty }
+
+    /// No scalar operation is dispatched: every approved value is read from its
+    /// issued object, then corroborated again after the deciding AX read.
+    func verifyMatchingNames() async -> SagaJournal.StoredOutcome {
+        func refusal(_ hint: String) -> SagaJournal.StoredOutcome {
+            SagaWire.storedOutcome(from: SagaWire.scopedStateC(.staleTargetReference, hint: hint,
+                extras: ["idempotency_key": plan.idempotencyKey,
+                    "plan_id": plan.canonicalPlanID as Any, "digest": plan.canonicalDigest as Any,
+                    "write_attempted": false, "writes_performed": 0]))
+        }
+        guard verifiesMatchingNamesOnly, FeatureFlags.adr004MutationSaga,
+              await projectIsCurrent(), await registry.resolveCurrentProject(projectRef) != nil else {
+            return refusal("The retained names-only verification or its project custody is unavailable.")
+        }
+        func independentRead(_ goal: NameGoal) async -> SagaReadEvidence? {
+            guard await projectIsCurrent(),
+                  let target = await registry.resolve(goal.reference), target.kind == .track,
+                  target.physicalTrack?.matches(goal.binding) == true,
+                  target.descriptor.trackName.utf8.elementsEqual(goal.name.utf8),
+                  let index = goal.binding.currentIndex(),
+                  case .success(let name?) = AXValueExtractors.extractTrackNameResult(
+                    from: goal.binding.header, runtime: goal.binding.runtime.ax),
+                  name.utf8.elementsEqual(goal.name.utf8),
+                  goal.binding.currentIndex() == index,
+                  let after = await registry.resolve(goal.reference), after.physicalTrack?.matches(goal.binding) == true,
+                  await projectIsCurrent() else {
+                return nil
+            }
+            return SagaReadEvidence(readSource: .axTrackName, provenance: .liveIndependent,
+                trackIndex: index, projectReference: projectRef.rawValue, field: "name",
+                observed: .string(name), sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: Date()))
+        }
+        // Bookend the entire approved set, not just each row: a later deciding
+        // read must not silently invalidate an earlier row's name or object.
+        var before: [SagaReadEvidence] = []
+        for goal in nameGoals {
+            guard let read = await independentRead(goal) else {
+                return refusal("An approved name or its originally issued track could not be independently verified.")
+            }
+            before.append(read)
+        }
+        var evidence: [[String: Any]] = []
+        for (offset, goal) in nameGoals.enumerated() {
+            guard let read = await independentRead(goal),
+                  let first = before[offset].observed.stringValue,
+                  read.observed.stringValue?.utf8.elementsEqual(first.utf8) == true else {
+                return refusal("The approved name set or its held track custody changed between independent readings.")
+            }
+            guard let data = try? JSONEncoder().encode(read),
+                  let object = try? JSONSerialization.jsonObject(with: data),
+                  let beforeData = try? JSONEncoder().encode(before[offset]),
+                  let beforeObject = try? JSONSerialization.jsonObject(with: beforeData) else {
+                return refusal("The independent name observation could not be encoded.")
+            }
+            evidence.append(["target_ref": goal.reference.rawValue, "before": beforeObject, "read": object])
+        }
+        guard await projectIsCurrent(), await registry.resolveCurrentProject(projectRef) != nil else {
+            return refusal("The names-only verification lost its project or operation ownership.")
+        }
+        let outcome = SagaOutcome(idempotencyKey: plan.idempotencyKey, state: .completed, complete: true,
+            journal: [], stateHistory: [.validated, .running, .completed], preflightIssues: [])
+        let stored = SagaWire.storedOutcome(plan: plan, outcome: outcome)
+        guard var body = decodedJSONObject(stored.body) else { return refusal("The verification receipt is unavailable.") }
+        body["write_attempted"] = false
+        body["writes_performed"] = 0
+        body["goal_evidence"] = evidence
+        return .init(body: HonestContract.jsonString(body), isError: stored.isError)
+    }
+
     func perform(_ desired: Bool, runtime: AXLogicProElements.Runtime) async -> ChannelResult {
+        guard let task = mixerTask else {
+            return .error(HonestContract.encodeStateC(error: .unsupportedState, extras: ["write_attempted": false]))
+        }
+        let before = task.before, binding = task.binding
         let ownedInverse = ran && ownedVisibility != nil && desired == before
         let expected: Bool?
         let expectedMixer: AXUIElement?
         if !ran { expected = before; expectedMixer = binding.mixer }
-        else { expected = ownedVisibility ?? (before == self.desired ? before : nil); expectedMixer = ownedMixer ?? binding.mixer }
-        guard let expected, desired == self.desired || desired == before,
+        else { expected = ownedVisibility ?? (before == task.desired ? before : nil); expectedMixer = ownedMixer ?? binding.mixer }
+        guard let expected, desired == task.desired || desired == before,
               let navigation = await navigation(runtime: runtime, allowPendingCancellation: ownedInverse) else {
             return .error(HonestContract.encodeStateC(error: .staleTargetReference,
                 hint: "The retained view custody or conditional inverse is unavailable.", extras: ["write_attempted": false]))
@@ -203,8 +337,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         guard let approval = await retained(id: id, digest: digest, key: key, cache: dependencies.cache,
             registry: dependencies.targetRegistry, journal: dependencies.sagaJournal) else {
             return toolStateCResult(.staleTargetReference,
-                hint: "The exact retained plan, required native view/transport evidence, or its original project is unavailable; no replacement plan was generated.",
-                extras: ["write_attempted": false])
+                hint: "The exact retained plan, required native goal evidence, or its original project is unavailable; no replacement plan was generated.",
+                extras: ["write_attempted": false, "verified": false])
         }
         return await SystemDispatcher.handle(command: "saga_execute", params: [:], router: dependencies.router,
             cache: dependencies.cache, targetRegistry: dependencies.targetRegistry,

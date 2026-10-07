@@ -199,6 +199,540 @@ struct Issue971ApprovedMixerSagaTests {
              "digest": .string(try #require(plan["digest"] as? String)),
              "confirmed": .bool(true), "idempotency_key": .string(key)]
         }
+
+        func installNameHeaders(_ names: [String]) -> [AXUIElement] {
+            let headers = names.enumerated().map { index, name in
+                let header = view.builder.element(971_900 + index)
+                view.builder.setRole(header, kAXLayoutItemRole as String)
+                view.builder.setAttribute(header, kAXTitleAttribute as String, name)
+                view.builder.setAttribute(header, kAXSelectedAttribute as String, false)
+                view.builder.setChildren(header, [])
+                return header
+            }
+            view.builder.setChildren(view.rail, headers)
+            return headers
+        }
+
+        func namesPlan(_ names: [String], approvedNames: [String]? = nil,
+                       policyExtras: [String: Value] = [:]) async throws -> [String: Any] {
+            let report = try await call("inspect_session", params: ["domains": .array([.string("tracks")])])
+            let snapshot = try #require(report["snapshot_id"] as? String)
+            let rows = try #require((report["tracks"] as? [String: Any])?["rows"] as? [[String: Any]])
+            #expect(rows.count == names.count)
+            let project = try #require(report["project"] as? [String: Any])
+            let projectRef = try #require(project["project_ref"] as? String)
+            let targets = try rows.enumerated().map { index, row -> Value in
+                let observed = try #require(row["name"] as? String)
+                #expect(observed.utf8.elementsEqual(names[index].utf8))
+                return .object(["handle": .string("t\(index)"),
+                    "track_ref": .string(try #require(row["track_ref"] as? String))])
+            }
+            let approved: [Value] = (approvedNames ?? names).enumerated().map { index, name in
+                .object(["target": .string("t\(index)"), "name": .string(name)])
+            }
+            var policy: [String: Value] = ["schema": .string(ProjectSessionAudit.intentPolicySchema),
+                "project_ref": .string(projectRef), "targets": .array(targets)]
+            policy.merge(policyExtras) { _, new in new }
+            return try await call("plan_session_repair", params: ["snapshot_id": .string(snapshot),
+                "policy": .object(policy), "names": .array(approved)])
+        }
+    }
+
+    @Test
+    func approvedMatchingNamesAreIndependentlyVerifiedWithoutWriting() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "  e\u{301}, \"Lead\"  "]
+                let headers = names.enumerated().map { index, name in
+                    let header = f.view.builder.element(971_800 + index)
+                    f.view.builder.setRole(header, kAXLayoutItemRole as String)
+                    f.view.builder.setAttribute(header, kAXTitleAttribute as String, name)
+                    f.view.builder.setAttribute(header, kAXSelectedAttribute as String, false)
+                    f.view.builder.setChildren(header, [])
+                    return header
+                }
+                f.view.builder.setChildren(f.view.rail, headers)
+                let report = try await f.call("inspect_session", params: ["domains": .array([.string("tracks")])])
+                let section = try #require(report["tracks"] as? [String: Any])
+                let rows = try #require(section["rows"] as? [[String: Any]])
+                #expect(rows.count == names.count)
+                let refs = try rows.enumerated().map { index, row in
+                    let observed = try #require(row["name"] as? String)
+                    #expect(observed.utf8.elementsEqual(names[index].utf8))
+                    return try #require(row["track_ref"] as? String)
+                }
+                let snapshot = try #require(report["snapshot_id"] as? String)
+                let retained = try #require(await f.cache.retainedInspection(id: snapshot))
+                #expect(retained.capture.tracks.allSatisfy { $0.physicalBinding != nil })
+                let project = try #require(report["project"] as? [String: Any])
+                let projectRef = try #require(project["project_ref"] as? String)
+                let targets: [Value] = refs.enumerated().map { index, ref in
+                    .object(["handle": .string("t\(index)"), "track_ref": .string(ref)])
+                }
+                let approved: [Value] = names.enumerated().map { index, name in
+                    .object(["target": .string("t\(index)"), "name": .string(name)])
+                }
+                let plan = try await f.call("plan_session_repair", params: ["snapshot_id": .string(snapshot),
+                    "policy": .object(["schema": .string(ProjectSessionAudit.intentPolicySchema),
+                        "project_ref": .string(projectRef), "targets": .array(targets)]),
+                    "names": .array(approved)])
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                let plannedSteps = try #require(plan["steps"] as? [Any])
+                #expect(plannedSteps.isEmpty)
+                #expect((plan["unchanged_tasks"] as? [String])?.count == names.count)
+                let reads = headers.map { _ in DecidingMixerReplacement() }
+                f.view.attributeReadObserver = { element, attribute in
+                    if let index = headers.firstIndex(where: { CFEqual($0, element) }), attribute == kAXTitleAttribute as String {
+                        reads[index].originalDecidingReads += 1
+                    }
+                }
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "matching-names"))
+                #expect(outcome["saga_state"] as? String == "completed")
+                let verified = outcome["verified"] as? Bool ?? false
+                #expect(verified)
+                for counter in reads { #expect(counter.originalDecidingReads > 0) }
+                #expect(f.view.events.isEmpty)
+                let attempted = try #require(outcome["write_attempted"] as? Bool)
+                #expect(!attempted)
+                #expect(outcome["writes_performed"] as? Int == 0)
+                let evidence = try #require(outcome["goal_evidence"] as? [[String: Any]])
+                #expect(evidence.count == names.count)
+                for (index, item) in evidence.enumerated() {
+                    #expect(item["target_ref"] as? String == refs[index])
+                    let read = try #require(item["read"] as? [String: Any])
+                    #expect(read["read_source"] as? String == "ax_track_name")
+                    #expect(read["provenance"] as? String == "live_independent")
+                    let observed = try #require(read["observed"] as? String)
+                    #expect(observed.utf8.elementsEqual(names[index].utf8))
+                }
+                guard case .completed(let stored)? = await f.journal.record(for: "matching-names") else {
+                    Issue.record("the verified zero-write result must use the existing journal")
+                    return
+                }
+                #expect(sharedJSONObject(stored.body)?["saga_state"] as? String == "completed")
+            }
+        }
+    }
+
+    @Test
+    func namesOnlyOracleDescribesActualZeroWriteGoalEvidence() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                f.installNameHeaders(["Bass", "e\u{301}"])
+                let plan = try await f.namesPlan(["Bass", "e\u{301}"])
+                let body = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "oracle-matching-names"))
+                let oracle = try #require(SemanticOracleTable.byOperationID[.projectApplySessionRepair])
+                let readback = Data("{}".utf8)
+                let accepted = try #require(oracle.evaluate(responseData: JSONSerialization.data(withJSONObject: body), readbackData: readback))
+                #expect(accepted)
+                #expect(f.view.events.isEmpty)
+                for key in ["steps", "goal_evidence", "write_attempted", "writes_performed", "verified", "state", "digest"] {
+                    var missing = body
+                    missing.removeValue(forKey: key)
+                    let missingAccepted = try #require(oracle.evaluate(responseData: JSONSerialization.data(withJSONObject: missing), readbackData: readback))
+                    #expect(!missingAccepted, "missing \(key) is not a verified zero-write goal")
+                }
+                for (key, value) in [("goal_evidence", [] as Any), ("write_attempted", true as Any),
+                                     ("write_attempted", 0 as Any), ("writes_performed", 1 as Any),
+                                     ("state", "B" as Any), ("state", "C" as Any)] {
+                    var mutant = body
+                    mutant[key] = value
+                    let mutantAccepted = try #require(oracle.evaluate(responseData: JSONSerialization.data(withJSONObject: mutant), readbackData: readback))
+                    #expect(!mutantAccepted)
+                }
+                for (key, value) in [("read_source", "cached"), ("provenance", "cached"),
+                                     ("field", "volume"), ("observed", "Different")] {
+                    var mutant = body
+                    var evidence = try #require(body["goal_evidence"] as? [[String: Any]])
+                    var read = try #require(evidence[0]["read"] as? [String: Any])
+                    read[key] = value
+                    evidence[0]["read"] = read
+                    mutant["goal_evidence"] = evidence
+                    let mutantAccepted = try #require(oracle.evaluate(responseData: JSONSerialization.data(withJSONObject: mutant), readbackData: readback))
+                    #expect(!mutantAccepted)
+                }
+            }
+        }
+    }
+
+    @Test
+    func namesOnlyOracleRejectsCorruptionInEveryObservedGoal() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                f.installNameHeaders(["Bass", "Piano"])
+                let plan = try await f.namesPlan(["Bass", "Piano"])
+                let body = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "oracle-every-matching-name"))
+                let evidence = try #require(body["goal_evidence"] as? [[String: Any]])
+                #expect(evidence.count == 2)
+                let oracle = try #require(SemanticOracleTable.byOperationID[.projectApplySessionRepair])
+                for index in evidence.indices {
+                    for (key, value) in [("read_source", "cached"), ("provenance", "cached"), ("observed", "Different")] {
+                        var mutant = body
+                        var rows = evidence
+                        var read = try #require(rows[index]["read"] as? [String: Any])
+                        read[key] = value
+                        rows[index]["read"] = read
+                        mutant["goal_evidence"] = rows
+                        let accepted = try #require(oracle.evaluate(responseData: JSONSerialization.data(withJSONObject: mutant), readbackData: Data("{}".utf8)))
+                        #expect(!accepted, "corrupted \(key) in goal \(index) cannot be credited")
+                    }
+                }
+                #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test
+    func disabledSagaBlocksNamesOnlyPlanningAndApply() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(false) {
+                let f = try Fixture(showing: false)
+                f.installNameHeaders(["Bass", "Piano"])
+                let plan = try await f.namesPlan(["Bass", "Piano"])
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(!executable)
+                let reasons = try #require(plan["reasons"] as? [String])
+                #expect(reasons.contains("mutation_saga_unavailable"))
+                let steps = try #require(plan["steps"] as? [Any])
+                #expect(steps.isEmpty)
+                #expect((plan["unchanged_tasks"] as? [String])?.count == 2)
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "disabled-matching-names"))
+                #expect(outcome["state"] as? String == "C")
+                #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test(arguments: ["second_name", "unicode_bytes", "replacement", "document", "unread", "last_read_document"])
+    func namesOnlyVerificationRefusesChangedHeldEvidenceWithoutWriting(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "e\u{301}"]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names)
+                let hook = DecidingMixerReplacement()
+                switch kind {
+                case "second_name": f.view.builder.setAttribute(headers[1], kAXTitleAttribute as String, "User edit")
+                case "unicode_bytes": f.view.builder.setAttribute(headers[1], kAXTitleAttribute as String, "é")
+                case "replacement":
+                    let replacement = f.view.builder.element(971_950)
+                    f.view.builder.setRole(replacement, kAXLayoutItemRole as String)
+                    f.view.builder.setAttribute(replacement, kAXTitleAttribute as String, names[1])
+                    f.view.builder.setAttribute(replacement, kAXSelectedAttribute as String, false)
+                    f.view.builder.setChildren(replacement, [])
+                    f.view.builder.setChildren(f.view.rail, [headers[0], replacement])
+                case "document": f.view.builder.setAttribute(f.view.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                case "unread": f.view.failedMetadata = (headers[1], kAXTitleAttribute as String)
+                case "last_read_document":
+                    f.view.attributeReadObserver = { element, attribute in
+                        if CFEqual(element, headers[1]), attribute == kAXTitleAttribute as String, !hook.replaced {
+                            hook.replaced = true
+                            f.view.builder.setAttribute(f.view.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                        }
+                    }
+                default: Issue.record("unknown name observation fault")
+                }
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "changed-names"))
+                if kind == "last_read_document" { #expect(hook.replaced) }
+                #expect(outcome["state"] as? String == "C")
+                let attempted = try #require(outcome["write_attempted"] as? Bool)
+                #expect(!attempted)
+                #expect(outcome["writes_performed"] as? Int == 0)
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                #expect(f.view.events.isEmpty)
+                guard case .completed(let stored)? = await f.journal.record(for: "changed-names") else {
+                    Issue.record("the zero-write refusal must terminalize the existing claim"); return
+                }
+                #expect(sharedJSONObject(stored.body)?["state"] as? String == "C")
+            }
+        }
+    }
+
+    @Test(arguments: ["raw_name", "physical_header"])
+    func aLaterNameReadCannotCertifyAnEarlierChangedTrack(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names)
+                let hook = DecidingMixerReplacement()
+                f.view.attributeReadObserver = { element, attribute in
+                    if CFEqual(element, headers[1]), attribute == kAXTitleAttribute as String, !hook.replaced {
+                        hook.replaced = true
+                        if kind == "raw_name" {
+                            f.view.builder.setAttribute(headers[0], kAXTitleAttribute as String, "User edit")
+                        } else {
+                            let replacement = f.view.builder.element(971_951)
+                            f.view.builder.setRole(replacement, kAXLayoutItemRole as String)
+                            f.view.builder.setAttribute(replacement, kAXTitleAttribute as String, names[0])
+                            f.view.builder.setAttribute(replacement, kAXSelectedAttribute as String, false)
+                            f.view.builder.setChildren(replacement, [])
+                            f.view.builder.setChildren(f.view.rail, [replacement, headers[1]])
+                        }
+                    }
+                    if CFEqual(element, headers[0]), attribute == kAXTitleAttribute as String {
+                        hook.originalDecidingReads += 1
+                    }
+                }
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "inter-goal-edit"))
+                #expect(hook.replaced)
+                #expect(hook.originalDecidingReads > 0)
+                #expect(outcome["state"] as? String == "C")
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                let attempted = try #require(outcome["write_attempted"] as? Bool)
+                #expect(!attempted)
+                #expect(outcome["writes_performed"] as? Int == 0)
+                #expect(f.view.events.isEmpty)
+                let project = await f.cache.getProject()
+                #expect(project.filePath == f.bundle.path)
+                #expect(f.view.builder.attributeValue(f.view.window, kAXDocumentAttribute as String) as? String == f.bundle.absoluteString)
+                guard case .completed(let stored)? = await f.journal.record(for: "inter-goal-edit") else {
+                    Issue.record("the independently refused goal must have a terminal journal result"); return
+                }
+                #expect(sharedJSONObject(stored.body)?["state"] as? String == "C")
+            }
+        }
+    }
+
+    @Test
+    func namesVerificationCancellationDuringTheDecidingReadIsTerminalAndReplayable() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names)
+                let blocked = BlockedRead()
+                defer { blocked.unblock() }
+                let hook = DecidingMixerReplacement()
+                f.view.attributeReadObserver = { element, attribute in
+                    if CFEqual(element, headers[0]), attribute == kAXTitleAttribute as String, !hook.armed {
+                        hook.armed = true
+                        Task {
+                            if await f.journal.cancel(idempotencyKey: "cancel-names") == .requested { hook.replaced = true }
+                            blocked.unblock()
+                        }
+                        blocked.blockOnce()
+                    }
+                }
+                let params = try f.applyParameters(plan, key: "cancel-names")
+                let outcome = try await f.call("apply_session_repair", params: params,
+                    lifecycleDeadline: .now.advanced(by: .seconds(1)))
+                #expect(hook.armed)
+                #expect(hook.replaced)
+                #expect(blocked.entered)
+                #expect(outcome["state"] as? String == "C")
+                let attempted = try #require(outcome["write_attempted"] as? Bool)
+                #expect(!attempted)
+                #expect(f.view.events.isEmpty)
+                guard case .cancelled(let stored, let verified)? = await f.journal.record(for: "cancel-names") else {
+                    Issue.record("no-write cancellation must be terminal, not pending"); return
+                }
+                #expect(verified)
+                #expect(sharedJSONObject(stored.body)?["state"] as? String == "C")
+                let replay = try await f.call("apply_session_repair", params: params)
+                #expect(replay["state"] as? String == "C")
+                let duplicate = try #require(replay["duplicate"] as? Bool)
+                #expect(duplicate)
+                #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test
+    func namesVerificationReadWedgeHasTheSharedDeadlineWinnerAndNoLateEffects() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names)
+                let blocked = BlockedRead()
+                defer { blocked.unblock() }
+                f.view.attributeReadObserver = { element, attribute in
+                    if CFEqual(element, headers[0]), attribute == kAXTitleAttribute as String { blocked.blockOnce() }
+                }
+                let params = try f.applyParameters(plan, key: "wedged-names")
+                let outcome = try await f.call("apply_session_repair", params: params,
+                    lifecycleDeadline: .now.advanced(by: .seconds(1)))
+                #expect(blocked.entered)
+                #expect(outcome["error"] as? String == HonestContract.FailureError.operationTimeout.rawValue)
+                #expect(f.view.events.isEmpty)
+                let successor = try #require(f.gate.tryAcquire(operation: "names-successor", now: .distantFuture))
+                defer { f.gate.release(successor) }
+                blocked.unblock()
+                let replay = try await f.call("apply_session_repair", params: params)
+                #expect(replay["error"] as? String == outcome["error"] as? String)
+                #expect(f.gate.stillOwns(successor))
+                #expect(f.view.events.isEmpty)
+                guard case .completed(let stored)? = await f.journal.record(for: "wedged-names") else {
+                    Issue.record("the deadline must remain the journal winner"); return
+                }
+                #expect(sharedJSONObject(stored.body)?["error"] as? String == outcome["error"] as? String)
+            }
+        }
+    }
+
+    @Test
+    func aMixerTaskCannotSilentlyDiscardTheSamePlansApprovedNames() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                await f.router.register(f.view.channel())
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(false)])])
+                let steps = try #require(plan["steps"] as? [[String: Any]])
+                #expect(steps.count == 1)
+                #expect(steps.first?["kind"] as? String == "mixer_visibility")
+                #expect((plan["unchanged_tasks"] as? [String])?.count == 2)
+                f.view.builder.setAttribute(headers[0], kAXTitleAttribute as String, "User edit")
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "mixed-name-view"))
+                #expect(outcome["state"] as? String == "C")
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                let attempted = try #require(outcome["write_attempted"] as? Bool)
+                #expect(!attempted)
+                #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test(arguments: ["empty", "unaccounted_target", "changed_name", "role", "receiver", "unknown_policy", "unknown_presentation"])
+    func namesOnlyApprovalDoesNotDropUnaccountedOrUnsupportedIntent(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "Lead"]
+                _ = f.installNameHeaders(names)
+                let approved: [String]?
+                let extra: [String: Value]
+                switch kind {
+                case "empty": approved = []; extra = [:]
+                case "unaccounted_target": approved = [names[0]]; extra = [:]
+                case "changed_name": approved = [names[0], "Changed"]; extra = [:]
+                case "role": approved = nil; extra = ["roles": .array([.object([
+                    "role": .string("lead"), "members": .array([.object(["handle": .string("t0"), "accepted": .bool(true)])])])])]
+                case "receiver": approved = nil; extra = ["receivers": .array([.object(["bus": .int(1), "aux": .string("none")])])]
+                case "unknown_policy": approved = nil; extra = ["unapproved_goal": .bool(true)]
+                case "unknown_presentation": approved = nil; extra = ["presentation": .object(["sort": .object([:])])]
+                default: Issue.record("unknown unsupported-policy control"); return
+                }
+                let plan = try await f.namesPlan(names, approvedNames: approved, policyExtras: extra)
+                if kind == "unknown_policy" || kind == "unknown_presentation" {
+                    #expect(plan["state"] as? String == "C")
+                    #expect(f.view.events.isEmpty)
+                    return
+                }
+                if kind == "changed_name" {
+                    let reasons = try #require(plan["reasons"] as? [String])
+                    #expect(reasons.contains("naming_preservation_adapter_unavailable"))
+                }
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "unsupported-names"))
+                #expect(outcome["state"] as? String == "C")
+                let attempted = try #require(outcome["write_attempted"] as? Bool)
+                #expect(!attempted)
+                #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test(arguments: ["target_refs_disabled", "saga_disabled", "gate_busy"])
+    func namesVerificationRequiresTheExistingOptInsAndMutationClaim(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "Lead"]
+                _ = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names)
+                let params = try f.applyParameters(plan, key: "names-availability")
+                let outcome: [String: Any]
+                switch kind {
+                case "target_refs_disabled":
+                    outcome = try await FeatureFlags.withAdr002TargetRefForTests(false) {
+                        try await f.call("apply_session_repair", params: params)
+                    }
+                case "saga_disabled":
+                    outcome = try await FeatureFlags.withAdr004MutationSagaForTests(false) {
+                        try await f.call("apply_session_repair", params: params)
+                    }
+                case "gate_busy":
+                    let claim = try #require(f.gate.tryAcquire(operation: "human-operation"))
+                    defer { f.gate.release(claim) }
+                    outcome = try await f.call("apply_session_repair", params: params)
+                    #expect(f.gate.stillOwns(claim))
+                    #expect(outcome["error"] as? String == HonestContract.FailureError.mutatingOperationInProgress.rawValue)
+                default: Issue.record("unknown availability control"); return
+                }
+                #expect(outcome["state"] as? String == "C")
+                let attempted = try #require(outcome["write_attempted"] as? Bool)
+                #expect(!attempted)
+                #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test(arguments: ["ttl_replay", "body_eviction", "never_begun_expiry", "restart", "changed_id", "changed_digest"])
+    func namesVerificationUsesTheSameCompactCanonicalReplayIdentity(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let clock = Clock()
+                let f = try Fixture(showing: false, cache: StateCache(sessionCaptureNow: { clock.now() }),
+                    journal: SagaJournal(maxRecords: 1))
+                let names = ["Bass", "Lead"]
+                let headers = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names)
+                var params = try f.applyParameters(plan, key: "historical-names")
+                if kind != "never_begun_expiry" && kind != "restart" {
+                    #expect(try await f.call("apply_session_repair", params: params)["saga_state"] as? String == "completed")
+                }
+                if kind == "body_eviction" {
+                    let second = try await f.namesPlan(names)
+                    #expect(try await f.call("apply_session_repair", params: f.applyParameters(second, key: "newer-names"))["saga_state"] as? String == "completed")
+                    #expect(await f.journal.record(for: "historical-names") == .outcomeEvicted(terminal: .completed))
+                }
+                if kind == "ttl_replay" || kind == "never_begun_expiry" {
+                    clock.advance(.seconds(StateCache.sessionCaptureLifetimeSeconds))
+                }
+                if kind == "changed_id" { params["plan_id"] = .string("plan_different") }
+                if kind == "changed_digest" { params["digest"] = .string(String(repeating: "0", count: 64)) }
+                f.view.builder.setAttribute(headers[0], kAXTitleAttribute as String, "New user edit")
+                let reads = DecidingMixerReplacement()
+                f.view.attributeReadObserver = { element, attribute in
+                    if headers.contains(where: { CFEqual($0, element) }), attribute == kAXTitleAttribute as String {
+                        reads.originalDecidingReads += 1
+                    }
+                }
+                let result: [String: Any]
+                if kind == "restart" {
+                    let restarted = try Fixture(showing: false)
+                    result = try await restarted.call("apply_session_repair", params: params)
+                    #expect(restarted.view.events.isEmpty)
+                } else { result = try await f.call("apply_session_repair", params: params) }
+                switch kind {
+                case "ttl_replay":
+                    #expect(result["saga_state"] as? String == "completed")
+                    let duplicate = try #require(result["duplicate"] as? Bool)
+                    #expect(duplicate)
+                    let evidence = try #require(result["goal_evidence"] as? [[String: Any]])
+                    #expect((evidence.first?["read"] as? [String: Any])?["observed"] as? String == names[0])
+                case "body_eviction": #expect(result["error"] as? String == HonestContract.FailureError.sagaOutcomeUnavailable.rawValue)
+                case "changed_id", "changed_digest": #expect(result["error"] as? String == HonestContract.FailureError.idempotencyKeyConflict.rawValue)
+                default: #expect(result["state"] as? String == "C")
+                }
+                #expect(reads.originalDecidingReads == 0)
+                #expect(f.view.events.isEmpty)
+            }
+        }
     }
 
     @Test(arguments: [false, true])
