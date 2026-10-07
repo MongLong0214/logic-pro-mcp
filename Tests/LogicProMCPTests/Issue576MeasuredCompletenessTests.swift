@@ -32,7 +32,8 @@ struct Issue576MeasuredCompletenessTests {
             nonRegionCount: 0,
             trackHeaderCount: headers,
             trackHeadersWithinViewport: inViewport,
-            regionItemsOutsideViewport: droppedRegions
+            regionItemsOutsideViewport: droppedRegions,
+            trackHeadersWithStackVisibilityGaps: 0
         )
     }
 
