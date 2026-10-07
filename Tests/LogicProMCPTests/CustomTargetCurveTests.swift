@@ -57,7 +57,8 @@ struct CustomTargetCurveTests {
                 "path": .string("/tmp/curve-deliberately-absent.wav"), "target_curve": curve,
             ])
             let body = try #require(sharedJSONObject(sharedToolText(result)))
-            #expect(result.isError == true)
+            let isError = try #require(result.isError)
+            #expect(isError)
             #expect(body["error"] as? String == "invalid_params")
             #expect(sharedToolText(result).contains("target_curve"))
         }
@@ -75,7 +76,8 @@ struct CustomTargetCurveTests {
                     #expect(band["targetEnergyDbfs"] == nil)
                 }
             }
-            #expect(body["complete"] as? Bool == false)
+            let complete = try #require(body["complete"] as? Bool)
+            #expect(!complete)
         }
     }
 
@@ -85,9 +87,11 @@ struct CustomTargetCurveTests {
                 "path": .string(path.path), "target_curve": .array([point(20, -40), point(20_000, -10)]),
             ])
             let body = try #require(sharedJSONObject(sharedToolText(result)))
-            #expect(result.isError == true)
+            let isError = try #require(result.isError)
+            #expect(isError)
             #expect(body["analysis_error"] as? String == "incomplete_input")
-            #expect(body["write_attempted"] as? Bool == false)
+            let writeAttempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!writeAttempted)
             #expect(body["targetCurveComparison"] == nil)
         }
     }
@@ -98,7 +102,8 @@ struct CustomTargetCurveTests {
             let bands = try #require(result["bands"] as? [[String: Any]])
             #expect(bands.allSatisfy { $0["deltaDb"] == nil })
             #expect(bands.contains { $0["unavailableReason"] as? String == "at_analysis_floor" })
-            #expect(result["complete"] as? Bool == false)
+            let complete = try #require(result["complete"] as? Bool)
+            #expect(!complete)
         }
         try withTone { path in
             let result = try evaluated(path, curve: .array([point(20, -80), point(20_000, -80)]))
@@ -148,7 +153,8 @@ struct CustomTargetCurveTests {
             #expect(abs(try #require(evaluated[index]["targetEnergyDbfs"] as? Double) - expected) < 1e-10)
             #expect(abs(try #require(evaluated[index]["deltaDb"] as? Double) - (expected - energy)) < 1e-10)
             #expect(evaluated.contains { $0["unavailableReason"] as? String == "unmeasured_band" })
-            #expect(evaluation["complete"] as? Bool == false)
+            let complete = try #require(evaluation["complete"] as? Bool)
+            #expect(!complete)
             #expect(try Data(contentsOf: path) == bytes)
             #expect(!body.keys.contains("applied"))
         }
