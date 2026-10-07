@@ -36,6 +36,27 @@ struct SemanticOracleEngineTests {
         for mutant in mutants { #expect(!every.isSatisfied(by: mutant.json)) }
     }
 
+    @Test func utf8StringRelationPreservesGenericEqualityAndRefusesMalformedValues() {
+        let exact = OracleConstraint.utf8StringsEqual(keyA: "before", keyB: "after")
+        let equivalent = root(#"{"before":"e\u0301","after":"\u00e9"}"#)
+        #expect(OracleConstraint.fieldsEqual(keyA: "before", keyB: "after").isSatisfied(by: equivalent))
+        #expect(!exact.isSatisfied(by: equivalent))
+        #expect(exact.key == "before")
+        #expect(exact.isValueConstraint)
+        for json in [#"{"before":"e\u0301","after":"e\u0301"}"#, #"{"before":"\u00e9","after":"\u00e9"}"#] {
+            let good = root(json)
+            #expect(exact.isSatisfied(by: good))
+            let mutants = JSONMutator.mutants(for: exact, in: good)
+            #expect(!mutants.isEmpty)
+            for mutant in mutants { #expect(!exact.isSatisfied(by: mutant.json)) }
+        }
+        for json in [#"{}"#, #"{"before":"A"}"#, #"{"after":"A"}"#,
+                     #"{"before":1,"after":1}"#, #"{"before":true,"after":true}"#,
+                     #"{"before":null,"after":null}"#, #"{"before":[],"after":[]}"#] {
+            #expect(!exact.isSatisfied(by: root(json)))
+        }
+    }
+
     @Test func alternativeMutantsCorruptOnlyTheActuallySatisfiedMode() {
         let constraint = OracleConstraint.anyOf([
             [.valueEquals(key: "mode", expected: .string("write")), .nonEmptyArray(key: "steps")],
@@ -1633,7 +1654,7 @@ enum JSONMutator {
                     ("different readback identity position", divergent(from: position)),
                 ]))
             }
-        case .fieldsEqual(let keyA, let keyB):
+        case .fieldsEqual(let keyA, let keyB), .utf8StringsEqual(let keyA, let keyB):
             // Break the equality by diverging EITHER side; each must sink the
             // oracle. (`drop keyA` is already added generically via `key`.)
             if let currentA = JSONPath.resolve(root, keyPath: keyA) {

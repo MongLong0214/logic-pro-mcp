@@ -386,6 +386,55 @@ struct Issue971ApprovedMixerSagaTests {
         }
     }
 
+    @Test(arguments: [0, 1], ["nfd", "nfc"])
+    func namesOnlyOracleRequiresExactUTF8InEitherGoal(row: Int, encoding: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let original = encoding == "nfd" ? "e\u{301}" : "\u{e9}"
+                let equivalent = encoding == "nfd" ? "\u{e9}" : "e\u{301}"
+                #expect(original == equivalent)
+                #expect(!original.utf8.elementsEqual(equivalent.utf8))
+                var names = ["Bass", "Piano"]
+                names[row] = original
+                let f = try Fixture(showing: false)
+                f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names)
+                let body = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "oracle-name-bytes"))
+                let rows = try #require(body["goal_evidence"] as? [[String: Any]])
+                #expect(rows.count == 2)
+                let before = try #require(rows[row]["before"] as? [String: Any])
+                let read = try #require(rows[row]["read"] as? [String: Any])
+                #expect((try #require(before["observed"] as? String)).utf8.elementsEqual(original.utf8))
+                #expect((try #require(read["observed"] as? String)).utf8.elementsEqual(original.utf8))
+                let oracle = try #require(SemanticOracleTable.byOperationID[.projectApplySessionRepair])
+                let readback = Data("{}".utf8)
+                let identicalAccepted = try #require(oracle.evaluate(responseData: JSONSerialization.data(withJSONObject: body), readbackData: readback))
+                #expect(identicalAccepted)
+                var alteredRows = rows
+                var alteredRead = read
+                alteredRead["observed"] = equivalent
+                alteredRows[row]["read"] = alteredRead
+                var altered = body
+                altered["goal_evidence"] = alteredRows
+                let changedBytesAccepted = try #require(oracle.evaluate(responseData: JSONSerialization.data(withJSONObject: altered), readbackData: readback))
+                #expect(!changedBytesAccepted)
+                for side in ["before", "read"] {
+                    for invalid: Any? in [nil, 1, false, NSNull()] {
+                        var malformedRows = rows
+                        var evidence = try #require(rows[row][side] as? [String: Any])
+                        evidence["observed"] = invalid
+                        malformedRows[row][side] = evidence
+                        var malformed = body
+                        malformed["goal_evidence"] = malformedRows
+                        let malformedAccepted = try #require(oracle.evaluate(responseData: JSONSerialization.data(withJSONObject: malformed), readbackData: readback))
+                        #expect(!malformedAccepted)
+                    }
+                }
+                #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
     @Test
     func disabledSagaBlocksNamesOnlyPlanningAndApply() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {

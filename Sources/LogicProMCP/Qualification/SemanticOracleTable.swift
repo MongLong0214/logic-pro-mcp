@@ -2284,7 +2284,7 @@ enum SemanticOracleTable {
                         .valueEquals(key: "read.provenance", expected: .string("live_independent")),
                         .valueEquals(key: "read.field", expected: .string("name")),
                         .typedField(key: "read.observed", type: .string),
-                        .fieldsEqual(keyA: "before.observed", keyB: "read.observed"),
+                        .utf8StringsEqual(keyA: "before.observed", keyB: "read.observed"),
                     ]),
                 ],
             ]),
