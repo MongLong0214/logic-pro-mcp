@@ -2937,6 +2937,65 @@ private actor SelectiveFailChannel: Channel {
     #expect(await missingKeyCmd.executedOps.isEmpty)
 }
 
+@Test(arguments: ["conflict", "object", "array", "null", "boolean", "number",
+                  "value_object_grid_valid", "grid_object_value_valid", "value_null_grid_valid",
+                  "grid_null_value_valid", "value_unknown_grid_valid", "grid_unknown_value_valid",
+                  "value_empty_grid_valid", "grid_empty_value_valid"])
+func testEditDispatcherQuantizeRejectsInvalidAliasWithoutRouting(_ input: String) async throws {
+    let params: [String: Value]
+    switch input {
+    case "conflict": params = ["value": .string("1/8"), "grid": .string("1/4")]
+    case "object": params = ["value": .object([:])]
+    case "array": params = ["grid": .array([.string("1/8")])]
+    case "null": params = ["value": .null]
+    case "boolean": params = ["grid": .bool(true)]
+    case "number": params = ["value": .int(16)]
+    case "value_object_grid_valid": params = ["value": .object([:]), "grid": .string("1/8")]
+    case "grid_object_value_valid": params = ["value": .string("1/8"), "grid": .object([:])]
+    case "value_null_grid_valid": params = ["value": .null, "grid": .string("1/8")]
+    case "grid_null_value_valid": params = ["value": .string("1/8"), "grid": .null]
+    case "value_unknown_grid_valid": params = ["value": .string("1/3"), "grid": .string("1/8")]
+    case "grid_unknown_value_valid": params = ["value": .string("1/8"), "grid": .string("1/3")]
+    case "value_empty_grid_valid": params = ["value": .string(""), "grid": .string("1/8")]
+    default: params = ["value": .string("1/8"), "grid": .string("")]
+    }
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+    let result = await EditDispatcher.handle(command: "quantize", params: params, router: router, cache: StateCache())
+    let isError = try #require(result.isError)
+    #expect(isError)
+    #expect(await ax.executedOps.isEmpty, "invalid request must not become a default-grid mutation")
+}
+
+@Test(arguments: ["value_only", "grid_only", "equal_aliases"])
+func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async throws {
+    let expected = input == "value_only" ? "1/8" : input == "grid_only" ? "1/4" : "1/8T"
+    let params: [String: Value] = input == "value_only" ? ["value": .string(expected)]
+        : input == "grid_only" ? ["grid": .string(expected)]
+        : ["value": .string(expected), "grid": .string(expected)]
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+    let result = await EditDispatcher.handle(command: "quantize", params: params, router: router, cache: StateCache())
+    let isError = try #require(result.isError)
+    #expect(!isError)
+    expectExecutedOps(await ax.executedOps, equals: [("edit.quantize", ["value": expected])])
+}
+
+@Test func testQuantizeParameterContractProjectsExplicitStringGrids() throws {
+    let id = try #require(OperationID(rawValue: "edit.quantize"))
+    let contract = try #require(OperationRegistry.parameterContracts[id])
+    for key in ["value", "grid"] {
+        let rule = try #require(contract.params[key])
+        #expect(rule.kind == .string)
+        #expect(rule.allowed == EditDispatcher.validQuantizeGrids)
+        let schema = try #require(rule.schema.objectValue)
+        #expect(schema["type"] == .string("string"))
+        #expect(schema["enum"] == .array(EditDispatcher.validQuantizeGrids.map(Value.string)))
+    }
+}
+
 @Test func testEditDispatcherTreatsUnverifiedStateBAsError() async {
     let router = ChannelRouter()
     let keyCmd = StaticResultChannel(

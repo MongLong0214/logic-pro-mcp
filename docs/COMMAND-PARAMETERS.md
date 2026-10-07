@@ -26,7 +26,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | `move_to_playhead` | none | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `normalize` | none | none | closed | mutating | none | none | none | never_automatic | requires_key_binding |
 | `paste` | none | none | closed | mutating | none | none | none | never_automatic | default_install |
-| `quantize` | `grid`, `value` | `value` or `grid` | closed | mutating | none | none | none | never_automatic | default_install |
+| `quantize` | `grid`: string (1/1, 1/2, 1/4, 1/8, 1/16, 1/32, 1/64, 1/4T, 1/8T, 1/16T), `value`: string (1/1, 1/2, 1/4, 1/8, 1/16, 1/32, 1/64, 1/4T, 1/8T, 1/16T) | `value` or `grid` | closed | mutating | none | none | none | never_automatic | default_install |
 | `redo` | none | none | closed | mutating | none | none | none | never_automatic | default_install |
 | `select_all` | none | none | closed | mutating | none | none | none | never_automatic | default_install |
 | `split` | none | none | closed | mutating | none | none | none | never_automatic | default_install |
