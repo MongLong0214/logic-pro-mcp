@@ -155,6 +155,20 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, verifyReferences: true)
     }
 
+    @Test func registeredSingleStackKnownClosedExposureCannotReopenItsOldInverse() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, knownOuterReopen: true)
+    }
+
+    @Test func registeredSingleStackSampledReplacementCannotRestoreItsOldDisclosureInverse() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, knownOuterReplacement: true)
+    }
+
+    @Test(arguments: ["competing", "role_loss"])
+    func registeredSingleStackUsesTheActuallyDecidingDisclosureIdentity(disclosureDecision: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false,
+            knownOuterReplacement: true, disclosureDecision: disclosureDecision)
+    }
+
     @Test func registeredNestedStackObservationCapturesGrandchildrenAndEndsTheirExposure() async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, verifyReferences: true, nested: true)
     }
@@ -394,7 +408,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                               verifyReferences: Bool = false, mouseCase: String? = nil,
                               releaseCase: String? = nil, nested: Bool = false,
                               nestedRelease: String? = nil, nestedFault: String? = nil,
-                              downFocusRead: String? = nil, knownInnerReopen: Bool = false,
+                              downFocusRead: String? = nil, knownOuterReopen: Bool = false,
+                              knownOuterReplacement: Bool = false, knownInnerReopen: Bool = false,
                               knownInnerReplacement: Bool = false, disclosureDecision: String? = nil) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
@@ -532,9 +547,22 @@ struct Issue965FreshPopulationAcquisitionTests {
         let cache = StateCache()
         let registry = TargetRegistry()
         let gate = LogicMutationGate()
-        let fileReader: LogicProjectFileReader.Runtime = (knownInnerReopen || knownInnerReplacement) ? .init(
+        let fileReader: LogicProjectFileReader.Runtime = (knownOuterReopen || knownOuterReplacement || knownInnerReopen || knownInnerReplacement) ? .init(
             currentDocumentPath: { nil }, now: Date.init, readPlistData: { _ in nil },
             mtime: { _ in
+                if knownOuterReopen || knownOuterReplacement {
+                    guard fixture.reads.recorded.contains("outer_extractor_returned_zero")
+                        || fixture.reads.recorded.contains("replacement_disclosure_value_read") else { return nil }
+                    fixture.reads.record("closed_population_metadata")
+                    if fixture.reads.recorded.filter({ $0 == "closed_population_metadata" }).count == 2 {
+                        fixture.reads.record("same_outer_reopened_on_retry")
+                        fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+                        fixture.builder.setRole(disclosure, kAXDisclosureTriangleRole as String)
+                        fixture.builder.setChildren(headers[0], [disclosure])
+                        fixture.builder.setChildren(fixture.rail, headers)
+                    }
+                    return nil
+                }
                 guard fixture.reads.recorded.contains("inner_extractor_returned_zero")
                     || fixture.reads.recorded.contains("replacement_disclosure_value_read") else { return nil }
                 fixture.reads.record("closed_population_metadata")
@@ -551,6 +579,30 @@ struct Issue965FreshPopulationAcquisitionTests {
             poller: StatePoller(axChannel: fixture.channel(disclosure: disclosure,
                 additionalDisclosure: nested ? inner : nil, observationMouse: observationMouse,
                 wrongDisclosureHit: mouseCase == "wrong_hit", observingAttribute: { element, attribute in
+                    if knownOuterReopen, fixture.events.count == 2, CFEqual(element, headers[0]),
+                       attribute == kAXHelpAttribute as String { fixture.reads.record("outer_row_help_before_stack_read") }
+                    if knownOuterReplacement, fixture.events.count == 2, CFEqual(element, headers[0]),
+                       attribute == kAXHelpAttribute as String,
+                       !fixture.reads.recorded.contains("replacement_disclosure_installed") {
+                        fixture.reads.record("replacement_disclosure_installed")
+                        if disclosureDecision == "role_loss" {
+                            fixture.builder.setRole(disclosure, kAXButtonRole as String)
+                            fixture.builder.setChildren(headers[0], [disclosure, substitutedDisclosure])
+                        } else {
+                            fixture.builder.setChildren(headers[0], disclosureDecision == "competing"
+                                ? [substitutedDisclosure, disclosure] : [substitutedDisclosure])
+                        }
+                        fixture.builder.setChildren(fixture.rail, collapsed)
+                    }
+                    if disclosureDecision == "role_loss", CFEqual(element, disclosure),
+                       attribute == kAXRoleAttribute as String,
+                       fixture.builder.attributeValue(disclosure, attribute) as? String == kAXButtonRole as String {
+                        fixture.reads.record("held_disclosure_button_role_read")
+                    }
+                    if knownOuterReplacement, CFEqual(element, substitutedDisclosure) {
+                        if attribute == kAXRoleAttribute as String { fixture.reads.record("replacement_disclosure_role_read") }
+                        if attribute == kAXValueAttribute as String { fixture.reads.record("replacement_disclosure_value_read") }
+                    }
                     if knownInnerReopen, fixture.events.count == 4, CFEqual(element, headers[1]),
                        attribute == kAXHelpAttribute as String {
                         fixture.reads.record("inner_row_help_before_stack_read")
@@ -592,6 +644,15 @@ struct Issue965FreshPopulationAcquisitionTests {
                         fixture.builder.setChildren(fixture.rail, changed)
                     }
                 }, readingAttribute: { element, attribute in
+                    if knownOuterReopen, fixture.events.count == 2, CFEqual(element, disclosure),
+                          attribute == kAXValueAttribute as String,
+                          fixture.reads.recorded.contains("outer_row_help_before_stack_read"),
+                          !fixture.reads.recorded.contains("outer_extractor_returned_zero") {
+                        fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
+                        fixture.builder.setChildren(fixture.rail, collapsed)
+                        fixture.reads.record("outer_extractor_returned_zero")
+                        return .success(NSNumber(value: 0))
+                    }
                     if knownInnerReopen, fixture.events.count == 4, CFEqual(element, inner),
                        attribute == kAXValueAttribute as String,
                        fixture.reads.recorded.contains("inner_row_help_before_stack_read"),
@@ -608,6 +669,24 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.reads.record("focus_read_missing_after_true_down")
                     return .success(nil)
                 }, observingChildren: { element in
+                    if knownOuterReplacement, CFEqual(element, headers[0]),
+                       fixture.reads.recorded.contains("replacement_disclosure_installed"),
+                       !fixture.reads.recorded.contains("same_outer_reopened_on_retry") {
+                        let children = fixture.builder.makeAXRuntime().children(headers[0])
+                        let expected = disclosureDecision == "role_loss" ? [disclosure, substitutedDisclosure]
+                            : disclosureDecision == "competing" ? [substitutedDisclosure, disclosure] : [substitutedDisclosure]
+                        if children.count == expected.count,
+                           zip(children, expected).allSatisfy({ CFEqual($0.0, $0.1) }) {
+                            fixture.reads.record("replacement_disclosure_children_read")
+                        }
+                    }
+                    if (knownOuterReopen || knownOuterReplacement), CFEqual(element, fixture.rail),
+                       (fixture.reads.recorded.contains("outer_extractor_returned_zero")
+                        || fixture.reads.recorded.contains("replacement_disclosure_value_read")),
+                       !fixture.reads.recorded.contains("same_outer_reopened_on_retry"),
+                       fixture.builder.makeAXRuntime().children(fixture.rail).count == 19 {
+                        fixture.reads.record("closed_rail_actually_read")
+                    }
                     if knownInnerReplacement, CFEqual(element, headers[1]),
                        fixture.reads.recorded.contains("replacement_disclosure_installed"),
                        !fixture.reads.recorded.contains("same_inner_reopened_on_retry") {
@@ -649,6 +728,37 @@ struct Issue965FreshPopulationAcquisitionTests {
                 }
                 return await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
+        if knownOuterReopen || knownOuterReplacement {
+            if knownOuterReopen {
+                #expect(fixture.reads.recorded.filter { $0 == "outer_extractor_returned_zero" }.count == 1)
+                #expect(fixture.reads.recorded.contains("outer_row_help_before_stack_read"))
+            } else {
+                #expect(!CFEqual(substitutedDisclosure, disclosure))
+                #expect(fixture.reads.recorded.filter { $0 == "replacement_disclosure_installed" }.count == 1)
+                #expect(fixture.reads.recorded.contains("replacement_disclosure_children_read"))
+                #expect(fixture.reads.recorded.contains("replacement_disclosure_role_read"))
+                #expect(fixture.reads.recorded.contains("replacement_disclosure_value_read"))
+                if disclosureDecision == "role_loss" {
+                    #expect(fixture.reads.recorded.contains("held_disclosure_button_role_read"))
+                }
+            }
+            #expect(fixture.reads.recorded.contains("closed_rail_actually_read"))
+            #expect(fixture.reads.recorded.filter { $0 == "closed_population_metadata" }.count >= 2)
+            #expect(fixture.reads.recorded.filter { $0 == "same_outer_reopened_on_retry" }.count == 1)
+            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up"],
+                    "a positively observed closed exposure cannot renew its original inverse")
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 42)
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored")
+            let current = await cache.getTracks()
+            #expect(current.isEmpty)
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            return
+        }
         if knownInnerReopen || knownInnerReplacement {
             if knownInnerReopen {
                 #expect(fixture.reads.recorded.filter { $0 == "inner_extractor_returned_zero" }.count == 1)

@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source_members=(
+  docs/SETUP.md
+  Scripts/install-keycmds.sh
+  Scripts/uninstall-keycmds.sh
+  Scripts/keycmd-preset.plist
+  Scripts/LogicProMCP-Scripter.js
+  Scripts/logic_bounce.py
+  Scripts/logic_bounce_ui.py
+  Scripts/logic_ui_jxa.py
+  Scripts/logic_input_source.py
+  Scripts/logic_variants.py
+  Scripts/logic_ui_labels.py
+)
+if [ "${1:-}" = --list-members ]; then
+  printf '%s\n' LogicProMCP "${source_members[@]}"
+  exit 0
+fi
+
 release_version="${GITHUB_REF_NAME:-${LOGIC_PRO_MCP_RELEASE_VERSION:-local-dev}}"
 
 binary_path="${LOGIC_PRO_MCP_PACKAGE_BINARY:-LogicProMCP}"
@@ -76,20 +94,11 @@ if [ "$binary_file" != "$root_binary" ]; then
   binary_dir=$(pwd -P)
 fi
 
-tar czf LogicProMCP-macOS-universal.tar.gz \
+# Ship only the declared members, not macOS AppleDouble sidecars carrying
+# unauthenticated filesystem metadata alongside those exact source bytes.
+COPYFILE_DISABLE=1 tar czf LogicProMCP-macOS-universal.tar.gz \
   -C "$binary_dir" LogicProMCP \
-  -C "$PWD" \
-  docs/SETUP.md \
-  Scripts/install-keycmds.sh \
-  Scripts/uninstall-keycmds.sh \
-  Scripts/keycmd-preset.plist \
-  Scripts/LogicProMCP-Scripter.js \
-  Scripts/logic_bounce.py \
-  Scripts/logic_bounce_ui.py \
-  Scripts/logic_ui_jxa.py \
-  Scripts/logic_input_source.py \
-  Scripts/logic_variants.py \
-  Scripts/logic_ui_labels.py
+  -C "$PWD" "${source_members[@]}"
 
 cp LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz
 shasum -a 256 LogicProMCP-macOS-universal.tar.gz > SHA256SUMS.txt

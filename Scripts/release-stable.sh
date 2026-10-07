@@ -1,127 +1,14 @@
-#!/bin/bash
-#
-# Scripts/release-stable.sh — guarded stable ADHOC release tag publisher.
-#
-# Stable tags trigger .github/workflows/release.yml. Apple Developer ID is
-# optional: if notarization secrets are absent, the workflow publishes the
-# historical ADHOC artifact with SHA256 + codesign verification metadata.
-# This script keeps the stable tag gate on clean main, duplicate tag/release
-# checks, and deterministic local build/test gates before pushing the tag.
-#
-# BEFORE running this: cutting the version is ONE commit, not three.
-#
-#   CHANGELOG.md         ## [Unreleased]  ->  ## [X.Y.Z] — YYYY-MM-DD
-#   ServerConfig.swift   serverVersion    ->  "X.Y.Z"
-#   ResourceProvider     the release timestamp every resource reports
-#
-# `VersionConsistencyTests` enforces that those three agree, so renaming the changelog heading on its own
-# fails the suite. That is the point: until the tag exists, a dated release heading claims something that
-# did not happen. Leave the notes under ## [Unreleased] and cut all three together, here.
-#
-# Formula and server.json stay on the newest published archive during this cut.
-# After publication, move their version and checksum references together in a pull request.
-#
-# Usage:
-#   Scripts/release-stable.sh v3.4.6
-#   DRY_RUN=1 Scripts/release-stable.sh v3.4.6
-#
+#!/usr/bin/env bash
+# Stable tags use the same final-artifact consumer and hosted sole publisher.
 set -euo pipefail
-
-VERSION="${1:-}"
+if [ "$#" != 4 ] || ! [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Usage: $0 vMAJOR.MINOR.PATCH FINAL_CANDIDATE PRIVATE_BUNDLE TRUSTED_VERIFIER" >&2
+  exit 1
+fi
 REPO="${GITHUB_REPOSITORY:-MongLong0214/logic-pro-mcp}"
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DRY_RUN="${DRY_RUN:-0}"
-
-usage() {
-    echo "Usage: $0 vMAJOR.MINOR.PATCH"
-}
-
-run() {
-    echo "→ $*"
-    if [ "$DRY_RUN" != "1" ]; then
-        "$@"
-    fi
-}
-
-if [ -z "$VERSION" ]; then
-    usage
-    exit 1
-fi
-
-if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Error: stable VERSION '$VERSION' must be strict SemVer, e.g. v3.4.6"
-    echo "       Use Scripts/release.sh vX.Y.Z-rcN for ADHOC prereleases."
-    exit 1
-fi
-
-cd "$REPO_ROOT"
-
-echo ""
-echo "  Logic Pro MCP — stable ADHOC release preflight"
-echo "  version: $VERSION"
-echo "  repo:    $REPO"
-echo "  dry-run: $DRY_RUN"
-echo ""
-
-if [ "$(git branch --show-current)" != "main" ]; then
-    echo "Error: stable releases must be tagged from the main branch."
-    exit 1
-fi
-
-if [ -n "$(git status --porcelain)" ]; then
-    echo "Error: working tree is not clean. Commit or stash first."
-    git status --short
-    exit 1
-fi
-
-run git fetch --quiet origin main --tags
-
-if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
-    echo "Error: HEAD must match origin/main before publishing a stable tag."
-    echo "       Push or pull main first, then rerun this script."
-    exit 1
-fi
-
-if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
-    echo "Error: tag $VERSION already exists locally."
-    exit 1
-fi
-
-REMOTE_TAGS=$(git ls-remote --tags origin "$VERSION") || {
-    echo "Error: could not verify remote tag availability for $VERSION."
-    echo "       Refusing to continue because a duplicate stable tag cannot be fixed safely."
-    exit 1
-}
-if printf '%s\n' "$REMOTE_TAGS" | grep -q "refs/tags/$VERSION"; then
-    echo "Error: tag $VERSION already exists on origin."
-    exit 1
-fi
-
 gh auth status >/dev/null
-
-if gh release view "$VERSION" --repo "$REPO" >/dev/null 2>&1; then
-    echo "Error: GitHub Release $VERSION already exists."
-    exit 1
+if gh release view "$1" --repo "$REPO" >/dev/null 2>&1; then
+  echo "Error: GitHub Release already exists." >&2
+  exit 1
 fi
-
-run python3 -m py_compile Scripts/live-e2e-test.py Scripts/logic_bounce.py Scripts/logic_bounce_main_test.py Scripts/logic_bounce_support_test.py Scripts/logic_bounce_ui.py Scripts/logic_bounce_ui_test.py Scripts/logic_input_source.py Scripts/logic_session_bootstrap.py Scripts/logic_ui_jxa.py Scripts/logic_free_tempo_modal.py Scripts/logic_controller_learn_mode.py Scripts/logic_variants.py
-# The discovered runner is the single source of truth for standalone drives; a second path list
-# would silently omit the next one added.
-run python3 Scripts/run-repo-guards.py
-run swiftc -typecheck Scripts/logic_key_event.swift
-run swiftc -typecheck Scripts/logic_ui_snapshot.swift
-run swiftc -typecheck Scripts/logic_ax_button_press.swift
-# Builds release, requires a running Logic, then runs the whole suite against that binary (#985).
-# Record the exact HEAD qualified here so the tag-triggered workflow can verify it (#985).
-QUALIFIED=$(git rev-parse HEAD)
-run Scripts/release-qualify.sh
-
-run git tag "$VERSION" -m "Release $VERSION" -m "Live-qualified: $QUALIFIED"
-run git push origin "$VERSION"
-
-echo ""
-echo "  Stable tag published: $VERSION"
-echo "  GitHub Actions release workflow will build, ADHOC-sign if Developer ID"
-echo "  secrets are absent, publish artifacts, then run install validation on"
-echo "  macos-14 and macos-15."
-echo ""
+exec bash "$(dirname "$0")/release.sh" "$@"

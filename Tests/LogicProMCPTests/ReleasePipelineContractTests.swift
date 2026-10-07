@@ -5,27 +5,27 @@ import Testing
     let script = try scriptContents("Scripts/release.sh")
 
     #expect(script.contains("git branch --show-current"))
-    #expect(script.contains("\"main\""))
+    #expect(script.contains("!= main"))
     #expect(script.contains("stable releases must be tagged from the main branch"))
     #expect(script.contains("git fetch --quiet origin main --tags"))
     #expect(script.contains("git rev-parse HEAD"))
     #expect(script.contains("git rev-parse origin/main"))
     #expect(script.contains("HEAD must match origin/main"))
-    #expect(script.contains("run \"Scripts/release-qualify.sh\""))
-    #expect(script.contains("git diff --exit-code Package.resolved"))
+    #expect(script.contains("bash Scripts/release-consume-final.sh stage"))
+    #expect(!script.contains("swift build"))
+    #expect(!script.contains("gh release create"))
 
     let branchGate = try #require(script.range(of: "git branch --show-current"))
     let headGate = try #require(script.range(of: "git rev-parse HEAD"))
-    let testGate = try #require(script.range(of: "run \"Scripts/release-qualify.sh\""))
-    let lockfileGate = try #require(script.range(of: "git diff --exit-code Package.resolved"))
-    let tag = try #require(script.range(of: "run \"git tag $VERSION"))
-    let tagPush = try #require(script.range(of: "git push origin $VERSION"))
+    let consumption = try #require(script.range(of: "bash Scripts/release-consume-final.sh stage"))
+    let pins = try #require(script.range(of: "BINARY_SHA=$(shasum"))
+    let tag = try #require(script.range(of: "git tag \"$VERSION\""))
+    let tagPush = try #require(script.range(of: "git push origin \"$VERSION\""))
     #expect(branchGate.lowerBound < tagPush.lowerBound)
     #expect(headGate.lowerBound < tagPush.lowerBound)
-    #expect(testGate.lowerBound < lockfileGate.lowerBound)
-    #expect(testGate.lowerBound < tag.lowerBound)
+    #expect(consumption.lowerBound < pins.lowerBound)
+    #expect(pins.lowerBound < tag.lowerBound)
     #expect(tag.lowerBound < tagPush.lowerBound)
-    #expect(lockfileGate.lowerBound < tagPush.lowerBound)
 }
 
 @Test func release_qualification_gate_builds_and_requires_live_logic_before_full_suite() throws {
@@ -44,19 +44,17 @@ import Testing
     let workflow = try scriptContents(".github/workflows/release.yml")
 
     let selectXcode = try #require(workflow.range(of: "name: Select Xcode"))
-    // release.yml runs the suite with the same flags as ci.yml (#496). The full
-    // invocation is asserted, not a prefix: "swift test --no-parallel" would still
-    // match after the flags diverged again, which is the drift this contract exists
-    // to catch — and it did catch it, twice, in both directions.
-    let testStep = try #require(workflow.range(
-        of: "swift test -Xswiftc -suppress-warnings --no-parallel"
-    ))
-    let buildUniversal = try #require(workflow.range(of: "name: Build universal binary"))
+    // The candidate is already final and qualified. Only the independently
+    // pinned verifier is built; consumer behavior is exercised separately.
+    let resolve = try #require(workflow.range(of: "swift package resolve --force-resolved-versions"))
+    let buildVerifier = try #require(workflow.range(of: "swift build -c release --product trusted-verifier --force-resolved-versions"))
     let package = try #require(workflow.range(of: "name: Package"))
 
-    #expect(selectXcode.lowerBound < testStep.lowerBound)
-    #expect(testStep.lowerBound < buildUniversal.lowerBound)
-    #expect(testStep.lowerBound < package.lowerBound)
+    #expect(selectXcode.lowerBound < resolve.lowerBound)
+    #expect(resolve.lowerBound < buildVerifier.lowerBound)
+    #expect(buildVerifier.lowerBound < package.lowerBound)
+    #expect(!workflow.contains("name: Build universal binary"))
+    #expect(!workflow.contains("codesign --force"))
 }
 
 @Test func ci_workflow_gates_package_resolved_drift() throws {
