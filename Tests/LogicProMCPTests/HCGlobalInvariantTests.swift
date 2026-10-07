@@ -331,6 +331,7 @@ struct HCGlobalInvariantTests {
             RouteCase(tool: "logic_project", command: "close", params: ["confirmed": .bool(true), "saving": .string("no")], operation: "project.close", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_project", command: "bounce", params: ["confirmed": .bool(true)], operation: "project.bounce", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_project", command: "cleanup_apply", params: ["step_id": .string("rename_duplicate_kick_0_1"), "confirmed": .bool(true), "names": .string("Kick L,Kick R")], operation: "project.cleanup_apply", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_project", command: "apply_session_repair", params: [:], operation: "project.apply_session_repair", destinations: [], invariant: .minimumV1),
 
             RouteCase(tool: "logic_system", command: "export_support_bundle", params: ["dir": .string(fixtures.supportBundlePath)], operation: "system.export_support_bundle", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_system", command: "saga_execute", params: [:], operation: "system.saga_execute", destinations: [], invariant: .minimumV1),
@@ -370,6 +371,20 @@ struct HCGlobalInvariantTests {
                 "\(tool) invariant coverage drifted; missing=\(commandSet.subtracting(represented).sorted()) extra=\(represented.subtracting(commandSet).sorted())"
             )
         }
+    }
+
+    @Test("the retained Mixer repair is an actual verified HC route")
+    func approvedRetainedMixerRepairRouteReturnsVerifiedHCJSON() async throws {
+        let route = RouteCase(tool: "logic_project", command: "apply_session_repair", params: [:],
+            operation: "project.apply_session_repair", destinations: [], invariant: .minimumV1)
+        let result = try await Self.execute(route)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(body["state"] as? String == "A")
+        let success = try #require(body["success"] as? Bool)
+        let verified = try #require(body["verified"] as? Bool)
+        #expect(success)
+        #expect(verified)
+        #expect(body["saga_state"] as? String == "completed")
     }
 
     @Test("logic_midi dispatcher route mapping matches RoutingTable destinations")
@@ -469,6 +484,24 @@ struct HCGlobalInvariantTests {
     }
 
     private static func execute(_ routeCase: RouteCase) async throws -> CallTool.Result {
+        if routeCase.id == "logic_project.apply_session_repair" {
+            return try await FeatureFlags.withAdr002TargetRefForTests(true) {
+                try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                    let fixture = try Issue971ApprovedMixerSagaTests.Fixture(showing: false)
+                    await fixture.router.register(fixture.view.channel())
+                    let plan = try await fixture.plan(desired: true)
+                    let params = try fixture.applyParameters(plan, key: "hc-approved-mixer")
+                    let result = try await fixture.callResult("apply_session_repair", params: params)
+                    #expect(fixture.view.events.filter { $0 == "show_mixer" } == ["show_mixer"])
+                    #expect(fixture.view.showing)
+                    let body = try #require(sharedJSONObject(sharedToolText(result)))
+                    let verified = try #require(body["verified"] as? Bool)
+                    #expect(verified)
+                    #expect(body["saga_state"] as? String == "completed")
+                    return result
+                }
+            }
+        }
         let router = routeCase.invariant == .midiStateB
             ? try await Self.hcMIDIRouter()
             : await Self.hcEnvelopeRouter()

@@ -96,7 +96,7 @@ struct Issue971ApprovedMixerSagaTests {
         }
     }
 
-    private final class Fixture: @unchecked Sendable {
+    final class Fixture: @unchecked Sendable {
         let view: Issue969MixerVisibilitySetterTests.Fixture
         let cache: StateCache
         let registry = TargetRegistry()
@@ -149,6 +149,13 @@ struct Issue971ApprovedMixerSagaTests {
 
         func call(_ command: String, params: [String: Value], lifecycleDeadline: ContinuousClock.Instant? = nil,
                   afterHandler: (@Sendable () async -> Void)? = nil) async throws -> [String: Any] {
+            let result = try await callResult(command, params: params, lifecycleDeadline: lifecycleDeadline,
+                                              afterHandler: afterHandler)
+            return try #require(sharedJSONObject(sharedToolText(result)))
+        }
+
+        func callResult(_ command: String, params: [String: Value], lifecycleDeadline: ContinuousClock.Instant? = nil,
+                        afterHandler: (@Sendable () async -> Void)? = nil) async throws -> CallTool.Result {
             let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: command))
             if LogicProServer.strictParamValidationResult(tool: "logic_project", command: command, params: params) != nil {
                 Issue.record("the registered request must satisfy its existing strict schema")
@@ -175,7 +182,7 @@ struct Issue971ApprovedMixerSagaTests {
                         }
                     }
                 }
-            return try #require(sharedJSONObject(sharedToolText(response)))
+            return response
         }
 
         func plan(desired: Bool) async throws -> [String: Any] {

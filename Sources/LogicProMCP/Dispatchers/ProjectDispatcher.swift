@@ -55,7 +55,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
         // inject fakes so the guarded state machine is unit-testable headless.
         exportOptions: ProjectExportExecutor.Options = .live(),
         acquireSessionPopulation: (@Sendable (SessionPopulationObservation.Request) async throws -> SessionPopulationObservation.Capture)? = nil,
-        applySessionRepair: (@Sendable ([String: Value]) async -> CallTool.Result)? = nil
+        applySessionRepair: (@Sendable (ApprovedSessionRepair.ApplyRequest) async -> CallTool.Result)? = nil
     ) async -> CallTool.Result {
         // A cancelled fresh inspection must not resolve, issue or retain a replacement
         // capture. Historical lookup remains a lookup of the original immutable bytes.
@@ -571,11 +571,14 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
 
         case "apply_session_repair":
+            guard let request = ApprovedSessionRepair.ApplyRequest.parse(params) else {
+                return ApprovedSessionRepair.ApplyRequest.refusal()
+            }
             guard let applySessionRepair else {
                 return toolStateCResult(.unsupportedState, hint: "The retained repair execution provider is unavailable.",
                     extras: ["write_attempted": false])
             }
-            return await applySessionRepair(params)
+            return await applySessionRepair(request)
 
         case "plan_session_repair":
             func refused(_ hint: String, stale: Bool = false) -> CallTool.Result {
