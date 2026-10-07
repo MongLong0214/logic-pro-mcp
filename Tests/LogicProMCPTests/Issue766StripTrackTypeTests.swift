@@ -23,6 +23,13 @@ import Testing
 // a software instrument's, so the answer for that shape is no answer.
 @Suite("#766 the strip separates audio and external MIDI, and refuses the instrument family")
 struct Issue766StripTrackTypeTests {
+    @Test("an own French send-slot help prevents the external-MIDI absence shape")
+    func frenchSendSlotDoesNotFakeExternalMIDI() {
+        // Independent QuickHelp INS_010_SendSlot title, not a raw native French observation.
+        #expect(AXLogicProElements.reading(fromSlotKinds: ["Assign control", "Slot d’envoi"])
+                == .undetermined)
+    }
+
     // The measured strips, as the leading help sentences `slotKinds` produces.
     private static let audioStrip = [
         "name field", "mute button", "solo button", "record enable button",

@@ -2211,13 +2211,6 @@ enum AXLocalePolicy {
             + "controls. Measured en-US and ko-KR on Logic 12.3; read-only."
     )
 
-    /// Tempo/position slider description tokens inside the transport container.
-    static let transportSliderHints = LabelSet(
-        canonical: "tempo",
-        variants: ["bpm", "position", "템포", "재생헤드 위치", "마디", "비트"],
-        rationale: "Classifies tempo/position sliders inside the transport container; read-only."
-    )
-
     // MARK: - Read-only classifier token bags (Phase 4, issue #60)
     //
     // Mixer / inspector / channel-strip / plugin-slot classifiers (surface #3)
@@ -2675,13 +2668,6 @@ enum AXLocalePolicy {
         rationale: "Identifies chooser-shaped AXWindow titles; a title alone is not document identity. Document counting and track readers also inspect the raw AXDocument status and payload."
             + " The eight added titles are the own Choose a Project row's values in Logic.framework Localizable.strings, already carried by projectChooserWindowTitle. Installed Logic 12.3 (6674) arm64 CLgAppManager._openNewProjectDialogSelectingCategoryID: obtains the Logic bundle through bundleForClass(MAContentPackageManager), localizes this key and passes the result to MANewProjectDialog.window.setTitle:. The bundle getter has an explicit mainBundle fallback when bundleForClass returns nil. This is static ownership evidence, not fresh AX or ten-locale native qualification; existing canonical and legacy contains markers are retained.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Choose%20a%20Project#value"
-    )
-
-    /// Transport text-field description hints (tempo/position fields).
-    static let transportTextFieldHint = LabelSet(
-        canonical: "tempo",
-        variants: ["bpm", "position", "템포", "재생헤드 위치"],
-        rationale: "Classifies transport tempo/position text fields inside the control bar; read-only."
     )
 
     /// Region container "Track Content" group (normalized exact match).
@@ -3546,7 +3532,6 @@ enum AXLocalePolicy {
         transportContainerMetadata,
         transportContainerControlKeywords,
         transportKeywordFalseFriends,
-        transportSliderHints,
         mixerInspectorContext,
         mixerNamedElement,
         mixerPresentationSingle, mixerPresentationTracks, mixerPresentationAll,
@@ -3587,7 +3572,6 @@ enum AXLocalePolicy {
         trackHeadersDescription,
         eventListTab,
         projectPickerWindow,
-        transportTextFieldHint,
         trackContentExplicit,
         trackContentGeneric,
         regionKindDrummer,

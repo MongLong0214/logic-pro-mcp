@@ -473,6 +473,9 @@ extension AXLogicProElements {
 
     private static func isKnownNonInsertButtonText(_ text: String) -> Bool {
         AXLocalePolicy.nonInsertButtonText.containsAny(in: text)
+            || AXLocalePolicy.inputSlotHelpKeyword.containsAny(in: text)
+            || AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: text)
+            || AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: text)
     }
 
     // internal (not private): called cross-file from the core AXLogicProElements

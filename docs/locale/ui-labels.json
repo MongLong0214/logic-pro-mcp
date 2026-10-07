@@ -7246,7 +7246,7 @@
     "AXMenuItem",
     "AXSlider"
    ],
-   "match": "exact_strict",
+   "match": "contains",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
@@ -8120,54 +8120,6 @@
     "錄音"
    ],
    "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only.",
-   "match": "contains",
-   "coverage": {
-    "en-US": "derived",
-    "ko-KR": "derived",
-    "ja-JP": "derived",
-    "de-DE": "derived",
-    "es-ES": "derived",
-    "fr-FR": "derived",
-    "it-IT": "derived",
-    "pt-BR": "derived",
-    "zh-CN": "derived",
-    "zh-TW": "derived"
-   }
-  },
-  "transportSliderHints": {
-   "canonical": "tempo",
-   "variants": [
-    "bpm",
-    "position",
-    "템포",
-    "재생헤드 위치",
-    "마디",
-    "비트"
-   ],
-   "rationale": "Classifies tempo/position sliders inside the transport container; read-only.",
-   "match": "exact",
-   "coverage": {
-    "en-US": "derived",
-    "ko-KR": "derived",
-    "ja-JP": "derived",
-    "de-DE": "derived",
-    "es-ES": "derived",
-    "fr-FR": "derived",
-    "it-IT": "derived",
-    "pt-BR": "derived",
-    "zh-CN": "derived",
-    "zh-TW": "derived"
-   }
-  },
-  "transportTextFieldHint": {
-   "canonical": "tempo",
-   "variants": [
-    "bpm",
-    "position",
-    "템포",
-    "재생헤드 위치"
-   ],
-   "rationale": "Classifies transport tempo/position text fields inside the control bar; read-only.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",
