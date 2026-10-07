@@ -78,6 +78,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
 
         func channel(unreadableRail: Bool = false, disclosure: AXUIElement? = nil,
+                     additionalDisclosure: AXUIElement? = nil,
                      observationMouse: AXMouseHelper.Runtime? = nil,
                      wrongDisclosureHit: Bool = false,
                      observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil) -> AccessibilityChannel {
@@ -101,7 +102,11 @@ struct Issue965FreshPopulationAcquisitionTests {
                         return false
                     },
                     elementAtPosition: { element, point in
-                        guard CFEqual(element, app), let disclosure, point == CGPoint(x: 16, y: 26) else { return .success(nil) }
+                        guard CFEqual(element, app) else { return .success(nil) }
+                        if let additionalDisclosure, point == CGPoint(x: 26, y: 36) {
+                            return .success(additionalDisclosure)
+                        }
+                        guard let disclosure, point == CGPoint(x: 16, y: 26) else { return .success(nil) }
                         return .success(wrongDisclosureHit ? header : disclosure)
                     })
             let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax,
@@ -140,7 +145,11 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, verifyReferences: true)
     }
 
-    @Test(arguments: ["down_failed", "held_focus", "wrong_hit"])
+    @Test func registeredNestedStackObservationCapturesGrandchildrenAndEndsTheirExposure() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, verifyReferences: true, nested: true)
+    }
+
+    @Test(arguments: ["down_failed", "held_focus", "held_focus_returned", "wrong_hit"])
     func registeredStackPairsOnlyOwnedMouseDownAndUp(mouseCase: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, mouseCase: mouseCase)
     }
@@ -148,6 +157,69 @@ struct Issue965FreshPopulationAcquisitionTests {
     @Test(arguments: ["expansion", "restoration"])
     func registeredStackDoesNotCertifyAnUnpostedMouseRelease(releaseCase: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, releaseCase: releaseCase)
+    }
+
+    @Test(arguments: ["expansion", "restoration"])
+    func registeredNestedStackStopsAllGesturesAfterAnUnpostedInnerRelease(nestedRelease: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true, nestedRelease: nestedRelease)
+    }
+
+    @Test(arguments: ["inner_closed", "replacement"])
+    func registeredNestedStackCorroboratesTheRailAfterItsLastGrandchildRead(nestedFault: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true, nestedFault: nestedFault)
+    }
+
+    @Test(arguments: ["focus", "project", "viewport"])
+    func registeredNestedStackDoesNotReverseOverNewChildCustody(nestedFault: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true, nestedFault: nestedFault)
+    }
+
+    @Test(arguments: ["cancel", "deadline"])
+    func registeredNestedStackStopsAfterTheAcquisitionCutoff(nestedFault: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true, nestedFault: nestedFault)
+    }
+
+    @Test(arguments: [false, true])
+    func nestedExposureRequiresEveryAcquiredDisclosureAndCannotReopen(closeOuter: Bool) throws {
+        let fixture = Fixture()
+        let innerHeader = fixture.builder.element(965_470)
+        let outer = fixture.builder.element(965_471)
+        let inner = fixture.builder.element(965_472)
+        fixture.builder.setRole(innerHeader, kAXLayoutItemRole as String)
+        fixture.builder.setAttribute(innerHeader, kAXTitleAttribute as String, "Inner")
+        for (header, triangle) in [(fixture.header, outer), (innerHeader, inner)] {
+            fixture.builder.setRole(triangle, kAXDisclosureTriangleRole as String)
+            fixture.builder.setAttribute(triangle, kAXValueAttribute as String, 1)
+            fixture.builder.setChildren(header, [triangle])
+        }
+        fixture.builder.setChildren(fixture.rail, [fixture.header, innerHeader])
+        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/NestedScope.logicx")
+        fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [fixture.window])
+        let ax = fixture.builder.makeAXRuntime(appElement: fixture.app,
+            setAttributeHandler: { _, _, _ in Issue.record("no setters"); return false },
+            performActionHandler: { _, _ in Issue.record("no actions"); return false })
+        let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax,
+            executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") },
+            onScreenWindowList: { [] }, postPopupMenuEscape: { Issue.record("no keys") },
+            focusedApplicationPID: { 4242 }, observeFrontmost: nil)
+        let scope = AXTrackBinding.Exposure(header: fixture.header, disclosure: outer, runtime: logic)
+        #expect(scope.retainAcquiredDisclosure(header: innerHeader, disclosure: inner))
+        let held = AXTrackBinding.Binding(window: fixture.window, header: innerHeader,
+            document: "file:///tmp/NestedScope.logicx", runtime: logic, exposure: scope)
+        #expect(scope.isCurrent && held.currentIndex() == 1)
+        let closed = closeOuter ? outer : inner
+        fixture.builder.setAttribute(closed, kAXValueAttribute as String, 0)
+        #expect(!scope.isCurrent)
+        fixture.builder.setAttribute(closed, kAXValueAttribute as String, 1)
+        #expect(!scope.isCurrent && held.currentIndex() == nil)
+        let fresh = AXTrackBinding.Exposure(header: fixture.header, disclosure: outer, runtime: logic)
+        #expect(fresh.retainAcquiredDisclosure(header: innerHeader, disclosure: inner))
+        let freshBinding = AXTrackBinding.Binding(window: fixture.window, header: innerHeader,
+            document: "file:///tmp/NestedScope.logicx", runtime: logic, exposure: fresh)
+        #expect(fresh.isCurrent && freshBinding.currentIndex() == 1)
+        fresh.end()
+        #expect(!fresh.isCurrent)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
     }
 
     @Test(arguments: ["gate", "cancel", "deadline"])
@@ -291,7 +363,8 @@ struct Issue965FreshPopulationAcquisitionTests {
 
     private func observeStack(navigation: Bool, initiallyExpanded: Bool,
                               verifyReferences: Bool = false, mouseCase: String? = nil,
-                              releaseCase: String? = nil) async throws {
+                              releaseCase: String? = nil, nested: Bool = false,
+                              nestedRelease: String? = nil, nestedFault: String? = nil) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -310,6 +383,23 @@ struct Issue965FreshPopulationAcquisitionTests {
             fixture.builder.setChildren(header, index == 0 ? [disclosure] : [])
         }
         let collapsed = [headers[0]] + Array(headers[24...])
+        let inner = fixture.builder.element(965_220)
+        let grandchildren = nested ? [fixture.builder.element(965_221), fixture.builder.element(965_222)] : []
+        let fullyExposed = Array(headers.prefix(2)) + grandchildren + Array(headers.dropFirst(2))
+        if nested {
+            fixture.builder.setRole(inner, kAXDisclosureTriangleRole as String)
+            fixture.builder.setAttribute(inner, kAXValueAttribute as String, 0)
+            fixture.builder.setFrame(inner, x: 20, y: 30, width: 12, height: 12)
+            fixture.builder.setChildren(headers[1], [inner])
+            for grandchild in grandchildren {
+                fixture.builder.setRole(grandchild, kAXLayoutItemRole as String)
+                fixture.builder.setAttribute(grandchild, kAXTitleAttribute as String, "Repeated grandchild")
+                fixture.builder.setAttribute(grandchild, kAXSelectedAttribute as String, false)
+                fixture.builder.setChildren(grandchild, [])
+            }
+            #expect(!collapsed.contains { CFEqual($0, headers[1]) })
+            #expect(!headers.contains { row in grandchildren.contains { CFEqual(row, $0) } })
+        }
         fixture.builder.setChildren(fixture.rail, initiallyExpanded ? headers : collapsed)
         fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [fixture.window])
         fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
@@ -328,13 +418,30 @@ struct Issue965FreshPopulationAcquisitionTests {
             fixture.builder.setAttribute(control, kAXValueAttribute as String, 0)
         }
         fixture.builder.setChildren(controlBar, [play, record])
-        fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar])
+        let scrollbar = fixture.builder.element(965_230)
+        fixture.builder.setRole(scrollbar, kAXScrollBarRole as String)
+        fixture.builder.setAttribute(scrollbar, kAXValueAttribute as String, 0.25)
+        fixture.builder.setChildren(scrollbar, [])
+        fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar] + (nestedFault == "viewport" ? [scrollbar] : []))
+        let replacement = fixture.builder.element(965_231)
+        fixture.builder.setRole(replacement, kAXLayoutItemRole as String)
+        fixture.builder.setAttribute(replacement, kAXTitleAttribute as String, "Repeated grandchild")
+        fixture.builder.setAttribute(replacement, kAXSelectedAttribute as String, false)
+        fixture.builder.setChildren(replacement, [])
         let observationMouse = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
-            guard (type == .leftMouseDown || type == .leftMouseUp), point == CGPoint(x: 16, y: 26), clicks == 1 else {
+            let isInner = nested && point == CGPoint(x: 26, y: 36)
+            guard (type == .leftMouseDown || type == .leftMouseUp),
+                  point == CGPoint(x: 16, y: 26) || isInner, clicks == 1 else {
                 Issue.record("unexpected disclosure event"); return false
             }
-            fixture.events.record(type == .leftMouseDown ? "disclosure_down" : "disclosure_up")
+            fixture.events.record(isInner ? (type == .leftMouseDown ? "inner_down" : "inner_up")
+                : (type == .leftMouseDown ? "disclosure_down" : "disclosure_up"))
             let eventCount = fixture.events.count
+            if let nestedRelease, isInner, type == .leftMouseUp,
+               eventCount == (nestedRelease == "expansion" ? 4 : 6) {
+                fixture.reads.record("inner_release_unposted")
+                return false
+            }
             let failedReleaseGesture = releaseCase == "expansion" ? 1 : 3
             if releaseCase != nil, eventCount == failedReleaseGesture, type == .leftMouseDown {
                 // The disclosure can take effect on Down even when the paired
@@ -350,14 +457,37 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
             if type == .leftMouseDown {
                 if mouseCase == "down_failed" { return false }
-                if mouseCase == "held_focus" {
+                if mouseCase == "held_focus" || mouseCase == "held_focus_returned" {
                     fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, disclosure)
                 }
             }
             if type == .leftMouseUp {
-                let expanded = (fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
-                fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, expanded ? 0 : 1)
-                fixture.builder.setChildren(fixture.rail, expanded ? collapsed : headers)
+                if mouseCase == "held_focus_returned" {
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.rail)
+                }
+                let target = isInner ? inner : disclosure
+                let expanded = (fixture.builder.attributeValue(target, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                fixture.builder.setAttribute(target, kAXValueAttribute as String, expanded ? 0 : 1)
+                fixture.builder.setChildren(fixture.rail, isInner ? (expanded ? headers : fullyExposed)
+                    : (expanded ? collapsed : headers))
+                if isInner, !expanded, let nestedFault,
+                   ["focus", "project", "viewport"].contains(nestedFault) {
+                    fixture.reads.record("child_custody_fault")
+                    switch nestedFault {
+                    case "focus": fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, replacement)
+                    case "project": fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String,
+                        bundle.deletingLastPathComponent().appendingPathComponent("Other.logicx").absoluteString)
+                    default: fixture.builder.setAttribute(scrollbar, kAXValueAttribute as String, 0.75)
+                    }
+                }
+                if isInner, !expanded, let nestedFault, ["cancel", "deadline"].contains(nestedFault) {
+                    fixture.reads.record("child_custody_fault")
+                    if nestedFault == "deadline" {
+                        // Delay the actual injected channel after its fourth event,
+                        // then resume strictly past the owned child's finite cutoff.
+                        Thread.sleep(forTimeInterval: 0.15)
+                    }
+                }
             }
             return true
         }, postKeyEvent: { _ in Issue.record("fixture forbids keys"); return false },
@@ -366,8 +496,24 @@ struct Issue965FreshPopulationAcquisitionTests {
         let registry = TargetRegistry()
         let gate = LogicMutationGate()
         let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
-            poller: StatePoller(axChannel: fixture.channel(disclosure: disclosure, observationMouse: observationMouse,
-                wrongDisclosureHit: mouseCase == "wrong_hit"), cache: cache,
+            poller: StatePoller(axChannel: fixture.channel(disclosure: disclosure,
+                additionalDisclosure: nested ? inner : nil, observationMouse: observationMouse,
+                wrongDisclosureHit: mouseCase == "wrong_hit", observingAttribute: { element, attribute in
+                    guard let nestedFault, ["inner_closed", "replacement"].contains(nestedFault),
+                          fixture.events.count == 4, attribute == kAXTitleAttribute as String,
+                          CFEqual(element, grandchildren[1]) else { return }
+                    fixture.reads.record("last_grandchild_title")
+                    guard fixture.reads.recorded.filter({ $0 == "last_grandchild_title" }).count == 5 else { return }
+                    fixture.reads.record("last_grandchild_fault")
+                    if nestedFault == "inner_closed" {
+                        fixture.builder.setAttribute(inner, kAXValueAttribute as String, 0)
+                        fixture.builder.setChildren(fixture.rail, headers)
+                    } else {
+                        var changed = fullyExposed
+                        changed[2] = replacement
+                        fixture.builder.setChildren(fixture.rail, changed)
+                    }
+                }), cache: cache,
                 runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
             dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
             liveTrackNames: { [:] }, projectFileReader: .unavailable)
@@ -375,8 +521,73 @@ struct Issue965FreshPopulationAcquisitionTests {
         let params: [String: Value] = ["domains": .array([.string("tracks")]), "allow_ui_navigation": .bool(navigation)]
         let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
             commandParams: params, mutationGate: gate) {
-                await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
+                if let nestedFault, ["cancel", "deadline"].contains(nestedFault),
+                   let inherited = OperationTraceContext.current {
+                    let context = OperationTraceContext(parentTraceID: inherited.parentTraceID,
+                        mutationGateAcquired: inherited.mutationGateAcquired, ownsGate: inherited.ownsGate,
+                        deadline: nestedFault == "deadline" ? ContinuousClock.now.advanced(by: .milliseconds(100)) : inherited.deadline,
+                        cancellationRequested: {
+                            inherited.cancellationRequested() || (nestedFault == "cancel"
+                                && fixture.reads.recorded.contains("child_custody_fault"))
+                        })
+                    return await OperationTraceContext.$current.withValue(context) {
+                        await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
+                    }
+                }
+                return await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
+        if let nestedFault {
+            let lastReadFault = ["inner_closed", "replacement"].contains(nestedFault)
+            #expect(fixture.reads.recorded.filter { $0 == (lastReadFault ? "last_grandchild_fault" : "child_custody_fault") }.count == 1)
+            if lastReadFault {
+                #expect(fixture.reads.recorded.filter { $0 == "last_grandchild_title" }.count >= 5,
+                        "fault reaches the last grandchild after actual row extraction has begun")
+            }
+            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up"],
+                    "known child conflict must not start an inner inverse or collapse its outer owner")
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == (nestedFault == "inner_closed" ? 0 : 1))
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored")
+            let current = await cache.getTracks()
+            #expect(current.isEmpty, "conflicted temporary rows are never current cache authority")
+            if lastReadFault {
+                #expect(body["state"] as? String == "C")
+                #expect(body["error"] as? String == "stale_snapshot")
+                #expect(body["tracks"] == nil && body["snapshot_id"] == nil,
+                        "the conflicted capture is discarded, not issued as a new domain report")
+                #expect(effects["reason"] as? String == "stack_navigation_ownership_lost")
+            }
+            if nestedFault == "cancel" || nestedFault == "deadline" {
+                #expect(body["state"] as? String == "C")
+                #expect(body["error"] as? String == (nestedFault == "cancel" ? "cancelled" : "operation_timeout"))
+                #expect(body["tracks"] == nil && body["snapshot_id"] == nil)
+            }
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            return
+        }
+        if let nestedRelease {
+            #expect(fixture.reads.recorded.filter { $0 == "inner_release_unposted" }.count == 1)
+            let expected = ["disclosure_down", "disclosure_up", "inner_down", "inner_up"]
+                + (nestedRelease == "restoration" ? ["inner_down", "inner_up"] : [])
+            #expect(fixture.events.recorded == expected, "no dependent inner or outer gesture follows an unposted release")
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == (nestedRelease == "expansion" ? 42 : 44))
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == (nestedRelease == "expansion" ? 0 : 1))
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored")
+            #expect(effects["reason"] as? String == "stack_mouse_release_unverified")
+            let current = await cache.getTracks()
+            #expect(current.isEmpty)
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            return
+        }
         if let releaseCase {
             #expect(fixture.reads.recorded.filter { $0 == "release_fault_down_effect" }.count == 1)
             #expect(fixture.reads.recorded.filter { $0 == "release_fault_up_unposted" }.count == 1)
@@ -425,6 +636,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                 #expect(effects["reason"] as? String == "keyboard_focus_not_restored")
                 let changed = try #require(effects["changed"] as? [String])
                 #expect(changed.contains("keyboard_focus"))
+            } else if mouseCase == "held_focus_returned" {
+                #expect(effects["restoration"] as? String == "restored")
+                let current = await cache.getTracks()
+                #expect(current.count == 19)
             }
             return
         }
@@ -433,7 +648,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         let body = try #require(sharedJSONObject(sharedToolText(result)))
         let tracks = try #require(body["tracks"] as? [String: Any])
         let rows = try #require(tracks["rows"] as? [[String: Any]])
-        let expectedHeaders = initiallyExpanded || navigation ? headers : collapsed
+        let expectedHeaders = initiallyExpanded || navigation ? (nested ? fullyExposed : headers) : collapsed
         #expect(rows.count == expectedHeaders.count)
         #expect(rows.compactMap { $0["name"] as? String } == expectedHeaders.compactMap {
             fixture.builder.attributeValue($0, kAXTitleAttribute as String) as? String
@@ -442,6 +657,13 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect(tracks["coverage"] as? String == "partial", "exposure alone does not prove hidden/nested/global completion")
         let current = await cache.getTracks()
         #expect(current.count == (initiallyExpanded ? 42 : 19), "collapsed descendants must not become ordinary current cache rows")
+        if nested {
+            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up",
+                "inner_down", "inner_up", "disclosure_down", "disclosure_up"])
+            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "restored")
+        }
         if verifyReferences {
             for (index, shouldResolve) in [(0, true), (1, false)] {
                 let reference = try #require(rows[index]["track_ref"] as? String)
@@ -478,6 +700,40 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
                 }
             }
+        }
+        if nested {
+            let grandchildRows = rows.filter { ($0["name"] as? String)?.utf8.elementsEqual("Repeated grandchild".utf8) == true }
+            #expect(grandchildRows.count == 2)
+            let reference = try #require(grandchildRows.first?["track_ref"] as? String)
+            let binding = try #require(await registry.resolve(TargetReference(rawValue: reference)))
+            let physical = try #require(binding.physicalTrack)
+            #expect(CFEqual(physical.header, grandchildren[0]))
+            #expect(binding.descriptor.trackIndex == 2)
+            #expect(physical.exposure != nil)
+            fixture.builder.setChildren(fixture.rail, fullyExposed)
+            fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+            fixture.builder.setAttribute(inner, kAXValueAttribute as String, 1)
+            let recycled = fixture.builder.makeAXRuntime().children(fixture.rail)
+            #expect(CFEqual(recycled[2], grandchildren[0]))
+            #expect(fixture.builder.attributeValue(recycled[2], kAXTitleAttribute as String) as? String == "Repeated grandchild")
+            #expect(physical.currentIndex() == nil, "ended nested custody must not resurrect through the same CF/name/index")
+            let live = AXTrackBinding.Exposure(header: headers[1], disclosure: inner,
+                runtime: physical.runtime, originalHeaders: collapsed)
+            let fresh = AXTrackBinding.Binding(window: physical.window, header: physical.header,
+                document: physical.document, runtime: physical.runtime, exposure: live)
+            #expect(fresh.currentIndex() == 2, "the same injected owners must remain readable for a genuinely live scope")
+            live.end()
+            let resolution = await FeatureFlags.withAdr002TargetRefForTests(true) {
+                await TargetRefResolver.resolveMutationIndex(["target_ref": .string(reference)],
+                    targetRegistry: registry, cache: cache, operation: "track.rename",
+                    invalidIndexResult: toolInvalidParamsResult("explicit index required"))
+            }
+            var mutationAuthority = false
+            if case .success = resolution { mutationAuthority = true }
+            #expect(!mutationAuthority)
+            fixture.builder.setChildren(fixture.rail, collapsed)
+            fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
+            fixture.builder.setAttribute(inner, kAXValueAttribute as String, 0)
         }
         #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == (initiallyExpanded ? 42 : 19))
         #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == (initiallyExpanded ? 1 : 0))

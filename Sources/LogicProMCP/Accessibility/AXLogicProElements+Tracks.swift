@@ -12,15 +12,28 @@ enum AXTrackBinding {
         let disclosure: AXUIElement
         let runtime: AXLogicProElements.Runtime
         let originalHeaders: [AXUIElement]
+        private var controls: [(header: AXUIElement, disclosure: AXUIElement)]
         init(header: AXUIElement, disclosure: AXUIElement, runtime: AXLogicProElements.Runtime,
              originalHeaders: [AXUIElement] = []) {
             self.header = header; self.disclosure = disclosure; self.runtime = runtime
             self.originalHeaders = originalHeaders
+            controls = [(header, disclosure)]
         }
         func end() { lock.withLock { ended = true } }
+        func retainAcquiredDisclosure(header: AXUIElement, disclosure: AXUIElement) -> Bool {
+            lock.withLock {
+                guard !ended, !controls.contains(where: {
+                    CFEqual($0.header, header) || CFEqual($0.disclosure, disclosure)
+                }) else { return false }
+                controls.append((header, disclosure))
+                return true
+            }
+        }
         var isCurrent: Bool {
-            guard !lock.withLock({ ended }),
-                  AXLogicProElements.heldTrackDisclosureValue(header: header, disclosure: disclosure, runtime: runtime) == 1
+            let held = lock.withLock { ended ? [] : controls }
+            guard !held.isEmpty, held.allSatisfy({
+                AXLogicProElements.heldTrackDisclosureValue(header: $0.header, disclosure: $0.disclosure, runtime: runtime) == 1
+            })
             else { end(); return false }
             return !lock.withLock { ended }
         }
