@@ -1914,6 +1914,69 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
     }
 
+    @Test(arguments: ["title", "document", "both", "title_absent", "document_absent",
+                      "document_unreadable", "document_malformed", "unchanged"])
+    func finalTrackValueReadCannotCertifyEarlierDocumentIdentity(_ change: String) async throws {
+        let fixture = Fixture()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lpm965-document-bookend-" + UUID().uuidString, isDirectory: true)
+        let original = directory.appendingPathComponent("Original.logicx", isDirectory: true)
+        let replacement = directory.appendingPathComponent("Replacement.logicx", isDirectory: true)
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, original.absoluteString)
+        let rowReads = Reads()
+        let channel = fixture.channel(observingAttribute: { element, attribute in
+            guard CFEqual(element, fixture.header), attribute == kAXSelectedAttribute as String else { return }
+            rowReads.record(attribute)
+            // The after-pass already copied the title/document. Reuse the same window,
+            // header and wire values while an external edit changes its identity during
+            // the actually consumed last-row value read; no expected-result echo.
+            guard rowReads.count == 2 else { return }
+            if change == "title" || change == "both" {
+                fixture.builder.setAttribute(fixture.window, kAXTitleAttribute as String, "Replacement - Tracks")
+            }
+            if change == "document" || change == "both" {
+                fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, replacement.absoluteString)
+            }
+            if change == "title_absent" { fixture.builder.removeAttribute(fixture.window, kAXTitleAttribute as String) }
+            if change == "document_absent" { fixture.builder.removeAttribute(fixture.window, kAXDocumentAttribute as String) }
+            if change == "document_malformed" {
+                fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, 42)
+            }
+        }, readingAttribute: { element, attribute in
+            guard change == "document_unreadable", rowReads.count >= 2,
+                  CFEqual(element, fixture.window), attribute == kAXDocumentAttribute as String else { return nil }
+            return .failure(.init(raw: AXError.cannotComplete.rawValue))
+        })
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await channel.readFreshSessionPopulation(
+                request: .init(domains: [.tracks]), fileReader: .unavailable, stoppingWhen: { false }
+            )
+        }
+        #expect(rowReads.count >= 2, "the fault must reach the real after-row extraction")
+        if change == "title_absent" {
+            #expect(!population.stable)
+            #expect(population.project == nil)
+        } else if change == "document_unreadable" || change == "document_malformed" {
+            #expect(!population.stable, "a failed or malformed document read is not observed document absence")
+        } else {
+            #expect(population.stable, "an independently stable retry remains allowed")
+            #expect(population.project?.name == (change == "title" || change == "both" ? "Replacement" : "Session"))
+            let expectedPath = change == "document_absent" ? nil
+                : change == "document" || change == "both" ? replacement.path : original.path
+            #expect(population.project?.filePath == expectedPath)
+        }
+        if change != "unchanged" { #expect(rowReads.count >= 4, "the changed identity must invalidate the original pair") }
+        else { #expect(rowReads.count == 2, "a genuinely unchanged pair needs no extra stabilization attempt") }
+        #expect(fixture.events.count == 0 && fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
     @Test func cancelledTasksCannotMintTrackOrProjectReferences() async throws {
         let registry = TargetRegistry()
         let snapshot = await registry.currentSnapshot
@@ -2026,7 +2089,8 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
     }
 
-    @Test func externalDocumentSwitchCannotReuseAnEarlierTrackReference() async throws {
+    @Test(arguments: ["before", "during"])
+    func externalDocumentSwitchCannotReuseAnEarlierTrackReference(_ changeTiming: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let fixture = Fixture()
             let ownedDirectory = FileManager.default.temporaryDirectory
@@ -2036,7 +2100,16 @@ struct Issue965FreshPopulationAcquisitionTests {
             try FileManager.default.createDirectory(at: oldBundle, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: newBundle, withIntermediateDirectories: true)
             defer { try? FileManager.default.removeItem(at: ownedDirectory) }
-            fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, newBundle.absoluteString)
+            fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String,
+                                         changeTiming == "before" ? newBundle.absoluteString : oldBundle.absoluteString)
+            let rowReads = Reads()
+            let channel = fixture.channel(observingAttribute: { element, attribute in
+                guard CFEqual(element, fixture.header), attribute == kAXSelectedAttribute as String else { return }
+                rowReads.record(attribute)
+                if changeTiming == "during", rowReads.count == 2 {
+                    fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, newBundle.absoluteString)
+                }
+            })
             let cache = StateCache()
             let oldProject = ProjectInfo(name: "Session", filePath: oldBundle.path)
             await cache.updateProject(oldProject)
@@ -2051,7 +2124,7 @@ struct Issue965FreshPopulationAcquisitionTests {
             let gate = LogicMutationGate()
             let dependencies = HandlerDependencies(
                 router: ChannelRouter(), cache: cache, targetRegistry: registry,
-                poller: StatePoller(axChannel: fixture.channel(), cache: cache,
+                poller: StatePoller(axChannel: channel, cache: cache,
                                     runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable)),
                 dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
                 liveTrackNames: { [:] }, projectFileReader: .unavailable
@@ -2068,6 +2141,7 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(rows.first?["track_ref"] as? String != oldReference.rawValue)
             #expect(await registry.resolve(oldReference) == nil,
                     "a matching raw name and ordinal in a different document is not the earlier target")
+            #expect(rowReads.count >= (changeTiming == "during" ? 4 : 2))
             #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
         }
     }
