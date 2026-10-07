@@ -744,6 +744,7 @@ enum SessionPopulationObservation {
         let pluginCount: Int
         let pluginsSource: String?
         var mixerStripRef: String? = nil
+        var sendSlots: [SendSlotObservation]? = nil
 
         enum CodingKeys: String, CodingKey {
             case stripIndex = "strip_index"
@@ -757,6 +758,7 @@ enum SessionPopulationObservation {
             case pluginCount = "plugin_count"
             case pluginsSource = "plugins_source"
             case mixerStripRef = "mixer_strip_ref"
+            case sendSlots = "send_slots"
         }
 
         // Unknown and legacy not-read names remain explicit nulls, never empty names.
@@ -777,6 +779,7 @@ enum SessionPopulationObservation {
             try container.encode(pluginCount, forKey: .pluginCount)
             try container.encodeIfPresent(pluginsSource, forKey: .pluginsSource)
             try container.encodeIfPresent(mixerStripRef, forKey: .mixerStripRef)
+            try container.encodeIfPresent(sendSlots, forKey: .sendSlots)
         }
     }
 
@@ -1044,7 +1047,8 @@ enum SessionPopulationObservation {
                     inputObservation: strip.inputObservation,
                     pluginCount: strip.plugins.count,
                     pluginsSource: strip.pluginsSource,
-                    mixerStripRef: capture.mixerReference(at: row)?.rawValue
+                    mixerStripRef: capture.mixerReference(at: row)?.rawValue,
+                    sendSlots: strip.sendSlots
                 )
             }
         )
