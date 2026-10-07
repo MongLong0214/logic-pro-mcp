@@ -32,14 +32,23 @@ enum SessionPopulationObservation {
         let mixerVisible: Bool?
         let isPlaying: Bool?
         let isRecording: Bool?
+        let uiLocale: String?
+        init(mixerVisible: Bool?, isPlaying: Bool?, isRecording: Bool?, uiLocale: String? = nil) {
+            self.mixerVisible = mixerVisible; self.isPlaying = isPlaying
+            self.isRecording = isRecording; self.uiLocale = uiLocale
+        }
+        func matchesViewTransport(_ other: Self) -> Bool {
+            mixerVisible == other.mixerVisible && isPlaying == other.isPlaying && isRecording == other.isRecording
+        }
         enum CodingKeys: String, CodingKey {
-            case mixerVisible = "mixer_visible", isPlaying = "is_playing", isRecording = "is_recording"
+            case mixerVisible = "mixer_visible", isPlaying = "is_playing", isRecording = "is_recording", uiLocale = "ui_locale"
         }
         func encode(to encoder: Encoder) throws {
             var values = encoder.container(keyedBy: CodingKeys.self)
             try values.encode(mixerVisible, forKey: .mixerVisible)
             try values.encode(isPlaying, forKey: .isPlaying)
             try values.encode(isRecording, forKey: .isRecording)
+            try values.encode(uiLocale, forKey: .uiLocale)
         }
     }
 
@@ -55,10 +64,13 @@ enum SessionPopulationObservation {
         let app: AXUIElement?
         let focus: AXUIElement?
         let navigationBaseline: AccessibilityChannel.OwnedMixerObservationNavigation?
+        let uiLocale: String?
         init(window: AXUIElement, title: String, document: String, mixer: AXUIElement?,
-             transport: AXLogicProElements.ObservedTransportActivity?, runtime: AXLogicProElements.Runtime) {
+             transport: AXLogicProElements.ObservedTransportActivity?, runtime: AXLogicProElements.Runtime,
+             uiLocale: String? = nil) {
             self.window = window; self.title = title; self.document = document
             self.mixer = mixer; self.transport = transport; self.runtime = runtime
+            self.uiLocale = uiLocale
             pid = runtime.logicProPID()
             app = AXLogicProElements.appRoot(runtime: runtime)
             focus = app.flatMap { AXHelpers.getAttribute($0, kAXFocusedUIElementAttribute as String, runtime: runtime.ax) }
