@@ -932,6 +932,115 @@ struct Issue291AssignedSendAsDumpedTests {
         #expect(builder.actionCalls.isEmpty)
     }
 
+    @Test("whole-strip send custody cannot count repeated controls or drop a mixed unqualified run",
+          arguments: ["repeated_controls", "distinct_runs", "mixed_without_knobs"])
+    func wholeStripClusterEvidenceUsesEachPhysicalControlOnce(kind: String) async throws {
+        let fixture = try Issue291PhysicalStripReferenceTests.Fixture()
+        let first = try multipleAssignedStrip(fixture.b, id: 35_000)
+        let firstAnchor = try element(at: "12", role: kAXButtonRole as String,
+                                      in: assignedSendStripKo, builder: fixture.b, stripID: 35_000)
+        let secondAnchor = fixture.b.element(35_300)
+        fixture.b.setRole(secondAnchor, kAXButtonRole as String)
+        fixture.b.setAttribute(secondAnchor, kAXHelpAttribute as String,
+                              try #require(fixture.b.attributeValue(firstAnchor, kAXHelpAttribute as String)))
+        var run = [firstAnchor] + first.groups + first.knobs
+        if kind == "mixed_without_knobs" {
+            let open = fixture.b.element(35_301)
+            fixture.b.setRole(open, kAXButtonRole as String)
+            fixture.b.setChildren(first.groups[0], fixture.b.makeAXRuntime().children(first.groups[0]) + [open])
+            run = [firstAnchor] + first.groups
+        } else if kind == "distinct_runs" {
+            let second = try multipleAssignedStrip(fixture.b, id: 36_000)
+            #expect(first.groups.allSatisfy { original in
+                !second.groups.contains { CFEqual(original, $0) }
+            })
+            #expect(first.knobs.allSatisfy { original in
+                !second.knobs.contains { CFEqual(original, $0) }
+            })
+            run += [secondAnchor] + second.groups + second.knobs
+        } else {
+            run += [secondAnchor] + first.groups + first.knobs
+            #expect(CFEqual(run[1], run[6]) && CFEqual(run[2], run[7]))
+            #expect(CFEqual(run[3], run[8]) && CFEqual(run[4], run[9]))
+        }
+        #expect(!CFEqual(firstAnchor, secondAnchor))
+        let ownStrip = fixture.strips[0]
+        fixture.b.setChildren(ownStrip, fixture.b.makeAXRuntime().children(ownStrip) + run)
+        let expected: [SendSlotObservation]? = kind == "distinct_runs"
+            ? (0..<6).map { .init(ordinal: $0, state: $0 == 0 || $0 == 3
+                ? .observedEmpty : .occupiedUnknownDestination) } : nil
+        let direct = AXLogicProElements.sendSlotObservations(in: ownStrip, runtime: fixture.logic.ax)
+        #expect(direct == expected)
+        let typed = AccessibilityChannel.defaultGetMixerStates(runtime: fixture.logic, stoppingWhen: { false })
+        #expect(!typed.yielded)
+        let states = try #require(typed.states)
+        #expect(states.first?.sendSlots == expected)
+        #expect(states.first?.physicalBinding != nil)
+        let cache = StateCache()
+        await cache.updateProject(ProjectInfo(name: "Session", filePath: fixture.bundle.path))
+        await cache.updateChannelStrips(states)
+        let resource = try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await ResourceHandlers.readMixer(cache: cache, uri: "logic://mixer", targetRegistry: TargetRegistry())
+        }
+        let body = try #require(sharedJSONObject(sharedResourceText(resource)))
+        let rows = try #require(body["strips"] as? [[String: Any]])
+        if let expected {
+            let slots = try #require(rows.first?["send_slots"] as? [[String: Any]])
+            #expect(slots.map { $0["state"] as? String } == expected.map { $0.state.rawValue })
+            #expect(slots.allSatisfy { $0["level_raw"] == nil && $0["level_description"] == nil })
+        } else {
+            #expect(rows.first?["send_slots"] == nil)
+        }
+        #expect(rows.first?["sends"] == nil)
+        let graph = try #require(body["routing_graph"] as? [String: Any])
+        #expect(try #require(graph["edges"] as? [[String: Any]]).isEmpty)
+        #expect(fixture.mutations.isEmpty)
+    }
+
+    @Test("a knob already owned by another send shape cannot authorize another occupancy",
+          arguments: ["single_before", "single_after", "legacy_before", "legacy_after"])
+    func separateSendShapesCannotShareAClusterKnob(kind: String) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let cluster = try multipleAssignedStrip(builder, id: 37_000)
+        let anchor = try element(at: "12", role: kAXButtonRole as String,
+                                 in: assignedSendStripKo, builder: builder, stripID: 37_000)
+        let extra = builder.element(37_300)
+        if kind.hasPrefix("single") {
+            let checkbox = builder.element(37_301)
+            let list = builder.element(37_302)
+            builder.setRole(extra, kAXGroupRole as String)
+            builder.setRole(checkbox, kAXCheckBoxRole as String)
+            builder.setRole(list, kAXButtonRole as String)
+            builder.setChildren(extra, [checkbox, list])
+        } else {
+            builder.setRole(extra, kAXButtonRole as String)
+            builder.setAttribute(extra, kAXHelpAttribute as String,
+                                 try #require(builder.attributeValue(anchor, kAXHelpAttribute as String)))
+        }
+        let separate = [extra, cluster.knobs[0]]
+        let grouped = [anchor] + cluster.groups + cluster.knobs
+        let children = kind.hasSuffix("before") ? separate + grouped : grouped + separate
+        builder.setChildren(cluster.strip, children)
+        #expect(!CFEqual(extra, anchor) && !cluster.groups.contains { CFEqual($0, extra) })
+        #expect(children.filter { CFEqual($0, cluster.knobs[0]) }.count == 2)
+        #expect(AXLogicProElements.sendSlotObservations(in: cluster.strip, runtime: builder.makeAXRuntime()) == nil)
+        _ = make123MixerFixture(stripCount: 1, firstStrip: cluster.strip, builder: builder)
+        let app = builder.element(10)
+        let window = builder.element(11)
+        builder.setAttribute(window, kAXTitleAttribute as String, "Session - Tracks")
+        builder.setAttribute(window, kAXDocumentAttribute as String, "file:///tmp/SharedSendKnob.logicx")
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        let runtime = builder.makeLogicRuntime(appElement: app,
+            setAttributeHandler: nil, performActionHandler: nil,
+            executeAppleScript: { _ in Issue.record("fixture forbids AppleScript"); return .error("forbidden") })
+        let typed = AccessibilityChannel.defaultGetMixerStates(runtime: runtime, stoppingWhen: { false })
+        #expect(!typed.yielded)
+        let state = try #require(typed.states?.first)
+        #expect(state.sendSlots == nil)
+        #expect(state.physicalBinding != nil)
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
     /// Builds the strip from dump rows: every row becomes an element with exactly the attributes
     /// the dump read, and each is attached to the parent its path names, in dump order.
     private func strip(_ rows: [DumpRow], builder: FakeAXRuntimeBuilder, id: Int) -> AXUIElement {

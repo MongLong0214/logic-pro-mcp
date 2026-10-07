@@ -960,6 +960,15 @@ extension AXLogicProElements {
         }
         var observations: [SendSlotObservation] = []
         var consumedGroups: Set<Int> = []
+        var recognizedControls: [AXUIElement] = []
+        func claim(_ controls: [AXUIElement]) -> Bool {
+            for offset in controls.indices {
+                if recognizedControls.contains(where: { CFEqual($0, controls[offset]) })
+                    || controls[..<offset].contains(where: { CFEqual($0, controls[offset]) }) { return false }
+            }
+            recognizedControls.append(contentsOf: controls)
+            return true
+        }
         for (index, visit) in walk.enumerated() {
             guard case let .success(role) = slotDecidingString(
                 visit.element, kAXRoleAttribute as String, runtime: runtime
@@ -997,21 +1006,22 @@ extension AXLogicProElements {
                             hasSendAnchor = AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: (anchorHelp ?? "").lowercased())
                         }
                     }
-                    guard let firstGroupHasShape = assignedSendGroupShape(walk[index].element, runtime: runtime) else { return nil }
+                    var groupShapes: [Bool] = []
+                    for group in groups {
+                        guard let shape = assignedSendGroupShape(walk[group].element, runtime: runtime) else { return nil }
+                        groupShapes.append(shape)
+                    }
                     guard let firstKnob = following else {
-                        if hasSendAnchor && firstGroupHasShape { return nil }
+                        if hasSendAnchor && groupShapes.contains(true) { return nil }
                         continue
                     }
                     guard let isKnob = isSendLevelKnob(walk[firstKnob].element, runtime: runtime) else { return nil }
                     guard isKnob else {
-                        if hasSendAnchor && firstGroupHasShape { return nil }
+                        if hasSendAnchor && groupShapes.contains(true) { return nil }
                         continue
                     }
                     guard hasSendAnchor else { return nil }
-                    for group in groups {
-                        guard let hasShape = assignedSendGroupShape(walk[group].element, runtime: runtime), hasShape
-                        else { return nil }
-                    }
+                    guard groupShapes.allSatisfy({ $0 }) else { return nil }
                     var knobs = [firstKnob]
                     var next = nextSibling(of: firstKnob, in: walk)
                     while let candidate = next {
@@ -1022,9 +1032,7 @@ extension AXLogicProElements {
                     }
                     guard groups.count == knobs.count else { return nil }
                     let controls = (groups + knobs).map { walk[$0].element }
-                    for offset in controls.indices {
-                        guard !controls[..<offset].contains(where: { CFEqual($0, controls[offset]) }) else { return nil }
-                    }
+                    guard claim(controls) else { return nil }
                     // A depth-bounded unseen descendant cannot prove this is the complete run.
                     for leaf in walk where leaf.depth == 4 {
                         guard let children = childrenIfRead(leaf.element, runtime: runtime), children.isEmpty else { return nil }
@@ -1039,6 +1047,7 @@ extension AXLogicProElements {
                 }
                 guard let isKnob = isSendLevelKnob(walk[sibling].element, runtime: runtime) else { return nil }
                 if isKnob {
+                    guard claim([visit.element, walk[sibling].element]) else { return nil }
                     observations.append(
                         occupiedSendSlot(ordinal: observations.count, knob: walk[sibling].element, runtime: runtime)
                     )
@@ -1053,9 +1062,16 @@ extension AXLogicProElements {
                 continue
             }
             let successor = index + 1 < walk.count ? walk[index + 1].element : nil
-            observations.append(
-                sendSlotObservation(ordinal: observations.count, following: successor, runtime: runtime)
-            )
+            let observation = sendSlotObservation(ordinal: observations.count, following: successor, runtime: runtime)
+            // The empty anchor is its own observation; a later group run claims only its
+            // groups/knobs. All occupied shapes share this one physical-control custody.
+            var controls = [visit.element]
+            if observation.state == .occupiedUnknownDestination {
+                guard let successor else { return nil }
+                controls.append(successor)
+            }
+            guard claim(controls) else { return nil }
+            observations.append(observation)
         }
         return observations
     }
