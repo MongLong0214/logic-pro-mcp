@@ -267,11 +267,15 @@ struct SendSlotObservation: Sendable, Codable, Equatable {
     var state: SendSlotState
     var levelRaw: Double?
     var levelDescription: String?
+    /// The qualified assigned group's own binary checkbox, never an enabled default.
+    /// Unknown/legacy slots carry no bypass observation and acquire no write authority.
+    var bypassed: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case ordinal, state
         case levelRaw = "level_raw"
         case levelDescription = "level_description"
+        case bypassed
     }
 }
 
