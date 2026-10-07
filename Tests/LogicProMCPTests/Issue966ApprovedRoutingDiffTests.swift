@@ -124,6 +124,207 @@ struct Issue966ApprovedRoutingDiffTests {
             "inverse_criterion": .string("creation_date")])])
     }
 
+    @Test(arguments: ["one", "empty"])
+    func explicitProtectedSinkPathsAreAcceptedAsPolicyData(_ kind: String) {
+        var raw = sendPolicy(.array([]))
+        raw["protected_paths"] = .array(kind == "empty" ? [] : [.object([
+            "target": .string("approved"), "sink_node_id": .string("sink_opaque")])])
+        let result = Audit.parseIntentPolicy(raw)
+        guard case .accepted = result else {
+            Issue.record("Explicit protected sink policy must be accepted, got \(result)")
+            return
+        }
+    }
+
+    @Test(arguments: ["not_array", "not_object", "unknown_key", "missing_target", "foreign_target",
+        "missing_sink", "sink_type", "empty_sink", "duplicate", "too_many"])
+    func malformedProtectedSinkPathsCannotBeSilentlyIgnored(_ fault: String) {
+        var raw = sendPolicy(.array([]))
+        var entry: [String: Value] = ["target": .string("approved"), "sink_node_id": .string("sink_opaque")]
+        switch fault {
+        case "unknown_key": entry["safe"] = .bool(true)
+        case "missing_target": entry.removeValue(forKey: "target")
+        case "foreign_target": entry["target"] = .string("unknown")
+        case "missing_sink": entry.removeValue(forKey: "sink_node_id")
+        case "sink_type": entry["sink_node_id"] = .int(0)
+        case "empty_sink": entry["sink_node_id"] = .string(" ")
+        default: break
+        }
+        raw["protected_paths"] = .array([.object(entry)])
+        if fault == "not_array" { raw["protected_paths"] = .object(entry) }
+        if fault == "not_object" { raw["protected_paths"] = .array([.string("sink_opaque")]) }
+        if fault == "duplicate" { raw["protected_paths"] = .array([.object(entry), .object(entry)]) }
+        if fault == "too_many" {
+            raw["protected_paths"] = .array((0..<65).map { .object([
+                "target": .string("approved"), "sink_node_id": .string("sink_\($0)")]) })
+        }
+        guard case .rejected(let reasons) = Audit.parseIntentPolicy(raw) else {
+            Issue.record("Malformed protected path accepted: \(fault)"); return
+        }
+        #expect(!reasons.isEmpty)
+    }
+
+    private var protectedSink: [String: Value] {
+        ["protected_paths": .array([.object([
+            "target": .string("approved"), "sink_node_id": .string("sink_opaque")])])]
+    }
+
+    /// Two independently described receivers, not labels joined to infer a route. The bypassed,
+    /// zero-level send remains a structural edge, not a claim of audible signal or native coverage.
+    private func protectedGraph(backupReachesSink: Bool = true) -> RoutingGraph {
+        let ns = nodes() + [RoutingNode(id: "sink_opaque", kind: .output, displayName: "Same", busNumber: nil, targetRef: nil)]
+        var es = [edge(.mainOutput, "source_opaque", "previous_opaque"),
+                  edge(.mainOutput, "other_opaque", "previous_opaque"),
+                  edge(.inputAssignment, "previous_opaque", "receiver_one"),
+                  edge(.inputAssignment, "destination_opaque", "receiver_two"),
+                  edge(.mainOutput, "receiver_one", "sink_opaque")]
+        if backupReachesSink { es.append(edge(.mainOutput, "receiver_two", "sink_opaque")) }
+        es.append(RoutingEdge(kind: .send, source: "source_opaque", destination: "destination_opaque",
+            send: SendEdge(sourceTrackRef: source, physicalSlot: 5, destinationBusNumber: 3, destinationRef: nil,
+                displayedName: "Same", level: 0, mode: "pre-fader", enabled: false), provenance: .axMixerStrip))
+        return graph(nodes: ns, edges: es)
+    }
+
+    @Test(arguments: ["output", "send", "both", "intermediate"])
+    func protectedSinkChecksEveryComposedRoutingPrefix(_ kind: String) throws {
+        let candidate = protectedGraph(backupReachesSink: kind != "intermediate")
+        #expect(candidate.isConsistent)
+        var extras = protectedSink
+        if kind == "send" { extras["outputs"] = .array([]) }
+        if kind != "output" {
+            extras["sends"] = .array([.object(kind == "intermediate"
+                ? ["target": .string("approved"), "physical_slot": .int(5), "bus": .int(4)]
+                : ["target": .string("approved"), "physical_slot": .int(5), "remove": .bool(true)])])
+        }
+        var options = Audit.PlanningOptions(); options.allowReplaceSend = true
+        let body = try plan(candidate, noOutput: kind != "intermediate", options: options, policyExtras: extras)
+        let invariants = try #require(body["protected_invariants"]?.arrayValue)
+        let invariant = try #require(invariants.first?.objectValue)
+        #expect(invariants.count == 1)
+        #expect(invariant["target_ref"]?.stringValue == source.rawValue)
+        #expect(invariant["sink_node_id"]?.stringValue == "sink_opaque")
+        #expect(invariant["baseline"]?.stringValue == "connected")
+        let prefixes = try #require(invariant["prefixes"]?.arrayValue).map { try #require($0.objectValue) }
+        let expectedStates = kind == "both" ? ["connected", "disconnected"]
+            : kind == "intermediate" ? ["disconnected", "connected"] : ["connected"]
+        #expect(prefixes.compactMap { $0["state"]?.stringValue } == expectedStates)
+        let steps = try #require(body["steps"]?.arrayValue).map { try #require($0.objectValue) }
+        #expect(prefixes.compactMap { $0["step_id"]?.stringValue } == steps.compactMap { $0["id"]?.stringValue })
+        #expect(invariant["final"]?.stringValue == expectedStates.last)
+        let violates = kind == "both" || kind == "intermediate"
+        #expect(invariant["status"]?.stringValue == (violates ? "violated" : "preserved"))
+        let reasons = try #require(body["reasons"]?.arrayValue)
+        if violates { #expect(reasons.contains(.string("protected_path_lost"))) }
+        else { #expect(!reasons.contains(.string("protected_path_lost"))) }
+        #expect(reasons.contains(.string("protected_path_execution_verifier_unavailable")))
+        let executable = try #require(body["executable"]?.boolValue as Bool?); #expect(!executable)
+        #expect(body["steps"] == body["preview"])
+        let repeated = try plan(candidate, noOutput: kind != "intermediate", options: options, policyExtras: extras)
+        #expect(body["digest"] == repeated["digest"])
+        #expect(body["protected_invariants"] == repeated["protected_invariants"])
+    }
+
+    @Test func deliberateDisconnectionWithoutProtectionDoesNotInventMusicalIntent() throws {
+        let body = try plan(protectedGraph(), noOutput: true, policyExtras: ["sends": .array([.object([
+            "target": .string("approved"), "physical_slot": .int(5), "remove": .bool(true)])])])
+        let steps = try #require(body["steps"]?.arrayValue)
+        #expect(steps.count == 2)
+        #expect(steps.allSatisfy { $0.objectValue?["proposed_routing_diff"]?.objectValue?["status"]?.stringValue == "proposed" })
+        #expect(!body.keys.contains("protected_invariants"))
+        let reasons = try #require(body["reasons"]?.arrayValue)
+        #expect(!reasons.contains(.string("protected_path_lost")))
+        #expect(body["preview"] == body["steps"])
+    }
+
+    @Test(arguments: ["snapshot", "epoch", "project", "stale", "unrequested", "population", "inputs", "sends",
+        "physical_output", "missing_sink", "duplicate_sink", "missing_source", "duplicate_source_ref", "ambiguous_output",
+        "sink_is_source", "source_not_track", "baseline_disconnected"])
+    func protectedSinkRequiresCurrentBoundUniqueEndpointEvidence(_ fault: String) throws {
+        let original = protectedGraph()
+        var ns = original.nodes, es = original.edges
+        var extras = protectedSink
+        extras["outputs"] = .array([])
+        switch fault {
+        case "missing_sink": ns.removeAll { $0.id == "sink_opaque" }
+        case "duplicate_sink": ns.append(try #require(ns.last))
+        case "missing_source": ns.removeAll { $0.targetRef == source }
+        case "duplicate_source_ref": ns.append(RoutingNode(id: "another_source", kind: .track,
+            displayName: "Same", busNumber: nil, targetRef: source))
+        case "ambiguous_output": es.append(edge(.mainOutput, "source_opaque", "destination_opaque"))
+        case "sink_is_source": extras["protected_paths"] = .array([.object([
+            "target": .string("approved"), "sink_node_id": .string("source_opaque")])])
+        case "source_not_track": ns[0] = RoutingNode(id: "source_opaque", kind: .aux,
+            displayName: "Same", busNumber: nil, targetRef: source)
+        case "baseline_disconnected": es.removeAll { $0.destination == "sink_opaque" }
+        default: break
+        }
+        let partial = RoutingDomainCoverage(state: .partial, reasons: ["not measured"])
+        let coverage = RoutingCoverage(population: fault == "population" ? partial : complete,
+            stripTrackAssociation: complete, mainOutput: complete,
+            physicalOutput: fault == "physical_output" ? partial : complete,
+            busToAuxInput: fault == "inputs" ? partial : complete, sends: fault == "sends" ? partial : complete)
+        let candidate = graph(nodes: ns, edges: es, coverage: coverage, epoch: fault == "epoch" ? 4 : 3,
+            snapshot: fault == "snapshot" ? "another_capture" : original.snapshotId,
+            project: fault == "project" ? TargetReference(rawValue: "prj_foreign") : project)
+        let body = try plan(candidate, snapshotCurrent: fault != "stale", policyExtras: extras,
+            request: Observation.Request(domains: fault == "unrequested" ? [.tracks] : [.tracks, .strips, .routing]))
+        let invariant = try #require(body["protected_invariants"]?.arrayValue?.first?.objectValue)
+        #expect(invariant["status"]?.stringValue == "unverified")
+        #expect(invariant["baseline"]?.stringValue == (fault == "baseline_disconnected" ? "disconnected" : "unverified"))
+        let reasons = try #require(body["reasons"]?.arrayValue)
+        #expect(reasons.contains(.string(fault == "baseline_disconnected" ? "protected_path_not_observed"
+            : "protected_path_evidence_unavailable")))
+        let executable = try #require(body["executable"]?.boolValue as Bool?); #expect(!executable)
+    }
+
+    @Test func unmodeledAuxCreationCannotCertifyALaterProtectedPrefix() throws {
+        var extras = protectedSink
+        extras["receivers"] = .array([.object(["bus": .int(9), "aux": .string("new")])])
+        var options = Audit.PlanningOptions(); options.allowCreateAux = true
+        let body = try plan(protectedGraph(), options: options, policyExtras: extras)
+        let invariant = try #require(body["protected_invariants"]?.arrayValue?.first?.objectValue)
+        #expect(invariant["baseline"]?.stringValue == "connected")
+        let prefixes = try #require(invariant["prefixes"]?.arrayValue)
+        #expect(prefixes.count == 2)
+        #expect(prefixes.first?.objectValue?["step_id"]?.stringValue == "create_aux_bus_9")
+        #expect(prefixes.allSatisfy { $0.objectValue?["state"]?.stringValue == "unverified" })
+        #expect(invariant["final"]?.stringValue == "unverified")
+        #expect(invariant["status"]?.stringValue == "unverified")
+        let reasons = try #require(body["reasons"]?.arrayValue)
+        #expect(reasons.contains(.string("protected_path_evidence_unavailable")))
+        #expect(body["steps"] == body["preview"])
+    }
+
+    @Test func publicUnobservedProtectedSinkCannotExecuteAnOtherwiseSupportedViewSubset() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Issue971ApprovedMixerSagaTests.Fixture(showing: false)
+                await f.router.register(f.view.channel())
+                _ = f.installNameHeaders(["Bass"])
+                let p = try await f.namesPlan(["Bass"], policyExtras: [
+                    "protected_paths": .array([.object(["target": .string("t0"), "sink_node_id": .string("unobserved_sink")])]),
+                    "presentation": .object(["mixer_visible": .bool(true)])])
+                let executable = try #require(p["executable"] as? Bool); #expect(!executable)
+                let key = "protected-sink-not-a-view-only-plan"
+                let result = try await f.call("apply_session_repair", params: f.applyParameters(p, key: key))
+                #expect(result["state"] as? String == "C")
+                let attempted = try #require(result["write_attempted"] as? Bool); #expect(!attempted)
+                #expect(f.view.events.isEmpty)
+                #expect(await f.journal.record(for: key) == nil)
+                let invariant = try #require((p["protected_invariants"] as? [[String: Any]])?.first)
+                #expect(invariant["status"] as? String == "unverified")
+                #expect(invariant["baseline"] as? String == "unverified")
+                #expect(invariant["final"] as? String == "unverified")
+                let reasons = try #require(p["reasons"] as? [String])
+                #expect(reasons.contains("protected_path_evidence_unavailable"))
+                let retained = try await f.call("plan_session_repair", params: [
+                    "plan_id": .string(try #require(p["plan_id"] as? String)),
+                    "digest": .string(try #require(p["digest"] as? String))])
+                #expect(NSDictionary(dictionary: retained) == NSDictionary(dictionary: p))
+            }
+        }
+    }
+
     /// Declared dependencies must agree with the canonical destination/repair/presentation order.
     /// The injected graph provides facts for planning, not runtime adapter or native qualification.
     @Test(arguments: ["output", "send", "both", "aux_only"])
