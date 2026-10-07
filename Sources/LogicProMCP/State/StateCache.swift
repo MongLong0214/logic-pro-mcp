@@ -392,7 +392,7 @@ actor StateCache {
         if population.stable, let info = population.project {
             updateProject(info)
             updateDocumentState(true)
-            if let freshTracks = population.tracks {
+            if let freshTracks = population.hasCapturedTrackExposure ? population.restoredTracks : population.tracks {
                 // A completely read empty rail is positive evidence, unlike an empty failed poll.
                 tracks = freshTracks
                 tracksFetchedAt = population.endedAt

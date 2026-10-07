@@ -421,6 +421,7 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         }
 
         let index = binding.descriptor.trackIndex
+        guard binding.physicalTrack.map({ $0.currentIndex() == index }) ?? true else { return nil }
         // Per-step identity fingerprint gate, unchanged in shape but now
         // LIVE-sourced: the cache name it used to compare could agree with the
         // binding while the live track at `index` was a different track after
@@ -472,6 +473,7 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
             return nil
         }
 
+        guard binding.physicalTrack.map({ $0.currentIndex() == index }) ?? true else { return nil }
         return ObservedState(read: SagaReadEvidence(
             readSource: readSource,
             provenance: .liveIndependent,

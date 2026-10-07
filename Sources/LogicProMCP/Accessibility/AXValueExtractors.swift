@@ -324,6 +324,7 @@ enum AXValueExtractors {
         from header: AXUIElement,
         index: Int,
         runtime: AXHelpers.Runtime = .production,
+        observingStackChildren: (([AXUIElement], AXUIElement?) -> Void)? = nil,
         stoppingBeforeHelp stop: () -> Bool
     ) -> TrackState? {
         let extractedName = extractTrackName(from: header, runtime: runtime)
@@ -342,7 +343,7 @@ enum AXValueExtractors {
         guard let trackType = inferTrackType(from: header, runtime: runtime, stoppingBeforeHelp: stop) else {
             return nil
         }
-        let stack = extractTrackStackState(from: header, runtime: runtime)
+        let stack = extractTrackStackState(from: header, runtime: runtime, observingChildren: observingStackChildren)
 
         return TrackState(
             id: index,
@@ -381,7 +382,8 @@ enum AXValueExtractors {
     /// an absence becomes a claim.
     static func extractTrackStackState(
         from header: AXUIElement,
-        runtime: AXHelpers.Runtime = .production
+        runtime: AXHelpers.Runtime = .production,
+        observingChildren: (([AXUIElement], AXUIElement?) -> Void)? = nil
     ) -> (isStackHeader: Bool?, collapsed: Bool?) {
         switch AXHelpers.childrenResult(header, runtime: runtime) {
         case .failure:
@@ -411,6 +413,7 @@ enum AXValueExtractors {
                 }
                 if triangle != nil { break }
             }
+            observingChildren?(children, triangle)
             guard let triangle else {
                 // No arrow among the children we could identify. That is only "not a stack main
                 // track" if we could identify all of them.

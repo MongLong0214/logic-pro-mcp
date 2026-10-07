@@ -108,6 +108,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
         performActionResultHandler: (@Sendable (AXUIElement, String) -> Result<Void, AXHelpers.AXStatusError>)? = nil,
+        elementAtPosition: (@Sendable (AXUIElement, CGPoint) -> Result<AXUIElement?, AXHelpers.AXStatusError>)? = nil,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
             await AppleScriptChannel.executeAppleScript($0)
         }
@@ -181,7 +182,8 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                 }
                 return .success(bridge(attributes[key(for: element)]?[attribute]))
             },
-            performActionResult: performActionResultHandler
+            performActionResult: performActionResultHandler,
+            elementAtPosition: elementAtPosition
         )
     }
 
