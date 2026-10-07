@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import Foundation
 import Testing
 import MCP
@@ -19,16 +20,46 @@ private actor RecordingMockChannel: Channel {
     nonisolated let id: ChannelID
     var importCalls: Int = 0
     let importResult: ChannelResult
+    let gotoRuntime: AXLogicProElements.Runtime?
+    let dialogOutput: String?
+    let gotoResult: ChannelResult?
+    var transportReadbacks: [ChannelResult]
+    var operations: [String] = []
+    var rawGotoResult: ChannelResult?
 
-    init(id: ChannelID, importResult: ChannelResult) {
+    init(id: ChannelID, importResult: ChannelResult,
+         gotoRuntime: AXLogicProElements.Runtime? = nil, dialogOutput: String? = nil,
+         gotoResult: ChannelResult? = nil,
+         transportReadbacks: [ChannelResult] = []) {
         self.id = id
         self.importResult = importResult
+        self.gotoRuntime = gotoRuntime
+        self.dialogOutput = dialogOutput
+        self.gotoResult = gotoResult
+        self.transportReadbacks = transportReadbacks
     }
 
     func start() async throws {}
     func stop() async {}
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        operations.append(operation)
+        if operation == "transport.get_state", !transportReadbacks.isEmpty {
+            return transportReadbacks.count > 1 ? transportReadbacks.removeFirst() : transportReadbacks[0]
+        }
+        if operation == "transport.goto_position", let gotoResult {
+            rawGotoResult = gotoResult
+            return gotoResult
+        }
+        if operation == "transport.goto_position", let gotoRuntime, let dialogOutput {
+            let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+                params: params, runtime: gotoRuntime, isFrontmost: { true },
+                activateLogic: { false }, sleepMicros: { _ in },
+                executeDialogScript: { _ in .success(dialogOutput) },
+                reconcileAfterDialogExecutionFailure: { false }, createDialogIssuanceLedger: { nil })
+            rawGotoResult = result
+            return result
+        }
         if operation == "midi.import_file" {
             importCalls += 1
             return importResult
@@ -38,6 +69,160 @@ private actor RecordingMockChannel: Channel {
     }
 
     func healthCheck() async -> ChannelHealth { .healthy(detail: "mock") }
+}
+
+private func recordSequencePosition(
+    _ value: String?, components: [TransportPositionComponent] = TransportPositionComponent.allCases
+) throws -> ChannelResult {
+    var state = TransportState()
+    if let value {
+        state.position = value
+        state.positionReadback = TransportPositionReadback(value: value, observedComponents: components)
+    }
+    state.lastUpdated = Date(timeIntervalSince1970: 0)
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    return .success(String(decoding: try encoder.encode(state), as: UTF8.self))
+}
+
+@Test func testRecordSequenceRejectsActualUnsafeGotoBeforeImport() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let runtime = AXLogicProElements.Runtime(
+        logicProPID: { 4242 }, ax: builder.makeAXRuntime(),
+        executeAppleScript: { _ in Issue.record("native script must not run"); return .error("inert") },
+        onScreenWindowList: { nil },
+        postPopupMenuEscape: { Issue.record("native escape must not run") })
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .error("bounded unexpected import"),
+        gotoRuntime: runtime,
+        dialogOutput: #"{"result":"DIALOG_SUBMISSION_ISSUED: Return may have been sent (AX error)"}"#,
+        transportReadbacks: [try recordSequencePosition("2.1.1.1"), try recordSequencePosition("1.1.1.1")])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { Issue.record("unverified position must not discover import tracks"); return 0 },
+        trackNameAt: { _ in Issue.record("unverified position must not read track names"); return nil },
+        readRegions: { Issue.record("unverified position must not read import regions"); return .success([]) },
+        settleReadback: { Issue.record("unverified position must not settle import") })
+    let raw = try #require(await channel.rawGotoResult)
+    #expect(raw.isSuccess)
+    let rawObject = try #require(sharedJSONObject(raw.message))
+    #expect(rawObject["state"] as? String == "B")
+    #expect(try #require(rawObject["fallback_unsafe"] as? Bool))
+    #expect(!(try #require(rawObject["safe_to_retry"] as? Bool)))
+    #expect(await channel.importCalls == 0)
+    #expect(!(await channel.operations).contains("midi.import_file"))
+    #expect(try #require(result.isError))
+    let text = sharedToolText(result)
+    let prefix = "record_sequence failed to reset playhead to bar 1 (required for accurate import): "
+    #expect(text.hasPrefix(prefix))
+    let diagnostic = try #require(sharedJSONObject(String(text.dropFirst(prefix.count))))
+    #expect(diagnostic["reason"] as? String == "readback_unavailable")
+    #expect(diagnostic["dialog_input_target"] as? String == "unknown")
+    #expect(try #require(diagnostic["fallback_unsafe"] as? Bool))
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["dialog_ok", "route_state_a", "already_at_target"])
+func testRecordSequenceVerifiesPositionBeforeImport(_ mode: String) async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let runtime = AXLogicProElements.Runtime(
+        logicProPID: { 4242 }, ax: builder.makeAXRuntime(),
+        executeAppleScript: { _ in Issue.record("native script prohibited"); return .error("inert") },
+        onScreenWindowList: { nil }, postPopupMenuEscape: { Issue.record("native escape prohibited") })
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .success("imported"),
+        gotoRuntime: runtime, dialogOutput: #"{"result":"OK"}"#,
+        gotoResult: mode == "route_state_a" ? .success(HonestContract.encodeStateA()) : nil,
+        transportReadbacks: [try recordSequencePosition(mode == "already_at_target" ? "1.1.1.1" : "2.1.1.1"),
+                             try recordSequencePosition("1.1.1.1")])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let counts = SequentialIntBox([1, 2])
+    let regions = SequentialRegionReadBox([
+        .success([]), .success([makeRegion(trackIndex: 1, startBar: 1, endBar: 2)])])
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { counts.next() }, trackNameAt: { $0 == 1 ? "Imported Piano" : nil },
+        readRegions: { regions.next() }, settleReadback: {})
+    #expect(!(try #require(result.isError)))
+    let object = recordSequenceJSONObject(result)
+    #expect(try #require(object["verified"] as? Bool))
+    #expect(object["target_track_index"] as? Int == 1)
+    #expect(await channel.importCalls == 1)
+    if mode == "already_at_target" {
+        #expect(await channel.operations == ["transport.get_state", "midi.import_file"])
+        #expect(await channel.rawGotoResult == nil)
+    } else {
+        #expect(await channel.operations == ["transport.get_state", "transport.goto_position", "transport.get_state", "midi.import_file"])
+        let raw = try #require(await channel.rawGotoResult)
+        #expect(sharedJSONObject(raw.message)?["state"] as? String == (mode == "dialog_ok" ? "B" : "A"))
+    }
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["wrong_position", "partial_after", "display_default", "missing_before", "missing_after",
+                  "input_issued", "state_a_unsafe", "state_a_mismatch"])
+func testRecordSequenceWithholdsImportWithoutVerifiedPosition(_ mode: String) async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let runtime = AXLogicProElements.Runtime(
+        logicProPID: { 4242 }, ax: builder.makeAXRuntime(),
+        executeAppleScript: { _ in Issue.record("native script prohibited"); return .error("inert") },
+        onScreenWindowList: { nil }, postPopupMenuEscape: { Issue.record("native escape prohibited") })
+    let before: ChannelResult = mode == "missing_before" ? .error("injected unread pre-position")
+        : try recordSequencePosition("2.1.1.1")
+    let after: ChannelResult
+    switch mode {
+    case "wrong_position", "state_a_mismatch": after = try recordSequencePosition("3.1.1.1")
+    case "partial_after": after = try recordSequencePosition("1.1", components: [.bar, .beat])
+    case "display_default": after = try recordSequencePosition(nil)
+    case "missing_after": after = .error("injected unread post-position")
+    default: after = try recordSequencePosition("1.1.1.1")
+    }
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .error("bounded unexpected import"),
+        gotoRuntime: runtime,
+        dialogOutput: mode == "input_issued"
+            ? #"{"result":"DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: position text may have been sent (AX error)"}"#
+            : #"{"result":"OK"}"#,
+        gotoResult: mode.hasPrefix("state_a") ? .success(HonestContract.encodeStateA(
+            extras: mode == "state_a_unsafe" ? ["fallback_unsafe": true, "safe_to_retry": false] : [:])) : nil,
+        transportReadbacks: [before, after])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { Issue.record("unverified position must not discover tracks"); return 0 },
+        trackNameAt: { _ in Issue.record("unverified position must not read names"); return nil },
+        readRegions: { Issue.record("unverified position must not read regions"); return .success([]) },
+        settleReadback: { Issue.record("unverified position must not settle import") })
+    #expect(try #require(result.isError))
+    #expect(await channel.operations == ["transport.get_state", "transport.goto_position", "transport.get_state"])
+    #expect(await channel.importCalls == 0)
+    let prefix = "record_sequence failed to reset playhead to bar 1 (required for accurate import): "
+    let text = sharedToolText(result)
+    #expect(text.hasPrefix(prefix))
+    let diagnostic = try #require(sharedJSONObject(String(text.dropFirst(prefix.count))))
+    #expect(diagnostic["state"] as? String == "B")
+    #expect(!(try #require(diagnostic["verified"] as? Bool)))
+    if mode == "input_issued" {
+        #expect(diagnostic["verification_withheld"] as? String == "dialog_input_target")
+        #expect(diagnostic["dialog_input_boundary"] as? String == "POSITION_INPUT_ARMED")
+        #expect(try #require(diagnostic["fallback_unsafe"] as? Bool))
+    } else if mode == "state_a_unsafe" {
+        #expect(diagnostic["verification_withheld"] as? String == "fallback_unsafe")
+    }
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
 }
 
 private func minimalNoteSpec() -> Value {
