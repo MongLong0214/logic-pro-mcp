@@ -969,6 +969,19 @@ extension AXLogicProElements {
             recognizedControls.append(contentsOf: controls)
             return true
         }
+        func sendAnchor(before index: Int) -> Bool? {
+            var previous = index - 1
+            while previous >= 0, walk[previous].depth > walk[index].depth { previous -= 1 }
+            guard previous >= 0, walk[previous].depth == walk[index].depth else { return false }
+            guard case let .success(role) = slotDecidingString(
+                walk[previous].element, kAXRoleAttribute as String, runtime: runtime
+            ) else { return nil }
+            guard role == kAXButtonRole as String else { return false }
+            guard case let .success(help) = slotDecidingString(
+                walk[previous].element, kAXHelpAttribute as String, runtime: runtime
+            ) else { return nil }
+            return AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: (help ?? "").lowercased())
+        }
         for (index, visit) in walk.enumerated() {
             guard case let .success(role) = slotDecidingString(
                 visit.element, kAXRoleAttribute as String, runtime: runtime
@@ -992,23 +1005,12 @@ extension AXLogicProElements {
                     }
                     // The observed cluster follows an empty send button. Similar automation or
                     // plug-in groups alone do not establish a send, and labels are not identity.
-                    var previous = index - 1
-                    while previous >= 0, walk[previous].depth > visit.depth { previous -= 1 }
-                    var hasSendAnchor = false
-                    if previous >= 0, walk[previous].depth == visit.depth {
-                        guard case let .success(anchorRole) = slotDecidingString(
-                            walk[previous].element, kAXRoleAttribute as String, runtime: runtime
-                        ) else { return nil }
-                        if anchorRole == (kAXButtonRole as String) {
-                            guard case let .success(anchorHelp) = slotDecidingString(
-                                walk[previous].element, kAXHelpAttribute as String, runtime: runtime
-                            ) else { return nil }
-                            hasSendAnchor = AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: (anchorHelp ?? "").lowercased())
-                        }
-                    }
+                    guard let hasSendAnchor = sendAnchor(before: index) else { return nil }
                     var groupShapes: [Bool] = []
+                    var bypassControls: [AXUIElement] = []
                     for group in groups {
-                        guard let shape = assignedSendGroupShape(walk[group].element, runtime: runtime) else { return nil }
+                        guard let shape = assignedSendGroupShape(walk[group].element, runtime: runtime,
+                            observingBypass: { bypassControls.append($0) }) else { return nil }
                         groupShapes.append(shape)
                     }
                     guard let firstKnob = following else {
@@ -1031,26 +1033,31 @@ extension AXLogicProElements {
                         next = nextSibling(of: candidate, in: walk)
                     }
                     guard groups.count == knobs.count else { return nil }
-                    let controls = (groups + knobs).map { walk[$0].element }
+                    let controls = (groups + knobs).map { walk[$0].element } + bypassControls
                     guard claim(controls) else { return nil }
                     // A depth-bounded unseen descendant cannot prove this is the complete run.
                     for leaf in walk where leaf.depth == 4 {
                         guard let children = childrenIfRead(leaf.element, runtime: runtime), children.isEmpty else { return nil }
                     }
-                    for group in groups {
+                    for (offset, group) in groups.enumerated() {
                         consumedGroups.insert(group)
                         observations.append(SendSlotObservation(
-                            ordinal: observations.count, state: .occupiedUnknownDestination
+                            ordinal: observations.count, state: .occupiedUnknownDestination,
+                            bypassed: observedSendBypass(group: walk[group].element, control: bypassControls[offset], runtime: runtime)
                         ))
                     }
                     continue
                 }
                 guard let isKnob = isSendLevelKnob(walk[sibling].element, runtime: runtime) else { return nil }
                 if isKnob {
-                    guard claim([visit.element, walk[sibling].element]) else { return nil }
-                    observations.append(
-                        occupiedSendSlot(ordinal: observations.count, knob: walk[sibling].element, runtime: runtime)
-                    )
+                    var bypassControl: AXUIElement?
+                    if sendAnchor(before: index) == true {
+                        _ = assignedSendGroupShape(visit.element, runtime: runtime, observingBypass: { bypassControl = $0 })
+                    }
+                    guard claim([visit.element, walk[sibling].element] + (bypassControl.map { [$0] } ?? [])) else { return nil }
+                    var observation = occupiedSendSlot(ordinal: observations.count, knob: walk[sibling].element, runtime: runtime)
+                    observation.bypassed = bypassControl.flatMap { observedSendBypass(group: visit.element, control: $0, runtime: runtime) }
+                    observations.append(observation)
                 }
                 continue
             }
@@ -1078,13 +1085,34 @@ extension AXLogicProElements {
 
     /// A capability shape, not a destination discriminator. Automation may share this shape;
     /// only the surrounding qualified send-button/group/knob run authorizes occupancy.
-    private static func assignedSendGroupShape(_ group: AXUIElement, runtime: AXHelpers.Runtime) -> Bool? {
+    private static func assignedSendGroupShape(
+        _ group: AXUIElement, runtime: AXHelpers.Runtime, observingBypass: ((AXUIElement) -> Void)? = nil
+    ) -> Bool? {
         guard let children = childrenIfRead(group, runtime: runtime) else { return nil }
         guard children.count == 2 else { return false }
         guard case let .success(firstRole) = slotDecidingString(children[0], kAXRoleAttribute as String, runtime: runtime),
               case let .success(secondRole) = slotDecidingString(children[1], kAXRoleAttribute as String, runtime: runtime)
         else { return nil }
-        return firstRole == (kAXCheckBoxRole as String) && secondRole == (kAXButtonRole as String)
+        let matches = firstRole == (kAXCheckBoxRole as String) && secondRole == (kAXButtonRole as String)
+        if matches { observingBypass?(children[0]) }
+        return matches
+    }
+
+    /// Consume the retained direct child's value, then corroborate that same control.
+    /// Neither a new checkbox nor a nonbinary/unread value becomes a bypass default.
+    private static func observedSendBypass(group: AXUIElement, control: AXUIElement, runtime: AXHelpers.Runtime) -> Bool? {
+        guard case .success(.some(let value)) = AXHelpers.getAttributeResult(
+            control, kAXValueAttribute as String, runtime: runtime) as Result<NSNumber?, AXHelpers.AXStatusError>,
+              value.doubleValue == 0 || value.doubleValue == 1,
+              let children = childrenIfRead(group, runtime: runtime), children.count == 2,
+              CFEqual(children[0], control),
+              case .success(.some(let role)) = AXHelpers.getAttributeResult(
+                control, kAXRoleAttribute as String, runtime: runtime) as Result<String?, AXHelpers.AXStatusError>,
+              role == kAXCheckBoxRole as String,
+              case .success(.some(let listRole)) = AXHelpers.getAttributeResult(
+                children[1], kAXRoleAttribute as String, runtime: runtime) as Result<String?, AXHelpers.AXStatusError>,
+              listRole == kAXButtonRole as String else { return nil }
+        return value.doubleValue == 1
     }
 
     /// The index of the element after `index` at the same depth with nothing shallower between —

@@ -1,5 +1,6 @@
 @preconcurrency import ApplicationServices
 import Foundation
+import MCP
 import Testing
 @testable import LogicProMCP
 
@@ -684,6 +685,225 @@ private let stripBesideTheAssignmentKo: [DumpRow] = [
 
 @Suite("#291 R1 an assigned send is the group beside its knob, as dumped live")
 struct Issue291AssignedSendAsDumpedTests {
+    @Test(arguments: [false, true])
+    func archivedOwnSendBypassSurvivesTypedMixerResource(korean: Bool) async throws {
+        let fixture = try Issue291PhysicalStripReferenceTests.Fixture()
+        let rows = korean ? assignedSendStripKo : assignedSendStripEn
+        let dumped = strip(rows, builder: fixture.b, id: 35_000)
+        fixture.b.setChildren(fixture.strips[0], fixture.b.makeAXRuntime().children(dumped))
+        let direct = try #require(AXLogicProElements.sendSlotObservations(in: fixture.strips[0], runtime: fixture.logic.ax))
+        let directWire = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(direct)) as? [[String: Any]])
+        let typed = AccessibilityChannel.defaultGetMixerStates(runtime: fixture.logic, stoppingWhen: { false })
+        let states = try #require(typed.states)
+        let cache = StateCache()
+        await cache.updateProject(ProjectInfo(name: "Session", filePath: fixture.bundle.path))
+        await cache.updateChannelStrips(states)
+        let resource = try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await ResourceHandlers.readMixer(cache: cache, uri: "logic://mixer", targetRegistry: TargetRegistry())
+        }
+        let body = try #require(sharedJSONObject(sharedResourceText(resource)))
+        let resourceRows = try #require(body["strips"] as? [[String: Any]])
+        let resourceSlots = try #require(resourceRows.first?["send_slots"] as? [[String: Any]])
+        for slots in [directWire, resourceSlots] {
+            #expect(slots.count == 2)
+            #expect(slots[0]["state"] as? String == "observed_empty")
+            #expect(slots[0]["bypassed"] == nil)
+            #expect(slots[1]["state"] as? String == "occupied_unknown_destination")
+            switch slots[1]["bypassed"] as? Bool {
+            case .some(let bypassed): #expect(!bypassed)
+            case .none: Issue.record("the archived assigned send's own unchecked checkbox must be published")
+            }
+        }
+        let graph = try #require(body["routing_graph"] as? [String: Any])
+        let edges = try #require(graph["edges"] as? [[String: Any]])
+        #expect(edges.isEmpty)
+        #expect(resourceRows.first?["sends"] == nil)
+        #expect(fixture.mutations.isEmpty && fixture.b.setCalls.isEmpty && fixture.b.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func registeredInspectionCarriesTheSameCapturedSendBypass(korean: Bool) async throws {
+        let fixture = try Issue291PhysicalStripReferenceTests.Fixture()
+        let dumped = strip(korean ? assignedSendStripKo : assignedSendStripEn, builder: fixture.b, id: 35_100)
+        fixture.b.setChildren(fixture.strips[0], fixture.b.makeAXRuntime().children(dumped))
+        let cache = StateCache()
+        let gate = LogicMutationGate()
+        let mouse = AXMouseHelper.Runtime(
+            postMouseEvent: { _, _, _ in Issue.record("read-only fixture forbids mouse events"); return false },
+            postKeyEvent: { _ in Issue.record("read-only fixture forbids keys"); return false },
+            postUnicodeScalar: { _ in Issue.record("read-only fixture forbids typing"); return false }, sleepMicros: { _ in })
+        let process = ProcessUtils.Runtime(logicProPID: { fixture.pid }, fallbackLogicProPID: { nil },
+            logicProRunning: { true }, activateLogicPro: { Issue.record("read-only fixture forbids activation"); return false },
+            logicIsFrontmost: { true }, logicProBundleURL: { nil })
+        let channel = AccessibilityChannel(runtime: .axBacked(
+            isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true }, logicRuntime: fixture.logic,
+            controlBarMouseRuntime: mouse, trackRenameMouseRuntime: mouse, trackToggleKeyRuntime: mouse,
+            processRuntime: process,
+            confirmNewTrackDialog: { Issue.record("read-only fixture forbids Return") }, canPostEvents: { false },
+            runTempoFallback: { _ in Issue.record("read-only fixture forbids fallback scripts"); return false }))
+        let registry = TargetRegistry()
+        let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
+            poller: StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
+            dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+            liveTrackNames: { [:] }, projectFileReader: .unavailable)
+        let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+        let params: [String: Value] = ["domains": .array([.string("strips"), .string("routing")]), "allow_ui_navigation": .bool(false)]
+        let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+            commandParams: params, mutationGate: gate) {
+                await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
+            }
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let strips = try #require(body["strips"] as? [String: Any])
+        let rows = try #require(strips["rows"] as? [[String: Any]])
+        #expect(rows.count == 2)
+        let slots: [[String: Any]]? = rows.first?["send_slots"] as? [[String: Any]]
+        #expect(slots != nil, "inspection must project the same captured send observations")
+        if let slots {
+            #expect(slots.count == 2)
+            #expect(slots[0]["bypassed"] == nil)
+            switch slots[1]["bypassed"] as? Bool {
+            case .some(let bypassed): #expect(!bypassed)
+            case .none: Issue.record("inspection must retain the actually observed own checkbox value")
+            }
+        }
+        let resource = try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await ResourceHandlers.readMixer(cache: cache, uri: "logic://mixer", targetRegistry: registry)
+        }
+        let resourceBody = try #require(sharedJSONObject(sharedResourceText(resource)))
+        let resourceRows = try #require(resourceBody["strips"] as? [[String: Any]])
+        #expect((resourceRows.first?["send_slots"] as? NSArray) == (slots as NSArray?))
+        let inspectedReference = try #require(rows.first?["mixer_strip_ref"] as? String)
+        let resourceReference = try #require(resourceRows.first?["mixer_strip_ref"] as? String)
+        #expect(inspectedReference == resourceReference)
+        #expect(fixture.mutations.isEmpty && fixture.b.setCalls.isEmpty && fixture.b.actionCalls.isEmpty)
+        #expect(gate.currentOperation() == nil)
+    }
+
+    @Test(arguments: ["checked", "missing", "malformed", "failed"])
+    func registeredInspectionDoesNotDefaultUnknownOwnBypass(kind: String) async throws {
+        let fixture = try Issue291PhysicalStripReferenceTests.Fixture()
+        let dumped = strip(assignedSendStripEn, builder: fixture.b, id: 38_600)
+        fixture.b.setChildren(fixture.strips[0], fixture.b.makeAXRuntime().children(dumped))
+        let checkbox = try element(at: "13.0", role: kAXCheckBoxRole as String, in: assignedSendStripEn, builder: fixture.b, stripID: 38_600)
+        if kind == "checked" { fixture.b.setAttribute(checkbox, kAXValueAttribute as String, 1) }
+        if kind == "missing" { fixture.b.removeAttribute(checkbox, kAXValueAttribute as String) }
+        if kind == "malformed" { fixture.b.setAttribute(checkbox, kAXValueAttribute as String, "0") }
+        let observed = FailedRead()
+        fixture.attributeReadResult = { target, attribute in
+            guard CFEqual(target, checkbox), attribute == kAXValueAttribute as String else { return nil }
+            observed.consume()
+            return kind == "failed" ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
+        }
+        let cache = StateCache()
+        let gate = LogicMutationGate()
+        let registry = TargetRegistry()
+        let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
+            poller: StatePoller(axChannel: fixture.channel(), cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
+            dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+            liveTrackNames: { [:] }, projectFileReader: .unavailable)
+        let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+        let params: [String: Value] = ["domains": .array([.string("strips"), .string("routing")]), "allow_ui_navigation": .bool(false)]
+        let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session", commandParams: params, mutationGate: gate) {
+            await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
+        }
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let rows = try #require((body["strips"] as? [String: Any])?["rows"] as? [[String: Any]])
+        let slots = try #require(rows.first?["send_slots"] as? [[String: Any]])
+        #expect(observed.wasConsumed)
+        #expect(slots.count == 2 && slots[1]["state"] as? String == "occupied_unknown_destination")
+        if kind == "checked" { #expect(try #require(slots[1]["bypassed"] as? Bool)) }
+        else { #expect(slots[1]["bypassed"] == nil) }
+        let resource = try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await ResourceHandlers.readMixer(cache: cache, uri: "logic://mixer", targetRegistry: registry)
+        }
+        let resourceRows = try #require(sharedJSONObject(sharedResourceText(resource))?["strips"] as? [[String: Any]])
+        #expect((resourceRows.first?["send_slots"] as? NSArray) == (slots as NSArray))
+        #expect(resourceRows.first?["mixer_strip_ref"] as? String == rows.first?["mixer_strip_ref"] as? String)
+        #expect(fixture.mutations.isEmpty && fixture.b.setCalls.isEmpty && fixture.b.actionCalls.isEmpty)
+        #expect(gate.currentOperation() == nil)
+    }
+
+    @Test(arguments: ["unchecked", "checked", "missing", "malformed", "nonbinary", "failed", "replacement", "wrong_role"])
+    func ownBypassRequiresBinaryValueAndTheSameQualifiedChild(kind: String) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let dumped = strip(assignedSendStripKo, builder: builder, id: 38_000)
+        let group = try element(at: "13", role: kAXGroupRole as String, in: assignedSendStripKo, builder: builder, stripID: 38_000)
+        let checkbox = try element(at: "13.0", role: kAXCheckBoxRole as String, in: assignedSendStripKo, builder: builder, stripID: 38_000)
+        let list = try element(at: "13.1", role: kAXButtonRole as String, in: assignedSendStripKo, builder: builder, stripID: 38_000)
+        switch kind {
+        case "checked": builder.setAttribute(checkbox, kAXValueAttribute as String, 1)
+        case "missing": builder.removeAttribute(checkbox, kAXValueAttribute as String)
+        case "malformed": builder.setAttribute(checkbox, kAXValueAttribute as String, "0")
+        case "nonbinary": builder.setAttribute(checkbox, kAXValueAttribute as String, 2)
+        default: break
+        }
+        let observed = FailedRead()
+        let runtime = builder.makeAXRuntime(attributeValueResultHandler: { target, attribute in
+            guard CFEqual(target, checkbox), attribute == kAXValueAttribute as String else { return nil }
+            observed.consume()
+            if kind == "failed" { return .failure(.init(raw: AXError.cannotComplete.rawValue)) }
+            if kind == "replacement" {
+                let replacement = builder.element(38_100)
+                builder.setRole(replacement, kAXCheckBoxRole as String)
+                builder.setAttribute(replacement, kAXValueAttribute as String, 0)
+                builder.setChildren(group, [replacement, list])
+            }
+            if kind == "wrong_role" { builder.setRole(checkbox, kAXButtonRole as String) }
+            return nil
+        }, setAttributeHandler: nil, performActionHandler: nil)
+        let slots = try #require(AXLogicProElements.sendSlotObservations(in: dumped, runtime: runtime))
+        #expect(observed.wasConsumed)
+        #expect(slots.count == 2)
+        #expect(slots[0] == SendSlotObservation(ordinal: 0, state: .observedEmpty))
+        #expect(slots[1].state == .occupiedUnknownDestination)
+        #expect(slots[1].levelRaw == 0 && slots[1].levelDescription == "-∞")
+        if kind == "checked" { #expect(try #require(slots[1].bypassed)) }
+        else if kind == "unchecked" { #expect(!(try #require(slots[1].bypassed))) }
+        else { #expect(slots[1].bypassed == nil) }
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func multipleGroupsReadTheirOwnBypassWithoutPairingKnobs(sharedCheckbox: Bool) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let cluster = try multipleAssignedStrip(builder, id: 38_200)
+        let children = builder.makeAXRuntime().children(cluster.groups[0])
+        let second = builder.makeAXRuntime().children(cluster.groups[1])
+        builder.setAttribute(second[0], kAXValueAttribute as String, 1)
+        if sharedCheckbox { builder.setChildren(cluster.groups[1], [children[0], second[1]]) }
+        let read = AXLogicProElements.sendSlotObservations(in: cluster.strip, runtime: builder.makeAXRuntime())
+        if sharedCheckbox { #expect(read == nil) }
+        else {
+            let slots = try #require(read)
+            #expect(slots.count == 3)
+            #expect(!(try #require(slots[1].bypassed)))
+            #expect(try #require(slots[2].bypassed))
+            #expect(slots.allSatisfy { $0.levelRaw == nil && $0.levelDescription == nil })
+        }
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
+    @Test
+    func unanchoredGroupAndLegacyPayloadDoNotInventBypass() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let dumped = strip(assignedSendStripEn, builder: builder, id: 38_400)
+        let group = try element(at: "13", role: kAXGroupRole as String, in: assignedSendStripEn, builder: builder, stripID: 38_400)
+        let knob = try element(at: "14", role: kAXSliderRole as String, in: assignedSendStripEn, builder: builder, stripID: 38_400)
+        builder.setChildren(dumped, [group, knob])
+        let slots = try #require(AXLogicProElements.sendSlotObservations(in: dumped, runtime: builder.makeAXRuntime()))
+        #expect(slots == [SendSlotObservation(ordinal: 0, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞")])
+        let legacy = Data(#"{"ordinal":0,"state":"occupied_unknown_destination","level_raw":0.5,"level_description":"-6 dB"}"#.utf8)
+        let decoded = try JSONDecoder().decode(SendSlotObservation.self, from: legacy)
+        #expect(decoded.bypassed == nil && decoded.levelRaw == 0.5)
+        for value in [false, true] {
+            let actual = SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, bypassed: value)
+            #expect(try JSONDecoder().decode(SendSlotObservation.self, from: JSONEncoder().encode(actual)) == actual)
+        }
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
     private final class FailedRead: @unchecked Sendable {
         private let lock = NSLock()
         private var consumed = false
@@ -741,8 +961,8 @@ struct Issue291AssignedSendAsDumpedTests {
         let ownStrip = strip(rows, builder: builder, id: 32_700)
         let expected = [
             SendSlotObservation(ordinal: 0, state: .observedEmpty),
-            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination),
-            SendSlotObservation(ordinal: 2, state: .occupiedUnknownDestination),
+            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, bypassed: false),
+            SendSlotObservation(ordinal: 2, state: .occupiedUnknownDestination, bypassed: false),
         ]
         let direct = try #require(
             AXLogicProElements.sendSlotObservations(in: ownStrip, runtime: builder.makeAXRuntime())
@@ -968,7 +1188,7 @@ struct Issue291AssignedSendAsDumpedTests {
         fixture.b.setChildren(ownStrip, fixture.b.makeAXRuntime().children(ownStrip) + run)
         let expected: [SendSlotObservation]? = kind == "distinct_runs"
             ? (0..<6).map { .init(ordinal: $0, state: $0 == 0 || $0 == 3
-                ? .observedEmpty : .occupiedUnknownDestination) } : nil
+                ? .observedEmpty : .occupiedUnknownDestination, bypassed: $0 == 1 || $0 == 4 ? false : nil) } : nil
         let direct = AXLogicProElements.sendSlotObservations(in: ownStrip, runtime: fixture.logic.ax)
         #expect(direct == expected)
         let typed = AccessibilityChannel.defaultGetMixerStates(runtime: fixture.logic, stoppingWhen: { false })
@@ -1090,7 +1310,7 @@ struct Issue291AssignedSendAsDumpedTests {
         )
         #expect(read == [
             SendSlotObservation(ordinal: 0, state: .observedEmpty),
-            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞"),
+            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞", bypassed: false),
         ])
     }
 
@@ -1108,7 +1328,7 @@ struct Issue291AssignedSendAsDumpedTests {
         )
         #expect(read == [
             SendSlotObservation(ordinal: 0, state: .observedEmpty),
-            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞"),
+            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞", bypassed: false),
         ])
     }
 
