@@ -1413,6 +1413,7 @@ extension AXLogicProElements {
         // remove the class.
         let externalMIDIShape = has(AXLocalePolicy.assignControlHelpKeyword)
             && !has(AXLocalePolicy.outputSlotHelpKeyword)
+            && !has(AXLocalePolicy.sendSlotHelpKeyword)
             && !has(AXLocalePolicy.sendOrIOControlLabel)
             && !has(AXLocalePolicy.audioPluginSlotLabel)
 

@@ -1081,11 +1081,13 @@ enum AXLogicProElements {
             return true
         }
 
-        // #60: centralized tempo/position slider hint token bag (read-only).
-        let sliderHintTokens = AXLocalePolicy.transportSliderHints.labels.map { $0.lowercased() }
+        // Reuse the reader's slider authorities and preserve the legacy position/BPM hints.
         let sliderHits = AXHelpers.findAllDescendants(of: element, role: kAXSliderRole, maxDepth: 4, runtime: runtime).contains { slider in
             let description = AXHelpers.getDescription(slider, runtime: runtime)?.lowercased() ?? ""
-            return sliderHintTokens.contains { description.contains($0) }
+            return AXLocalePolicy.tempoSliderLabel.containsAny(in: description)
+                || AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: description)
+                || AXLocalePolicy.barSliderLabel.containsAny(in: description)
+                || AXLocalePolicy.beatSliderLabel.containsAny(in: description)
         }
 
         let textRoles = [kAXStaticTextRole, kAXTextFieldRole]
@@ -1094,7 +1096,8 @@ enum AXLogicProElements {
         }.contains { text in
             let description = AXHelpers.getDescription(text, runtime: runtime)?.lowercased() ?? ""
             let value = (AXValueExtractors.extractTextValue(text, runtime: runtime) ?? "").lowercased()
-            return AXLocalePolicy.transportTextFieldHint.containsAny(in: description)
+            return AXLocalePolicy.tempoFieldLabel.containsAny(in: description)
+                || AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: description)
                 || value.contains(" bpm")
                 || value.filter({ $0 == "." }).count >= 2
                 || value.contains(":")
