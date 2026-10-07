@@ -84,6 +84,24 @@ extension ProjectSessionAudit {
         let json: String
     }
 
+    private struct ProtectedPathRead {
+        let targetRef: TargetReference
+        let sinkNodeID: String
+        let baseline: RoutingPathState
+        var final: RoutingPathState
+        var prefixes: [Value] = []
+        var lost = false
+        var unavailable: Bool { baseline == .unverified || final == .unverified
+            || prefixes.contains { $0.objectValue?["state"]?.stringValue == RoutingPathState.unverified.rawValue } }
+
+        var wire: Value {
+            .object(["kind": .string("sink_path"), "target_ref": .string(targetRef.rawValue),
+                "sink_node_id": .string(sinkNodeID), "baseline": .string(baseline.rawValue),
+                "prefixes": .array(prefixes), "final": .string(final.rawValue),
+                "status": .string(lost ? "violated" : unavailable || baseline != .connected ? "unverified" : "preserved")])
+        }
+    }
+
     /// A canonical draft accounts for approved tasks even when their observation or adapter
     /// footprint is unavailable. It never turns a logical track index into a physical strip.
     static func buildCanonicalRepairPlan(
@@ -99,7 +117,7 @@ extension ProjectSessionAudit {
         let graph = graphOverride ?? SessionPopulationObservation.routingGraph(capture: capture)
         let assessment = assessIntent(policy: policy, capture: capture, graph: graph)
         let viewOnly = policy.mixerVisible != nil && policy.trackSort == nil && policy.targets.isEmpty && policy.roles.isEmpty
-            && policy.outputs.isEmpty && policy.sends.isEmpty && policy.receivers.isEmpty && names.isEmpty
+            && policy.outputs.isEmpty && policy.sends.isEmpty && policy.receivers.isEmpty && names.isEmpty && policy.protectedPaths.isEmpty
         var reasons = Set<String>()
         if !snapshotCurrent { reasons.insert("snapshot_changed") }
         if !viewOnly && request.scope != .wholeProject { reasons.insert("whole_project_scope_required") }
@@ -112,6 +130,42 @@ extension ProjectSessionAudit {
         let graphBound = gate == nil && epochMismatch == nil
         var proposalReadReasons = reasons
         if !request.domains.contains(.routing) { proposalReadReasons.insert("routing_not_requested") }
+        // These constraints are a required task, not an optional property that a supported view
+        // subset can ignore. The current apply provider has no fresh protected-path verifier.
+        if !policy.protectedPaths.isEmpty { reasons.insert("protected_path_execution_verifier_unavailable") }
+        var proposedGraph = graph
+        var proposedGraphKnown = true
+        let pathEvidenceBound = graphBound && snapshotCurrent && request.scope == .wholeProject
+            && request.domains.contains(.routing) && capture.referencesEnabled
+        func pathState(_ target: TargetReference, _ sink: String, in candidate: RoutingGraph) -> RoutingPathState {
+            guard pathEvidenceBound, let issued = capture.issued,
+                  case .located(let index) = locate(target, in: issued),
+                  capture.tracks.filter({ $0.id == index }).count == 1,
+                  candidate.nodes.filter({ $0.targetRef == target }).count == 1,
+                  candidate.nodes.first(where: { $0.targetRef == target })?.kind == .track else { return .unverified }
+            return routingPath(from: target, to: sink, in: candidate)
+        }
+        var protectedReads = policy.protectedPaths.compactMap { path -> ProtectedPathRead? in
+            guard let target = policy.targets.first(where: { $0.handle == path.target }) else { return nil }
+            let baseline = pathState(target.trackRef, path.sinkNodeID, in: graph)
+            if baseline == .unverified { reasons.insert("protected_path_evidence_unavailable") }
+            if baseline == .disconnected { reasons.insert("protected_path_not_observed") }
+            return .init(targetRef: target.trackRef, sinkNodeID: path.sinkNodeID, baseline: baseline, final: baseline)
+        }
+        func recordRoutingPrefix(_ id: String, after: RoutingGraph?) {
+            if let after { proposedGraph = after } else { proposedGraphKnown = false }
+            for index in protectedReads.indices {
+                let current = proposedGraphKnown ? pathState(protectedReads[index].targetRef,
+                    protectedReads[index].sinkNodeID, in: proposedGraph) : .unverified
+                protectedReads[index].final = current
+                protectedReads[index].prefixes.append(.object(["step_id": .string(id), "state": .string(current.rawValue)]))
+                if current == .disconnected, protectedReads[index].baseline == .connected {
+                    protectedReads[index].lost = true
+                    reasons.insert("protected_path_lost")
+                }
+                if current == .unverified { reasons.insert("protected_path_evidence_unavailable") }
+            }
+        }
         // Even an unchanged send needs a fresh exact-slot verifier which the retained apply
         // provider does not have. A pure graph fixture cannot advertise runtime availability.
         if !policy.sends.isEmpty { reasons.insert("send_goal_verification_unavailable") }
@@ -189,6 +243,11 @@ extension ProjectSessionAudit {
         var steps: [Value] = []
         var unchanged: [Value] = []
         var routingIDs: [String] = []
+        // The current aux adapter supplies no factual predicted graph. Do not claim a protected
+        // path survived a fabricated new-object topology or silently skip that canonical prefix.
+        for aux in auxSteps {
+            if let id = aux.objectValue?["id"]?.stringValue { recordRoutingPrefix(id, after: nil) }
+        }
         for finding in assessment.findings {
             if finding.status == .compliant {
                 unchanged.append(.string(finding.id))
@@ -222,7 +281,8 @@ extension ProjectSessionAudit {
             }
             var proposalReasons = proposalReadReasons
             if blocked.contains("bus_receiver_unverified") { proposalReasons.insert("bus_receiver_unverified") }
-            let proposal = try proposedExistingBusOutput(finding: finding, graph: graph, readReasons: proposalReasons)
+            let proposal = try proposedExistingBusOutput(finding: finding, graph: proposedGraph, readReasons: proposalReasons)
+            recordRoutingPrefix(id, after: proposal.after)
             blocked.formUnion(proposal.reasons)
             reasons.formUnion(blocked)
             var before: Value = .object([:])
@@ -250,8 +310,9 @@ extension ProjectSessionAudit {
             }
             let id = "send_" + finding.id
             routingIDs.append(id)
-            let proposal = try proposedExistingSend(finding: finding, graph: graph,
+            let proposal = try proposedExistingSend(finding: finding, graph: proposedGraph,
                 readReasons: proposalReadReasons, allowReplace: options.allowReplaceSend)
+            recordRoutingPrefix(id, after: proposal.after)
             var blocked = Set(finding.reasons.map(\.rawValue)).union(proposal.reasons)
             blocked.formUnion(["exact_target_send_adapter_unavailable", "send_preservation_adapter_unavailable"])
             reasons.formUnion(blocked)
@@ -405,6 +466,7 @@ extension ProjectSessionAudit {
             "executable": .bool(reasons.isEmpty),
             "reasons": .array(reasons.sorted().map(Value.string))
         ]
+        if !protectedReads.isEmpty { body["protected_invariants"] = .array(protectedReads.map(\.wire)) }
         let canonical = try encodeJSONStrict(Value.object(body), compact: true)
         let digest = SHA256.hash(data: Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
         let id = "plan_" + UUID().uuidString
@@ -418,7 +480,7 @@ extension ProjectSessionAudit {
     /// unrelated edges are copied unchanged; receiving-aux fanout is not a main-output duplicate.
     private static func proposedExistingBusOutput(
         finding: IntentFinding, graph: RoutingGraph, readReasons: Set<String>
-    ) throws -> (wire: Value, reasons: Set<String>) {
+    ) throws -> (wire: Value, reasons: Set<String>, after: RoutingGraph?) {
         var reasons = readReasons
         if finding.status != .violation {
             reasons.formUnion(finding.reasons.map(\.rawValue))
@@ -433,13 +495,13 @@ extension ProjectSessionAudit {
         ] where domain.state != .complete {
             reasons.insert("proposed_\(name)_coverage_incomplete")
         }
-        func unverified(_ reason: String? = nil) -> (Value, Set<String>) {
+        func unverified(_ reason: String? = nil) -> (Value, Set<String>, RoutingGraph?) {
             if let reason { reasons.insert(reason) }
             return (.object([
                 "status": .string("unverified"), "basis": .string("approved_policy"),
                 "observation": .string("proposed_not_observed"),
                 "reasons": .array(reasons.sorted().map(Value.string)),
-            ]), reasons)
+            ]), reasons, nil)
         }
         guard reasons.isEmpty else { return unverified() }
         guard graph.edges.allSatisfy({ $0.send?.level?.isFinite ?? true }) else {
@@ -506,16 +568,16 @@ extension ProjectSessionAudit {
             provenance: graph.provenance.contains(.other) ? graph.provenance : graph.provenance + [.other],
             snapshotId: graph.snapshotId, coverage: graph.coverage
         )
-        return (try proposedRoutingDiffValue(routingDiff(before: graph, after: after)), [])
+        return (try proposedRoutingDiffValue(routingDiff(before: graph, after: after)), [], after)
     }
 
     private static func proposedExistingSend(finding: IntentSendFinding, graph: RoutingGraph,
-                                             readReasons: Set<String>, allowReplace: Bool) throws -> (wire: Value, reasons: Set<String>) {
+                                             readReasons: Set<String>, allowReplace: Bool) throws -> (wire: Value, reasons: Set<String>, after: RoutingGraph?) {
         var reasons = readReasons.union(finding.reasons.map(\.rawValue))
-        func unverified(_ reason: String? = nil) -> (Value, Set<String>) {
+        func unverified(_ reason: String? = nil) -> (Value, Set<String>, RoutingGraph?) {
             if let reason { reasons.insert(reason) }
             return (.object(["status": .string("unverified"), "basis": .string("approved_policy"),
-                "observation": .string("proposed_not_observed"), "reasons": .array(reasons.sorted().map(Value.string))]), reasons)
+                "observation": .string("proposed_not_observed"), "reasons": .array(reasons.sorted().map(Value.string))]), reasons, nil)
         }
         guard reasons.isEmpty, finding.status == .violation else { return unverified() }
         guard graph.edges.allSatisfy({ $0.send?.level?.isFinite ?? true }) else {
@@ -561,7 +623,7 @@ extension ProjectSessionAudit {
             edges: graph.edges.compactMap { $0 == before ? desired : $0 },
             provenance: graph.provenance.contains(.other) ? graph.provenance : graph.provenance + [.other],
             snapshotId: graph.snapshotId, coverage: graph.coverage)
-        return (try proposedRoutingDiffValue(routingDiff(before: graph, after: after)), [])
+        return (try proposedRoutingDiffValue(routingDiff(before: graph, after: after)), [], after)
     }
 
     private static func proposedRoutingDiffValue(_ diff: RoutingDiff) throws -> Value {

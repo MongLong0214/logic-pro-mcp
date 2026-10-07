@@ -272,3 +272,35 @@ private func destinationMatches(_ send: SendEdge, node: RoutingNode) -> Bool {
     if let reference = send.destinationRef, node.targetRef != reference { return false }
     return true
 }
+
+enum RoutingPathState: String, Sendable {
+    case connected
+    case disconnected
+    case unverified
+}
+
+/// A structural path through the recorded directed edges, not audible signal, channel-format
+/// compatibility or sidechain/monitor safety. Complete endpoint/edge evidence is mandatory;
+/// bypass and level never delete an observed send connection. Callers bind the graph to their
+/// capture before using this shared #291 predicate. No scanner or planner policy lives here.
+func routingPath(from sourceRef: TargetReference, to sinkNodeID: String, in graph: RoutingGraph) -> RoutingPathState {
+    guard graph.complete, graph.isConsistent else { return .unverified }
+    let sources = graph.nodes.filter { $0.targetRef == sourceRef }
+    let sinks = graph.nodes.filter { $0.id == sinkNodeID }
+    guard sources.count == 1, let source = sources.first,
+          sinks.count == 1, let sink = sinks.first, [.bus, .aux, .output].contains(sink.kind),
+          source.id != sinkNodeID else { return .unverified }
+    let outputs = graph.edges.filter { $0.kind == .mainOutput }
+    guard Dictionary(grouping: outputs, by: \.source).values.allSatisfy({ $0.count == 1 }) else {
+        return .unverified
+    }
+    let adjacency = Dictionary(grouping: graph.edges, by: \.source)
+    var pending = [source.id]
+    var visited = Set<String>()
+    while let node = pending.popLast() {
+        guard visited.insert(node).inserted else { continue }
+        if node == sinkNodeID { return .connected }
+        pending.append(contentsOf: (adjacency[node] ?? []).map(\.destination))
+    }
+    return .disconnected
+}
