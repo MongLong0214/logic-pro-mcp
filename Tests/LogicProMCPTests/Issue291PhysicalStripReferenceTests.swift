@@ -370,6 +370,308 @@ struct Issue291PhysicalStripReferenceTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func capturedPhysicalInputSlotsReachTheSameResourceAndInspectionNodes(background: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture(duplicateNames: true, secondAux: true)
+            let rail = try #require(fixture.b.makeAXRuntime().children(fixture.window).first)
+            fixture.b.setChildren(rail, [])
+            let sources = ["Bus 1", "Input 3"]
+            for (offset, source) in sources.enumerated() {
+                let receiver = fixture.strips[2 + offset]
+                let input = fixture.b.element(2_911_000 + offset)
+                fixture.b.setButton(input, description: source,
+                    help: "Input slot. Choose the channel strip input source.",
+                    x: 0, y: 0, width: 1, height: 1)
+                fixture.b.setChildren(input, [])
+                fixture.b.setChildren(receiver, fixture.b.makeAXRuntime().children(receiver) + [input])
+            }
+            let cache = StateCache(); let registry = TargetRegistry(); let router = ChannelRouter()
+            let channel = fixture.channel(); await router.register(channel)
+            let poller = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, dialogPresent: { false }, blockingDialogInfo: { nil },
+                               projectFileReader: .unavailable, keyboardFocus: { .notTextEditing }))
+            if background { #expect(await poller.refreshNow()) }
+            let gate = LogicMutationGate()
+            let deps = HandlerDependencies(router: router, cache: cache, targetRegistry: registry, poller: poller,
+                dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+                liveTrackNames: { [:] }, projectFileReader: .unavailable)
+            let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+            let params: [String: Value] = ["domains": .array([.string("strips"), .string("routing")]),
+                                         "allow_ui_navigation": .bool(false)]
+            let response = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+                commandParams: params, mutationGate: gate) { await handler(deps, params) }
+            let isError = response.isError ?? false
+            #expect(!isError)
+            let report = try #require(sharedJSONObject(sharedToolText(response)))
+            let inspectedRows = try #require((report["strips"] as? [String: Any])?["rows"] as? [[String: Any]])
+            let inspectedRouting = try #require(report["routing"] as? [String: Any])
+            let inspectedNodes = try #require(inspectedRouting["nodes"] as? [[String: Any]])
+            let resource = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
+                targetRegistry: registry, fileReader: .unavailable)
+            let body = try #require(sharedJSONObject(sharedResourceText(resource)))
+            let rows = try #require(body["strips"] as? [[String: Any]])
+            let graph = try #require(body["routing_graph"] as? [String: Any])
+            let nodes = try #require(graph["nodes"] as? [[String: Any]])
+            try #require(rows.count == 4 && inspectedRows.count == 4)
+            let references = try rows.map { try #require($0["mixer_strip_ref"] as? String) }
+            #expect(Set(references).count == 4)
+            #expect(inspectedRows.compactMap { $0["mixer_strip_ref"] as? String } == references)
+            #expect(nodes.allSatisfy { $0["kind"] as? String == "physical_strip" })
+            #expect(nodes.allSatisfy { $0["displayName"] as? String == "Same" })
+            for (offset, source) in sources.enumerated() {
+                let reference = references[2 + offset]
+                let node = try #require(nodes.first { $0["id"] as? String == reference })
+                let inspectedNode = try #require(inspectedNodes.first { $0["id"] as? String == reference })
+                #expect((node["observed_input_slot"] as? [String: Any])?["state"] as? String == "observed_source")
+                #expect((node["observed_input_slot"] as? [String: Any])?["source"] as? String == source)
+                #expect((inspectedNode["observed_input_slot"] as? [String: Any])?["state"] as? String == "observed_source")
+                #expect((inspectedNode["observed_input_slot"] as? [String: Any])?["source"] as? String == source)
+                #expect(rows[2 + offset]["input"] as? String == source)
+            }
+            #expect(try #require(graph["edges"] as? [[String: Any]]).isEmpty)
+            #expect(((graph["coverage"] as? [String: Any])?["bus_to_aux_input"] as? [String: Any])?["state"] as? String == "not_observed")
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test func sameLabelInputReplacementBetweenBookendsDoesNotAdoptNewSlotCustody() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture(duplicateNames: true)
+            let old = fixture.b.element(2_911_100)
+            let replacement = fixture.b.element(2_911_101)
+            let unaffected = fixture.b.element(2_911_102)
+            for control in [old, replacement, unaffected] {
+                fixture.b.setButton(control, description: "Bus 1",
+                    help: "Input slot. Choose the channel strip input source.",
+                    x: 0, y: 0, width: 1, height: 1)
+                fixture.b.setChildren(control, [])
+            }
+            let originalChildren = fixture.b.makeAXRuntime().children(fixture.strips[0])
+            fixture.b.setChildren(fixture.strips[0], originalChildren + [old])
+            fixture.b.setChildren(fixture.strips[1], fixture.b.makeAXRuntime().children(fixture.strips[1]) + [unaffected])
+            let sawOld = Once(); let sawReplacement = Once(); let changed = Once()
+            fixture.onAttributeRead = { element, attribute in
+                guard attribute == kAXDescriptionAttribute as String else { return }
+                if CFEqual(element, old) { _ = sawOld.take() }
+                if CFEqual(element, replacement) { _ = sawReplacement.take() }
+            }
+            defer { fixture.onAttributeRead = nil }
+            let fileReader = LogicProjectFileReader.Runtime(currentDocumentPath: { nil }, now: Date.init,
+                readPlistData: { _ in nil }, mtime: { _ in
+                    if changed.take() {
+                        #expect(!sawOld.take(), "the original input's deciding description read must precede this metadata gap")
+                        fixture.b.setChildren(fixture.strips[0], originalChildren + [replacement])
+                    }
+                    return nil
+                }, sleep: { _ in })
+            let cache = StateCache(); let registry = TargetRegistry(); let router = ChannelRouter()
+            let channel = fixture.channel(); await router.register(channel)
+            let poller = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, dialogPresent: { false }, blockingDialogInfo: { nil },
+                               projectFileReader: fileReader, keyboardFocus: { .notTextEditing }))
+            let gate = LogicMutationGate()
+            let deps = HandlerDependencies(router: router, cache: cache, targetRegistry: registry, poller: poller,
+                dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+                liveTrackNames: { [0: "Same", 1: "Same"] }, projectFileReader: fileReader)
+            let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+            let params: [String: Value] = ["domains": .array([.string("tracks"), .string("strips"), .string("routing")]),
+                                         "allow_ui_navigation": .bool(false)]
+            let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+                commandParams: params, mutationGate: gate) { await handler(deps, params) }
+            let isError = result.isError ?? false
+            #expect(!isError)
+            #expect(!changed.take() && !sawReplacement.take(), "the one replacement and its subsequent deciding read must both execute")
+            let report = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect((report["strips"] as? [String: Any])?["coverage"] as? String == "partial")
+            #expect((report["tracks"] as? [String: Any])?["coverage"] as? String == "partial")
+            let inspected = try #require((report["strips"] as? [String: Any])?["rows"] as? [[String: Any]])
+            #expect(inspected.count == 2)
+            #expect(inspected[0]["input_status"] as? String == "unreadable")
+            #expect(inspected[0]["input"] == nil)
+            #expect(inspected[1]["input"] as? String == "Bus 1")
+            let resource = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
+                targetRegistry: registry, fileReader: .unavailable)
+            let body = try #require(sharedJSONObject(sharedResourceText(resource)))
+            let rows = try #require(body["strips"] as? [[String: Any]])
+            let nodes = try #require((body["routing_graph"] as? [String: Any])?["nodes"] as? [[String: Any]])
+            let references = rows.compactMap { $0["mixer_strip_ref"] as? String }
+            try #require(references.count == 2)
+            let affectedNode = try #require(nodes.first { $0["id"] as? String == references[0] })
+            let unaffectedNode = try #require(nodes.first { $0["id"] as? String == references[1] })
+            #expect(affectedNode["observed_input_slot"] == nil)
+            #expect((unaffectedNode["observed_input_slot"] as? [String: Any])?["source"] as? String == "Bus 1")
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    private func addInput(_ fixture: Fixture, strip: AXUIElement, id: Int, source: String = "Bus 1") -> AXUIElement {
+        let input = fixture.b.element(id)
+        fixture.b.setButton(input, description: source,
+            help: "Input slot. Choose the channel strip input source.", x: 0, y: 0, width: 1, height: 1)
+        fixture.b.setChildren(input, [])
+        fixture.b.setChildren(strip, fixture.b.makeAXRuntime().children(strip) + [input])
+        return input
+    }
+
+    private func inputGraph(_ cache: StateCache, _ registry: TargetRegistry, _ router: ChannelRouter) async throws
+        -> (rows: [[String: Any]], graph: RoutingGraph) {
+        let resource = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
+            targetRegistry: registry, fileReader: .unavailable)
+        let body = try #require(sharedJSONObject(sharedResourceText(resource)))
+        let object = try #require(body["routing_graph"] as? [String: Any])
+        return (try #require(body["strips"] as? [[String: Any]]),
+                try JSONDecoder().decode(RoutingGraph.self, from: JSONSerialization.data(withJSONObject: object)))
+    }
+
+    @Test(arguments: ["no_slot", "blank", "description", "help", "role", "children", "duplicate", "unknown_bus", "depth", "cycle"])
+    func incompleteOrAmbiguousInputReadsDoNotPublishPhysicalSlotCustody(shape: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            let strip = fixture.strips[0]
+            let originalChildren = fixture.b.makeAXRuntime().children(strip)
+            let input = addInput(fixture, strip: strip, id: 2_911_200, source: shape == "blank" ? "" : "Bus 1")
+            if shape == "no_slot" { fixture.b.setChildren(strip, originalChildren) }
+            if shape == "duplicate" || shape == "unknown_bus" {
+                let competitor = addInput(fixture, strip: strip, id: 2_911_201, source: "Bus 2")
+                if shape == "unknown_bus" {
+                    fixture.b.setAttribute(competitor, kAXHelpAttribute as String, "Unidentified source control")
+                }
+            }
+            if ["description", "help", "role"].contains(shape) {
+                let deciding = shape == "description" ? kAXDescriptionAttribute as String
+                    : (shape == "help" ? kAXHelpAttribute as String : kAXRoleAttribute as String)
+                fixture.attributeReadResult = { element, attribute in
+                    CFEqual(element, input) && attribute == deciding
+                        ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
+                }
+            }
+            if shape == "children" {
+                fixture.childrenReadResult = { CFEqual($0, input) ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil }
+            }
+            if shape == "depth" {
+                var nested = input
+                for offset in 0..<4 {
+                    let group = fixture.b.element(2_911_210 + offset)
+                    fixture.b.setRole(group, kAXGroupRole as String)
+                    fixture.b.setChildren(group, [nested]); nested = group
+                }
+                fixture.b.setChildren(strip, originalChildren + [nested])
+            }
+            if shape == "cycle" { fixture.b.setChildren(input, [input]) }
+            let (cache, registry, router, _) = try await publish(fixture, background: true)
+            let state = try #require(await cache.getChannelStrips().first)
+            #expect(state.inputSlotBinding == nil)
+            #expect(state.inputObservation?.state == (shape == "no_slot" ? .noSlot : .unreadable))
+            let (rows, graph) = try await inputGraph(cache, registry, router)
+            let reference = try #require(rows.first?["mixer_strip_ref"] as? String)
+            let node = try #require(graph.nodes.first { $0.id == reference })
+            #expect(node.observedInputSlot == nil)
+            #expect(graph.edges.isEmpty && graph.coverage.busToAuxInput.state == .notObserved)
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func ordinaryAndScheduledTypedInputCustodyFollowsPhysicalReferencesThroughReorder(scheduled: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture(duplicateNames: true)
+            fixture.b.setChildren(fixture.b.element(2_910_003), [])
+            _ = addInput(fixture, strip: fixture.strips[0], id: 2_911_300, source: "Bus 1")
+            _ = addInput(fixture, strip: fixture.strips[1], id: 2_911_301, source: "Input 3")
+            let cache = StateCache(); let registry = TargetRegistry(); let router = ChannelRouter()
+            let channel = fixture.channel(); await router.register(channel)
+            let (finished, completion) = AsyncStream<Void>.makeStream()
+            let poller = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, dialogPresent: { false }, sleep: { _ in
+                    completion.finish(); throw CancellationError()
+                }, blockingDialogInfo: { nil }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing }))
+            if scheduled {
+                await poller.start(); for await _ in finished {}; await poller.stop()
+            } else { #expect(await poller.refreshNow()) }
+            let first = try await inputGraph(cache, registry, router)
+            let firstRef = try #require(first.rows[0]["mixer_strip_ref"] as? String)
+            let secondRef = try #require(first.rows[1]["mixer_strip_ref"] as? String)
+            #expect(firstRef != secondRef)
+            #expect(first.graph.nodes.first { $0.id == firstRef }?.observedInputSlot?.source == "Bus 1")
+            #expect(first.graph.nodes.first { $0.id == secondRef }?.observedInputSlot?.source == "Input 3")
+            fixture.reorder([1, 0])
+            // stop() intentionally leaves that scheduled poller stopped. A fresh ordinary
+            // producer performs the next real refresh, rather than bypassing its stop latch.
+            let ordinary = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing }))
+            #expect(await ordinary.refreshNow())
+            let reordered = try await inputGraph(cache, registry, router)
+            #expect(reordered.rows.compactMap { $0["mixer_strip_ref"] as? String } == [secondRef, firstRef])
+            #expect(reordered.graph.nodes.first { $0.id == firstRef }?.observedInputSlot?.source == "Bus 1")
+            #expect(reordered.graph.nodes.first { $0.id == secondRef }?.observedInputSlot?.source == "Input 3")
+            #expect(reordered.graph.edges.isEmpty && fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test func encodedInputDisplayCannotReconstructOwnControlCustody() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            _ = addInput(fixture, strip: fixture.strips[0], id: 2_911_400)
+            let (cache, registry, router, _) = try await publish(fixture, background: true)
+            let native = await cache.getChannelStrips()
+            #expect(native[0].inputSlotBinding != nil)
+            var imported = try JSONDecoder().decode([ChannelStripState].self, from: JSONEncoder().encode(native))
+            #expect(imported[0].inputObservation?.source == "Bus 1")
+            #expect(imported.allSatisfy { $0.physicalBinding == nil && $0.inputSlotBinding == nil })
+            await cache.updateChannelStrips(imported)
+            let display = try await inputGraph(cache, registry, router)
+            #expect(display.rows.allSatisfy { $0["mixer_strip_ref"] == nil })
+            #expect(display.graph.nodes.allSatisfy { $0.observedInputSlot == nil })
+            // Even a separately legitimate physical strip owner does not authenticate imported
+            // input display. Only the typed own-control observation may supply this node field.
+            imported[0].physicalBinding = native[0].physicalBinding
+            await cache.updateChannelStrips(imported)
+            let physical = try await inputGraph(cache, registry, router)
+            let reference = try #require(physical.rows[0]["mixer_strip_ref"] as? String)
+            #expect(try #require(physical.graph.nodes.first { $0.id == reference }).observedInputSlot == nil)
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func JSONFallbackAndUnreadTypedMixerCannotPublishInputControlCustody(typedUnread: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            _ = addInput(fixture, strip: fixture.strips[0], id: 2_911_500)
+            let cache = StateCache(); let registry = TargetRegistry(); let router = ChannelRouter()
+            let channel = fixture.channel(typedMixer: typedUnread, typedUnread: typedUnread)
+            await router.register(channel)
+            let poller = StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing }))
+            #expect(await poller.refreshNow())
+            let states = await cache.getChannelStrips()
+            if !typedUnread { #expect(states.first?.inputObservation?.source == "Bus 1") }
+            #expect(states.allSatisfy { $0.inputSlotBinding == nil && $0.physicalBinding == nil })
+            let display = try await inputGraph(cache, registry, router)
+            #expect(display.graph.nodes.allSatisfy { $0.observedInputSlot == nil })
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
+    @Test func MCUDisplayAndFaderCacheCannotSupplyPhysicalInputSlotCustody() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            let cache = StateCache(); let registry = TargetRegistry(); let router = ChannelRouter()
+            await cache.updateProject(.init(name: "Session", filePath: fixture.bundle.path, source: "fixture"))
+            await cache.updateDocumentState(true)
+            await cache.updateMCUDisplayRow(upper: true, text: "Bus 1", offset: 0)
+            await cache.updateFader(strip: 0, volume: 0.5)
+            #expect(await cache.getMCUDisplay().upperRow.hasPrefix("Bus 1"))
+            let strip = try #require(await cache.getChannelStrips().first)
+            #expect(strip.physicalBinding == nil && strip.inputSlotBinding == nil && strip.inputObservation == nil)
+            let display = try await inputGraph(cache, registry, router)
+            #expect(display.rows.allSatisfy { $0["mixer_strip_ref"] == nil })
+            #expect(display.graph.nodes.allSatisfy { $0.observedInputSlot == nil })
+            #expect(fixture.mutations.isEmpty)
+        }
+    }
+
     @Test func scheduledPhysicalSourceNodePublicationNeedsNoArrangeOrPreliminaryResource() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let fixture = try Fixture(secondAux: true)

@@ -458,6 +458,36 @@ actor AccessibilityChannel: Channel {
             project: nil, tracks: nil, strips: nil, fileTrackCount: nil,
             beganAt: beganAt, endedAt: beganAt, stable: false
         )
+        // A retry may stabilize the population, but must not adopt another input control
+        // after this acquisition observed custody loss on the same physical owner.
+        var changedInputOwners: [AXMixerStripBinding.Binding] = []
+        func observeInputContinuity(_ before: [ChannelStripState]?, _ after: [ChannelStripState]?) {
+            for strip in before ?? [] {
+                guard let owner = strip.physicalBinding else { continue }
+                let matches = (after ?? []).filter { $0.physicalBinding?.matches(owner) == true }
+                guard matches.count == 1 else { continue }
+                let sameInput: Bool
+                switch (strip.inputSlotBinding, matches[0].inputSlotBinding) {
+                case (nil, nil): sameInput = true
+                case (.some(let a), .some(let b)): sameInput = a.matches(b)
+                default: sameInput = false
+                }
+                if !sameInput, !changedInputOwners.contains(where: { $0.matches(owner) }) {
+                    changedInputOwners.append(owner)
+                }
+            }
+        }
+        func inputSafeStates(_ states: [ChannelStripState]?) -> [ChannelStripState]? {
+            states?.map { state in
+                guard let owner = state.physicalBinding,
+                      changedInputOwners.contains(where: { $0.matches(owner) }) else { return state }
+                var unknown = state
+                unknown.inputSlotBinding = nil
+                unknown.input = nil
+                unknown.inputObservation = .init(state: .unreadable, source: nil)
+                return unknown
+            }
+        }
         for _ in 0..<3 {
             try check()
             guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: logic) else {
@@ -476,6 +506,9 @@ actor AccessibilityChannel: Channel {
             else { metadata = nil }
             try check()
             let after = try read(in: window)
+            observeInputContinuity(before.strips, after.strips)
+            let beforeStrips = inputSafeStates(before.strips)
+            let afterStrips = inputSafeStates(after.strips)
             let sameWindow: Bool
             if case .found(let current) = AXLogicProElements.arrangeWindowRead(runtime: logic) {
                 sameWindow = CFEqual(window, current)
@@ -495,12 +528,12 @@ actor AccessibilityChannel: Channel {
                     default: return false
                     }
                 }
-                && sameValues(before.tracks, after.tracks) && sameValues(before.strips, after.strips)
+                && sameValues(before.tracks, after.tracks) && sameValues(beforeStrips, afterStrips)
             let project = before.title.map {
                 ProjectInfo(name: Self.projectName(fromWindowTitle: $0), filePath: path, source: "ax_request_read")
             }
             let candidate = SessionPopulationObservation.FreshPopulation(
-                project: project, tracks: before.tracks, strips: before.strips,
+                project: project, tracks: before.tracks, strips: beforeStrips,
                 fileTrackCount: metadata?.trackCount, beganAt: beganAt, endedAt: Date(), stable: stable,
                 mixerPresentation: before.presentation?.presentation
             )

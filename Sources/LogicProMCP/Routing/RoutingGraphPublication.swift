@@ -146,11 +146,19 @@ enum RoutingGraphPublication {
             if strip.physicalBinding != nil {
                 if let reference = capture.mixerReference(at: row) {
                     let label = nonEmptyObservedLabel(strip.output)
+                    let input: InputSlotObservation?
+                    if let slot = strip.inputSlotBinding, let owner = strip.physicalBinding,
+                       slot.owner.matches(owner),
+                       let observed = strip.inputObservation, observed.state == .observedSource,
+                       let source = observed.source, source.utf8.elementsEqual(slot.source.utf8) {
+                        input = observed
+                    } else { input = nil }
                     nodesByID[reference.rawValue] = RoutingNode(
                         id: reference.rawValue, kind: .physicalStrip,
                         displayName: strip.name ?? "", busNumber: nil, targetRef: reference,
                         observedOutputLabel: label,
-                        outputClassification: label.map { classifyOutputLabel($0).0 }
+                        outputClassification: label.map { classifyOutputLabel($0).0 },
+                        observedInputSlot: input
                     )
                 } else {
                     population.partial("physical strip membership or reference unavailable at observed row=\(row)")

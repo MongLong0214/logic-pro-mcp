@@ -107,10 +107,14 @@ extension AccessibilityChannel {
     private static func readInputSource(
         of strip: AXUIElement, into state: inout ChannelStripState, runtime: AXLogicProElements.Runtime
     ) {
-        switch AXLogicProElements.inputSlotReading(in: strip, runtime: runtime.ax) {
+        let read = AXLogicProElements.inputSlotRead(in: strip, runtime: runtime.ax)
+        switch read.reading {
         case .source(let source):
             state.input = source
             state.inputObservation = .init(state: .observedSource, source: source)
+            if let owner = state.physicalBinding, let control = read.control {
+                state.inputSlotBinding = .init(owner: owner, control: control, source: source)
+            }
         case .noSlot:
             state.input = nil
             state.inputObservation = .init(state: .noSlot, source: nil)
