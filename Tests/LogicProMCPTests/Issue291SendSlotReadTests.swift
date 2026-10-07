@@ -684,6 +684,254 @@ private let stripBesideTheAssignmentKo: [DumpRow] = [
 
 @Suite("#291 R1 an assigned send is the group beside its knob, as dumped live")
 struct Issue291AssignedSendAsDumpedTests {
+    private final class FailedRead: @unchecked Sendable {
+        private let lock = NSLock()
+        private var consumed = false
+        func consume() { lock.withLock { consumed = true } }
+        var wasConsumed: Bool { lock.withLock { consumed } }
+    }
+
+    /// The observed multi-send layout groups all assigned controls before all knobs. Neither
+    /// tree order nor the destination display text establishes which knob belongs to a group.
+    @Test("two assigned groups followed by two knobs retain both occupied slots",
+          arguments: [false, true])
+    func separatedAssignedGroupsRetainOccupancyWithoutGuessingLevels(distinctLevels: Bool) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let rows = [
+            DumpRow(path: "0", role: "AXGroup", description: "읽기, 오토메이션이 활성화됨",
+                    help: nil, value: nil, valueDescription: nil),
+            DumpRow(path: "0.0", role: "AXCheckBox", description: "오토메이션",
+                    help: nil, value: .number(1), valueDescription: nil),
+            DumpRow(path: "0.1", role: "AXButton", description: "목록",
+                    help: nil, value: nil, valueDescription: nil),
+            DumpRow(path: "1", role: "AXPopUpButton", description: "그룹",
+                    help: nil, value: nil, valueDescription: nil),
+            DumpRow(path: "2", role: "AXButton", description: "보내기 버튼",
+                    help: "센드 슬롯. 신호를 Aux 채널 스트립으로 라우팅합니다.",
+                    value: nil, valueDescription: nil),
+            DumpRow(path: "3", role: "AXGroup", description: "버스 3",
+                    help: nil, value: nil, valueDescription: nil),
+            DumpRow(path: "3.0", role: "AXCheckBox", description: "바이패스",
+                    help: nil, value: .number(0), valueDescription: nil),
+            DumpRow(path: "3.1", role: "AXButton", description: "목록",
+                    help: nil, value: nil, valueDescription: nil),
+            DumpRow(path: "4", role: "AXGroup", description: "버스 2",
+                    help: nil, value: nil, valueDescription: nil),
+            DumpRow(path: "4.0", role: "AXCheckBox", description: "바이패스",
+                    help: nil, value: .number(0), valueDescription: nil),
+            DumpRow(path: "4.1", role: "AXButton", description: "목록",
+                    help: nil, value: nil, valueDescription: nil),
+            DumpRow(path: "5", role: "AXSlider", description: "센드 노브",
+                    help: "센드 레벨 노브. Aux 채널 스트립으로 전송되는 신호의 양을 제어합니다.",
+                    value: .number(distinctLevels ? 0.2 : 0),
+                    valueDescription: distinctLevels ? "-18.0 dB" : "-∞"),
+            DumpRow(path: "6", role: "AXSlider", description: "센드 노브",
+                    help: "센드 레벨 노브. Aux 채널 스트립으로 전송되는 신호의 양을 제어합니다.",
+                    value: .number(distinctLevels ? 0.8 : 0),
+                    valueDescription: distinctLevels ? "-2.0 dB" : "-∞"),
+            DumpRow(path: "7", role: "AXGroup", description: "Q-Sampler",
+                    help: nil, value: nil, valueDescription: nil),
+            DumpRow(path: "7.0", role: "AXCheckBox", description: "바이패스",
+                    help: nil, value: .number(0), valueDescription: nil),
+            DumpRow(path: "7.1", role: "AXButton", description: "열기",
+                    help: nil, value: nil, valueDescription: nil),
+            DumpRow(path: "7.2", role: "AXButton", description: "목록",
+                    help: nil, value: nil, valueDescription: nil),
+        ]
+        let ownStrip = strip(rows, builder: builder, id: 32_700)
+        let expected = [
+            SendSlotObservation(ordinal: 0, state: .observedEmpty),
+            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination),
+            SendSlotObservation(ordinal: 2, state: .occupiedUnknownDestination),
+        ]
+        let direct = try #require(
+            AXLogicProElements.sendSlotObservations(in: ownStrip, runtime: builder.makeAXRuntime())
+        )
+        #expect(direct == expected)
+
+        _ = make123MixerFixture(stripCount: 1, firstStrip: ownStrip, builder: builder)
+        let window = builder.element(11)
+        builder.setAttribute(window, kAXTitleAttribute as String, "Session - Tracks")
+        builder.setAttribute(window, kAXDocumentAttribute as String, "file:///tmp/MultipleSends.logicx")
+        builder.setAttribute(builder.element(10), kAXWindowsAttribute as String, [window])
+        let runtime = builder.makeLogicRuntime(
+            appElement: builder.element(10), setAttributeHandler: nil, performActionHandler: nil,
+            executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+        )
+        let typed = AccessibilityChannel.defaultGetMixerStates(runtime: runtime, stoppingWhen: { false })
+        #expect(!typed.yielded)
+        let state = try #require(typed.states?.first)
+        #expect(state.physicalBinding != nil)
+        #expect(state.sendSlots == expected)
+        #expect(state.sends == nil)
+        #expect(builder.setCalls.isEmpty)
+        #expect(builder.actionCalls.isEmpty)
+    }
+
+    private func multipleAssignedStrip(_ builder: FakeAXRuntimeBuilder, id: Int) throws -> (
+        strip: AXUIElement, groups: [AXUIElement], knobs: [AXUIElement], children: [AXUIElement]
+    ) {
+        let ownStrip = strip(assignedSendStripKo, builder: builder, id: id)
+        let group = try element(at: "13", role: kAXGroupRole as String,
+                                in: assignedSendStripKo, builder: builder, stripID: id)
+        let knob = try element(at: "14", role: kAXSliderRole as String,
+                               in: assignedSendStripKo, builder: builder, stripID: id)
+        let otherGroup = builder.element(id + 100)
+        let bypass = builder.element(id + 101)
+        let list = builder.element(id + 102)
+        let otherKnob = builder.element(id + 103)
+        builder.setRole(otherGroup, kAXGroupRole as String)
+        builder.setAttribute(otherGroup, kAXDescriptionAttribute as String, "버스 2")
+        builder.setRole(bypass, kAXCheckBoxRole as String)
+        builder.setRole(list, kAXButtonRole as String)
+        builder.setChildren(otherGroup, [bypass, list])
+        builder.setRole(otherKnob, kAXSliderRole as String)
+        for attribute in [kAXHelpAttribute, kAXDescriptionAttribute, kAXValueAttribute, kAXValueDescriptionAttribute] {
+            if let value = builder.attributeValue(knob, attribute as String) {
+                builder.setAttribute(otherKnob, attribute as String, value)
+            }
+        }
+        let before = builder.makeAXRuntime().children(ownStrip)
+        let position = try #require(before.firstIndex { CFEqual($0, group) })
+        let children = Array(before[..<position]) + [group, otherGroup, knob, otherKnob]
+            + Array(before[(position + 2)...])
+        builder.setChildren(ownStrip, children)
+        return (ownStrip, [group, otherGroup], [knob, otherKnob], children)
+    }
+
+    @Test("an unqualified multi-send cluster is unknown, not a shorter readable list",
+          arguments: ["unequal", "no_knobs", "wrong_parent", "plugin_group", "missing_anchor",
+                      "duplicate_group", "duplicate_knob", "group_role", "knob_help", "group_children", "depth_bound"])
+    func unqualifiedMultiSendClusterCannotPublishAShorterList(kind: String) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let fixture = try multipleAssignedStrip(builder, id: 33_000)
+        let failure = FailedRead()
+        var children = fixture.children
+        switch kind {
+        case "unequal": children.removeAll { CFEqual($0, fixture.knobs[1]) }
+        case "no_knobs": children.removeAll { element in fixture.knobs.contains { CFEqual($0, element) } }
+        case "wrong_parent":
+            let wrapper = builder.element(33_200)
+            builder.setRole(wrapper, kAXGroupRole as String)
+            builder.setChildren(wrapper, fixture.knobs)
+            children.removeAll { element in fixture.knobs.contains { CFEqual($0, element) } }
+            let position = try #require(children.firstIndex { CFEqual($0, fixture.groups[1]) })
+            children.insert(wrapper, at: position + 1)
+        case "plugin_group":
+            let open = builder.element(33_201)
+            builder.setRole(open, kAXButtonRole as String)
+            builder.setChildren(fixture.groups[0], builder.makeAXRuntime().children(fixture.groups[0]) + [open])
+        case "missing_anchor":
+            let anchor = try element(at: "12", role: kAXButtonRole as String,
+                                     in: assignedSendStripKo, builder: builder, stripID: 33_000)
+            builder.setAttribute(anchor, kAXHelpAttribute as String, "Audio Effect slot. Insert a plug-in.")
+        case "duplicate_group":
+            let position = try #require(children.firstIndex { CFEqual($0, fixture.groups[1]) })
+            children[position] = fixture.groups[0]
+        case "duplicate_knob":
+            let position = try #require(children.firstIndex { CFEqual($0, fixture.knobs[1]) })
+            children[position] = fixture.knobs[0]
+        case "depth_bound":
+            var descendant = builder.element(33_210)
+            builder.setRole(descendant, kAXButtonRole as String)
+            for offset in (0..<4).reversed() {
+                let wrapper = builder.element(33_220 + offset)
+                builder.setRole(wrapper, kAXGroupRole as String)
+                builder.setChildren(wrapper, [descendant])
+                descendant = wrapper
+            }
+            children.append(descendant)
+        default: break
+        }
+        builder.setChildren(fixture.strip, children)
+        let runtime = builder.makeAXRuntime(
+            attributeValueResultHandler: { element, attribute in
+                if (kind == "group_role" && CFEqual(element, fixture.groups[0]) && attribute == kAXRoleAttribute as String)
+                    || (kind == "knob_help" && CFEqual(element, fixture.knobs[1]) && attribute == kAXHelpAttribute as String) {
+                    failure.consume()
+                    return .failure(readFailure)
+                }
+                return nil
+            },
+            childrenResultHandler: { element in
+                if kind == "group_children", CFEqual(element, fixture.groups[0]) {
+                    failure.consume()
+                    return .failure(readFailure)
+                }
+                return nil
+            }, setAttributeHandler: nil, performActionHandler: nil
+        )
+        #expect(AXLogicProElements.sendSlotObservations(in: fixture.strip, runtime: runtime) == nil)
+        if ["group_role", "knob_help", "group_children"].contains(kind) { #expect(failure.wasConsumed) }
+        #expect(builder.setCalls.isEmpty)
+        #expect(builder.actionCalls.isEmpty)
+    }
+
+    @Test("multi-send occupancy survives the actual typed cache and Mixer resource")
+    func multiSendClusterSurvivesTypedCacheAndMixerResource() async throws {
+        let fixture = try Issue291PhysicalStripReferenceTests.Fixture()
+        let cluster = try multipleAssignedStrip(fixture.b, id: 33_500)
+        fixture.b.setChildren(fixture.strips[0], fixture.b.makeAXRuntime().children(fixture.strips[0])
+                              + fixture.b.makeAXRuntime().children(cluster.strip))
+        let typed = AccessibilityChannel.defaultGetMixerStates(runtime: fixture.logic, stoppingWhen: { false })
+        let states = try #require(typed.states)
+        let cache = StateCache()
+        await cache.updateProject(ProjectInfo(name: "Session", filePath: fixture.bundle.path))
+        await cache.updateChannelStrips(states)
+        let resource = try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await ResourceHandlers.readMixer(cache: cache, uri: "logic://mixer", targetRegistry: TargetRegistry())
+        }
+        let body = try #require(sharedJSONObject(sharedResourceText(resource)))
+        let rows = try #require(body["strips"] as? [[String: Any]])
+        let slots = try #require(rows.first?["send_slots"] as? [[String: Any]])
+        #expect(slots.map { $0["state"] as? String } == ["observed_empty", "occupied_unknown_destination", "occupied_unknown_destination"])
+        #expect(slots.map { $0["ordinal"] as? Int } == [0, 1, 2])
+        #expect(slots.allSatisfy { $0["level_raw"] == nil && $0["level_description"] == nil })
+        #expect(rows.first?["sends"] == nil)
+        let graph = try #require(body["routing_graph"] as? [String: Any])
+        let edges = try #require(graph["edges"] as? [[String: Any]])
+        #expect(edges.isEmpty)
+        #expect(fixture.mutations.isEmpty)
+    }
+
+    @Test("consecutive non-send groups are not an unread send cluster",
+          arguments: ["automation", "plugin", "plugin_after_empty"])
+    func consecutiveNonSendGroupsRemainReadable(kind: String) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let ownStrip = builder.element(34_000)
+        builder.setRole(ownStrip, kAXLayoutItemRole as String)
+        var children: [AXUIElement] = []
+        if kind == "plugin_after_empty" {
+            let empty = builder.element(34_001)
+            builder.setRole(empty, kAXButtonRole as String)
+            builder.setAttribute(empty, kAXHelpAttribute as String, "Send slot. Route the signal to an aux channel strip.")
+            children.append(empty)
+        }
+        for offset in 0..<2 {
+            let group = builder.element(34_010 + offset * 10)
+            let checkbox = builder.element(34_011 + offset * 10)
+            let list = builder.element(34_012 + offset * 10)
+            builder.setRole(group, kAXGroupRole as String)
+            builder.setRole(checkbox, kAXCheckBoxRole as String)
+            builder.setRole(list, kAXButtonRole as String)
+            var controls = [checkbox, list]
+            if kind.hasPrefix("plugin") {
+                let open = builder.element(34_013 + offset * 10)
+                builder.setRole(open, kAXButtonRole as String)
+                controls.insert(open, at: 1)
+            }
+            builder.setChildren(group, controls)
+            children.append(group)
+        }
+        builder.setChildren(ownStrip, children)
+        let read = try #require(AXLogicProElements.sendSlotObservations(in: ownStrip, runtime: builder.makeAXRuntime()))
+        let expected: [SendSlotObservation] = kind == "plugin_after_empty"
+            ? [.init(ordinal: 0, state: .observedEmpty)] : []
+        #expect(read == expected)
+        #expect(builder.setCalls.isEmpty)
+        #expect(builder.actionCalls.isEmpty)
+    }
+
     /// Builds the strip from dump rows: every row becomes an element with exactly the attributes
     /// the dump read, and each is attached to the parent its path names, in dump order.
     private func strip(_ rows: [DumpRow], builder: FakeAXRuntimeBuilder, id: Int) -> AXUIElement {
