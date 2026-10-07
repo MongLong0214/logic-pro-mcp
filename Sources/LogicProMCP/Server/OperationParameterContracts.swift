@@ -250,8 +250,8 @@ extension OperationRegistry {
 
             // logic_edit
             "edit.quantize": .init(params: [
-                "value": .unconstrained("read as text with 1/16 as the default", sample: .string("1/16")),
-                "grid": .unconstrained("read as text with 1/16 as the default", sample: .string("1/16")),
+                "value": .enforced(.string, .string("1/16"), allowed: EditDispatcher.validQuantizeGrids),
+                "grid": .enforced(.string, .string("1/16"), allowed: EditDispatcher.validQuantizeGrids),
             ], required: [["value", "grid"]]),
 
             // logic_midi
