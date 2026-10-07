@@ -1090,6 +1090,19 @@ struct SystemDispatcher: OperationTraceDispatching {
                                 if didWin { timeoutHandle.cancel() }
                                 return
                             }
+                            var approvedNameBefore: [[String: Any]]?
+                            if let approval = approvedSessionRepair, approval.hasMatchingNameGoals {
+                                guard let evidence = await approval.nameGoalEvidence() else {
+                                    let (winner, _) = await sagaJournal.finalizeReturningWinner(
+                                        journalClaim, proposed: approval.nameGoalRefusal(), verifiedIfCancelled: true
+                                    )
+                                    let didWin = race.resume(continuation,
+                                        returning: toolTextResult(winner.body, isError: winner.isError))
+                                    if didWin { timeoutHandle.cancel() }
+                                    return
+                                }
+                                approvedNameBefore = evidence
+                            }
                             // Availability includes synchronous AX reads. It belongs to
                             // the same lifecycle race as execution, not before its timer.
                             let preflight = await saga.preflight(plan)
@@ -1135,7 +1148,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                             // Preserve the prior behavior: a cancel that raced in
                             // after the saga's last checkpoint (so it completed)
                             // compensates the applied writes before terminalizing.
-                            let finalOutcome: SagaOutcome
+                            var finalOutcome: SagaOutcome
                             if await sagaJournal.record(for: plan.idempotencyKey)
                                 == .cancellationRequested,
                                outcome.state == .completed {
@@ -1147,7 +1160,35 @@ struct SystemDispatcher: OperationTraceDispatching {
                             } else {
                                 finalOutcome = outcome
                             }
-                            let proposed = SagaWire.storedOutcome(plan: plan, outcome: finalOutcome)
+                            var finalNameEvidence: [[String: Any]]?
+                            var nameGoalFailed = false
+                            if finalOutcome.state == .completed,
+                               let approval = approvedSessionRepair, approval.hasMatchingNameGoals {
+                                finalNameEvidence = await approval.nameGoalEvidence(requiringMixerGoal: true)
+                                if finalNameEvidence == nil {
+                                    nameGoalFailed = true
+                                    // Only the owned view effect is compensated; a human name
+                                    // edit is never overwritten or used to block a safe inverse.
+                                    finalOutcome = await saga.cancel(outcome: finalOutcome,
+                                        executor: surfaceExecutor, deadlineReached: deadlineReached)
+                                    finalOutcome.complete = false
+                                    if finalOutcome.state == .cancelled {
+                                        // A no-op view has no applied inverse. This is goal loss,
+                                        // not an invented user cancellation.
+                                        finalOutcome.state = .partiallyApplied
+                                        finalOutcome.stateHistory.append(.partiallyApplied)
+                                    }
+                                }
+                            }
+                            var proposed = SagaWire.storedOutcome(plan: plan, outcome: finalOutcome)
+                            if let finalNameEvidence, var body = decodedJSONObject(proposed.body) {
+                                body["goal_evidence"] = finalNameEvidence
+                                proposed = .init(body: HonestContract.jsonString(body), isError: proposed.isError)
+                            } else if nameGoalFailed, var body = decodedJSONObject(proposed.body) {
+                                body["goal_verification_failure"] = "approved_name_or_mixer_goal_unverified"
+                                body["goal_before_evidence"] = approvedNameBefore
+                                proposed = .init(body: HonestContract.jsonString(body), isError: proposed.isError)
+                            }
                             let (winner, _) = await sagaJournal.finalizeReturningWinner(
                                 journalClaim,
                                 proposed: proposed,
