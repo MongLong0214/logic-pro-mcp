@@ -241,8 +241,13 @@ extension AXLogicProElements {
     /// Only the Korean help string is measured. On a locale whose `AXHelp` carries none of the
     /// hint's variants the predicate yields nothing, and this falls through to elimination exactly
     /// as it did before — so an unmeasured locale is no worse off, and never silently better.
-    static func findPanControlInHeader(_ header: AXUIElement, runtime: AXHelpers.Runtime = .production) -> AXUIElement? {
-        let sliders = AXHelpers.findAllDescendants(of: header, role: kAXSliderRole, maxDepth: 4, runtime: runtime)
+    static func findPanControlInHeader(
+        _ header: AXUIElement, runtime: AXHelpers.Runtime = .production,
+        observingExposure: AXTrackBinding.Exposure? = nil
+    ) -> AXUIElement? {
+        let sliders = AXHelpers.findAllDescendants(of: header, role: kAXSliderRole, maxDepth: 4, runtime: runtime,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) })
         let candidates = headerPanSliderCandidates(among: sliders, runtime: runtime)
 
         if candidates.count == 1 { return candidates[0] }
@@ -1514,7 +1519,8 @@ extension AXLogicProElements {
     static func findVolumeFader(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production,
-        requireUnique: Bool = false
+        requireUnique: Bool = false,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> AXUIElement? {
         let failures = AXPluginInstanceIdentity.FailedReads()
         let ax = requireUnique ? AXPluginInstanceIdentity.noting(failures, over: runtime) : runtime
@@ -1524,7 +1530,9 @@ extension AXLogicProElements {
             sliders = observed
         } else {
             sliders = AXHelpers.findAllDescendants(
-                of: strip, role: kAXSliderRole, maxDepth: 4, runtime: ax
+                of: strip, role: kAXSliderRole, maxDepth: 4, runtime: ax,
+                observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+                observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }
             )
         }
         // Second atlas adoption. This site had BOTH of the shapes ADR-007 exists to remove: it

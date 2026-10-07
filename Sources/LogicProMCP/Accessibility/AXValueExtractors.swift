@@ -325,6 +325,7 @@ enum AXValueExtractors {
         index: Int,
         runtime: AXHelpers.Runtime = .production,
         observingStackChildren: (([AXUIElement], AXUIElement?) -> Void)? = nil,
+        observingExposure: AXTrackBinding.Exposure? = nil,
         stoppingBeforeHelp stop: () -> Bool
     ) -> TrackState? {
         let extractedName = extractTrackName(from: header, runtime: runtime)
@@ -354,8 +355,8 @@ enum AXValueExtractors {
             isArmed: armed,
             isInputMonitoring: inputMonitoring,
             isSelected: selected,
-            volume: extractTrackHeaderVolume(from: header, runtime: runtime),
-            pan: extractTrackHeaderPan(from: header, runtime: runtime),
+            volume: extractTrackHeaderVolume(from: header, runtime: runtime, observingExposure: observingExposure),
+            pan: extractTrackHeaderPan(from: header, runtime: runtime, observingExposure: observingExposure),
             automationMode: extractTrackAutomationMode(from: header, runtime: runtime),
             color: extractTrackColor(from: header, runtime: runtime),
             liveIdentityBacked: extractedName.liveIdentityBacked,
@@ -445,9 +446,10 @@ enum AXValueExtractors {
     /// default) when the fader or its value is unreadable.
     private static func extractTrackHeaderVolume(
         from header: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure?
     ) -> Double {
-        guard let fader = AXLogicProElements.findVolumeFader(in: header, runtime: runtime),
+        guard let fader = AXLogicProElements.findVolumeFader(in: header, runtime: runtime, observingExposure: observingExposure),
               let contract = extractLogicMixerFaderValue(fader, runtime: runtime) else {
             return 0.0
         }
@@ -460,9 +462,10 @@ enum AXValueExtractors {
     /// slider, its range, or its value is unreadable.
     private static func extractTrackHeaderPan(
         from header: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure?
     ) -> Double {
-        guard let slider = AXLogicProElements.findPanControlInHeader(header, runtime: runtime),
+        guard let slider = AXLogicProElements.findPanControlInHeader(header, runtime: runtime, observingExposure: observingExposure),
               let range = extractSliderRange(slider, runtime: runtime),
               range.max > range.min,
               let contract = headerPanContract(slider, range: range, runtime: runtime) else {

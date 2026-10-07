@@ -53,6 +53,7 @@ extension AccessibilityChannel {
             guard var state = AXValueExtractors.extractTrackState(
                 from: header, index: index, runtime: runtime.ax,
                 observingStackChildren: { exposure?.observeDisclosureChildren(header: header, children: $0, selected: $1) },
+                observingExposure: exposure,
                 stoppingBeforeHelp: stop
             ) else { return (nil, true) }
             exposure?.observeStackState(header: header, isStackHeader: state.isStackHeader, collapsed: state.stackCollapsed)

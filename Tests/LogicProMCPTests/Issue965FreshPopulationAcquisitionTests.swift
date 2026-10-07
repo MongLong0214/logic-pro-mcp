@@ -85,7 +85,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                      wrongDisclosureHit: Bool = false,
                      observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil,
                      readingAttribute: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
-                     observingChildren: (@Sendable (AXUIElement) -> Void)? = nil) -> AccessibilityChannel {
+                     observingChildren: (@Sendable (AXUIElement) -> Void)? = nil,
+                     observingLegacyChildren: (@Sendable (AXUIElement) -> Void)? = nil) -> AccessibilityChannel {
             let ax = builder.makeAXRuntime(
                     appElement: app,
                     attributeValueHandler: { element, attribute in
@@ -100,6 +101,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                         return nil
                     },
                     attributeValueResultHandler: readingAttribute,
+                    childrenHandler: { element in
+                        observingLegacyChildren?(element)
+                        return nil
+                    },
                     childrenResultHandler: { element in
                         observingChildren?(element)
                         return unreadableRail && CFEqual(element, rail)
@@ -211,6 +216,10 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeSiblingStacks(navigation: true, postReleaseOwnershipLoss: loss)
     }
 
+    @Test func registeredSiblingPassiveRowLossCannotResumeAnOldInverse() async throws {
+        try await observeSiblingStacks(navigation: true, postReleaseOwnershipLoss: "row_role_loss")
+    }
+
     @Test func registeredNewlyRevealedSiblingDisclosuresAcquireEveryHeldChild() async throws {
         try await observeSiblingStacks(navigation: true, siblingCase: "revealed")
     }
@@ -274,10 +283,12 @@ struct Issue965FreshPopulationAcquisitionTests {
         let viewportLoss = postReleaseOwnershipLoss?.hasPrefix("viewport_") == true
         let transportLoss = postReleaseOwnershipLoss?.hasPrefix("transport_") == true
         let mixerLoss = postReleaseOwnershipLoss?.hasPrefix("mixer_") == true
+        let rowLoss = postReleaseOwnershipLoss?.hasPrefix("row_") == true
         let censusLossKind = collectorLoss ? postReleaseOwnershipLoss?.dropFirst("collector_".count).description
             : viewportLoss ? postReleaseOwnershipLoss?.dropFirst("viewport_".count).description
             : transportLoss ? postReleaseOwnershipLoss?.dropFirst("transport_".count).description
-            : mixerLoss ? postReleaseOwnershipLoss?.dropFirst("mixer_".count).description : postReleaseOwnershipLoss
+            : mixerLoss ? postReleaseOwnershipLoss?.dropFirst("mixer_".count).description
+            : rowLoss ? postReleaseOwnershipLoss?.dropFirst("row_".count).description : postReleaseOwnershipLoss
         let mouse = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
             let isSecond = point == CGPoint(x: 26, y: 36)
             let isThird = revealed && point == CGPoint(x: 36, y: 46)
@@ -308,7 +319,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                     return
                     (firstOpen || !(1...7).contains($0.offset)) && (secondOpen || !(17...23).contains($0.offset))
                 }.map(\.element))
-                if let censusLossKind, !collectorLoss, !viewportLoss, !transportLoss, !mixerLoss, fixture.events.count == 4 {
+                if let censusLossKind, !collectorLoss, !viewportLoss, !transportLoss, !mixerLoss, !rowLoss, fixture.events.count == 4 {
                     fixture.reads.record("post_release_loss_installed")
                     if censusLossKind == "role_loss" { fixture.builder.setRole(first, kAXButtonRole as String) }
                     if censusLossKind == "replacement" { fixture.builder.setChildren(headers[0], [replacement]) }
@@ -320,7 +331,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         let channel = fixture.channel(disclosure: first, additionalDisclosure: second,
             thirdDisclosure: revealed ? third : nil, wrongAdditionalDisclosureHit: siblingCase == "wrong_hit", observationMouse: mouse,
             observingAttribute: { element, attribute in
-                if collectorLoss || viewportLoss || transportLoss || mixerLoss, fixture.events.count == 4,
+                if collectorLoss || viewportLoss || transportLoss || mixerLoss || rowLoss, fixture.events.count == 4,
                    !fixture.reads.recorded.contains("post_release_loss_installed") {
                     if CFEqual(element, second), attribute == kAXValueAttribute as String {
                         fixture.reads.record("collector_value_read")
@@ -334,10 +345,17 @@ struct Issue965FreshPopulationAcquisitionTests {
                        !fixture.reads.recorded.contains("mixer_scan_ready") {
                         fixture.reads.record("mixer_scan_ready")
                     }
+                    if rowLoss, CFEqual(element, first), attribute == kAXValueAttribute as String,
+                       fixture.reads.recorded.filter({ $0 == "collector_value_read" }).count >= 2,
+                       (fixture.builder.attributeValue(first, attribute) as? NSNumber)?.intValue == 1,
+                       !fixture.reads.recorded.contains("row_stack_open") {
+                        fixture.reads.record("row_stack_open")
+                    }
                     if fixture.reads.recorded.filter({ $0 == "collector_value_read" }).count >= 2,
                        (collectorLoss && CFEqual(element, fixture.window) && attribute == kAXTitleAttribute as String)
                         || ((viewportLoss || (transportLoss && fixture.reads.recorded.contains("transport_scan_ready"))
-                            || (mixerLoss && fixture.reads.recorded.contains("mixer_scan_ready")))
+                            || (mixerLoss && fixture.reads.recorded.contains("mixer_scan_ready"))
+                            || (rowLoss && fixture.reads.recorded.contains("row_stack_open")))
                             && censusLossKind == "role_loss" && CFEqual(element, first) && attribute == kAXRoleAttribute as String) {
                         fixture.reads.record("post_release_loss_installed")
                         if censusLossKind == "role_loss" { fixture.builder.setRole(first, kAXButtonRole as String) }
@@ -461,6 +479,14 @@ struct Issue965FreshPopulationAcquisitionTests {
                         fixture.reads.record("sibling_loss_actually_sampled")
                     }
                 }
+            }, observingLegacyChildren: { element in
+                if rowLoss, CFEqual(element, headers[0]),
+                   fixture.reads.recorded.contains("post_release_loss_actually_sampled"),
+                   !fixture.reads.recorded.contains("post_release_loss_returned") {
+                    fixture.builder.setRole(first, kAXDisclosureTriangleRole as String)
+                    fixture.reads.record("row_pan_recovery")
+                    fixture.reads.record("post_release_loss_returned")
+                }
             })
         let cache = StateCache()
         let registry = TargetRegistry()
@@ -488,6 +514,13 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
         let body = try #require(sharedJSONObject(sharedToolText(result)))
         if postReleaseOwnershipLoss != nil {
+            if rowLoss {
+                let open = try #require(fixture.reads.recorded.firstIndex(of: "row_stack_open"))
+                let installed = try #require(fixture.reads.recorded.firstIndex(of: "post_release_loss_installed"))
+                let sampled = try #require(fixture.reads.recorded.firstIndex(of: "post_release_loss_actually_sampled"))
+                let recovered = try #require(fixture.reads.recorded.firstIndex(of: "row_pan_recovery"))
+                #expect(open < installed && installed < sampled && sampled < recovered)
+            }
             if transportLoss || mixerLoss {
                 let ready = try #require(fixture.reads.recorded.firstIndex(of: transportLoss ? "transport_scan_ready" : "mixer_scan_ready"))
                 let installed = try #require(fixture.reads.recorded.firstIndex(of: "post_release_loss_installed"))

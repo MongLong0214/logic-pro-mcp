@@ -847,10 +847,13 @@ enum AXHelpers {
         of element: AXUIElement,
         role: String? = nil,
         maxDepth: Int = 5,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        observingRole: (AXUIElement, String?) -> Void = { _, _ in },
+        observingChildren: (AXUIElement, [AXUIElement]) -> Void = { _, _ in }
     ) -> [AXUIElement] {
         var results: [AXUIElement] = []
-        collectDescendants(of: element, role: role, maxDepth: maxDepth, runtime: runtime, into: &results)
+        collectDescendants(of: element, role: role, maxDepth: maxDepth, runtime: runtime,
+            observingRole: observingRole, observingChildren: observingChildren, into: &results)
         return results
     }
 
@@ -859,15 +862,25 @@ enum AXHelpers {
         role: String?,
         maxDepth: Int,
         runtime: Runtime,
+        observingRole: (AXUIElement, String?) -> Void,
+        observingChildren: (AXUIElement, [AXUIElement]) -> Void,
         into results: inout [AXUIElement]
     ) {
         guard maxDepth > 0 else { return }
         let children = getChildren(element, runtime: runtime)
+        observingChildren(element, children)
         for child in children {
-            if role == nil || getRole(child, runtime: runtime) == role {
+            let matches: Bool
+            if let role {
+                let observedRole = getRole(child, runtime: runtime)
+                observingRole(child, observedRole)
+                matches = observedRole == role
+            } else { matches = true }
+            if matches {
                 results.append(child)
             }
-            collectDescendants(of: child, role: role, maxDepth: maxDepth - 1, runtime: runtime, into: &results)
+            collectDescendants(of: child, role: role, maxDepth: maxDepth - 1, runtime: runtime,
+                observingRole: observingRole, observingChildren: observingChildren, into: &results)
         }
     }
 
