@@ -2210,13 +2210,6 @@ enum AXLocalePolicy {
             + "controls. Measured en-US and ko-KR on Logic 12.3; read-only."
     )
 
-    /// Tempo/position slider description tokens inside the transport container.
-    static let transportSliderHints = LabelSet(
-        canonical: "tempo",
-        variants: ["bpm", "position", "템포", "재생헤드 위치", "마디", "비트"],
-        rationale: "Classifies tempo/position sliders inside the transport container; read-only."
-    )
-
     // MARK: - Read-only classifier token bags (Phase 4, issue #60)
     //
     // Mixer / inspector / channel-strip / plugin-slot classifiers (surface #3)
@@ -3538,7 +3531,6 @@ enum AXLocalePolicy {
         transportContainerMetadata,
         transportContainerControlKeywords,
         transportKeywordFalseFriends,
-        transportSliderHints,
         mixerInspectorContext,
         mixerNamedElement,
         mixerPresentationSingle, mixerPresentationTracks, mixerPresentationAll,

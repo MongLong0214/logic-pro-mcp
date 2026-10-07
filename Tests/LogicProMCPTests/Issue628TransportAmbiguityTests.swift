@@ -22,6 +22,108 @@ import Testing
 @Suite("Issue #628 — the transport scan's candidate list is a value")
 struct Issue628TransportAmbiguityTests {
 
+    @Test("the container predicate reuses the measured Japanese own tempo slider authority")
+    func japaneseTempoSliderQualifiesTheHeldContainer() throws {
+        let b = FakeAXRuntimeBuilder()
+        let container = b.element(904870), play = b.element(904871), tempo = b.element(904872)
+        b.setAttribute(container, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(play, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(play, kAXDescriptionAttribute as String, "Play")
+        b.setAttribute(tempo, kAXRoleAttribute as String, kAXSliderRole as String)
+        // Own AXSlider description in the archived 2026-09-05 Japanese census, not a
+        // policy-generated expectation. No container metadata or text-value fallback.
+        b.setAttribute(tempo, kAXDescriptionAttribute as String, "テンポ")
+        b.setAttribute(tempo, kAXValueAttribute as String, NSNumber(value: 128))
+        b.setChildren(container, [play, tempo])
+
+        let candidates = AXLogicProElements.transportContainerCandidates(
+            among: [container], runtime: b.makeLogicRuntime())
+        #expect(candidates.count == 1)
+        let held = try #require(candidates.first)
+        #expect(CFEqual(held, container))
+        let state = AXValueExtractors.extractTransportState(from: held, runtime: b.makeAXRuntime())
+        #expect(state.tempo == 128)
+    }
+
+    @Test("all legacy slider hints retain their actual container qualification",
+          arguments: ["tempo", "bpm", "position", "템포", "재생헤드 위치", "마디", "비트",
+                      "TEMPO", "tempo display"])
+    func legacySliderHintsStillQualify(description: String) throws {
+        let b = FakeAXRuntimeBuilder()
+        let container = transportish(b, 904880, labels: ["Play"]), slider = b.element(904881)
+        b.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
+        b.setAttribute(slider, kAXDescriptionAttribute as String, description)
+        b.setAttribute(slider, kAXValueAttribute as String, NSNumber(value: 128))
+        b.setChildren(container, [b.element(9048801), slider])
+        let candidates = AXLogicProElements.transportContainerCandidates(
+            among: [container], runtime: b.makeLogicRuntime())
+        #expect(candidates.count == 1)
+        #expect(CFEqual(try #require(candidates.first), container))
+        let state = AXValueExtractors.extractTransportState(from: container, runtime: b.makeAXRuntime())
+        if description == "tempo" || description == "템포" || description == "TEMPO"
+            || description == "tempo display" {
+            #expect(state.tempo == 128)
+        } else {
+            // The extractor intentionally does not read a BPM-only slider as tempo, nor
+            // position components outside their named Playhead Position owner.
+            #expect(state.tempo == 120, "unobserved tempo retains the existing display default")
+            #expect(state.positionReadback == nil)
+        }
+    }
+
+    @Test("slider qualification retains role, owner, diacritic and slider-only boundaries",
+          arguments: ["wrong_role", "outside_owner", "accented", "unlabelled", "no_control"])
+    func sliderQualificationBoundariesRemain(fault: String) throws {
+        let b = FakeAXRuntimeBuilder()
+        let container = transportish(b, 904890, labels: ["Play"]), slider = b.element(904891)
+        b.setAttribute(slider, kAXRoleAttribute as String,
+                       fault == "wrong_role" ? kAXImageRole as String : kAXSliderRole as String)
+        b.setAttribute(slider, kAXDescriptionAttribute as String,
+                       fault == "accented" ? "Témpo" : fault == "unlabelled" ? "" : "テンポ")
+        b.setAttribute(slider, kAXValueAttribute as String, NSNumber(value: 128))
+        if fault == "outside_owner" {
+            b.setChildren(container, [b.element(9048901)])
+        } else if fault == "no_control" {
+            b.setChildren(container, [slider])
+        } else {
+            b.setChildren(container, [b.element(9048901), slider])
+        }
+        let candidates = AXLogicProElements.transportContainerCandidates(
+            among: [container], runtime: b.makeLogicRuntime())
+        if fault == "no_control" {
+            // Existing slider evidence alone can qualify a container.
+            #expect(candidates.count == 1)
+            #expect(CFEqual(try #require(candidates.first), container))
+        } else {
+            #expect(candidates.isEmpty)
+        }
+    }
+
+    @Test("slider traversal retains its four-level boundary", arguments: [4, 5])
+    func sliderDepthBoundaryRemains(depth: Int) throws {
+        let b = FakeAXRuntimeBuilder()
+        let container = transportish(b, 904900, labels: ["Play"]), slider = b.element(904901)
+        b.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
+        b.setAttribute(slider, kAXDescriptionAttribute as String, "テンポ")
+        b.setAttribute(slider, kAXValueAttribute as String, NSNumber(value: 128))
+        var child = slider
+        for index in 1..<depth {
+            let wrapper = b.element(904910 + index)
+            b.setAttribute(wrapper, kAXRoleAttribute as String, kAXGroupRole as String)
+            b.setChildren(wrapper, [child])
+            child = wrapper
+        }
+        b.setChildren(container, [b.element(9049001), child])
+        let candidates = AXLogicProElements.transportContainerCandidates(
+            among: [container], runtime: b.makeLogicRuntime())
+        if depth == 4 {
+            #expect(candidates.count == 1)
+            #expect(CFEqual(try #require(candidates.first), container))
+        } else {
+            #expect(candidates.isEmpty)
+        }
+    }
+
     @Test("the container predicate reuses the Japanese tempo field authority",
           arguments: [kAXStaticTextRole as String, kAXTextFieldRole as String])
     func japaneseTempoFieldQualifiesTheHeldContainer(role: String) throws {

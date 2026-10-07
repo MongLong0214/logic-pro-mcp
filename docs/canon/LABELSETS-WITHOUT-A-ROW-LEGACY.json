@@ -93,11 +93,6 @@
       "verdict": "namespace",
       "candidate": "Localizable.strings Loop Browser#acc via #acc",
       "members": 12
-    },
-    "transportSliderHints": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Tempo#mti via #mti",
-      "members": 7
     }
   },
   "why_these_three_arrived_late": "Added 2026-09-20. They are not new LabelSets: they named no row before this branch too, and `check-labelset-census-only-shrinks.py` could not see them because its own parser took the end of a declaration to be the next `\\n    )` in the file. It reads the policy through `check-labelsets-are-derived.py`'s parser now. For contrast, the two Event List columns that DO name a row: `eventListColumnTrack` derives from logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Trk#value (`Trk`), and `eventListColumnLength` from the same table's `Length#und`. One row, all ten locales, nothing typed -- which is what these three cannot do yet. CLOSED 2026-09-20, the same day: all three name their row now. The Event List builds its columns in code -- no nib in the bundle names `EventListView` -- and `-[EventListView columnTitle:forMenu:]` looks each header up in Logic.framework's own Localizable.strings under `M`, `Position` and `Name`. Read from the shipped binary, not chosen because a value matched: docs/observations/2026-09-20-the-event-list-names-its-columns-in-code.json."

@@ -37,11 +37,15 @@ struct Issue60LocalePhase3Tests {
         #expect(labels == expected, "token set drifted: \(labels.symmetricDifference(expected))")
     }
 
-    @Test("transport slider hint tokens cover EN + KO")
+    @Test("reused transport slider authorities preserve all legacy EN + KO hints")
     func transportSliderHints() {
-        let labels = Set(AXLocalePolicy.transportSliderHints.labels)
         let expected: Set<String> = ["tempo", "bpm", "position", "템포", "재생헤드 위치", "마디", "비트"]
-        #expect(labels == expected, "token set drifted: \(labels.symmetricDifference(expected))")
+        for hint in expected {
+            #expect(AXLocalePolicy.tempoSliderLabel.containsAny(in: hint)
+                || AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: hint)
+                || AXLocalePolicy.barSliderLabel.containsAny(in: hint)
+                || AXLocalePolicy.beatSliderLabel.containsAny(in: hint))
+        }
     }
 
     @Test("containsAny matches both EN and KO control-bar metadata (classifier semantics)")
@@ -58,7 +62,10 @@ struct Issue60LocalePhase3Tests {
             ("markerContainerKeywords", AXLocalePolicy.markerContainerKeywords),
             ("transportContainerMetadata", AXLocalePolicy.transportContainerMetadata),
             ("transportContainerControlKeywords", AXLocalePolicy.transportContainerControlKeywords),
-            ("transportSliderHints", AXLocalePolicy.transportSliderHints),
+            ("tempoSliderLabel", AXLocalePolicy.tempoSliderLabel),
+            ("playheadPositionFieldLabel", AXLocalePolicy.playheadPositionFieldLabel),
+            ("barSliderLabel", AXLocalePolicy.barSliderLabel),
+            ("beatSliderLabel", AXLocalePolicy.beatSliderLabel),
         ]
         for (name, bag) in bags {
             let hasKorean = bag.labels.contains { $0.unicodeScalars.contains { (0xAC00...0xD7A3).contains($0.value) } }
