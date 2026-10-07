@@ -363,8 +363,14 @@ extension OperationRegistry {
                     "path": .unconstrained("read as text; a missing or unreadable path is analyzed and reported as not existing, not refused"),
                 ]) { _, new in new },
                 required: []),
-            "audio.analyze_spectrum": .init(params: ["path": .unconstrained("read as text; the analyzer refuses a path it cannot open",
-                                    sample: .string("/tmp/lpm-957-no-such-file.wav"))],
+            "audio.analyze_spectrum": .init(params: [
+                "path": .unconstrained("read as text; the analyzer refuses a path it cannot open",
+                                    sample: .string("/tmp/lpm-957-no-such-file.wav")),
+                "target_curve": .enforced(.array, .array([
+                    .object(["center_hz": .double(20), "energy_dbfs": .double(-40)]),
+                    .object(["center_hz": .double(20_000), "energy_dbfs": .double(-10)]),
+                ])),
+            ],
                                             required: [["path"]]),
             "audio.compare_spectra": .init(params: [
                 "before_path": .unconstrained("read as text; the analyzer refuses a path it cannot open",

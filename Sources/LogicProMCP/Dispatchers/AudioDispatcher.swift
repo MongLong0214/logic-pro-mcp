@@ -12,7 +12,7 @@ struct AudioDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_audio",
-        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq, compare_spectra. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path }; recommend_eq -> { path: absolute audio file path, minimum_level?: number }; compare_spectra -> { before_path: absolute audio file path, after_path: absolute audio file path, output_root?: absolute allowlist root }; comparison returns content-bound native-format analyses and raw after-minus-before band energy differences under matching analysis policy and channel interpretation; unavailable or floor-censored bands have no deltaDb, complete means every band is comparable, and limitations disclose unequal duration/window coverage; no time alignment, level normalization, quality judgment or EQ application; each recommended band carries reason, prominenceDb (how far the peak stood above its local baseline), resolutionLimited, and a confidence derived from those two — 0 where the peak only just cleared the detection threshold, 1 where it cleared it by as much again, capped at 0.5 when Q is a lower bound. analyze_spectrum returns per-band energy; a band whose edges enclose no FFT bin at the file's sample rate is marked measured:false and its energyDb is the floor sentinel, not a reading. `classification` is a coarse advisory heuristic — it reads white noise as drums and a pure tone as vocal — and `levelConfidence` is a loudness figure, not a measure of how sure that classification is. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
+        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq, compare_spectra. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path, target_curve?: [{center_hz: number, energy_dbfs: number}] }; target_curve evaluates absolute band-energy targets, not EQ gains, with 2 through the shipped grid's band count (\(SpectralTargetCurve.maximumPoints)) ascending unique points inside the configured frequency and floor-to-0-dBFS range. It returns {analysis, targetCurveComparison}, hashes the held file content, interpolates dB over log frequency only inside the curve span, and reports target-minus-observed deltaDb only for uncensored measured bands. Outside-span/unmeasured/floor bands have explicit unavailableReason; complete means every analysis band is comparable. Without a curve, the flat analysis response is unchanged. No level normalization or gain application; recommend_eq -> { path: absolute audio file path, minimum_level?: number }; compare_spectra -> { before_path: absolute audio file path, after_path: absolute audio file path, output_root?: absolute allowlist root }; comparison returns content-bound native-format analyses and raw after-minus-before band energy differences under matching analysis policy and channel interpretation; unavailable or floor-censored bands have no deltaDb, complete means every band is comparable, and limitations disclose unequal duration/window coverage; no time alignment, level normalization, quality judgment or EQ application; each recommended band carries reason, prominenceDb (how far the peak stood above its local baseline), resolutionLimited, and a confidence derived from those two — 0 where the peak only just cleared the detection threshold, 1 where it cleared it by as much again, capped at 0.5 when Q is a lower bound. analyze_spectrum returns per-band energy; a band whose edges enclose no FFT bin at the file's sample rate is marked measured:false and its energyDb is the floor sentinel, not a reading. `classification` is a coarse advisory heuristic — it reads white noise as drums and a pure tone as vocal — and `levelConfidence` is a loudness figure, not a measure of how sure that classification is. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
         commandDescription: "Audio command to execute"
     )
 
@@ -47,7 +47,7 @@ struct AudioDispatcher: OperationTraceDispatching {
         // reads white noise as `drums` and a pure sine as `vocal`. Advisory is what it is, so
         // advisory is what it says.
         case "analyze_spectrum":
-            return spectralAnalysisResult(command: command, params: params)
+            return spectralAnalysisResult(command: command, params: params, runtime: runtime)
 
         case "compare_spectra":
             return spectrumComparisonResult(params: params, runtime: runtime)
@@ -66,13 +66,40 @@ struct AudioDispatcher: OperationTraceDispatching {
     /// lossy dispatcher-specific representation.
     private static func spectralAnalysisResult(
         command: String,
-        params: [String: Value]
+        params: [String: Value],
+        runtime: AudioAnalyzer.Runtime
     ) -> CallTool.Result {
+        let curve: SpectralTargetCurve?
+        if let value = params["target_curve"] {
+            guard let parsed = SpectralTargetCurve(value: value) else {
+                return toolInvalidParamsResult(
+                    "target_curve requires 2...\(SpectralTargetCurve.maximumPoints) ascending unique {center_hz, energy_dbfs} numeric points; frequencies must be within \(AudioFeatureExtractionEngine.Config.default.fMinHz)...\(AudioFeatureExtractionEngine.Config.default.fMaxHz) Hz and energies within \(AudioFeatureExtractionEngine.Config.default.floorDbfs)...0 dBFS",
+                    extras: ["operation": "audio.\(command)", "write_attempted": false]
+                )
+            }
+            curve = parsed
+        } else { curve = nil }
         switch spectralInput(command: command, params: params) {
         case .refusal(let result):
             return result
         case .input(let input):
             do {
+                if let curve {
+                    let analysis = try AudioFeatureExtractionEngine.analyzeFile(
+                        path: input.path, analysisRef: "audio.\(command)", artifactFingerprint: "",
+                        runtime: runtime, computeArtifactFingerprint: true
+                    )
+                    guard analysis.complete else {
+                        return toolStateCResult(.spectralAnalysisFailed,
+                            hint: "Artifact analysis is incomplete: \(analysis.partialReason ?? "unavailable")",
+                            extras: ["operation": "audio.\(command)", "analysis_error": "incomplete_input",
+                                     "write_attempted": false])
+                    }
+                    return toolTextResult(encodeJSON(TargetCurveResponse(
+                        analysis: analysis,
+                        targetCurveComparison: .init(analysis: analysis, curve: curve)
+                    )))
+                }
                 return toolTextResult(encodeJSON(try analyzeSpectrum(path: input.path, command: command)))
             } catch {
                 return spectralAnalysisFailureResult(error, operation: "audio.\(command)")
@@ -205,6 +232,11 @@ struct AudioDispatcher: OperationTraceDispatching {
 
     private struct SpectralInput {
         let path: String
+    }
+
+    private struct TargetCurveResponse: Encodable {
+        let analysis: SpectralAnalysisResult
+        let targetCurveComparison: SpectralTargetCurveComparison
     }
 
     private enum SpectralInputResult {
