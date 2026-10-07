@@ -107,6 +107,9 @@ enum OracleConstraint: Sendable {
     /// value is present. Bool-vs-number safe: a requested `true` is not
     /// satisfied by an observed `1`.
     case fieldsEqual(keyA: String, keyB: String)
+    /// Two actual strings agree byte-for-byte, for domains where canonical Unicode equivalence
+    /// is not identity. Missing/nonstring values refuse; generic `fieldsEqual` remains unchanged.
+    case utf8StringsEqual(keyA: String, keyB: String)
     /// A key path in the RESPONSE equals a key path in the INDEPENDENT readback.
     /// Makes response↔readback agreement declarative instead of a bespoke
     /// closure. Fails closed when the readback is absent or unparseable — an
@@ -152,6 +155,9 @@ enum OracleConstraint: Sendable {
     /// planes explicit: accepting a checkbox envelope must not relax any slider
     /// invariant, and vice versa.
     indirect case anyOf([[OracleConstraint]])
+    /// Every element of a readable array satisfies the same clauses, relative to that element.
+    /// Pair with `nonEmptyArray` when an empty array cannot establish the operation's evidence.
+    indirect case arrayElements(key: String, constraints: [OracleConstraint])
 
     /// The primary RESPONSE-side key path — the one the generic mutator drops
     /// and error messages cite. For the relational cases it is the response side
@@ -168,11 +174,13 @@ enum OracleConstraint: Sendable {
              .lengthPrefixedIdentityAtIndexEquals(let key, _, _, _),
              .readbackArrayExcludesResponseIdentity(let key, _, _),
              .fieldsEqual(let key, _),
+             .utf8StringsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
              .emptyArray(let key),
              .booleanFlipped(let key, _),
-             .numericEqualsOffset(let key, _, _):
+             .numericEqualsOffset(let key, _, _),
+             .arrayElements(let key, _):
             return key
         case .anyOf:
             // Alternatives have no single response key. Mutators recurse into
@@ -190,13 +198,15 @@ enum OracleConstraint: Sendable {
         switch self {
         case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
              .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
-             .readbackArrayExcludesResponseIdentity, .fieldsEqual, .crossCheck, .numericNear,
+             .readbackArrayExcludesResponseIdentity, .fieldsEqual, .utf8StringsEqual, .crossCheck, .numericNear,
              .booleanFlipped, .numericEqualsOffset:
             return true
         case let .anyOf(alternatives):
             return alternatives.allSatisfy { branch in
                 branch.contains { $0.isValueConstraint }
             }
+        case let .arrayElements(_, constraints):
+            return constraints.contains { $0.isValueConstraint }
         case .nonEmptyArray, .typedField, .emptyArray:
             return false
         }
@@ -287,6 +297,10 @@ enum OracleConstraint: Sendable {
             guard let a = JSONPath.resolve(root, keyPath: keyA),
                   let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
             return JSONInspector.leavesEqual(a, b)
+        case .utf8StringsEqual(let keyA, let keyB):
+            guard let a = JSONPath.resolve(root, keyPath: keyA) as? String,
+                  let b = JSONPath.resolve(root, keyPath: keyB) as? String else { return false }
+            return a.utf8.elementsEqual(b.utf8)
         case .crossCheck(let responseKey, let readbackKey):
             // Fail closed: no readback means nothing to cross-check against,
             // which is an unverified read — never a pass.
@@ -337,6 +351,11 @@ enum OracleConstraint: Sendable {
         case let .anyOf(alternatives):
             return alternatives.contains { alternative in
                 alternative.allSatisfy { $0.isSatisfied(by: root, readback: readback) }
+            }
+        case let .arrayElements(key, constraints):
+            guard let array = JSONPath.resolve(root, keyPath: key) as? [Any], !constraints.isEmpty else { return false }
+            return array.allSatisfy { element in
+                constraints.allSatisfy { $0.isSatisfied(by: element, readback: readback) }
             }
         }
     }
