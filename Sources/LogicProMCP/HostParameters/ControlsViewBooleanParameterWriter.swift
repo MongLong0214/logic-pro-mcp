@@ -189,6 +189,7 @@ enum ControlsViewBooleanParameterWriter {
         case viewMenuItemNotFound(PluginWindowView)
         case viewMenuItemAmbiguous(PluginWindowView)
         case viewMenuItemDisabled(PluginWindowView)
+        case contextOwnershipEnded
         case viewStructureDidNotConfirm(PluginWindowView, ViewStructureObservation)
 
         var observation: String {
@@ -215,6 +216,8 @@ enum ControlsViewBooleanParameterWriter {
                 return "the scoped View menu exposed several measured \(view.labels.canonical) items"
             case let .viewMenuItemDisabled(view):
                 return "the scoped View menu's measured \(view.labels.canonical) item did not expose AXEnabled == true, so AXPick was refused"
+            case .contextOwnershipEnded:
+                return "the acquired target context ended before the next View-menu action"
             case let .viewStructureDidNotConfirm(expected, _):
                 return "after selecting the measured \(expected.labels.canonical) item, the bound plugin window did not expose the expected \(expected.rawValue) structure before the confirmation deadline"
             }
@@ -225,6 +228,8 @@ enum ControlsViewBooleanParameterWriter {
         /// refusal can be grouped without parsing a user-facing sentence.
         var responseDiagnostics: [String: Any] {
             switch self {
+            case .contextOwnershipEnded:
+                return ["plugin_view_switch_phase": "context_ended"]
             case .viewMenuDidNotAppearBeforeDeadline:
                 return ["plugin_view_switch_phase": "menu_never_appeared"]
             case .viewMenuAmbiguous:
@@ -346,7 +351,7 @@ enum ControlsViewBooleanParameterWriter {
         /// caller before it returns either a successful write or a State C; the
         /// already-observed parameter-write verdict is never recast as though it
         /// had not run.
-        func restore() -> ViewRestoration {
+        func restore(allowingChanges: () -> Bool = { true }) -> ViewRestoration {
             guard !restorationFinished else {
                 return ViewRestoration(
                     attempted: false,
@@ -356,6 +361,10 @@ enum ControlsViewBooleanParameterWriter {
                 )
             }
             restorationFinished = true
+            guard allowingChanges() else {
+                return ViewRestoration(attempted: false, confirmed: false,
+                    observedStructure: nil, entryView: entryView)
+            }
             guard didSwitch else {
                 return ViewRestoration(
                     attempted: false,
@@ -370,6 +379,7 @@ enum ControlsViewBooleanParameterWriter {
                 windowRefresher: windowRefresher,
                 menuAppearanceTimeout: menuAppearanceTimeout,
                 confirmationTimeout: viewConfirmationTimeout,
+                allowingChanges: allowingChanges,
                 runtime: runtime
             ) {
             case let .confirmed(switched):
@@ -380,6 +390,10 @@ enum ControlsViewBooleanParameterWriter {
                     entryView: entryView
                 )
             case .refused:
+                guard allowingChanges() else {
+                    return ViewRestoration(attempted: true, confirmed: false,
+                        observedStructure: nil, entryView: entryView)
+                }
                 let observed: PluginWindowView?
                 if case let .success(.some(value)) = observedView(
                     in: window,
@@ -432,6 +446,7 @@ enum ControlsViewBooleanParameterWriter {
         menuAppearanceTimeout: TimeInterval = viewMenuAppearanceTimeout,
         confirmationTimeout: TimeInterval = viewConfirmationTimeout,
         windowRefresher: (() -> AXUIElement?)? = nil,
+        allowingChanges: () -> Bool = { true },
         runtime: AXHelpers.Runtime = .production
     ) -> ViewPreparationResult {
         let effectiveWindowRefresher = windowRefresher ?? { window }
@@ -471,6 +486,7 @@ enum ControlsViewBooleanParameterWriter {
             windowRefresher: effectiveWindowRefresher,
             menuAppearanceTimeout: menuAppearanceTimeout,
             confirmationTimeout: confirmationTimeout,
+            allowingChanges: allowingChanges,
             runtime: runtime
         ) {
         case let .confirmed(switched):
@@ -488,7 +504,10 @@ enum ControlsViewBooleanParameterWriter {
             // the entry view best-effort before refusing, so failed selection
             // paths do not strand it.
             let restoration: ViewRestoration?
-            if targetSelectionAttempted {
+            if targetSelectionAttempted && !allowingChanges() {
+                restoration = ViewRestoration(attempted: false, confirmed: false,
+                    observedStructure: nil, entryView: entryView)
+            } else if targetSelectionAttempted {
                 switch switchView(
                     to: entryView,
                     in: window,
@@ -496,6 +515,7 @@ enum ControlsViewBooleanParameterWriter {
                     menuAppearanceTimeout: menuAppearanceTimeout,
                     confirmationTimeout: confirmationTimeout,
                     forceSelection: true,
+                    allowingChanges: allowingChanges,
                     runtime: runtime
                 ) {
                 case let .confirmed(switched):
@@ -744,6 +764,7 @@ enum ControlsViewBooleanParameterWriter {
         menuAppearanceTimeout: TimeInterval,
         confirmationTimeout: TimeInterval,
         forceSelection: Bool = false,
+        allowingChanges: () -> Bool = { true },
         runtime: AXHelpers.Runtime
     ) -> ViewChangeResult {
         if !forceSelection {
@@ -791,6 +812,7 @@ enum ControlsViewBooleanParameterWriter {
         // AX's action status is intentionally not the verdict. Live Logic
         // reveals this app-wide menu after AXPress, and its entry accepts only
         // AXPick; no retry ladder can turn another protocol into evidence.
+        guard allowingChanges() else { return .refused(.contextOwnershipEnded, targetSelectionAttempted: false) }
         _ = AXHelpers.performAction(switcher, kAXPressAction as String, runtime: runtime)
         let menus: [AXUIElement]
         switch waitForScopedViewMenu(
@@ -840,6 +862,7 @@ enum ControlsViewBooleanParameterWriter {
         case let .failure(error):
             return .refused(.viewEvidenceReadFailed(.menuItemEnabled(error)), targetSelectionAttempted: false)
         }
+        guard allowingChanges() else { return .refused(.contextOwnershipEnded, targetSelectionAttempted: false) }
         _ = AXHelpers.performAction(target, kAXPickAction as String, runtime: runtime)
         switch waitForView(
             targetView,

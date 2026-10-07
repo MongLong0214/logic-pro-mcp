@@ -524,6 +524,7 @@ enum SemanticOracleTable {
         systemSagaPreflight,
         systemSagaStatus,
         pluginsGetInventory,
+        pluginsGetParamVerified,
         projectIsRunning,
         projectGetRegions,
         projectExportPlan,
@@ -861,6 +862,51 @@ enum SemanticOracleTable {
             .typedField(key: "plugins", type: .array),
         ]
     )
+
+    // The response protocol is conditional on the existing catalog's read method:
+    // checkbox raw values are Boolean; native-slider raw values are finite numbers.
+    // This does not independently qualify a native target or a whole-state snapshot.
+    static let pluginsGetParamVerified = OperationOracle(
+        custom: .pluginsGetParamVerified,
+        reason: "The catalog determines the raw unit and Boolean-versus-number representation; a single fixed numeric constraint would reject supported checkboxes or admit a Boolean slider. This checks the single-parameter response contract, not independent native qualification."
+    ) { responseData, _ in
+        guard let object = JSONInspector.parse(responseData) as? [String: Any],
+              object["state"] as? String == "A",
+              object["hc_schema"].flatMap(JSONInspector.number) == 2,
+              object["operation"] as? String == "logic_plugins.get_param_verified",
+              object["parameter_read_status"] as? String == "read",
+              object["observation_scope"] as? String == "current_insert_parameter",
+              object["verify_source"] as? String == "ax_plugin_window",
+              let write = object["write_attempted"], JSONInspector.isBoolean(write), (write as? Bool) == false,
+              let success = object["success"], JSONInspector.isBoolean(success), (success as? Bool) == true,
+              let verified = object["verified"], JSONInspector.isBoolean(verified), (verified as? Bool) == true,
+              let reference = object["target_ref"] as? String, !reference.isEmpty,
+              let fingerprint = object["target_fingerprint"] as? String, !fingerprint.isEmpty,
+              let identity = object["target_identity"] as? [String: Any],
+              let track = identity["track_index"].flatMap(JSONInspector.number), track >= 0, track.rounded() == track,
+              let insert = identity["insert"].flatMap(JSONInspector.number), insert >= 0, insert.rounded() == insert,
+              let pluginID = identity["plugin_id"] as? String,
+              let param = object["param"] as? String,
+              let entry = VerifiedPluginCatalog.productionEntryLookup(pluginID),
+              let metadata = entry.parameters.first(where: {
+                  $0.id == (VerifiedPluginCatalog.canonicalParamKey(pluginID: pluginID, alias: param)
+                    ?? param.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+              }),
+              object["raw_unit"] as? String == metadata.unit,
+              let raw = object["observed_raw"], let display = object["observed_display"],
+              let displayStatus = object["display_read_status"] as? String else { return false }
+        if metadata.readbackMethod == "ax_controls_view_checkbox_value" {
+            guard metadata.controlsViewControlRole == "AXCheckBox", JSONInspector.isBoolean(raw) else { return false }
+        } else {
+            guard metadata.readbackMethod == "ax_slider_axvalue", metadata.axDescription != nil,
+                  let number = JSONInspector.number(of: raw), number.isFinite else { return false }
+        }
+        switch displayStatus {
+        case "read": return display is String
+        case "absent", "unreadable", "malformed": return display is NSNull
+        default: return false
+        }
+    }
 
     // MARK: - project
 

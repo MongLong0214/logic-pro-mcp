@@ -110,7 +110,28 @@ enum SemanticOracleFixtures {
         return SemanticOracleFixture(response: comparison.map { encodeJSON($0) } ?? "{}", readback: health)
     }()
 
+    private static let parameterRead: SemanticOracleFixture = {
+        func response(raw: Any = 51.0, writeAttempted: Bool = false) -> String {
+            HonestContract.encodeV2StateA(extras: [
+                "operation": "logic_plugins.get_param_verified",
+                "target_identity": ["track_index": 0, "insert": 6, "plugin_id": "logic.stock.effect.compressor"],
+                "target_ref": "ins_00000000-0000-0000-0000-000000000955",
+                "target_fingerprint": "0:4:Bass|insert=6|plugin=logic.stock.effect.compressor",
+                "param": "threshold", "observed_raw": raw, "raw_unit": "normalized",
+                "observed_display": "51 %", "display_read_status": "read",
+                "parameter_read_status": "read", "observation_scope": "current_insert_parameter",
+                "verify_source": "ax_plugin_window", "write_attempted": writeAttempted,
+            ])
+        }
+        return SemanticOracleFixture(response: response(), readback: "{}", customMutants: [
+            .init(.malformed, "{}"),
+            .init(.wellFormedButWrong, response(raw: true)),
+            .init(.wellFormedButWrong, response(writeAttempted: true)),
+        ])
+    }()
+
     static let byOperationID: [OperationID: SemanticOracleFixture] = [
+        .pluginsGetParamVerified: parameterRead,
         .audioCompareSpectra: spectrumComparison,
         .systemPermissions: SemanticOracleFixture(
             response: """

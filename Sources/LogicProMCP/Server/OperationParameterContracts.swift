@@ -385,6 +385,16 @@ extension OperationRegistry {
                 ($0, ParamRule.unconstrained("omitted when it does not read as an integer; the channel then refuses the request",
                                              sample: .int(0)))
             }), required: [["index", "track", "track_index"]]),
+            "plugins.get_param_verified": .init(params: [
+                "target_ref": targetRef, "project_ref": projectRef,
+                "param": .enforced(.string, .string("threshold")),
+                "unit": .enforced(.string, .string("normalized")),
+                "plugin": .enforced(.string, .string("Compressor")),
+                "plugin_id": .enforced(.string, .string("logic.stock.effect.compressor")),
+                "plugin_name": .enforced(.string, .string("Compressor")),
+                "track": .enforced(.integer, .int(0)),
+                "insert": .enforced(.integer, .int(6)),
+            ], required: [["target_ref"], ["param"]]),
             "plugins.insert_verified": .init(params: pluginWriteRules(["insert", "slot", "plugin", "plugin_id", "plugin_name", "mode", "project_expected_path", "track"])
                 .merging([
                     "expected_name": .unconstrained("corroborates a bare track index, which is refused without it "

@@ -193,7 +193,7 @@ For `set_volume`, `set_pan` and `set_output_verified`, a physical `mix_` referen
 
 ### `logic_plugins`
 
-This is the verified apply-back surface.
+This is the stock-plugin inventory, parameter-read and verified apply-back surface.
 
 For every `logic_plugins` command, `track` is the zero-based Arrange track-header index, not the Mixer strip ordinal. `get_inventory` reports the observed `track_name` and `mixer_strip_index`; the latter is a read-only diagnostic, not a mutation selector. Aux strips can make these indices differ: if Bass is Arrange track 9 and Mixer strip 11, use `track: 9` for inventory and writes. Clients that previously compensated for the indexing bug by passing 11 must switch to 9. A `plugin_insert_ref` binds the observed Arrange identity, physical insert slot and occupied plugin identity (or a verified empty slot), rather than the Mixer ordinal; unreadable or incomplete inventory does not issue usable insert references.
 
@@ -202,6 +202,18 @@ Flow:
 1. `get_inventory` reads the target track's plugin insert slots.
 2. `insert_verified` inserts an allowlisted stock plugin into an explicit physical slot and verifies post-write inventory.
 3. `logic_plugins.set_param_verified` writes a supported parameter and verifies readback.
+
+`get_param_verified` reads one named parameter from an occupied `plugin_insert_ref` returned by `get_inventory`:
+
+```json
+{"command":"get_param_verified","params":{"target_ref":"ins_…","param":"threshold"}}
+```
+
+Observe `logic://project/info` or `logic://mixer` first to establish the current project binding. The reader requires an insert reference, not a bare track index or track reference. Optional `track`, `insert`, and plugin aliases only corroborate that reference; contradictory selectors refuse. `value`, mutation `mode`, confirmation, and a caller-supplied project path are not read inputs.
+
+The supported read subset is the catalogued Channel EQ native-editor sliders and Compressor `threshold`, `limiter_on`, and `auto_release`. The result contains `observed_raw`, `raw_unit`, the host's verbatim `observed_display` when available, and separate parameter/display read statuses. Threshold's canonical raw unit is the legacy `normalized` **0..100 percentage scale**, not a 0..1 fraction or dB. EQ returns `raw_ax_value`; the two Compressor switches return JSON Booleans with unit `boolean`. An optional unit must equal this canonical raw representation; no engineering-unit conversion is inferred. Unknown, unsupported, absent, malformed and unreadable observations are explicit refusals/statuses, never an invented zero.
+
+The observation scope is one parameter of the **current referenced physical insert**, not a historical AU-object identity, an atomic whole-plugin snapshot, or all-parameter completeness. Project, slot, editor and control identity are checked around collection. Observed raw-value drift during display collection refuses with `parameter_read_status: unstable`; matching bookends cannot detect every intervening change. This audio-read-only operation shares the existing verified-operation serializer because editor acquisition can open windows, change focus or temporarily switch views. It does not select a track or write an audio parameter. It restores its observed entry view while ownership remains valid, closes only an editor it created, and reports unavailable restoration instead of acting through lost ownership. A confirmed view restoration is not a general focus-restoration guarantee. Ordinary inventory remains ungated. New-reader live qualification and the remaining snapshot/batch/application scope are tracked in #955.
 
 Important constraints:
 
