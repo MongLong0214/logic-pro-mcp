@@ -30,8 +30,10 @@ enum AXTrackBinding {
         func observeStackState(header: AXUIElement, isStackHeader: Bool?, collapsed: Bool?) {
             if CFEqual(self.header, header), collapsed == true || isStackHeader == false { lose() }
         }
-        func observeDisclosureChildren(header: AXUIElement, children: [AXUIElement]) {
-            if CFEqual(self.header, header), children.filter({ CFEqual($0, disclosure) }).count != 1 { lose() }
+        func observeDisclosureChildren(header: AXUIElement, children: [AXUIElement], selected: AXUIElement?) {
+            guard CFEqual(self.header, header) else { return }
+            guard let selected, CFEqual(selected, disclosure),
+                  children.filter({ CFEqual($0, disclosure) }).count == 1 else { lose(); return }
         }
         var isCurrent: Bool {
             guard !lock.withLock({ ended }) else { return false }

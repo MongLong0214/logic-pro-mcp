@@ -158,6 +158,12 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, knownOuterReplacement: true)
     }
 
+    @Test(arguments: ["competing", "role_loss"])
+    func registeredSingleStackUsesTheActuallyDecidingDisclosureIdentity(disclosureDecision: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false,
+            knownOuterReplacement: true, disclosureDecision: disclosureDecision)
+    }
+
     @Test(arguments: ["down_failed", "held_focus", "wrong_hit"])
     func registeredStackPairsOnlyOwnedMouseDownAndUp(mouseCase: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, mouseCase: mouseCase)
@@ -310,7 +316,7 @@ struct Issue965FreshPopulationAcquisitionTests {
     private func observeStack(navigation: Bool, initiallyExpanded: Bool,
                               verifyReferences: Bool = false, mouseCase: String? = nil,
                               releaseCase: String? = nil, knownOuterReopen: Bool = false,
-                              knownOuterReplacement: Bool = false) async throws {
+                              knownOuterReplacement: Bool = false, disclosureDecision: String? = nil) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -396,6 +402,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                 if fixture.reads.recorded.filter({ $0 == "closed_population_metadata" }).count == 2 {
                     fixture.reads.record("same_outer_reopened_on_retry")
                     fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+                    fixture.builder.setRole(disclosure, kAXDisclosureTriangleRole as String)
                     fixture.builder.setChildren(headers[0], [disclosure])
                     fixture.builder.setChildren(fixture.rail, headers)
                 }
@@ -410,8 +417,19 @@ struct Issue965FreshPopulationAcquisitionTests {
                        attribute == kAXHelpAttribute as String,
                        !fixture.reads.recorded.contains("replacement_disclosure_installed") {
                         fixture.reads.record("replacement_disclosure_installed")
-                        fixture.builder.setChildren(headers[0], [substitutedDisclosure])
+                        if disclosureDecision == "role_loss" {
+                            fixture.builder.setRole(disclosure, kAXButtonRole as String)
+                            fixture.builder.setChildren(headers[0], [disclosure, substitutedDisclosure])
+                        } else {
+                            fixture.builder.setChildren(headers[0], disclosureDecision == "competing"
+                                ? [substitutedDisclosure, disclosure] : [substitutedDisclosure])
+                        }
                         fixture.builder.setChildren(fixture.rail, collapsed)
+                    }
+                    if disclosureDecision == "role_loss", CFEqual(element, disclosure),
+                       attribute == kAXRoleAttribute as String,
+                       fixture.builder.attributeValue(disclosure, attribute) as? String == kAXButtonRole as String {
+                        fixture.reads.record("held_disclosure_button_role_read")
                     }
                     if knownOuterReplacement, CFEqual(element, substitutedDisclosure) {
                         if attribute == kAXRoleAttribute as String { fixture.reads.record("replacement_disclosure_role_read") }
@@ -431,7 +449,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                        fixture.reads.recorded.contains("replacement_disclosure_installed"),
                        !fixture.reads.recorded.contains("same_outer_reopened_on_retry") {
                         let children = fixture.builder.makeAXRuntime().children(headers[0])
-                        if children.count == 1, CFEqual(children[0], substitutedDisclosure), !CFEqual(children[0], disclosure) {
+                        let expected = disclosureDecision == "role_loss" ? [disclosure, substitutedDisclosure]
+                            : disclosureDecision == "competing" ? [substitutedDisclosure, disclosure] : [substitutedDisclosure]
+                        if children.count == expected.count,
+                           zip(children, expected).allSatisfy({ CFEqual($0.0, $0.1) }) {
                             fixture.reads.record("replacement_disclosure_children_read")
                         }
                     }
@@ -462,6 +483,9 @@ struct Issue965FreshPopulationAcquisitionTests {
                 #expect(fixture.reads.recorded.contains("replacement_disclosure_children_read"))
                 #expect(fixture.reads.recorded.contains("replacement_disclosure_role_read"))
                 #expect(fixture.reads.recorded.contains("replacement_disclosure_value_read"))
+                if disclosureDecision == "role_loss" {
+                    #expect(fixture.reads.recorded.contains("held_disclosure_button_role_read"))
+                }
             }
             #expect(fixture.reads.recorded.contains("closed_rail_actually_read"))
             #expect(fixture.reads.recorded.filter { $0 == "closed_population_metadata" }.count >= 2)

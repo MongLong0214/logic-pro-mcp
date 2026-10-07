@@ -676,7 +676,7 @@ actor AccessibilityChannel: Channel {
                         for (header, state) in zip(observed, states) {
                             try check()
                             let stack = AXValueExtractors.extractTrackStackState(from: header, runtime: logic.ax,
-                                observingChildren: { exposure?.observeDisclosureChildren(header: header, children: $0) })
+                                observingChildren: { exposure?.observeDisclosureChildren(header: header, children: $0, selected: $1) })
                             exposure?.observeStackState(header: header, isStackHeader: stack.isStackHeader, collapsed: stack.collapsed)
                             if stack.isStackHeader != state.isStackHeader || stack.collapsed != state.stackCollapsed {
                                 sameStackExposure = false
