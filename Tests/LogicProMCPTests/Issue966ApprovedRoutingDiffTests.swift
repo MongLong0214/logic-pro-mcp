@@ -74,21 +74,26 @@ struct Issue966ApprovedRoutingDiffTests {
                             snapshotId: snapshot, coverage: coverage)
     }
 
-    private func plan(_ graph: RoutingGraph, bus: Int = 3, noOutput: Bool = false, snapshotCurrent: Bool = true,
+    private func plan(_ graph: RoutingGraph, bus: Int = 3, noOutput: Bool = false, sends: [Value]? = nil,
+                      options: Audit.PlanningOptions = Audit.PlanningOptions(), snapshotCurrent: Bool = true,
                       request: Observation.Request = Observation.Request(domains: [.tracks, .strips, .routing])) throws -> [String: Value] {
-        let raw: [String: Value] = [
+        var raw: [String: Value] = [
             "schema": .string(Audit.intentPolicySchema), "project_ref": .string(project.rawValue),
             "targets": .array([.object(["handle": .string("approved"), "track_ref": .string(source.rawValue)])]),
             "outputs": .array([.object(noOutput
                 ? ["target": .string("approved"), "output": .string("no_output")]
                 : ["target": .string("approved"), "bus": .int(bus)])]),
         ]
+        if let sends {
+            raw["outputs"] = .array([])
+            raw["sends"] = .array(sends)
+        }
         guard case .accepted(let policy) = Audit.parseIntentPolicy(raw) else {
-            Issue.record("valid explicit policy rejected")
+            Issue.record("valid explicit policy rejected: \(String(describing: Audit.parseIntentPolicy(raw)))")
             throw CocoaError(.coderInvalidValue)
         }
         let result = try Audit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw), names: [],
-                                                       capture: capture(), request: request, snapshotCurrent: snapshotCurrent,
+                                                       capture: capture(), request: request, snapshotCurrent: snapshotCurrent, options: options,
                                                        graphOverride: graph)
         let wire = try JSONDecoder().decode(Value.self, from: Data(result.json.utf8))
         return try #require(wire.objectValue)
@@ -102,6 +107,401 @@ struct Issue966ApprovedRoutingDiffTests {
 
     private func decodeEdge(_ value: Value) throws -> RoutingEdge {
         try JSONDecoder().decode(RoutingEdge.self, from: Data(encodeJSONStrict(value, compact: true).utf8))
+    }
+
+    private func sendPolicy(_ sends: Value) -> [String: Value] {
+        ["schema": .string(Audit.intentPolicySchema), "project_ref": .string(project.rawValue),
+         "targets": .array([.object(["handle": .string("approved"), "track_ref": .string(source.rawValue)])]),
+         "sends": sends]
+    }
+
+    @Test(arguments: ["not_array", "not_object", "unknown", "missing_target", "foreign_target",
+        "target_type", "missing_slot", "slot_type", "slot_low", "slot_high", "bus_type", "bus_low",
+        "both", "neither", "remove_false", "remove_type", "duplicate", "conflict"])
+    func exactSendParserRejectsMalformedOrConflictingTasks(_ fault: String) {
+        var entry: [String: Value] = ["target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)]
+        switch fault {
+        case "unknown": entry["label"] = .string("Same")
+        case "missing_target": entry.removeValue(forKey: "target")
+        case "foreign_target": entry["target"] = .string("foreign")
+        case "target_type": entry["target"] = .int(0)
+        case "missing_slot": entry.removeValue(forKey: "physical_slot")
+        case "slot_type": entry["physical_slot"] = .string("5")
+        case "slot_low": entry["physical_slot"] = .int(-1)
+        case "slot_high": entry["physical_slot"] = .int(12)
+        case "bus_type": entry["bus"] = .string("3")
+        case "bus_low": entry["bus"] = .int(0)
+        case "both": entry["remove"] = .bool(true)
+        case "neither": entry.removeValue(forKey: "bus")
+        case "remove_false", "remove_type":
+            entry.removeValue(forKey: "bus"); entry["remove"] = fault == "remove_false" ? .bool(false) : .string("true")
+        default: break
+        }
+        var entries: [Value] = [.object(entry)]
+        if fault == "duplicate" { entries.append(.object(entry)) }
+        if fault == "conflict" { entry["bus"] = .int(4); entries.append(.object(entry)) }
+        let value: Value = fault == "not_array" ? .string("send")
+            : fault == "not_object" ? .array([.int(5)]) : .array(entries)
+        guard case .rejected(let reasons) = Audit.parseIntentPolicy(sendPolicy(value)) else {
+            Issue.record("malformed exact send policy was accepted: \(fault)"); return
+        }
+        #expect(!reasons.isEmpty)
+    }
+
+    @Test(arguments: [-17.25, 0.0])
+    func connectedBypassedOrZeroLevelSendIsStillCompliantButNotExecutable(_ level: Double) throws {
+        let old = try #require(edges().last), scalar = try #require(old.send)
+        let actual = RoutingEdge(kind: .send, source: old.source, destination: old.destination,
+            send: SendEdge(sourceTrackRef: scalar.sourceTrackRef, physicalSlot: scalar.physicalSlot,
+                destinationBusNumber: 4, destinationRef: nil, displayedName: scalar.displayedName,
+                level: level, mode: scalar.mode, enabled: false), provenance: old.provenance)
+        let raw = sendPolicy(.array([.object(["target": .string("approved"), "physical_slot": .int(5), "bus": .int(4)])]))
+        guard case .accepted(let policy) = Audit.parseIntentPolicy(raw) else { Issue.record("valid send rejected"); return }
+        let assessment = Audit.assessIntent(policy: policy, capture: capture(), graph: graph(edges: edges().dropLast() + [actual]))
+        #expect(!assessment.changeRequired)
+        #expect(assessment.sendFindings?.count == 1)
+        #expect(assessment.sendFindings?.first?.status == .compliant)
+        #expect(assessment.sendFindings?.first?.observed == actual)
+        let body = try plan(graph(edges: edges().dropLast() + [actual]), sends: [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(4)])])
+        #expect(body["steps"]?.arrayValue == [])
+        #expect(body["unchanged_tasks"]?.arrayValue == [.string("send.target.approved.slot.5")])
+        let reasons = try #require(body["reasons"]?.arrayValue)
+        #expect(reasons.contains(.string("send_goal_verification_unavailable")))
+        let executable = try #require(body["executable"]?.boolValue as Bool?); #expect(!executable)
+    }
+
+    @Test(arguments: [false, true])
+    func sendReplacementRequiresOptInWithoutLosingTheRequestedTask(_ allow: Bool) throws {
+        var options = Audit.PlanningOptions(); options.allowReplaceSend = allow
+        let body = try plan(graph(), sends: [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])], options: options)
+        let step = try #require(body["steps"]?.arrayValue?.first?.objectValue)
+        let diff = try #require(step["proposed_routing_diff"]?.objectValue)
+        #expect(diff["status"]?.stringValue == (allow ? "proposed" : "unverified"))
+        if !allow {
+            let blocked = try #require(step["blocked_reasons"]?.arrayValue)
+            #expect(blocked.contains(.string("send_replacement_not_allowed")))
+        }
+        #expect(body["unchanged_tasks"]?.arrayValue == [])
+    }
+
+    @Test(arguments: [false, true])
+    func absentSendRemovalNeedsCompleteCoverageAndCreationNeverInventsScalars(_ remove: Bool) throws {
+        let action: [String: Value] = remove ? ["remove": .bool(true)] : ["bus": .int(3)]
+        let entry = ["target": Value.string("approved"), "physical_slot": .int(5)].merging(action) { _, new in new }
+        let body = try plan(graph(edges: Array(edges().dropLast())), sends: [.object(entry)])
+        if remove {
+            #expect(body["steps"]?.arrayValue == [])
+            #expect(body["unchanged_tasks"]?.arrayValue?.count == 1)
+        } else {
+            let step = try #require(body["steps"]?.arrayValue?.first?.objectValue)
+            #expect(step["before"] == .null)
+            let reasons = try #require(step["blocked_reasons"]?.arrayValue)
+            #expect(reasons.contains(.string("send_creation_metadata_unavailable")))
+        }
+        let partial = RoutingDomainCoverage(state: .partial, reasons: ["send population incomplete"])
+        let coverage = RoutingCoverage(population: complete, stripTrackAssociation: complete,
+            mainOutput: complete, physicalOutput: complete, busToAuxInput: complete, sends: partial)
+        let blocked = try plan(graph(edges: Array(edges().dropLast()), coverage: coverage), sends: [.object(entry)])
+        #expect(blocked["unchanged_tasks"]?.arrayValue == [])
+        #expect(blocked["steps"]?.arrayValue?.count == 1)
+        #expect(blocked["findings"]?.arrayValue?.first?.objectValue?["status"]?.stringValue == "unverified")
+    }
+
+    @Test(arguments: ["population", "association", "sends", "snapshot", "epoch", "project", "source",
+        "source_id", "duplicate_slot", "destination", "destination_id", "desired_bus"])
+    func exactSendEvidenceLossOrAmbiguityCannotProduceAProposal(_ fault: String) throws {
+        let partial = RoutingDomainCoverage(state: .partial, reasons: ["incomplete"])
+        var ns = nodes(), es = edges()
+        let coverage = RoutingCoverage(population: fault == "population" ? partial : complete,
+            stripTrackAssociation: fault == "association" ? partial : complete, mainOutput: complete,
+            physicalOutput: complete, busToAuxInput: complete, sends: fault == "sends" ? partial : complete)
+        if fault == "source" { ns.append(ns[0]) }
+        if fault == "source_id" { ns.append(RoutingNode(id: ns[0].id, kind: .aux, displayName: "Same", busNumber: nil, targetRef: nil)) }
+        if fault == "duplicate_slot" { es.append(es.last!) }
+        if fault == "destination" { ns.removeAll { $0.id == "previous_opaque" } }
+        if fault == "destination_id" { ns.append(RoutingNode(id: "previous_opaque", kind: .aux, displayName: "Same", busNumber: nil, targetRef: nil)) }
+        if fault == "desired_bus" { ns.append(RoutingNode(id: "duplicate_bus", kind: .bus, displayName: "Same", busNumber: 3, targetRef: nil)) }
+        // This is a pure captured-graph seam, never a claim of native complete routing.
+        let candidate = graph(nodes: ns, edges: es, coverage: coverage, epoch: fault == "epoch" ? 4 : 3,
+            snapshot: fault == "snapshot" ? "another_capture" : "proposal_fixture",
+            project: fault == "project" ? TargetReference(rawValue: "prj_other") : project)
+        var options = Audit.PlanningOptions(); options.allowReplaceSend = true
+        let body = try plan(candidate, sends: [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])], options: options)
+        #expect(body["unchanged_tasks"]?.arrayValue == [])
+        let step = try #require(body["steps"]?.arrayValue?.first?.objectValue)
+        #expect(step["proposed_routing_diff"]?.objectValue?["status"]?.stringValue == "unverified")
+        let reasons = try #require(step["blocked_reasons"]?.arrayValue)
+        #expect(!reasons.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func exactSendDiffPreservesParallelSendsOutputsAndReceiverFanout(_ remove: Bool) throws {
+        let untouched = RoutingEdge(kind: .send, source: "other_opaque", destination: "destination_opaque",
+            send: SendEdge(sourceTrackRef: other, physicalSlot: 2, destinationBusNumber: 3, destinationRef: nil,
+                displayedName: "Same", level: 0, mode: "post-fader", enabled: false), provenance: .axMixerStrip)
+        var options = Audit.PlanningOptions(); options.allowReplaceSend = true
+        let action: [String: Value] = remove ? ["remove": .bool(true)] : ["bus": .int(3)]
+        let body = try plan(graph(edges: edges() + [untouched]), sends: [.object(
+            ["target": Value.string("approved"), "physical_slot": .int(5)].merging(action) { _, new in new })], options: options)
+        let delta = try proposal(body)
+        #expect(delta["status"]?.stringValue == "proposed")
+        for key in ["output_changes", "input_changes", "added_sends"] { #expect(delta[key]?.arrayValue == []) }
+        #expect(delta["removed_sends"]?.arrayValue?.count == (remove ? 1 : 0))
+        #expect(delta["changed_sends"]?.arrayValue?.count == (remove ? 0 : 1))
+        let changed = try #require(remove ? delta["removed_sends"]?.arrayValue?.first
+            : delta["changed_sends"]?.arrayValue?.first?.objectValue?["before"])
+        let send = try JSONDecoder().decode(SendEdge.self, from: Data(encodeJSONStrict(changed, compact: true).utf8))
+        #expect(send == edges().last?.send)
+        #expect(send != untouched.send)
+    }
+
+    @Test func sendCanonicalDigestBindsActionsOptionsAndEveryTask() throws {
+        let replace: Value = .object(["target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])
+        let remove: Value = .object(["target": .string("approved"), "physical_slot": .int(5), "remove": .bool(true)])
+        var options = Audit.PlanningOptions(); options.allowReplaceSend = true
+        let a = try plan(graph(), sends: [replace], options: options)
+        let b = try plan(graph(), sends: [remove], options: options)
+        let c = try plan(graph(), sends: [replace])
+        #expect(a["digest"] != b["digest"]); #expect(a["digest"] != c["digest"])
+        #expect(a["digest"] == (try plan(graph(), sends: [replace], options: options))["digest"])
+        #expect(a["steps"] == a["preview"])
+        let all = try plan(graph(), sends: [replace, .object([
+            "target": .string("approved"), "physical_slot": .int(6), "remove": .bool(true)])], options: options)
+        #expect(all["steps"]?.arrayValue?.count == 1)
+        #expect(all["unchanged_tasks"]?.arrayValue?.count == 1)
+        #expect(all["findings"]?.arrayValue?.count == 2)
+        let baseline = try plan(graph())
+        #expect(baseline["approved_policy"]?.objectValue?["sends"] == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func registeredSendPolicyRemainsAccountedAndCannotExecuteOnlyItsViewOrNames(_ remove: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Issue971ApprovedMixerSagaTests.Fixture(showing: false)
+                await f.router.register(f.view.channel())
+                _ = f.installNameHeaders(["Bass"])
+                let action: [String: Value] = remove ? ["remove": .bool(true)] : ["bus": .int(3)]
+                let p = try await f.namesPlan(["Bass"], policyExtras: [
+                    "sends": .array([.object(["target": Value.string("t0"), "physical_slot": .int(5)]
+                        .merging(action) { _, new in new })]),
+                    "presentation": .object(["mixer_visible": .bool(true)])])
+                let executable = try #require(p["executable"] as? Bool); #expect(!executable)
+                let steps = try #require(p["steps"] as? [[String: Any]])
+                #expect(steps.filter { $0["kind"] as? String == "send_assignment" }.count == 1)
+                #expect(steps.filter { $0["kind"] as? String == "mixer_visibility" }.count == 1)
+                let findings = try #require(p["findings"] as? [[String: Any]])
+                #expect(findings.count == 1)
+                #expect(findings.first?["status"] as? String == "unverified")
+                let reasons = try #require(p["reasons"] as? [String])
+                #expect(reasons.contains("send_goal_verification_unavailable"))
+                let key = "never-execute-send-subset-\(remove)"
+                let params = try f.applyParameters(p, key: key)
+                let result = try await f.call("apply_session_repair", params: params)
+                #expect(result["state"] as? String == "C")
+                let attempted = try #require(result["write_attempted"] as? Bool); #expect(!attempted)
+                #expect(f.view.events.isEmpty)
+                #expect(await f.journal.record(for: key) == nil)
+                #expect(await ApprovedSessionRepair.retained(id: try #require(p["plan_id"] as? String),
+                    digest: try #require(p["digest"] as? String), key: key, cache: f.cache,
+                    registry: f.registry, journal: f.journal) == nil)
+            }
+        }
+    }
+
+    @Test func sharedAssessmentAccountsOutputsAndEveryParallelSendWithoutChangingOldWire() throws {
+        let second = RoutingEdge(kind: .send, source: "source_opaque", destination: "previous_opaque",
+            send: SendEdge(sourceTrackRef: source, physicalSlot: 6, destinationBusNumber: 4, destinationRef: nil,
+                displayedName: "Same", level: 0, mode: "post-fader", enabled: false), provenance: .axMixerStrip)
+        var raw = sendPolicy(.array([
+            .object(["target": .string("approved"), "physical_slot": .int(6), "remove": .bool(true)]),
+            .object(["target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])]))
+        raw["outputs"] = .array([.object(["target": .string("approved"), "bus": .int(3)])])
+        guard case .accepted(let policy) = Audit.parseIntentPolicy(raw) else { Issue.record("parallel tasks rejected"); return }
+        let candidate = graph(edges: edges() + [second])
+        let assessment = Audit.assessIntent(policy: policy, capture: capture(), graph: candidate)
+        #expect(assessment.changeRequired)
+        #expect(assessment.findings.count == 1)
+        #expect(assessment.sendFindings?.map(\.physicalSlot) == [5, 6])
+        #expect(assessment.sendFindings?.map(\.status) == [.violation, .violation])
+        var options = Audit.PlanningOptions(); options.allowReplaceSend = true
+        let canonical = try Audit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw), names: [],
+            capture: capture(), request: Observation.Request(domains: [.tracks, .strips, .routing]),
+            snapshotCurrent: true, options: options, graphOverride: candidate)
+        let body = try #require(JSONDecoder().decode(Value.self, from: Data(canonical.json.utf8)).objectValue)
+        #expect(body["steps"]?.arrayValue?.count == 3)
+        #expect(body["findings"]?.arrayValue?.count == 3)
+        #expect(body["preview"] == body["steps"])
+        let executable = try #require(body["executable"]?.boolValue as Bool?); #expect(!executable)
+        raw.removeValue(forKey: "sends")
+        guard case .accepted(let originalPolicy) = Audit.parseIntentPolicy(raw) else { Issue.record("old policy rejected"); return }
+        let original = Audit.assessIntent(policy: originalPolicy, capture: capture(), graph: candidate)
+        let oldWire = try #require(JSONDecoder().decode(Value.self,
+            from: Data(encodeJSONStrict(original, compact: true).utf8)).objectValue)
+        #expect(oldWire["send_findings"] == nil)
+        #expect(original.findings == assessment.findings)
+    }
+
+    @Test func registeredRoutingInspectionCarriesExactSendTaskAndActualProviderLimitations() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = try Issue971ApprovedMixerSagaTests.Fixture(showing: true)
+            _ = f.installNameHeaders(["Bass"])
+            let report = try await f.call("inspect_session", params: [
+                "domains": .array([.string("tracks"), .string("strips"), .string("routing")])])
+            let snapshot = try #require(report["snapshot_id"] as? String)
+            let rows = try #require((report["tracks"] as? [String: Any])?["rows"] as? [[String: Any]])
+            let reference = try #require(rows.first?["track_ref"] as? String)
+            let projectRef = try #require((report["project"] as? [String: Any])?["project_ref"] as? String)
+            let p = try await f.call("plan_session_repair", params: ["snapshot_id": .string(snapshot),
+                "policy": .object(["schema": .string(Audit.intentPolicySchema), "project_ref": .string(projectRef),
+                    "targets": .array([.object(["handle": .string("approved"), "track_ref": .string(reference)])]),
+                    "sends": .array([.object(["target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])])])])
+            let findings = try #require(p["findings"] as? [[String: Any]])
+            let finding = try #require(findings.first)
+            #expect((finding["target"] as? [String: Any])?["track_ref"] as? String == reference)
+            #expect(finding["physical_slot"] as? Int == 5)
+            #expect(finding["status"] as? String == "unverified")
+            let steps = try #require(p["steps"] as? [[String: Any]])
+            let reasons = try #require(steps.first?["blocked_reasons"] as? [String])
+            #expect(!reasons.contains("routing_not_requested"))
+            #expect(reasons.contains("exact_target_send_adapter_unavailable"))
+            let executable = try #require(p["executable"] as? Bool); #expect(!executable)
+            let retained = try await f.call("plan_session_repair", params: [
+                "plan_id": .string(try #require(p["plan_id"] as? String)),
+                "digest": .string(try #require(p["digest"] as? String))])
+            #expect(HonestContract.jsonString(retained) == HonestContract.jsonString(p))
+            #expect(f.view.events.isEmpty)
+        }
+    }
+
+    @Test(arguments: ["violation", "compliant", "unverified"])
+    func sendFindingsDistinguishSeverityFromStatus(_ status: String) throws {
+        let partial = RoutingDomainCoverage(state: .partial, reasons: ["send evidence incomplete"])
+        let coverage = RoutingCoverage(population: complete, stripTrackAssociation: complete,
+            mainOutput: complete, physicalOutput: complete, busToAuxInput: complete,
+            sends: status == "unverified" ? partial : complete)
+        let body = try plan(graph(coverage: coverage), sends: [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(status == "compliant" ? 4 : 3)
+        ])])
+        let finding = try #require(body["findings"]?.arrayValue?.first?.objectValue)
+        #expect(finding["status"]?.stringValue == status)
+        #expect(finding["severity"]?.stringValue == (status == "violation" ? "warn" : "info"))
+    }
+
+    @Test(arguments: [-Double.infinity, Double.infinity, Double.nan])
+    func nonfiniteObservedSendLevelsRemainAccountedForWithoutInventedAbsence(_ level: Double) throws {
+        let old = try #require(edges().last)
+        let send = try #require(old.send)
+        let actual = RoutingEdge(kind: .send, source: old.source, destination: old.destination,
+            send: SendEdge(sourceTrackRef: send.sourceTrackRef, physicalSlot: send.physicalSlot,
+                destinationBusNumber: send.destinationBusNumber, destinationRef: send.destinationRef,
+                displayedName: send.displayedName, level: level, mode: send.mode, enabled: send.enabled), provenance: old.provenance)
+        let candidate = graph(edges: edges().dropLast() + [actual])
+        var options = Audit.PlanningOptions(); options.allowReplaceSend = true
+        let body = try plan(candidate, sends: [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(4)
+        ])], options: options)
+        #expect(body["unchanged_tasks"]?.arrayValue == [])
+        let step = try #require(body["steps"]?.arrayValue?.first?.objectValue)
+        #expect(step["kind"]?.stringValue == "send_assignment")
+        let blocked = try #require(step["blocked_reasons"]?.arrayValue)
+        #expect(blocked.contains(.string("send_scalar_unserializable")))
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+    }
+
+    @Test(arguments: ["stale", "unrequested"])
+    func matchingSendCannotBecomeUnchangedOverAStaleOrUnrequestedRead(_ fault: String) throws {
+        let body = try plan(graph(), sends: [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(4)
+        ])], snapshotCurrent: fault != "stale", request: Observation.Request(
+            domains: fault == "unrequested" ? [.tracks] : [.tracks, .strips, .routing]))
+        #expect(body["unchanged_tasks"]?.arrayValue == [])
+        let step = try #require(body["steps"]?.arrayValue?.first?.objectValue)
+        let delta = try #require(step["proposed_routing_diff"]?.objectValue)
+        #expect(delta["status"]?.stringValue == "unverified")
+        let blocked = try #require(step["blocked_reasons"]?.arrayValue)
+        #expect(blocked.contains(.string(fault == "stale" ? "snapshot_changed" : "routing_not_requested")))
+    }
+
+    @Test(arguments: [false, true])
+    func unrelatedNonfiniteSendPreventsAnUnserializableSharedRoutingProposal(_ sendTask: Bool) throws {
+        let unrelated = RoutingEdge(kind: .send, source: "other_opaque", destination: "previous_opaque",
+            send: SendEdge(sourceTrackRef: other, physicalSlot: 2, destinationBusNumber: 4, destinationRef: nil,
+                displayedName: "Same", level: .nan, mode: "post-fader", enabled: false), provenance: .axMixerStrip)
+        var options = Audit.PlanningOptions(); options.allowReplaceSend = true
+        let body = try plan(graph(edges: edges() + [unrelated]), sends: sendTask ? [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)
+        ])] : nil, options: options)
+        let step = try #require(body["steps"]?.arrayValue?.first?.objectValue)
+        let delta = try #require(step["proposed_routing_diff"]?.objectValue)
+        #expect(delta["status"]?.stringValue == "unverified")
+        let blocked = try #require(step["blocked_reasons"]?.arrayValue)
+        #expect(blocked.contains(.string("send_scalar_unserializable")))
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+    }
+
+    @Test func approvedExactSendReplacementUsesOneCanonicalPreservingDiff() throws {
+        var options = Audit.PlanningOptions()
+        options.allowReplaceSend = true
+        let beforeGraph = graph()
+        let body = try plan(beforeGraph, sends: [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)
+        ])], options: options)
+        let steps = try #require(body["steps"]?.arrayValue)
+        #expect(steps.count == 1)
+        #expect(body["preview"] == body["steps"])
+        let step = try #require(steps.first?.objectValue)
+        #expect(step["kind"]?.stringValue == "send_assignment")
+        #expect(step["target_ref"]?.stringValue == source.rawValue)
+        #expect(step["physical_slot"]?.intValue == 5)
+        let delta = try #require(step["proposed_routing_diff"]?.objectValue)
+        #expect(delta["status"]?.stringValue == "proposed")
+        #expect(delta["observation"]?.stringValue == "proposed_not_observed")
+        for key in ["output_changes", "input_changes", "added_sends", "removed_sends"] {
+            #expect(delta[key]?.arrayValue == [])
+        }
+        let changes = try #require(delta["changed_sends"]?.arrayValue)
+        #expect(changes.count == 1)
+        let change = try #require(changes.first?.objectValue)
+        let before = try JSONDecoder().decode(SendEdge.self, from: Data(encodeJSONStrict(#require(change["before"]), compact: true).utf8))
+        let after = try JSONDecoder().decode(SendEdge.self, from: Data(encodeJSONStrict(#require(change["after"]), compact: true).utf8))
+        #expect(before == beforeGraph.edges.last?.send)
+        #expect(after.sourceTrackRef == source && after.physicalSlot == 5)
+        #expect(after.destinationBusNumber == 3 && after.destinationRef == nil)
+        #expect(after.level == before.level && after.mode == before.mode && after.enabled == before.enabled)
+        let blocked = try #require(step["blocked_reasons"]?.arrayValue)
+        #expect(blocked.contains(.string("exact_target_send_adapter_unavailable")))
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+    }
+
+    @Test func approvedExactSendRemovalPreservesBusReceiversAndOtherRoutes() throws {
+        let beforeGraph = graph()
+        let body = try plan(beforeGraph, sends: [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "remove": .bool(true)
+        ])])
+        let steps = try #require(body["steps"]?.arrayValue)
+        #expect(steps.count == 1 && body["steps"] == body["preview"])
+        let step = try #require(steps.first?.objectValue)
+        #expect(step["kind"]?.stringValue == "send_assignment")
+        let delta = try #require(step["proposed_routing_diff"]?.objectValue)
+        #expect(delta["status"]?.stringValue == "proposed")
+        #expect(delta["observation"]?.stringValue == "proposed_not_observed")
+        for key in ["output_changes", "input_changes", "added_sends", "changed_sends"] {
+            #expect(delta[key]?.arrayValue == [])
+        }
+        let removed = try #require(delta["removed_sends"]?.arrayValue)
+        #expect(removed.count == 1)
+        let actual = try JSONDecoder().decode(SendEdge.self, from: Data(encodeJSONStrict(#require(removed.first), compact: true).utf8))
+        #expect(actual == beforeGraph.edges.last?.send)
+        #expect(step["after"]?.objectValue?["remove"] == .bool(true))
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
     }
 
     @Test func approvedBusFourToNoOutputHasOneMinimalProposedRemoval() throws {

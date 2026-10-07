@@ -77,7 +77,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               SHA256.hash(data: Data(encoded.utf8)).map({ String(format: "%02x", $0) }).joined() == digest else { return nil }
         guard let policyObject = object["approved_policy"]?.objectValue,
               case .accepted(let policy) = ProjectSessionAudit.parseIntentPolicy(policyObject),
-              policy.trackSort == nil, policy.roles.isEmpty, policy.outputs.isEmpty, policy.receivers.isEmpty,
+              policy.trackSort == nil, policy.roles.isEmpty, policy.outputs.isEmpty, policy.sends.isEmpty, policy.receivers.isEmpty,
               let names = ProjectSessionAudit.parseApprovedNames(object["approved_names"], policy: policy),
               names.count == policy.targets.count,
               ["reasons", "questions", "receiver_questions", "findings", "new_object_inventory"].allSatisfy({

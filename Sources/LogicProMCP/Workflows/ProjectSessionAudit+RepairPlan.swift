@@ -99,7 +99,7 @@ extension ProjectSessionAudit {
         let graph = graphOverride ?? SessionPopulationObservation.routingGraph(capture: capture)
         let assessment = assessIntent(policy: policy, capture: capture, graph: graph)
         let viewOnly = policy.mixerVisible != nil && policy.trackSort == nil && policy.targets.isEmpty && policy.roles.isEmpty
-            && policy.outputs.isEmpty && policy.receivers.isEmpty && names.isEmpty
+            && policy.outputs.isEmpty && policy.sends.isEmpty && policy.receivers.isEmpty && names.isEmpty
         var reasons = Set<String>()
         if !snapshotCurrent { reasons.insert("snapshot_changed") }
         if !viewOnly && request.scope != .wholeProject { reasons.insert("whole_project_scope_required") }
@@ -112,6 +112,9 @@ extension ProjectSessionAudit {
         let graphBound = gate == nil && epochMismatch == nil
         var proposalReadReasons = reasons
         if !request.domains.contains(.routing) { proposalReadReasons.insert("routing_not_requested") }
+        // Even an unchanged send needs a fresh exact-slot verifier which the retained apply
+        // provider does not have. A pure graph fixture cannot advertise runtime availability.
+        if !policy.sends.isEmpty { reasons.insert("send_goal_verification_unavailable") }
         if options.onAmbiguity == .reportOnly { reasons.insert("report_only_requested") }
         // Steps that create a receiving aux come before the outputs that need one
         // (destination before source), and each bus gets at most one.
@@ -240,6 +243,31 @@ extension ProjectSessionAudit {
         }
         if !assessment.questions.isEmpty { reasons.insert("unresolved_intent") }
 
+        for finding in assessment.sendFindings ?? [] {
+            if finding.status == .compliant, proposalReadReasons.isEmpty {
+                unchanged.append(.string(finding.id))
+                continue
+            }
+            let id = "send_" + finding.id
+            routingIDs.append(id)
+            let proposal = try proposedExistingSend(finding: finding, graph: graph,
+                readReasons: proposalReadReasons, allowReplace: options.allowReplaceSend)
+            var blocked = Set(finding.reasons.map(\.rawValue)).union(proposal.reasons)
+            blocked.formUnion(["exact_target_send_adapter_unavailable", "send_preservation_adapter_unavailable"])
+            reasons.formUnion(blocked)
+            steps.append(.object([
+                "id": .string(id), "kind": .string("send_assignment"),
+                "target_ref": finding.target.trackRef.map(Value.string) ?? .null,
+                "physical_slot": .int(finding.physicalSlot),
+                "before": try finding.observed.map { try repairPlanValue($0) } ?? .null,
+                "after": try repairPlanValue(finding.expected),
+                "proposed_routing_diff": proposal.wire,
+                "dependencies": .array([]), "blocked_reasons": .array(blocked.sorted().map(Value.string)),
+                "required_invariants": .array(["exact_strip_identity", "exact_send_slot_and_destination",
+                    "preserved_send_scalars", "receiver_fanout", "protected_and_intermediate_audio_paths",
+                    "channel_format_preservation", "sidechain_and_monitoring_preservation", "conditional_inverse_send"].map(Value.string))
+            ]))
+        }
         // Matching names still require the same opted-in execution lifecycle for fresh verification.
         if !names.isEmpty, !FeatureFlags.adr004MutationSaga { reasons.insert("mutation_saga_unavailable") }
         for desired in names {
@@ -365,7 +393,8 @@ extension ProjectSessionAudit {
             "steps": .array(steps), "preview": .array(steps),
             "unchanged_tasks": .array(unchanged), "questions": try repairPlanValue(assessment.questions),
             "receiver_questions": .array(receiverQuestions.keys.sorted().compactMap { receiverQuestions[$0] }),
-            "findings": try repairPlanValue(assessment.findings),
+            "findings": .array(try assessment.findings.map { try repairPlanValue($0) }
+                + (assessment.sendFindings ?? []).map { try repairPlanValue($0) }),
             "new_object_inventory": .array(inventory),
             "planning_options": options.wire,
             "executable": .bool(reasons.isEmpty),
@@ -408,6 +437,9 @@ extension ProjectSessionAudit {
             ]), reasons)
         }
         guard reasons.isEmpty else { return unverified() }
+        guard graph.edges.allSatisfy({ $0.send?.level?.isFinite ?? true }) else {
+            return unverified("send_scalar_unserializable")
+        }
         guard finding.expected.output == .bus || finding.expected.output == .noOutput else {
             return unverified("main_output_proposal_unsupported")
         }
@@ -469,14 +501,72 @@ extension ProjectSessionAudit {
             provenance: graph.provenance.contains(.other) ? graph.provenance : graph.provenance + [.other],
             snapshotId: graph.snapshotId, coverage: graph.coverage
         )
-        let diff = routingDiff(before: graph, after: after)
+        return (try proposedRoutingDiffValue(routingDiff(before: graph, after: after)), [])
+    }
+
+    private static func proposedExistingSend(finding: IntentSendFinding, graph: RoutingGraph,
+                                             readReasons: Set<String>, allowReplace: Bool) throws -> (wire: Value, reasons: Set<String>) {
+        var reasons = readReasons.union(finding.reasons.map(\.rawValue))
+        func unverified(_ reason: String? = nil) -> (Value, Set<String>) {
+            if let reason { reasons.insert(reason) }
+            return (.object(["status": .string("unverified"), "basis": .string("approved_policy"),
+                "observation": .string("proposed_not_observed"), "reasons": .array(reasons.sorted().map(Value.string))]), reasons)
+        }
+        guard reasons.isEmpty, finding.status == .violation else { return unverified() }
+        guard graph.edges.allSatisfy({ $0.send?.level?.isFinite ?? true }) else {
+            return unverified("send_scalar_unserializable")
+        }
+        guard let before = finding.observed, let observed = before.send,
+              let rawRef = finding.target.trackRef else {
+            // An empty slot has no observed scalar defaults to preserve. Account for that task,
+            // but don't invent a level, mode or enabled state for a new connection.
+            return unverified("send_creation_metadata_unavailable")
+        }
+        let request = RoutingWriteRequest(sourceTrackRef: TargetReference(rawValue: rawRef),
+            physicalSlot: finding.physicalSlot, destinationBusNumber: finding.expected.bus ?? observed.destinationBusNumber,
+            destinationRef: finding.expected.bus == nil ? observed.destinationRef : nil,
+            replaceExisting: finding.expected.bus == nil || allowReplace, expectedProjectEpoch: graph.projectEpoch)
+        let decision = evaluate(request, against: graph)
+        guard decision.allowed else {
+            for rejection in decision.rejections {
+                if case .slotOccupied = rejection { reasons.insert("send_replacement_not_allowed") }
+                else { reasons.insert("send_graph_unsafe_\(String(describing: rejection))") }
+            }
+            return unverified()
+        }
+        // routingDiff's assignment maps are last-wins; don't use that behavior to conceal
+        // contradictory unrelated output facts while proposing a send delta.
+        let outputs = graph.edges.filter { $0.kind == .mainOutput }
+        guard Dictionary(grouping: outputs, by: \.source).values.allSatisfy({ $0.count == 1 }),
+              outputs.allSatisfy({ $0.send == nil }) else { return unverified("proposed_output_assignments_ambiguous") }
+        var desired: RoutingEdge?
+        if let bus = finding.expected.bus {
+            let destinations = graph.nodes.filter { $0.kind == .bus && $0.busNumber == bus }
+            guard destinations.count == 1, let destination = destinations.first else {
+                return unverified("proposed_destination_not_unique_bus")
+            }
+            desired = RoutingEdge(kind: .send, source: before.source, destination: destination.id,
+                send: SendEdge(sourceTrackRef: observed.sourceTrackRef, physicalSlot: observed.physicalSlot,
+                    destinationBusNumber: bus, destinationRef: destination.targetRef,
+                    displayedName: observed.displayedName, level: observed.level, mode: observed.mode, enabled: observed.enabled),
+                provenance: .other)
+        }
+        let after = RoutingGraph(projectReference: graph.projectReference, projectEpoch: graph.projectEpoch,
+            complete: graph.complete, partialReason: graph.partialReason, nodes: graph.nodes,
+            edges: graph.edges.compactMap { $0 == before ? desired : $0 },
+            provenance: graph.provenance.contains(.other) ? graph.provenance : graph.provenance + [.other],
+            snapshotId: graph.snapshotId, coverage: graph.coverage)
+        return (try proposedRoutingDiffValue(routingDiff(before: graph, after: after)), [])
+    }
+
+    private static func proposedRoutingDiffValue(_ diff: RoutingDiff) throws -> Value {
         func changeValue(_ change: RoutingEdgeChange) throws -> Value {
             .object([
                 "before": try change.before.map { try repairPlanValue($0) } ?? .null,
                 "after": try change.after.map { try repairPlanValue($0) } ?? .null,
             ])
         }
-        return (.object([
+        return .object([
             "status": .string("proposed"), "basis": .string("approved_policy"),
             "observation": .string("proposed_not_observed"),
             "output_changes": .array(try diff.outputChanges.map(changeValue)),
@@ -486,7 +576,7 @@ extension ProjectSessionAudit {
             "changed_sends": .array(try diff.changedSends.map {
                 .object(["before": try repairPlanValue($0.before), "after": try repairPlanValue($0.after)])
             }),
-        ]), [])
+        ])
     }
 
     enum ReceivingAux: Equatable {

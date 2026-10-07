@@ -85,6 +85,23 @@ extension ProjectSessionAudit {
         let destination: IntentMainOutput
     }
 
+    /// An exact physical send slot on an issued source. A nil bus is explicit removal, never
+    /// inferred from level, bypass, a displayed name or missing observation.
+    struct IntentSend: Equatable, Encodable, Sendable {
+        let target: String
+        let physicalSlot: Int
+        let bus: Int?
+
+        enum CodingKeys: String, CodingKey { case target, bus, remove; case physicalSlot = "physical_slot" }
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(target, forKey: .target)
+            try container.encode(physicalSlot, forKey: .physicalSlot)
+            if let bus { try container.encode(bus, forKey: .bus) }
+            else { try container.encode(true, forKey: .remove) }
+        }
+    }
+
     struct IntentSort: Equatable, Sendable {
         let criterion: TrackSortCriterion
         let expectedOrder: [String]
@@ -98,6 +115,7 @@ extension ProjectSessionAudit {
         let targets: [IntentTarget]
         let roles: [IntentRole]
         let outputs: [IntentOutput]
+        let sends: [IntentSend]
         /// The approved receiving-aux intent per bus (#1090 review R3, R1090-004): an output
         /// approves only the bus a track feeds, not what reads that bus. `.new` approves planning a
         /// new aux that reads it; `.keep` approves the observed receivers; `.noReceiver` (wire `none`) says nothing is meant to read it (a sidechain-only bus).
@@ -110,6 +128,7 @@ extension ProjectSessionAudit {
             targets: [IntentTarget],
             roles: [IntentRole],
             outputs: [IntentOutput],
+            sends: [IntentSend] = [],
             receivers: [Int: IntentReceiver] = [:],
             mixerVisible: Bool? = nil,
             trackSort: IntentSort? = nil
@@ -118,6 +137,7 @@ extension ProjectSessionAudit {
             self.targets = targets
             self.roles = roles
             self.outputs = outputs
+            self.sends = sends
             self.receivers = receivers
             self.mixerVisible = mixerVisible
             self.trackSort = trackSort
@@ -150,6 +170,10 @@ extension ProjectSessionAudit {
         case duplicateReceiver(bus: Int)
         case unsupportedSortCriterion(path: String, value: String)
         case invalidSortOrder(path: String)
+        case sendDestinationBothOrNeither(path: String)
+        case sendRemovalMustBeTrue(path: String)
+        case sendSlotOutOfRange(path: String, value: Int)
+        case duplicateSend(target: String, slot: Int)
 
         /// The deterministic form the rejection list is sorted by.
         var sortKey: String {
@@ -190,6 +214,10 @@ extension ProjectSessionAudit {
                 return "unsupported_sort_criterion \(path) \(value)"
             case .invalidSortOrder(let path):
                 return "invalid_sort_order \(path)"
+            case .sendDestinationBothOrNeither(let path): return "send_destination_both_or_neither \(path)"
+            case .sendRemovalMustBeTrue(let path): return "send_removal_must_be_true \(path)"
+            case .sendSlotOutOfRange(let path, let value): return "send_slot_out_of_range \(path) \(value)"
+            case .duplicateSend(let target, let slot): return "duplicate_send \(target) \(slot)"
             }
         }
     }
@@ -244,6 +272,11 @@ extension ProjectSessionAudit {
         case outputDestinationAmbiguous = "output_destination_ambiguous"
         case expectedBusNotObserved = "expected_bus_not_observed"
         case roleHasNoAcceptedMember = "role_has_no_accepted_member"
+        case sendCoverageIncomplete = "send_coverage_incomplete"
+        case populationCoverageIncomplete = "population_coverage_incomplete"
+        case sendSlotAmbiguous = "send_slot_ambiguous"
+        case sendEndpointUnverified = "send_endpoint_unverified"
+        case sendScalarUnserializable = "send_scalar_unserializable"
     }
 
     enum IntentAspect: String, Codable, Sendable {
@@ -364,6 +397,8 @@ extension ProjectSessionAudit {
         let findings: [IntentFinding]
         let questions: [IntentQuestion]
         let changeRequired: Bool
+        /// Omitted for old policies, preserving their assessment wire shape.
+        var sendFindings: [IntentSendFinding]? = nil
 
         enum CodingKeys: String, CodingKey {
             case schema
@@ -374,6 +409,28 @@ extension ProjectSessionAudit {
             case findings
             case questions
             case changeRequired = "change_required"
+            case sendFindings = "send_findings"
+        }
+    }
+
+    struct IntentSendFinding: Encodable, Equatable, Sendable {
+        let id: String
+        let rule = "send_assignment"
+        let basis = IntentBasis.approvedPolicy
+        let severity: Severity
+        let status: IntentStatus
+        let target: IntentTargetEvidence
+        let physicalSlot: Int
+        let observed: RoutingEdge?
+        let expected: IntentSend
+        let coverage: RoutingCoverage
+        let notVerified: [IntentAspect] = [.sidechain, .monitoring]
+        let reasons: [IntentReason]
+
+        enum CodingKeys: String, CodingKey {
+            case id, rule, basis, severity, status, target, observed, expected, coverage, reasons
+            case physicalSlot = "physical_slot"
+            case notVerified = "not_verified"
         }
     }
 
@@ -389,7 +446,7 @@ extension ProjectSessionAudit {
         var rejections: [IntentPolicyRejection] = []
         rejectUnknownKeys(
             object,
-            allowed: ["schema", "project_ref", "targets", "roles", "outputs", "receivers", "presentation"],
+            allowed: ["schema", "project_ref", "targets", "roles", "outputs", "sends", "receivers", "presentation"],
             path: "policy",
             into: &rejections
         )
@@ -413,6 +470,7 @@ extension ProjectSessionAudit {
         let targets = parseTargets(object, into: &rejections)
         let roles = parseRoles(object, into: &rejections)
         let outputs = parseOutputs(object, into: &rejections)
+        let sends = parseSends(object, targets: targets, into: &rejections)
         let receivers = parseReceivers(object, into: &rejections)
         var mixerVisible: Bool?
         var trackSort: IntentSort?
@@ -443,6 +501,7 @@ extension ProjectSessionAudit {
             targets: targets,
             roles: roles,
             outputs: outputs,
+            sends: sends,
             receivers: receivers,
             mixerVisible: mixerVisible,
             trackSort: trackSort
@@ -644,6 +703,49 @@ extension ProjectSessionAudit {
             outputs.append(IntentOutput(subject: subject, destination: destination))
         }
         return outputs
+    }
+
+    private static func parseSends(_ object: [String: Value], targets: [IntentTarget],
+                                   into rejections: inout [IntentPolicyRejection]) -> [IntentSend] {
+        guard let raw = object["sends"] else { return [] }
+        guard let entries = raw.arrayValue else {
+            rejections.append(.wrongType(path: "policy.sends", expected: "array")); return []
+        }
+        var result: [IntentSend] = []
+        var slots: [String: Set<Int>] = [:]
+        for (index, rawEntry) in entries.enumerated() {
+            let path = "policy.sends[\(index)]"
+            guard let entry = rawEntry.objectValue else {
+                rejections.append(.wrongType(path: path, expected: "object")); continue
+            }
+            rejectUnknownKeys(entry, allowed: ["target", "physical_slot", "bus", "remove"], path: path, into: &rejections)
+            let target = requiredString(entry, key: "target", path: path, into: &rejections)
+            let slot = requiredInt(entry, key: "physical_slot", path: path, into: &rejections)
+            guard (entry["bus"] == nil) != (entry["remove"] == nil) else {
+                rejections.append(.sendDestinationBothOrNeither(path: path)); continue
+            }
+            var bus: Int?
+            if entry["bus"] != nil {
+                guard let number = requiredInt(entry, key: "bus", path: path, into: &rejections) else { continue }
+                guard number >= 1 else { rejections.append(.busBelowOne(path: "\(path).bus", value: number)); continue }
+                bus = number
+            } else {
+                guard let remove = requiredBool(entry, key: "remove", path: path, into: &rejections) else { continue }
+                guard remove else { rejections.append(.sendRemovalMustBeTrue(path: path)); continue }
+            }
+            guard let target, let slot else { continue }
+            guard targets.contains(where: { $0.handle == target }) else {
+                rejections.append(.unknownSubject(path: path, subject: target)); continue
+            }
+            guard routingPhysicalSendSlots.contains(slot) else {
+                rejections.append(.sendSlotOutOfRange(path: "\(path).physical_slot", value: slot)); continue
+            }
+            guard slots[target, default: []].insert(slot).inserted else {
+                rejections.append(.duplicateSend(target: target, slot: slot)); continue
+            }
+            result.append(IntentSend(target: target, physicalSlot: slot, bus: bus))
+        }
+        return result.sorted { $0.target == $1.target ? $0.physicalSlot < $1.physicalSlot : $0.target < $1.target }
     }
 
     /// Exactly one of `bus` (an int >= 1) or `output` (`"no_output"`, the one non-bus main output
@@ -1040,6 +1142,10 @@ extension ProjectSessionAudit {
         findings.sort { $0.id < $1.id }
         questions.sort { $0.id < $1.id }
 
+        let sendFindings = policy.sends.compactMap { intent -> IntentSendFinding? in
+            guard let target = targetsByHandle[intent.target] else { return nil } // validated by the parser
+            return assessSend(intent, trackRef: target.trackRef, gate: gate, capture: capture, graph: graph)
+        }
         return IntentAssessment(
             schema: intentAssessmentSchema,
             readOnly: true,
@@ -1048,8 +1154,72 @@ extension ProjectSessionAudit {
             graphProjectEpoch: graph.projectEpoch,
             findings: findings,
             questions: questions,
-            changeRequired: findings.contains { $0.status == .violation }
+            changeRequired: findings.contains { $0.status == .violation } || sendFindings.contains { $0.status == .violation },
+            sendFindings: sendFindings.isEmpty ? nil : sendFindings
         )
+    }
+
+    /// One shared pure send assessment for audit and planning. No label, scalar level or bypass
+    /// supplies connectivity; absence needs complete requested source-slot population evidence.
+    private static func assessSend(_ intent: IntentSend, trackRef: TargetReference, gate: AssessmentGate?,
+                                   capture: SessionPopulationObservation.Capture, graph: RoutingGraph) -> IntentSendFinding {
+        func finding(_ status: IntentStatus, index: Int? = nil, observed: RoutingEdge? = nil,
+                     reasons: [IntentReason] = []) -> IntentSendFinding {
+            IntentSendFinding(id: "send.target.\(intent.target).slot.\(intent.physicalSlot)",
+                severity: status == .violation ? .warn : .info, status: status,
+                target: IntentTargetEvidence(handle: intent.target, role: nil, trackRef: trackRef.rawValue, trackIndex: index),
+                physicalSlot: intent.physicalSlot, observed: observed, expected: intent, coverage: graph.coverage, reasons: reasons)
+        }
+        if let gate { return finding(gate.status, reasons: [gate.reason]) }
+        let issued: IssuedTrackReferences
+        switch trackReferences(of: capture) {
+        case .unreadable(let reason): return finding(.unverified, reasons: [reason])
+        case .issued(let references): issued = references
+        }
+        let index: Int
+        switch locate(trackRef, in: issued) {
+        case .unlocated(let status, let reason): return finding(status, reasons: [reason])
+        case .located(let value): index = value
+        }
+        if let reason = graphEpochMismatch(graph, capture: capture) { return finding(.unverified, index: index, reasons: [reason]) }
+        var reasons: [IntentReason] = []
+        if graph.coverage.population.state != .complete { reasons.append(.populationCoverageIncomplete) }
+        if graph.coverage.stripTrackAssociation.state != .complete { reasons.append(.stripTrackAssociationIncomplete) }
+        if graph.coverage.sends.state != .complete { reasons.append(.sendCoverageIncomplete) }
+        if !reasons.isEmpty { return finding(.unverified, index: index, reasons: reasons) }
+        let sources = graph.nodes.filter { $0.targetRef == trackRef }
+        guard sources.count == 1, let source = sources.first, source.kind == .track,
+              graph.nodes.filter({ $0.id == source.id }).count == 1 else {
+            return finding(.unverified, index: index, reasons: [.sourceNodeAmbiguous])
+        }
+        let candidates = graph.edges.filter { $0.kind == .send
+            && ($0.source == source.id || $0.send?.sourceTrackRef == trackRef)
+            && ($0.send?.physicalSlot == intent.physicalSlot || $0.send == nil) }
+        guard candidates.count <= 1 else { return finding(.unverified, index: index, reasons: [.sendSlotAmbiguous]) }
+        let before = candidates.first
+        if let before {
+            guard let send = before.send, before.source == source.id, send.sourceTrackRef == trackRef,
+                  let destination = graph.nodes.first(where: { $0.id == before.destination }), destination.kind == .bus,
+                  graph.nodes.filter({ $0.id == before.destination }).count == 1,
+                  send.destinationBusNumber == destination.busNumber, destination.busNumber != nil,
+                  send.destinationRef == nil || send.destinationRef == destination.targetRef else {
+                return finding(.unverified, index: index, reasons: [.sendEndpointUnverified])
+            }
+            if let level = before.send?.level, !level.isFinite {
+                // Preserve an accounted, blocked task rather than invent a scalar or fail the
+                // entire canonical draft's strict JSON encoding. This is not observed absence.
+                return finding(.unverified, index: index, reasons: [.sendScalarUnserializable])
+            }
+        }
+        if let bus = intent.bus {
+            let destinations = graph.nodes.filter { $0.kind == .bus && $0.busNumber == bus }
+            guard destinations.count == 1, let destination = destinations.first,
+                  graph.nodes.filter({ $0.id == destination.id }).count == 1 else {
+                return finding(.unverified, index: index, observed: before, reasons: [.expectedBusNotObserved])
+            }
+            return finding(before?.destination == destination.id ? .compliant : .violation, index: index, observed: before)
+        }
+        return finding(before == nil ? .compliant : .violation, index: index, observed: before)
     }
 
     /// Whether this graph can be read against this capture at all, and whether the policy is for
