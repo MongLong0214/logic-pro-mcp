@@ -79,6 +79,8 @@ struct Issue965FreshPopulationAcquisitionTests {
 
         func channel(unreadableRail: Bool = false, disclosure: AXUIElement? = nil,
                      additionalDisclosure: AXUIElement? = nil,
+                     thirdDisclosure: AXUIElement? = nil,
+                     wrongAdditionalDisclosureHit: Bool = false,
                      observationMouse: AXMouseHelper.Runtime? = nil,
                      wrongDisclosureHit: Bool = false,
                      observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil,
@@ -113,8 +115,9 @@ struct Issue965FreshPopulationAcquisitionTests {
                     },
                     elementAtPosition: { element, point in
                         guard CFEqual(element, app) else { return .success(nil) }
+                        if let thirdDisclosure, point == CGPoint(x: 36, y: 46) { return .success(thirdDisclosure) }
                         if let additionalDisclosure, point == CGPoint(x: 26, y: 36) {
-                            return .success(additionalDisclosure)
+                            return .success(wrongAdditionalDisclosureHit ? header : additionalDisclosure)
                         }
                         guard let disclosure, point == CGPoint(x: 16, y: 26) else { return .success(nil) }
                         return .success(wrongDisclosureHit ? header : disclosure)
@@ -171,6 +174,268 @@ struct Issue965FreshPopulationAcquisitionTests {
 
     @Test func registeredNestedStackObservationCapturesGrandchildrenAndEndsTheirExposure() async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, verifyReferences: true, nested: true)
+    }
+
+    @Test(arguments: [false, true])
+    func registeredSiblingStacksCaptureAllDeclaredRowsAndRestoreOrdinaryCache(navigation: Bool) async throws {
+        try await observeSiblingStacks(navigation: navigation)
+    }
+
+    @Test(arguments: ["closed", "role_loss", "replacement"])
+    func registeredSiblingOwnershipLossCannotResumeAnOldInverse(loss: String) async throws {
+        try await observeSiblingStacks(navigation: true, ownershipLoss: loss)
+    }
+
+    @Test func registeredNewlyRevealedSiblingDisclosuresAcquireEveryHeldChild() async throws {
+        try await observeSiblingStacks(navigation: true, siblingCase: "revealed")
+    }
+
+    @Test(arguments: ["alias", "wrong_hit", "release_expansion", "release_restoration", "cancel", "recycled"])
+    func registeredSiblingTraversalPreservesControlCustody(siblingCase: String) async throws {
+        try await observeSiblingStacks(navigation: true, siblingCase: siblingCase)
+    }
+
+    private func observeSiblingStacks(navigation: Bool, ownershipLoss: String? = nil, siblingCase: String? = nil) async throws {
+        let fixture = Fixture()
+        let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-siblings-\(UUID().uuidString).logicx")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        let headers = (0..<32).map { fixture.builder.element(965_500 + $0) }
+        let first = fixture.builder.element(965_550)
+        let second = fixture.builder.element(965_551)
+        let replacement = fixture.builder.element(965_552)
+        let third = fixture.builder.element(965_553)
+        let revealed = siblingCase == "revealed"
+        fixture.builder.setRole(replacement, kAXDisclosureTriangleRole as String)
+        fixture.builder.setAttribute(replacement, kAXValueAttribute as String, 1)
+        for (target, x, y) in [(first, 10.0, 20.0), (second, 20.0, 30.0), (third, 30.0, 40.0)] {
+            fixture.builder.setRole(target, kAXDisclosureTriangleRole as String)
+            fixture.builder.setAttribute(target, kAXValueAttribute as String, 0)
+            fixture.builder.setFrame(target, x: x, y: y, width: 12, height: 12)
+        }
+        for (index, header) in headers.enumerated() {
+            fixture.builder.setRole(header, kAXLayoutItemRole as String)
+            fixture.builder.setAttribute(header, kAXTitleAttribute as String,
+                index == 1 || index == 17 ? "Repeated sibling child" : "Sibling track \(index + 1)")
+            fixture.builder.setAttribute(header, kAXSelectedAttribute as String, index == 0)
+            fixture.builder.setChildren(header, index == 0 ? [first]
+                : index == (revealed ? 1 : 16) ? [siblingCase == "alias" ? first : second]
+                : revealed && index == 16 ? [third] : [])
+        }
+        let original = headers.enumerated().filter {
+            revealed ? !(1...23).contains($0.offset) : !(1...7).contains($0.offset) && !(17...23).contains($0.offset)
+        }.map(\.element)
+        #expect(original.count == (revealed ? 9 : 18))
+        fixture.builder.setChildren(fixture.rail, original)
+        fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [fixture.window])
+        fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.rail)
+        fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, true)
+        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, bundle.absoluteString)
+        let controlBar = fixture.builder.element(965_560)
+        let play = fixture.builder.element(965_561)
+        let record = fixture.builder.element(965_562)
+        fixture.builder.setRole(controlBar, kAXGroupRole as String)
+        fixture.builder.setAttribute(controlBar, kAXDescriptionAttribute as String, AXLocalePolicy.controlBarGroupLabel.canonical)
+        for (control, labels) in [(play, AXLocalePolicy.transportPlayControl), (record, AXLocalePolicy.transportRecordControl)] {
+            fixture.builder.setRole(control, kAXCheckBoxRole as String)
+            fixture.builder.setAttribute(control, kAXDescriptionAttribute as String, labels.canonical)
+            fixture.builder.setAttribute(control, kAXValueAttribute as String, 0)
+        }
+        fixture.builder.setChildren(controlBar, [play, record])
+        fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar])
+        let mouse = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
+            let isSecond = point == CGPoint(x: 26, y: 36)
+            let isThird = revealed && point == CGPoint(x: 36, y: 46)
+            guard clicks == 1, point == CGPoint(x: 16, y: 26) || isSecond || isThird,
+                  type == .leftMouseDown || type == .leftMouseUp else {
+                Issue.record("unexpected sibling observation event"); return false
+            }
+            fixture.events.record((isThird ? "third_" : isSecond ? "second_" : "first_") + (type == .leftMouseDown ? "down" : "up"))
+            if type == .leftMouseUp, isSecond,
+               (siblingCase == "release_expansion" && fixture.events.count == 4)
+                || (siblingCase == "release_restoration" && fixture.events.count == 6) {
+                fixture.reads.record("sibling_release_unposted")
+                return false
+            }
+            if type == .leftMouseUp {
+                let target = isThird ? third : isSecond ? second : first
+                let open = (fixture.builder.attributeValue(target, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                fixture.builder.setAttribute(target, kAXValueAttribute as String, open ? 0 : 1)
+                let firstOpen = (fixture.builder.attributeValue(first, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                let secondOpen = (fixture.builder.attributeValue(second, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                let thirdOpen = (fixture.builder.attributeValue(third, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                fixture.builder.setChildren(fixture.rail, headers.enumerated().filter {
+                    if revealed {
+                        return (firstOpen || !(1...23).contains($0.offset))
+                            && (secondOpen || !(2...7).contains($0.offset))
+                            && (thirdOpen || !(17...23).contains($0.offset))
+                    }
+                    return
+                    (firstOpen || !(1...7).contains($0.offset)) && (secondOpen || !(17...23).contains($0.offset))
+                }.map(\.element))
+            }
+            return true
+        }, postKeyEvent: { _ in Issue.record("fixture forbids keys"); return false },
+           postUnicodeScalar: { _ in Issue.record("fixture forbids typing"); return false }, sleepMicros: { _ in })
+        let channel = fixture.channel(disclosure: first, additionalDisclosure: second,
+            thirdDisclosure: revealed ? third : nil, wrongAdditionalDisclosureHit: siblingCase == "wrong_hit", observationMouse: mouse,
+            observingAttribute: { element, attribute in
+                if let ownershipLoss, fixture.events.count == 2, CFEqual(element, second),
+                   attribute == kAXPositionAttribute as String,
+                   !fixture.reads.recorded.contains("sibling_loss_installed") {
+                    fixture.reads.record("sibling_loss_installed")
+                    if ownershipLoss == "closed" { fixture.builder.setAttribute(first, kAXValueAttribute as String, 0) }
+                    if ownershipLoss == "role_loss" { fixture.builder.setRole(first, kAXButtonRole as String) }
+                    if ownershipLoss == "replacement" { fixture.builder.setChildren(headers[0], [replacement]) }
+                }
+                if let ownershipLoss, fixture.reads.recorded.contains("sibling_loss_installed"),
+                   !fixture.reads.recorded.contains("sibling_loss_returned") {
+                    if ownershipLoss == "closed", CFEqual(element, first), attribute == kAXValueAttribute as String,
+                       (fixture.builder.attributeValue(first, attribute) as? NSNumber)?.intValue == 0 {
+                        fixture.reads.record("sibling_loss_actually_sampled")
+                    }
+                    if ownershipLoss == "role_loss", CFEqual(element, first), attribute == kAXRoleAttribute as String,
+                       fixture.builder.attributeValue(first, attribute) as? String == kAXButtonRole as String {
+                        fixture.reads.record("sibling_loss_actually_sampled")
+                    }
+                    if fixture.reads.recorded.contains("sibling_loss_actually_sampled"),
+                       CFEqual(element, fixture.window), attribute == kAXTitleAttribute as String {
+                        fixture.builder.setAttribute(first, kAXValueAttribute as String, 1)
+                        fixture.builder.setRole(first, kAXDisclosureTriangleRole as String)
+                        fixture.builder.setChildren(headers[0], [first])
+                        fixture.reads.record("sibling_loss_returned")
+                    }
+                }
+                if attribute == kAXTitleAttribute as String, let index = headers.firstIndex(where: { CFEqual($0, element) }) {
+                    fixture.reads.record("sibling_title_\(index)")
+                }
+            }, observingChildren: { element in
+                if ownershipLoss == "replacement", CFEqual(element, headers[0]),
+                   fixture.reads.recorded.contains("sibling_loss_installed"),
+                   !fixture.reads.recorded.contains("sibling_loss_returned") {
+                    let children = fixture.builder.makeAXRuntime().children(headers[0])
+                    if children.count == 1, CFEqual(children[0], replacement) {
+                        fixture.reads.record("sibling_loss_actually_sampled")
+                    }
+                }
+            })
+        let cache = StateCache()
+        let registry = TargetRegistry()
+        let gate = LogicMutationGate()
+        let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
+            poller: StatePoller(axChannel: channel, cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
+            dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+            liveTrackNames: { [:] }, projectFileReader: .unavailable)
+        let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+        let params: [String: Value] = ["domains": .array([.string("tracks")]), "allow_ui_navigation": .bool(navigation)]
+        let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+            commandParams: params, mutationGate: gate) {
+                if siblingCase == "cancel", let inherited = OperationTraceContext.current {
+                    let context = OperationTraceContext(parentTraceID: inherited.parentTraceID,
+                        mutationGateAcquired: inherited.mutationGateAcquired, ownsGate: inherited.ownsGate,
+                        deadline: inherited.deadline, cancellationRequested: {
+                            inherited.cancellationRequested() || fixture.events.count == 4
+                        })
+                    return await OperationTraceContext.$current.withValue(context) {
+                        await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
+                    }
+                }
+                return await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
+            }
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        if let siblingCase, ["alias", "wrong_hit", "release_expansion", "release_restoration", "cancel"].contains(siblingCase) {
+            let events = siblingCase == "alias" ? [] : siblingCase == "wrong_hit"
+                ? ["first_down", "first_up", "first_down", "first_up"]
+                : ["first_down", "first_up", "second_down", "second_up"]
+                    + (siblingCase == "release_restoration" ? ["second_down", "second_up"] : [])
+            #expect(fixture.events.recorded == events)
+            let current = await cache.getTracks()
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            if siblingCase.hasPrefix("release_") {
+                #expect(fixture.reads.recorded.filter { $0 == "sibling_release_unposted" }.count == 1)
+                #expect(effects["reason"] as? String == "stack_mouse_release_unverified")
+            }
+            if siblingCase == "alias" || siblingCase == "wrong_hit" {
+                #expect(current.count == original.count)
+                let tracks = try #require(body["tracks"] as? [String: Any])
+                let rows = try #require(tracks["rows"] as? [[String: Any]])
+                #expect(rows.count == (siblingCase == "alias" ? 18 : 25))
+                #expect(tracks["coverage"] as? String == "partial")
+            } else {
+                #expect(current.isEmpty)
+                #expect(effects["restoration"] as? String == "not_restored")
+            }
+            if siblingCase == "cancel" { #expect(body["error"] as? String == "cancelled") }
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            return
+        }
+        if ownershipLoss != nil {
+            #expect(fixture.reads.recorded.filter { $0 == "sibling_loss_installed" }.count == 1)
+            #expect(fixture.reads.recorded.contains("sibling_loss_actually_sampled"))
+            #expect(fixture.reads.recorded.filter { $0 == "sibling_loss_returned" }.count == 1)
+            #expect(fixture.events.recorded == ["first_down", "first_up"], "sampled loss cannot renew the previous inverse")
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored")
+            let current = await cache.getTracks()
+            #expect(current.isEmpty)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            return
+        }
+        let tracks = try #require(body["tracks"] as? [String: Any])
+        let rows = try #require(tracks["rows"] as? [[String: Any]])
+        let expected = navigation ? headers : original
+        #expect(rows.count == expected.count)
+        #expect(rows.compactMap { $0["name"] as? String } == expected.compactMap {
+            fixture.builder.attributeValue($0, kAXTitleAttribute as String) as? String
+        })
+        let forward = ["first_down", "first_up", "second_down", "second_up"] + (revealed ? ["third_down", "third_up"] : [])
+        let inverse = (revealed ? ["third_down", "third_up"] : []) + ["second_down", "second_up", "first_down", "first_up"]
+        #expect(fixture.events.recorded == (navigation ? forward + inverse : []))
+        #expect(tracks["coverage"] as? String == "partial", "declared fixture membership is not a global hidden/end witness")
+        let current = await cache.getTracks()
+        #expect(current.count == original.count)
+        #expect(zip(current, original).allSatisfy { state, header in
+            state.physicalBinding.map { CFEqual($0.header, header) && $0.exposure == nil } == true
+        })
+        for target in [first, second] + (revealed ? [third] : []) {
+            #expect((fixture.builder.attributeValue(target, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+        }
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+        try #require(rows.count == expected.count)
+        for (row, header) in zip(rows, expected) {
+            let reference = try #require(row["track_ref"] as? String)
+            let binding = try #require(await registry.resolve(TargetReference(rawValue: reference)))
+            let physical = try #require(binding.physicalTrack)
+            #expect(CFEqual(physical.header, header))
+            let index = try #require(headers.firstIndex { CFEqual($0, header) })
+            #expect(fixture.reads.recorded.contains("sibling_title_\(index)"))
+            if navigation, !original.contains(where: { CFEqual($0, header) }) {
+                #expect(physical.exposure != nil && physical.currentIndex() == nil)
+            }
+        }
+        if siblingCase == "recycled" {
+            let originalRef = try #require(rows.first?["track_ref"] as? String)
+            let originalBinding = try #require(await registry.resolve(TargetReference(rawValue: originalRef)))
+            let heldRuntime = try #require(originalBinding.physicalTrack).runtime
+            fixture.builder.setChildren(fixture.rail, headers)
+            for target in [first, second] { fixture.builder.setAttribute(target, kAXValueAttribute as String, 1) }
+            for row in rows where row["name"] as? String == "Repeated sibling child" {
+                let reference = try #require(row["track_ref"] as? String)
+                let binding = try #require(await registry.resolve(TargetReference(rawValue: reference)))
+                let physical = try #require(binding.physicalTrack)
+                #expect(physical.currentIndex() == nil, "recycled CF/name/ordinal does not renew ended descendant custody")
+            }
+            let live = AXTrackBinding.Exposure(header: headers[0], disclosure: first,
+                runtime: heldRuntime, originalHeaders: original)
+            #expect(live.retainAcquiredDisclosure(header: headers[16], disclosure: second))
+            let probe = AXTrackBinding.Binding(window: fixture.window, header: headers[1], document: bundle.absoluteString,
+                runtime: heldRuntime, exposure: live)
+            #expect(probe.currentIndex() == 1, "same owners permit a genuinely live scope")
+            live.end()
+            #expect(probe.currentIndex() == nil)
+        }
     }
 
     @Test(arguments: ["down_failed", "held_focus", "held_focus_returned", "wrong_hit"])
