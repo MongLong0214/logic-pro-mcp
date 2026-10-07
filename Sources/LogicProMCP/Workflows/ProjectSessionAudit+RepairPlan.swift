@@ -240,6 +240,19 @@ extension ProjectSessionAudit {
                 receiverBlocks[bus] = ["receiving_aux_missing", "create_aux_not_allowed"]
             }
         }
+        // Output and send assignments consume the same approved receiving-aux decision.
+        // A destination dependency is local to its bus; removal has no destination to create.
+        func receiverRequirements(_ bus: Int) -> (blocked: Set<String>, dependencies: [String]) {
+            if policy.receivers[bus] != nil {
+                return (receiverBlocks[bus] ?? [], auxStepForBus[bus].map { [$0] } ?? [])
+            }
+            switch observedReceiver(bus) {
+            case .unverified: return (["bus_receiver_unverified"], [])
+            case .absent: receiverQuestion(bus, observed: .absent)
+            case .present: break
+            }
+            return ([], [])
+        }
         var steps: [Value] = []
         var unchanged: [Value] = []
         var routingIDs: [String] = []
@@ -268,16 +281,9 @@ extension ProjectSessionAudit {
                 // An output approves only the bus (#1090 review R3, R1090-004). With a `receivers`
                 // entry the decision above applies; without one an observed absence is a question,
                 // never a planned aux, and an unverified receiver blocks the output.
-                if policy.receivers[bus] != nil {
-                    blocked.formUnion(receiverBlocks[bus] ?? [])
-                    if let auxID = auxStepForBus[bus] { dependencies.append(auxID) }
-                } else {
-                    switch observedReceiver(bus) {
-                    case .unverified: blocked.insert("bus_receiver_unverified")
-                    case .absent: receiverQuestion(bus, observed: .absent)
-                    case .present: break
-                    }
-                }
+                let receiver = receiverRequirements(bus)
+                blocked.formUnion(receiver.blocked)
+                dependencies = receiver.dependencies
             }
             var proposalReasons = proposalReadReasons
             if blocked.contains("bus_receiver_unverified") { proposalReasons.insert("bus_receiver_unverified") }
@@ -310,10 +316,19 @@ extension ProjectSessionAudit {
             }
             let id = "send_" + finding.id
             routingIDs.append(id)
+            var blocked = Set(finding.reasons.map(\.rawValue))
+            var dependencies: [String] = []
+            var proposalReasons = proposalReadReasons
+            if let bus = finding.expected.bus {
+                let receiver = receiverRequirements(bus)
+                blocked.formUnion(receiver.blocked)
+                dependencies = receiver.dependencies
+                if blocked.contains("bus_receiver_unverified") { proposalReasons.insert("bus_receiver_unverified") }
+            }
             let proposal = try proposedExistingSend(finding: finding, graph: proposedGraph,
-                readReasons: proposalReadReasons, allowReplace: options.allowReplaceSend)
+                readReasons: proposalReasons, allowReplace: options.allowReplaceSend)
             recordRoutingPrefix(id, after: proposal.after)
-            var blocked = Set(finding.reasons.map(\.rawValue)).union(proposal.reasons)
+            blocked.formUnion(proposal.reasons)
             blocked.formUnion(["exact_target_send_adapter_unavailable", "send_preservation_adapter_unavailable"])
             reasons.formUnion(blocked)
             steps.append(.object([
@@ -323,7 +338,7 @@ extension ProjectSessionAudit {
                 "before": try finding.observed.map { try repairPlanValue($0) } ?? .null,
                 "after": try repairPlanValue(finding.expected),
                 "proposed_routing_diff": proposal.wire,
-                "dependencies": .array([]), "blocked_reasons": .array(blocked.sorted().map(Value.string)),
+                "dependencies": .array(dependencies.map(Value.string)), "blocked_reasons": .array(blocked.sorted().map(Value.string)),
                 "required_invariants": .array(["exact_strip_identity", "exact_send_slot_and_destination",
                     "preserved_send_scalars", "receiver_fanout", "protected_and_intermediate_audio_paths",
                     "channel_format_preservation", "sidechain_and_monitoring_preservation", "conditional_inverse_send"].map(Value.string))

@@ -784,6 +784,89 @@ struct Issue966ApprovedRoutingDiffTests {
         #expect(!executable)
     }
 
+    /// A newly approved receiver is a prerequisite of every send onto its bus, not of
+    /// unrelated send replacements or removals. This is a pure draft, never native creation.
+    @Test(arguments: ["new_receiver", "other_bus", "remove"])
+    func sendReceiverDependenciesOnlyBindTheApprovedDestination(_ action: String) throws {
+        let extraBus = RoutingNode(id: "another_bus", kind: .bus, displayName: "Same", busNumber: 7, targetRef: nil)
+        var es = edges().filter { $0.kind != .inputAssignment }
+        var sends: [Value] = [.object([
+            "target": .string("approved"), "physical_slot": .int(5),
+        ].merging(action == "remove" ? ["remove": .bool(true)]
+            : ["bus": .int(action == "new_receiver" ? 3 : 7)]) { _, new in new })]
+        if action == "new_receiver" {
+            es.append(RoutingEdge(kind: .send, source: "source_opaque", destination: "previous_opaque",
+                send: SendEdge(sourceTrackRef: source, physicalSlot: 6, destinationBusNumber: 4,
+                    destinationRef: nil, displayedName: "Same", level: -20, mode: "post-fader", enabled: true),
+                provenance: .axMixerStrip))
+            sends.append(.object(["target": .string("approved"), "physical_slot": .int(6), "bus": .int(3)]))
+        }
+        var options = Audit.PlanningOptions()
+        options.allowCreateAux = true
+        options.allowReplaceSend = true
+        let candidate = graph(nodes: nodes() + [extraBus], edges: es)
+        #expect(candidate.isConsistent)
+        let body = try plan(candidate, sends: sends, options: options, policyExtras: [
+            "receivers": .array([.object(["bus": .int(3), "aux": .string("new")])]),
+        ])
+        let steps = try #require(body["steps"]?.arrayValue)
+        let aux = try #require(steps.first?.objectValue)
+        #expect(aux["kind"]?.stringValue == "create_aux")
+        let auxID = try #require(aux["id"]?.stringValue)
+        let assignments = steps.dropFirst().compactMap(\.objectValue)
+        #expect(assignments.count == sends.count)
+        for step in assignments {
+            #expect(step["kind"]?.stringValue == "send_assignment")
+            let dependencies = try #require(step["dependencies"]?.arrayValue)
+            #expect(dependencies == (action == "new_receiver" ? [.string(auxID)] : []))
+        }
+        #expect(body["preview"] == body["steps"])
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+    }
+
+    @Test(arguments: ["disallowed", "unknown", "ask", "none", "present"])
+    func changedSendsRetainTheirReceiverDecision(_ situation: String) throws {
+        let es = situation == "present" ? edges() : edges().filter { $0.kind != .inputAssignment }
+        let partial = RoutingDomainCoverage(state: .partial, reasons: ["receiver inputs unread"])
+        let domains = RoutingCoverage(population: complete, stripTrackAssociation: complete,
+            mainOutput: complete, physicalOutput: complete,
+            busToAuxInput: situation == "unknown" ? partial : complete, sends: complete)
+        var extras: [String: Value] = [:]
+        if ["disallowed", "unknown", "none"].contains(situation) {
+            extras["receivers"] = .array([.object([
+                "bus": .int(3), "aux": .string(situation == "none" ? "none" : "new"),
+            ])])
+        }
+        var options = Audit.PlanningOptions()
+        options.allowCreateAux = situation != "disallowed"
+        options.allowReplaceSend = true
+        let body = try plan(graph(edges: es, coverage: domains), sends: [.object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3),
+        ])], options: options, policyExtras: extras)
+        let steps = try #require(body["steps"]?.arrayValue)
+        #expect(steps.count == 1)
+        let step = try #require(steps.first?.objectValue)
+        #expect(step["kind"]?.stringValue == "send_assignment")
+        #expect(step["dependencies"]?.arrayValue == [])
+        let blocked = try #require(step["blocked_reasons"]?.arrayValue)
+        if situation == "disallowed" {
+            #expect(blocked.contains(.string("receiving_aux_missing")))
+            #expect(blocked.contains(.string("create_aux_not_allowed")))
+        }
+        if situation == "unknown" { #expect(blocked.contains(.string("bus_receiver_unverified"))) }
+        let questions = try #require(body["receiver_questions"]?.arrayValue)
+        #expect(questions.count == (situation == "ask" ? 1 : 0))
+        if situation == "ask" {
+            let question = try #require(questions.first?.objectValue)
+            #expect(question["bus"]?.intValue == 3)
+            #expect(question["observed"]?.stringValue == "no_receiver")
+        }
+        #expect(body["steps"] == body["preview"])
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+    }
+
     @Test func approvedExactSendReplacementUsesOneCanonicalPreservingDiff() throws {
         var options = Audit.PlanningOptions()
         options.allowReplaceSend = true
