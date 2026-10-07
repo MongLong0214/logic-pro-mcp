@@ -59,11 +59,6 @@
       "candidate": "SongSettingsScore.strings 101232.title",
       "members": 2
     },
-    "tickSliderLabel": {
-      "verdict": "ambiguous",
-      "candidate": "5 candidate(s)",
-      "members": 2
-    },
     "trackContentGeneric": {
       "verdict": "ambiguous",
       "candidate": "3 candidate(s)",
