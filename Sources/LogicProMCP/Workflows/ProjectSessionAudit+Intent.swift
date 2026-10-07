@@ -108,6 +108,13 @@ extension ProjectSessionAudit {
         let inverseCriterion: TrackSortCriterion
     }
 
+    /// Preserve structural connectivity to this exact node in the bound routing capture. A node
+    /// ID is not a label, a guessed port, write authority, or a claim of audible signal.
+    struct IntentProtectedPath: Equatable, Hashable, Sendable {
+        let target: String
+        let sinkNodeID: String
+    }
+
     /// Only `parseIntentPolicy` constructs this, so `assessIntent` never sees an unvalidated policy.
     /// `projectRef`, when present, is the project the policy was written for.
     struct IntentPolicy: Equatable, Sendable {
@@ -122,6 +129,7 @@ extension ProjectSessionAudit {
         let receivers: [Int: IntentReceiver]
         let mixerVisible: Bool?
         let trackSort: IntentSort?
+        let protectedPaths: [IntentProtectedPath]
 
         fileprivate init(
             projectRef: TargetReference?,
@@ -131,7 +139,8 @@ extension ProjectSessionAudit {
             sends: [IntentSend] = [],
             receivers: [Int: IntentReceiver] = [:],
             mixerVisible: Bool? = nil,
-            trackSort: IntentSort? = nil
+            trackSort: IntentSort? = nil,
+            protectedPaths: [IntentProtectedPath] = []
         ) {
             self.projectRef = projectRef
             self.targets = targets
@@ -141,6 +150,7 @@ extension ProjectSessionAudit {
             self.receivers = receivers
             self.mixerVisible = mixerVisible
             self.trackSort = trackSort
+            self.protectedPaths = protectedPaths
         }
     }
 
@@ -174,6 +184,7 @@ extension ProjectSessionAudit {
         case sendRemovalMustBeTrue(path: String)
         case sendSlotOutOfRange(path: String, value: Int)
         case duplicateSend(target: String, slot: Int)
+        case invalidProtectedPath(path: String)
 
         /// The deterministic form the rejection list is sorted by.
         var sortKey: String {
@@ -218,6 +229,7 @@ extension ProjectSessionAudit {
             case .sendRemovalMustBeTrue(let path): return "send_removal_must_be_true \(path)"
             case .sendSlotOutOfRange(let path, let value): return "send_slot_out_of_range \(path) \(value)"
             case .duplicateSend(let target, let slot): return "duplicate_send \(target) \(slot)"
+            case .invalidProtectedPath(let path): return "invalid_protected_path \(path)"
             }
         }
     }
@@ -446,7 +458,7 @@ extension ProjectSessionAudit {
         var rejections: [IntentPolicyRejection] = []
         rejectUnknownKeys(
             object,
-            allowed: ["schema", "project_ref", "targets", "roles", "outputs", "sends", "receivers", "presentation"],
+            allowed: ["schema", "project_ref", "targets", "roles", "outputs", "sends", "receivers", "presentation", "protected_paths"],
             path: "policy",
             into: &rejections
         )
@@ -472,6 +484,7 @@ extension ProjectSessionAudit {
         let outputs = parseOutputs(object, into: &rejections)
         let sends = parseSends(object, targets: targets, into: &rejections)
         let receivers = parseReceivers(object, into: &rejections)
+        let protectedPaths = parseProtectedPaths(object, targets: targets, into: &rejections)
         var mixerVisible: Bool?
         var trackSort: IntentSort?
         if let raw = object["presentation"] {
@@ -504,8 +517,42 @@ extension ProjectSessionAudit {
             sends: sends,
             receivers: receivers,
             mixerVisible: mixerVisible,
-            trackSort: trackSort
+            trackSort: trackSort,
+            protectedPaths: protectedPaths
         ))
+    }
+
+    /// At most 64 explicit target/sink pairs; the graph, not this syntax, supplies their identity
+    /// and observation. Missing/foreign/duplicate constraints never disappear into a partial plan.
+    private static func parseProtectedPaths(_ object: [String: Value], targets: [IntentTarget],
+                                            into rejections: inout [IntentPolicyRejection]) -> [IntentProtectedPath] {
+        guard let raw = object["protected_paths"] else { return [] }
+        guard let entries = raw.arrayValue else {
+            rejections.append(.wrongType(path: "policy.protected_paths", expected: "array")); return []
+        }
+        guard entries.count <= 64 else {
+            rejections.append(.invalidProtectedPath(path: "policy.protected_paths")); return []
+        }
+        var result = Set<IntentProtectedPath>()
+        for (index, rawEntry) in entries.enumerated() {
+            let path = "policy.protected_paths[\(index)]"
+            guard let entry = rawEntry.objectValue else {
+                rejections.append(.wrongType(path: path, expected: "object")); continue
+            }
+            rejectUnknownKeys(entry, allowed: ["target", "sink_node_id"], path: path, into: &rejections)
+            guard let target = requiredString(entry, key: "target", path: path, into: &rejections),
+                  let sink = requiredString(entry, key: "sink_node_id", path: path, into: &rejections) else { continue }
+            guard targets.contains(where: { $0.handle == target }) else {
+                rejections.append(.unknownSubject(path: path, subject: target)); continue
+            }
+            guard isValidHandle(sink) else {
+                rejections.append(.invalidProtectedPath(path: path)); continue
+            }
+            guard result.insert(.init(target: target, sinkNodeID: sink)).inserted else {
+                rejections.append(.invalidProtectedPath(path: path)); continue
+            }
+        }
+        return result.sorted { $0.target == $1.target ? $0.sinkNodeID < $1.sinkNodeID : $0.target < $1.target }
     }
 
     private static func parseIntentSort(_ value: Value, into rejections: inout [IntentPolicyRejection]) -> IntentSort? {
