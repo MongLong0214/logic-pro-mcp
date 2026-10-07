@@ -278,20 +278,34 @@ enum AXLocalePolicy {
     ///
     /// Both English forms are listed because the reveal must FIND the item in either state; which
     /// one is present is what tells it whether a click is needed. The Korean form is the one this
-    /// label shipped with before that change. Japanese is deliberately absent rather than guessed:
-    /// the only ja string available is the same stale census reading.
+    /// label shipped with before that change. Additional discovery values below are the shipped
+    /// dynamic Show/Hide action rows, not a claim that a stale census qualified their direction.
     static let showMixerMenuItem = LabelSet(
         canonical: "Show Mixer",
-        variants: ["Hide Mixer", "믹서 보기"],
-        rationale: "Used only as a best-effort mixer reveal before structural mixer readback."
+        variants: ["Hide Mixer", "믹서 보기", "믹서 가리기", "Mixer einblenden", "Mixer ausblenden",
+                   "Mostrar mezclador", "Ocultar mezclador", "Afficher la table de mixage", "Masquer la table de mixage",
+                   "Mostra mixer", "Nascondi mixer", "ミキサーを表示", "ミキサーを非表示", "Mostrar Mixer", "Ocultar Mixer",
+                   "显示混音器", "隐藏混音器", "顯示混音器", "隱藏混音器"],
+        rationale: "Discovers the dynamic Mixer action before structural readback. The MAMobileGeneralUI Show/Hide Mixer keys describe exactly the two actions read on the opened EN/KO desktop menu; bare Mixer and preferences rows do not. Shipped additional discovery values do not establish native ten-locale navigation or restoration.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMobileGeneralUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Show%20Mixer#value",
+        alsoDerivedFrom: ["logic-canon://strings/Contents%2FFrameworks%2FMAMobileGeneralUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Hide%20Mixer#value"]
     )
 
-    /// The existing first variant owns the known English Hide direction. The Korean
-    /// discovery variant does not establish a direction and is deliberately not projected.
-    static var mixerMenuHideDirection: LabelSet {
-        .init(canonical: showMixerMenuItem.variants[0], variants: [],
-              rationale: showMixerMenuItem.rationale)
-    }
+    /// Discovery and direction are distinct: a known opposite action never authorizes the leaf.
+    static let mixerMenuShowDirection = LabelSet(
+        canonical: "Show Mixer",
+        variants: ["믹서 보기", "Mixer einblenden", "Mostrar mezclador", "Afficher la table de mixage",
+                   "Mostra mixer", "ミキサーを表示", "Mostrar Mixer", "显示混音器", "顯示混音器"],
+        rationale: "Own dynamic Show Mixer action direction, from the same action row as discovery. Native locale/navigation scope is unchanged.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMobileGeneralUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Show%20Mixer#value"
+    )
+    static let mixerMenuHideDirection = LabelSet(
+        canonical: "Hide Mixer",
+        variants: ["믹서 가리기", "Mixer ausblenden", "Ocultar mezclador", "Masquer la table de mixage",
+                   "Nascondi mixer", "ミキサーを非表示", "Ocultar Mixer", "隐藏混音器", "隱藏混音器"],
+        rationale: "Own dynamic Hide Mixer action direction, from the same action row as discovery. Native locale/navigation scope is unchanged.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMobileGeneralUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Hide%20Mixer#value"
+    )
 
     static let windowMenuBar = LabelSet(
         canonical: "Window",
@@ -1475,7 +1489,7 @@ enum AXLocalePolicy {
     static let saveConfirmationButton = LabelSet(
         canonical: "Save",
         variants: ["저장", "OK", "확인"],
-        rationale: "Save As dialog commit button; file existence verifies the result."
+        rationale: "Retained scoped Save As commit-button family (exact match): Save/OK are alternatives on the structurally classified panel, and file existence verifies the result. Neither an unrelated Save/OK row among the corpus candidates nor the panel-window title establishes both button providers. No additional locale member or derivability claim is made."
     )
 
     /// The channel configurations a stock plug-in can be inserted as, in the order tried.
@@ -1684,8 +1698,12 @@ enum AXLocalePolicy {
 
     static let playheadPositionFieldLabel = LabelSet(
         canonical: "position",
-        variants: ["재생헤드 위치"],
-        rationale: "Identifies the playhead position text field description; read-only."
+        variants: ["playhead position", "재생헤드 위치", "再生ヘッドの位置", "Position der Abspielposition",
+                   "Posición del cursor de reproducción", "Position de la tête de lecture",
+                   "Posizione testina di riproduzione", "Posição do Cursor de Reprodução",
+                   "播放头位置", "播放磁頭位置"],
+        rationale: "Identifies the playhead position text field description; read-only. Uses the existing Playhead Position group's Logic.framework row, not the unrelated Live Loops start-position choice. The generic English position containment tolerance and original Korean reading remain. Static derivation does not establish native text-field publication in every locale.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Playhead%20Position#value"
     )
 
     /// The Japanese form is `再生ヘッドの位置`, WITH the `の`. `再生ヘッド位置`
@@ -2015,7 +2033,7 @@ enum AXLocalePolicy {
     static let automationModeTrim = LabelSet(
         canonical: "trim",
         variants: ["트림"],
-        rationale: "Classifies the track-header automation mode as Trim; read-only classifier."
+        rationale: "Retained automation-mode value tokens after automation-context gating; read-only. The reader tokenizes description/title/value, not AXHelp. The whole QuickHelp Automation Mode Trim Title and unrelated Trim editing/Controller Assignments rows do not establish this popup value; its own value provider remains unidentified. No translated mode is guessed."
     )
     static let automationModeTouch = LabelSet(
         canonical: "touch",
@@ -2051,7 +2069,7 @@ enum AXLocalePolicy {
     static let settingPopupValue = LabelSet(
         canonical: "Preset",
         variants: ["프리셋", "Default", "기본"],
-        rationale: "Identifies the plugin Setting AXPopUpButton by its value substring; read-only locator."
+        rationale: "Retained case-sensitive substrings of the plug-in AXPopUpButton VALUE, which can be an arbitrary preset name; read-only locator. A Setting control title or an unrelated Default/Preset row is not authority for those names. The four existing fragments remain compatibility, not a claim of localized preset-name completeness."
     )
 
     // MARK: - Read-only heuristic token bags (Phase 3, issue #60)
@@ -2164,18 +2182,30 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTabBtnLabel%7C%7C%7CControl%20Bar#value"
     )
 
-    /// Transport control-button label tokens (≥2 distinct hits ⇒ transport bar).
-    static let transportContainerControlKeywords = LabelSet(
-        canonical: "play",
-        variants: ["stop", "record", "cycle", "loop", "metronome", "rewind", "forward",
-                   "재생", "녹음", "사이클", "메트로놈", "클릭",
-                   "再生", "録音", "サイクル", "メトロノーム", "クリック"],
-        rationale: "Counts distinct transport-control labels to classify the control bar; read-only."
+    /// Read-only container evidence for the three remaining transport-button families.
+    /// Play, Record, Cycle and Metronome reuse their existing authorities at the consumer.
+    static let transportStopControl = LabelSet(
+        canonical: "stop",
+        variants: ["정지", "停止", "Stoppen", "Detener", "Interrompi", "Para"],
+        rationale: "Identifies the Stop family for read-only transport-container classification. Values read from Logic 12.3 (6674) StrTransportBtns|||Stop; the existing lowercase English containment tolerance is retained. Static derivation is not runtime qualification.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTransportBtns%7C%7C%7CStop#value"
+    )
+    static let transportRewindControl = LabelSet(
+        canonical: "rewind",
+        variants: ["되감기", "早戻し", "Zurückspulen", "Retroceder", "Rembobinage", "Indietro", "Retrocede", "倒回", "倒轉"],
+        rationale: "Identifies the Rewind family for read-only transport-container classification. Values read from Logic 12.3 (6674) StrTransportBtns|||Rewind; the existing lowercase English containment tolerance is retained. Static derivation is not runtime qualification.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTransportBtns%7C%7C%7CRewind#value"
+    )
+    static let transportForwardControl = LabelSet(
+        canonical: "forward",
+        variants: ["앞으로", "早送り", "Vorspulen", "Adelante", "Avance", "Avanti", "Avança", "前进", "往前"],
+        rationale: "Identifies the Forward family for read-only transport-container classification. Values read from Logic 12.3 (6674) StrTransportBtns|||Forward; the existing lowercase English containment tolerance is retained. Static derivation is not runtime qualification.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTransportBtns%7C%7C%7CForward#value"
     )
 
     /// Labels that carry a transport keyword without being a transport control.
     ///
-    /// `transportContainerControlKeywords` matches with `contains`, which is required: Korean and
+    /// Transport control authorities match with `contains`, which is required: Korean and
     /// Japanese labels have no word boundaries, so `재생헤드` can only be reached by substring. The
     /// cost is that short generic words match unrelated controls, and two of them put the ARRANGE
     /// AREA into `looksLikeTransportContainer` — measured 2026-08-21, Logic 12.3:
@@ -2199,16 +2229,42 @@ enum AXLocalePolicy {
     /// Korean would miss labels that stay English inside a Korean UI, and a guard written only in
     /// English would miss `재생헤드 캐치`. Both halves were read off a live window.
     ///
-    /// ja-JP is NOT here. Nobody has read these labels off a Japanese Logic, and the ship scope is
-    /// Desktop × {en-US, ko-KR}. Inventing them is the defect #519 exists to remove.
+    /// The additional locale members below come from the six named shipped rows, not a native
+    /// qualification campaign. The original EN/KO spellings remain compatibility tolerances.
+    /// English value: Playhead thumb
+    /// English value: Loop Browser
+    /// English value: Session Player
+    /// English value: Show/Hide Live Loops Grid
+    /// English value: Live Loops Grid
     static let transportKeywordFalseFriends = LabelSet(
         canonical: "catch playhead",
         variants: ["playhead position", "playhead thumb", "loop browser", "session player",
                    "show/hide live loops grid", "live loops grid",
                    "재생헤드 캐치", "재생헤드 위치", "재생헤드 썸네일", "루프 브라우저",
-                   "live loop 그리드 보기/가리기"],
+                   "live loop 그리드 보기/가리기",
+                   "Abspielposition folgen", "Seguir cursor al reproducir", "Capturer la tête de lecture",
+                   "Segui testina di riproduzione", "再生ヘッドをキャッチします", "Seguir o cursor de reprodução",
+                   "跟随播放头", "抓取播放磁頭", "Symbol der Abspielposition", "Cuadro de cursor de reproducción",
+                   "Barre de défilement de la tête de lecture", "Testina di riproduzione", "再生ヘッドのつまみ",
+                   "Miniatura do cursor de reprodução", "播放头缩略图", "播放磁頭指標", "Loop-Übersicht",
+                   "Explorador de loops", "Navigateur de boucles", "Browser Loop", "ループブラウザ",
+                   "Navegador de Loops", "循环浏览器", "循環樂段瀏覽器", "Session Player", "伴奏乐手",
+                   "Live Loops-Raster ein-/ausblenden", "Mostrar/ocultar parrilla de Live Loops",
+                   "Afficher/Masquer la grille des Live Loops", "Mostra/nascondi griglia Live Loops",
+                   "Live Loopsグリッドを表示/非表示", "Live Loop 그리드 보기/가리기",
+                   "Mostrar/Ocultar Grade de Live Loops", "显示/隐藏实时循环乐段网格", "顯示/隱藏即時循環樂段格線",
+                   "Live Loops-Raster", "Parrilla de Live Loops", "Grille des Live Loops", "Griglia Live Loops",
+                   "Live Loopsグリッド", "Live Loop 그리드", "Grade de Live Loops", "实时循环乐段网格", "即時循環樂段格線"],
         rationale: "Negative guard: labels carrying a transport keyword that are not transport "
-            + "controls. Measured en-US and ko-KR on Logic 12.3; read-only."
+            + "controls. Original EN/KO members were measured on Logic 12.3; additional members are the shipped values of the six own-control rows below. Playhead Position remains a compatibility member and is independently excluded through playheadPositionGroupLabel. Containment tolerances remain; no additional native locale qualification is claimed.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Catch%20Playhead#value",
+        alsoDerivedFrom: [
+            "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Playhead%20thumb#value",
+            "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Loop%20Browser%23acc#value",
+            "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Session%20Player#value",
+            "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Show%2FHide%20Live%20Loops%20Grid#value",
+            "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Live%20Loops%20Grid#value"
+        ]
     )
 
     // MARK: - Read-only classifier token bags (Phase 4, issue #60)
@@ -2315,10 +2371,16 @@ enum AXLocalePolicy {
             + " these values are not newly measured localized AX readings.",
         derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_011_SendLevelKnob#Title"
     )
+    /// English value: Vertical Zoom
     static let sliderZoomHint = LabelSet(
         canonical: "zoom",
-        variants: ["확대"],
-        rationale: "Classifies a slider as a zoom control; read-only."
+        variants: ["확대", "Horizontal Zoom", "Vertical Zoom", "Horizontal-Zoom", "Vertikal-Zoom",
+                   "Zoom horizontal", "Zoom vertical", "Zoom orizzontale", "Zoom verticale",
+                   "横方向にズーム", "縦方向にズーム", "수평 확대/축소", "수직 확대/축소",
+                   "水平缩放", "垂直缩放", "水平縮放", "垂直縮放"],
+        rationale: "Negative exclusion of own horizontal/vertical zoom sliders from volume/pan selection. Composes the two Logic own-slider rows, corroborated by archived own AXSlider description/help (the horizontal row also names horizontalZoomSlider). The original zoom/확대 containment fragments remain. Score Settings Enlarged is an unrelated checkbox title, not this authority; no additional native qualification is claimed.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Horizontal%20Zoom#value",
+        alsoDerivedFrom: ["logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Vertical%20Zoom#value"]
     )
     static let sliderVolumeHint = LabelSet(
         canonical: "volume",
@@ -2521,15 +2583,28 @@ enum AXLocalePolicy {
     /// the call site falls through to `isLanguageNeutralEmptyAudioPluginSlot`,
     /// which is substantial enough that the label may never have been
     /// load-bearing, and that was not measured.
+    /// English value: Audio Effect slot
     static let audioPluginSlotLabel = LabelSet(
         canonical: "audio plug-in",
-        variants: ["audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン"],
-        rationale: "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists)."
+        variants: ["audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン", "Audio-Plug-in",
+                   "módulo de audio", "plugin audio", "音频插件", "音訊外掛模組", "module audio", "plug-in de áudio",
+                   "Audio Effect slot", "Audioeffekt-Slot", "Ranura de efectos de audio", "Slot d’effet audio\u{00A0}",
+                   "オーディオエフェクトスロット", "오디오 이펙트 슬롯", "音频效果插槽"],
+        rationale: "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists). MAMixer's audio plug-in row matches the archived own EN/KO/JA/DE empty-button descriptions; INS_009_InsertSlot Title supplies that button's own Audio Effect help. Legacy fragments remain containment tolerances. This is not plug-in-editor label authority or additional native locale qualification.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMixer.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/audio%20plug-in#value",
+        alsoDerivedFrom: ["logic-canon://quickhelp/QuickHelp/en/INS_009_InsertSlot#Title"]
     )
     static let sendOrIOControlLabel = LabelSet(
         canonical: "send",
-        variants: ["센드", "input", "output", "입력", "출력"],
-        rationale: "Excludes send/IO buttons from empty audio-plugin slot detection; read-only."
+        variants: ["센드", "input", "output", "입력", "출력", "Send slot", "센드 슬롯", "センドスロット",
+                   "Send-Slot", "Ranura de envío", "Slot d’envoi\u{00A0}", "发送插槽", "Input slot", "입력 슬롯",
+                   "入力スロット", "Input-Slot", "Ranura de entrada", "Slot d’entrée\u{00A0}", "输入插槽",
+                   "Output slot", "출력 슬롯", "出力スロット", "Output-Slot", "Ranura de salida",
+                   "Slot de sortie\u{00A0}", "输出插槽"],
+        rationale: "Excludes send/IO buttons from empty audio-plugin slot detection and external-MIDI classification; read-only. Composes the same three own QuickHelp Title authorities used by the routing readers. All six original fragments remain negative containment tolerances, not independent row values or endpoint identity.",
+        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_010_SendSlot#Title",
+        alsoDerivedFrom: ["logic-canon://quickhelp/QuickHelp/en/INS_012_InputSlot#Title",
+                          "logic-canon://quickhelp/QuickHelp/en/INS_014_OutputSlot#Title"]
     )
 
     /// Negative-case table: button labels that are NOT empty insert slots.
@@ -2542,7 +2617,7 @@ enum AXLocalePolicy {
             "monitor", "모니터링", "volume", "볼륨", "fader", "페이더",
             "pan", "패닝", "밸런스",
         ],
-        rationale: "Negative-case table excluding non-insert channel-strip buttons from empty-slot enumeration; read-only."
+        rationale: "Retained measured compound negative fragments excluding non-insert channel-strip buttons from empty-slot enumeration; case-insensitive containment of the own aggregate. These 29 fragments span routing, setting, meters and controls, not one Record menu row. The three qualified own routing-help predicates additionally exclude translated routing slots. No single-row derivation or completeness for every translated control is claimed."
     )
 
     /// Track-type classification tokens (read-only; `inferTrackType`). Centralized
@@ -2575,8 +2650,9 @@ enum AXLocalePolicy {
     )
     static let trackTypeDrummer = LabelSet(
         canonical: "drummer",
-        variants: [],
-        rationale: "Classifies a drummer track; read-only classifier."
+        variants: ["鼓手"],
+        rationale: "Classifies a drummer track by the shipped Logic Drummer noun; read-only header classifier. The lowercase English containment tolerance remains; this does not establish track/strip association or native locale qualification.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Drummer#value"
     )
     static let trackTypeExternalMIDI = LabelSet(
         canonical: "external",
@@ -2587,8 +2663,9 @@ enum AXLocalePolicy {
     )
     static let trackTypeAux = LabelSet(
         canonical: "aux",
-        variants: [],
-        rationale: "Classifies an aux track; read-only classifier."
+        variants: ["Aux.", "辅助"],
+        rationale: "Classifies an aux track by the shipped Logic Aux noun, also used by mixerTypeFilterAux. The existing lowercase containment tolerance remains; this is not track/strip association or native locale qualification.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Aux#value"
     )
     static let trackTypeBus = LabelSet(
         canonical: "bus",
@@ -2600,7 +2677,7 @@ enum AXLocalePolicy {
     static let trackTypeMaster = LabelSet(
         canonical: "master",
         variants: ["stereo out"],
-        rationale: "Classifies the master / stereo-out track; read-only classifier."
+        rationale: "Retained Master/Stereo Out header-aggregate fragments; read-only classifier. The matching Bass Amp Master candidate names a plug-in parameter, not this header/default-output name. A plain Master row alone also cannot establish the Stereo Out name provider or distinguish a user-assigned name. No new track/strip association or translated default name is inferred."
     )
 
     /// Track-header pan slider locator (header-level).
@@ -2703,14 +2780,17 @@ enum AXLocalePolicy {
     static let trackContentGeneric = LabelSet(
         canonical: "콘텐츠",
         variants: ["content", "contents"],
-        rationale: "Generic content-group fallback by normalized description; read-only classifier."
+        rationale: "Retained generic content-group fallback by normalized whole description, distinct from the derived explicit Tracks contents composition. The archived Japanese surface has no generic コンテンツ group; menu/help occurrences do not establish one. No generic Japanese member is invented, and the measured English/Korean fallback remains."
     )
 
     /// Region-kind classification by name+help substring.
+    /// English value: Session Player
     static let regionKindDrummer = LabelSet(
         canonical: "drummer",
-        variants: ["session player", "드러머", "세션 플레이어"],
-        rationale: "Classifies a region as drummer/session-player content; read-only."
+        variants: ["session player", "드러머", "세션 플레이어", "Session Player", "鼓手", "伴奏乐手"],
+        rationale: "Classifies a drummer / session-player region from its own name/help; read-only. The two Logic noun rows supply shipped locale values; existing Korean and English containment fragments remain. This does not infer region ancestry, a track/strip association, or native locale qualification.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Drummer#value",
+        alsoDerivedFrom: ["logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Session%20Player#value"]
     )
     static let regionKindMidi = LabelSet(
         canonical: "midi",
@@ -2990,8 +3070,10 @@ enum AXLocalePolicy {
     /// slot either.
     static let assignControlHelpKeyword = LabelSet(
         canonical: "assign control",
-        variants: [],
-        rationale: "Marks an external-MIDI strip's controller-assignment rows; read-only classifier."
+        variants: ["할당 컨트롤", "コントロールを割り当てる", "Steuerung zuweisen", "Asignar control",
+                   "Commande Assignation\u{00A0}", "分配控制"],
+        rationale: "Marks an external-MIDI strip's own controller-assignment help. INS_092_AssignControl Title supplies the measured English help and the shipped locale titles; the French trailing NBSP is normalized as in the existing QuickHelp corpus. Absence still requires a readable child list; no additional native locale qualification is claimed.",
+        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/INS_092_AssignControl#Title"
     )
 
     /// Japanese measured 2026-09-06 from the ja-JP arrange-regions census: Logic's help string for
@@ -3396,6 +3478,7 @@ enum AXLocalePolicy {
         pluginWindowControlsViewMenuItem,
         pluginWindowEditorViewMenuItem,
         showMixerMenuItem,
+        mixerMenuShowDirection, mixerMenuHideDirection,
         windowMenuBar,
         hideAllPluginWindowsMenuItem,
         showStepInputKeyboardMenuItem,
@@ -3530,7 +3613,9 @@ enum AXLocalePolicy {
         showLibraryMenuItem,
         libraryPanelLabel,
         transportContainerMetadata,
-        transportContainerControlKeywords,
+        transportStopControl,
+        transportRewindControl,
+        transportForwardControl,
         transportKeywordFalseFriends,
         mixerInspectorContext,
         mixerNamedElement,

@@ -213,6 +213,30 @@ struct Issue519NavigateMenuDriveSiteTests {
 
 @Suite("#519 File menu-drive sites route through AXLocalePolicy")
 struct Issue519FileMenuDriveSiteTests {
+    @Test("the secondary MIDI import traversal uses the existing localized panel and commit names")
+    func midiImportSecondaryTraversalUsesLocalizedNames() async throws {
+        let path = NSTemporaryDirectory() + "issue904-\(UUID().uuidString).mid"
+        FileManager.default.createFile(atPath: path, contents: Data([0x4D, 0x54, 0x68, 0x64]))
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let probe = MenuScriptProbe()
+        _ = await AccessibilityChannel.defaultImportMIDIFile(
+            systemEventsAuthorized: { true }, path: path,
+            executeScript: { script in
+                probe.capture(script)
+                return .success(#"{"result":"MENU_ERROR: not found"}"#)
+            }, trackCount: { 0 }, trackNames: { [] },
+            regionInfos: { .success([], complete: false) }, deltaPoll: {})
+        let start = try #require(probe.script.range(of: "if importClicked is false then"))
+        let end = try #require(probe.script.range(of: "if importClicked then exit repeat", range: start.upperBound..<probe.script.endIndex))
+        let secondary = String(probe.script[start.upperBound..<end.lowerBound])
+        // Actual emitted script only; the injected executor never runs System Events.
+        // The same existing German panel/button row is needed by the secondary path.
+        #expect(secondary.contains("\"Importieren\""))
+        #expect(!secondary.contains("first window whose name is \"Import\""))
+        #expect(!secondary.contains("button \"Import\" of"))
+        #expect(secondary.contains("enabled of ib"))
+    }
+
     @Test("File > Bounce script resolves File/Bounce from LabelSets, reaching the already-recorded Japanese File variant")
     func bounceMenuScriptCoversVariants() async {
         let probe = MenuScriptProbe()

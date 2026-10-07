@@ -115,6 +115,46 @@ private func slots(_ children: [AXUIElement], _ b: FakeAXRuntimeBuilder) -> [AXL
     #expect(b.actionCalls.isEmpty)
 }
 
+@Test func frenchOwnAudioEffectHelpIdentifiesTheEmptyInsert() {
+    let b = FakeAXRuntimeBuilder()
+    let insert = button(b, 904930, y: 400, height: 18, description: "", help: "Slot d’effet audio")
+    let read = slots([insert], b)
+    // No adjacent geometry fallback. INS_009's own help must identify this button.
+    #expect(read.count == 1)
+    #expect(read.contains { CFEqual($0.element, insert) && $0.index == 0 && $0.isEmpty })
+    #expect(b.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["Muet", "静音", "独奏", "Solo"])
+func translatedMuteAndSoloNeverConsumeAnInsertIndex(description: String) {
+    let b = FakeAXRuntimeBuilder()
+    let genuine = [
+        button(b, 904941, y: 400, height: 18, description: ""),
+        button(b, 904942, y: 418, height: 18, description: ""),
+        button(b, 904943, y: 436, height: 18, description: ""),
+    ]
+    // These are literal shipped own-control values, not policy-generated expectations.
+    // The 58 px geometry is synthetic: archived native mute/solo buttons were only 28 px wide.
+    let control = button(b, 904944, y: 454, height: 18, description: description)
+    let read = slots(genuine + [control], b)
+    #expect(read.count == 3)
+    #expect(!read.contains { CFEqual($0.element, control) })
+    #expect(read.map(\.index) == [0, 1, 2])
+    for (index, element) in genuine.enumerated() {
+        #expect(read.contains { CFEqual($0.element, element) && $0.index == index && $0.isEmpty })
+    }
+    #expect(b.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["Slot d’entrée", "Slot de sortie", "Slot d’envoi"])
+func translatedRoutingHelpCannotPassTheAudioSlotFastPath(help: String) {
+    let b = FakeAXRuntimeBuilder()
+    let routing = button(b, 904931, y: 400, height: 18, description: "audio effect", help: help)
+    // A legacy positive description cannot overrule the button's own observed routing help.
+    #expect(slots([routing], b).isEmpty)
+    #expect(b.actionCalls.isEmpty)
+}
+
 @Test(arguments: ["Input slot", "Output slot", "Send slot", "입력 슬롯", "출력 슬롯", "센드 슬롯",
                   "Slot d’entrée", "Slot de sortie", "Slot d’envoi"])
 func ownRoutingSlotHelpNeverConsumesAnInsertIndex(_ help: String) {

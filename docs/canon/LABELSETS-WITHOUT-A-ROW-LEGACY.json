@@ -4,16 +4,6 @@
   "counted_on": "2026-09-20",
   "total_labelsets": 195,
   "undeclared": {
-    "assignControlHelpKeyword": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 1
-    },
-    "audioPluginSlotLabel": {
-      "verdict": "ambiguous",
-      "candidate": "2 candidate(s)",
-      "members": 5
-    },
     "automationModeTrim": {
       "verdict": "no-row",
       "candidate": "0 candidate(s)",
@@ -24,70 +14,25 @@
       "candidate": "Localizable.strings Record#mti via #mti",
       "members": 29
     },
-    "playheadPositionFieldLabel": {
-      "verdict": "ambiguous",
-      "candidate": "3 candidate(s)",
-      "members": 2
-    },
-    "regionKindDrummer": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 4
-    },
     "saveConfirmationButton": {
       "verdict": "ambiguous",
       "candidate": "88 candidate(s)",
       "members": 4
-    },
-    "sendOrIOControlLabel": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Enter#key via #key",
-      "members": 6
     },
     "settingPopupValue": {
       "verdict": "ambiguous",
       "candidate": "18 candidate(s)",
       "members": 4
     },
-    "showMixerMenuItem": {
-      "verdict": "ambiguous",
-      "candidate": "2 candidate(s)",
-      "members": 3
-    },
-    "sliderZoomHint": {
-      "verdict": "value",
-      "candidate": "SongSettingsScore.strings 101232.title",
-      "members": 2
-    },
     "trackContentGeneric": {
       "verdict": "ambiguous",
       "candidate": "3 candidate(s)",
       "members": 3
     },
-    "trackTypeAux": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 1
-    },
-    "trackTypeDrummer": {
-      "verdict": "no-row",
-      "candidate": "0 candidate(s)",
-      "members": 1
-    },
     "trackTypeMaster": {
       "verdict": "value",
       "candidate": "Localizable.strings ChineseOnly_TI_BassAmpLabel_Master_lowercase",
       "members": 2
-    },
-    "transportContainerControlKeywords": {
-      "verdict": "ambiguous",
-      "candidate": "48 candidate(s)",
-      "members": 18
-    },
-    "transportKeywordFalseFriends": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings Loop Browser#acc via #acc",
-      "members": 12
     }
   },
   "why_these_three_arrived_late": "Added 2026-09-20. They are not new LabelSets: they named no row before this branch too, and `check-labelset-census-only-shrinks.py` could not see them because its own parser took the end of a declaration to be the next `\\n    )` in the file. It reads the policy through `check-labelsets-are-derived.py`'s parser now. For contrast, the two Event List columns that DO name a row: `eventListColumnTrack` derives from logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Trk#value (`Trk`), and `eventListColumnLength` from the same table's `Length#und`. One row, all ten locales, nothing typed -- which is what these three cannot do yet. CLOSED 2026-09-20, the same day: all three name their row now. The Event List builds its columns in code -- no nib in the bundle names `EventListView` -- and `-[EventListView columnTitle:forMenu:]` looks each header up in Logic.framework's own Localizable.strings under `M`, `Position` and `Name`. Read from the shipped binary, not chosen because a value matched: docs/observations/2026-09-20-the-event-list-names-its-columns-in-code.json."

@@ -1013,7 +1013,7 @@ enum AXLogicProElements {
 
     // internal (not private): called cross-file from the +Transport extension (WS3 AC1 split).
 
-    /// Distinct transport keywords found on this container's own controls, false friends excluded.
+    /// Distinct transport-control families on this container's own controls, false friends excluded.
     ///
     /// Extracted so the composition in `getTransportBar` can ask the CAPABILITY question — "does a
     /// transport control actually live in here" — with the same code that answers it inside
@@ -1028,7 +1028,6 @@ enum AXLogicProElements {
         in element: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Set<String> {
-        let transportKeywords = AXLocalePolicy.transportContainerControlKeywords.labels.map { $0.lowercased() }
         let controls = AXHelpers.findAllDescendants(of: element, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
             + AXHelpers.findAllDescendants(of: element, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime)
         return controls.reduce(into: Set<String>()) { hits, control in
@@ -1050,9 +1049,23 @@ enum AXLogicProElements {
             // lookup at all. Restructuring the code is the honest fix; raising a ratchet for a false
             // positive is not, and neither is loosening the detector to accommodate one caller.
             let isFalseFriend = AXLocalePolicy.transportKeywordFalseFriends.containsAny(in: label)
+                || AXLocalePolicy.playheadPositionGroupLabel.containsAny(in: label)
+                || (AXLocalePolicy.transportRecordControl.containsAny(in: label)
+                    && AXLocalePolicy.transportRecordArmExclusion.containsAny(in: label))
             if !isFalseFriend {
-                for keyword in transportKeywords where label.contains(keyword) {
-                    hits.insert(keyword)
+                // Synonyms such as Cycle/Loop or Japanese Metronome/Click on one
+                // control supply one capability, not two independent transport controls.
+                let families: [(String, Bool)] = [
+                    ("play", AXLocalePolicy.transportPlayControl.containsAny(in: label)),
+                    ("record", AXLocalePolicy.transportRecordControl.containsAny(in: label)),
+                    ("cycle", AXLocalePolicy.transportCycleControl.containsAny(in: label)),
+                    ("metronome", AXLocalePolicy.transportMetronomeControl.containsAny(in: label)),
+                    ("stop", AXLocalePolicy.transportStopControl.containsAny(in: label)),
+                    ("rewind", AXLocalePolicy.transportRewindControl.containsAny(in: label)),
+                    ("forward", AXLocalePolicy.transportForwardControl.containsAny(in: label))
+                ]
+                for (family, matches) in families where matches {
+                    hits.insert(family)
                 }
             }
         }

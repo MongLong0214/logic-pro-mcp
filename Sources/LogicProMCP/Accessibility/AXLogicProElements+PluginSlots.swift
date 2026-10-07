@@ -473,6 +473,8 @@ extension AXLogicProElements {
 
     private static func isKnownNonInsertButtonText(_ text: String) -> Bool {
         AXLocalePolicy.nonInsertButtonText.containsAny(in: text)
+            || AXLocalePolicy.trackMuteButton.containsAny(in: text)
+            || AXLocalePolicy.trackSoloButton.containsAny(in: text)
             || AXLocalePolicy.inputSlotHelpKeyword.containsAny(in: text)
             || AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: text)
             || AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: text)

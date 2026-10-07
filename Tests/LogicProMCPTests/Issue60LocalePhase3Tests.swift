@@ -27,14 +27,21 @@ struct Issue60LocalePhase3Tests {
 
     @Test("transport control keywords preserve the full EN + KO + JA token set")
     func transportControlKeywords() {
-        let labels = Set(AXLocalePolicy.transportContainerControlKeywords.labels)
-        // The exact set the inline literal carried (order-independent).
+        let b = FakeAXRuntimeBuilder()
         let expected: Set<String> = [
             "play", "stop", "record", "cycle", "loop", "metronome", "rewind", "forward",
             "재생", "녹음", "사이클", "메트로놈", "클릭",
             "再生", "録音", "サイクル", "メトロノーム", "クリック",
         ]
-        #expect(labels == expected, "token set drifted: \(labels.symmetricDifference(expected))")
+        for (index, label) in expected.sorted().enumerated() {
+            let group = b.element(904960 + index * 2), button = b.element(904961 + index * 2)
+            b.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+            b.setAttribute(button, kAXRoleAttribute as String, kAXButtonRole as String)
+            b.setAttribute(button, kAXDescriptionAttribute as String, label)
+            b.setChildren(group, [button])
+            #expect(AXLogicProElements.transportControlKeywordHits(
+                in: group, runtime: b.makeAXRuntime()).count == 1, "legacy control \(label)")
+        }
     }
 
     @Test("reused transport slider authorities preserve all legacy EN + KO hints")
@@ -61,7 +68,10 @@ struct Issue60LocalePhase3Tests {
         let bags: [(String, AXLocalePolicy.LabelSet)] = [
             ("markerContainerKeywords", AXLocalePolicy.markerContainerKeywords),
             ("transportContainerMetadata", AXLocalePolicy.transportContainerMetadata),
-            ("transportContainerControlKeywords", AXLocalePolicy.transportContainerControlKeywords),
+            ("transportPlayControl", AXLocalePolicy.transportPlayControl),
+            ("transportRecordControl", AXLocalePolicy.transportRecordControl),
+            ("transportCycleControl", AXLocalePolicy.transportCycleControl),
+            ("transportMetronomeControl", AXLocalePolicy.transportMetronomeControl),
             ("tempoSliderLabel", AXLocalePolicy.tempoSliderLabel),
             ("playheadPositionFieldLabel", AXLocalePolicy.playheadPositionFieldLabel),
             ("barSliderLabel", AXLocalePolicy.barSliderLabel),

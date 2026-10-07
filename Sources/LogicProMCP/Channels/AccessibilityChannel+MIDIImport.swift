@@ -443,9 +443,25 @@ extension AccessibilityChannel {
                         end try
                         if importClicked is false then
                             try
-                                set importDlg to first window whose name is "Import"
+                                -- The compatibility traversal must use the same localized
+                                -- names as the primary walk, not an English-only second path.
+                                set importDlg to missing value
+                                repeat with fallbackWindow in windows
+                                    if (name of fallbackWindow) is in {\(importPanelWindowPredicate)} then
+                                        set importDlg to fallbackWindow
+                                        exit repeat
+                                    end if
+                                end repeat
+                                if importDlg is missing value then error "NO_IMPORT_PANEL"
                                 set sawPanel to true
-                                set ib to button "Import" of UI element 1 of importDlg
+                                set ib to missing value
+                                repeat with fallbackButton in (every button of UI element 1 of importDlg)
+                                    if (name of fallbackButton) is in {\(importCommitButtonNames)} then
+                                        set ib to fallbackButton
+                                        exit repeat
+                                    end if
+                                end repeat
+                                if ib is missing value then error "NO_IMPORT_BUTTON"
                                 set sawButton to true
                                 if (enabled of ib) then
                                     click ib

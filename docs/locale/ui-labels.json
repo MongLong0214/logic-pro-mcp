@@ -174,19 +174,26 @@
   },
   "assignControlHelpKeyword": {
    "canonical": "assign control",
-   "variants": [],
-   "rationale": "Marks an external-MIDI strip's controller-assignment rows; read-only classifier.",
+   "variants": [
+    "할당 컨트롤",
+    "コントロールを割り当てる",
+    "Steuerung zuweisen",
+    "Asignar control",
+    "Commande Assignation ",
+    "分配控制"
+   ],
+   "rationale": "Marks an external-MIDI strip's own controller-assignment help. INS_092_AssignControl Title supplies the measured English help and the shipped locale titles; the French trailing NBSP is normalized as in the existing QuickHelp corpus. Absence still requires a readable child list; no additional native locale qualification is claimed.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
     "it-IT": "unmeasured",
     "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "unmeasured"
    }
   },
@@ -196,9 +203,23 @@
     "audio effect",
     "오디오 플러그인",
     "오디오 이펙트",
-    "オーディオプラグイン"
+    "オーディオプラグイン",
+    "Audio-Plug-in",
+    "módulo de audio",
+    "plugin audio",
+    "音频插件",
+    "音訊外掛模組",
+    "module audio",
+    "plug-in de áudio",
+    "Audio Effect slot",
+    "Audioeffekt-Slot",
+    "Ranura de efectos de audio",
+    "Slot d’effet audio ",
+    "オーディオエフェクトスロット",
+    "오디오 이펙트 슬롯",
+    "音频效果插槽"
    ],
-   "rationale": "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists).",
+   "rationale": "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists). MAMixer's audio plug-in row matches the archived own EN/KO/JA/DE empty-button descriptions; INS_009_InsertSlot Title supplies that button's own Audio Effect help. Legacy fragments remain containment tolerances. This is not plug-in-editor label authority or additional native locale qualification.",
    "provenance": {
     "オーディオプラグイン": {
      "attribute": "description",
@@ -225,13 +246,13 @@
     "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-mixer-channel_strips-census"
@@ -365,7 +386,7 @@
    "variants": [
     "트림"
    ],
-   "rationale": "Classifies the track-header automation mode as Trim; read-only classifier.",
+   "rationale": "Retained automation-mode value tokens after automation-context gating; read-only. The reader tokenizes description/title/value, not AXHelp. The whole QuickHelp Automation Mode Trim Title and unrelated Trim editing/Controller Assignments rows do not establish this popup value; its own value provider remains unidentified. No translated mode is guessed.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -3463,6 +3484,62 @@
     "zh-TW": "AXWindow#1/AXGroup#6"
    }
   },
+  "mixerMenuHideDirection": {
+   "canonical": "Hide Mixer",
+   "variants": [
+    "믹서 가리기",
+    "Mixer ausblenden",
+    "Ocultar mezclador",
+    "Masquer la table de mixage",
+    "Nascondi mixer",
+    "ミキサーを非表示",
+    "Ocultar Mixer",
+    "隐藏混音器",
+    "隱藏混音器"
+   ],
+   "rationale": "Own dynamic Hide Mixer action direction, from the same action row as discovery. Native locale/navigation scope is unchanged.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "mixerMenuShowDirection": {
+   "canonical": "Show Mixer",
+   "variants": [
+    "믹서 보기",
+    "Mixer einblenden",
+    "Mostrar mezclador",
+    "Afficher la table de mixage",
+    "Mostra mixer",
+    "ミキサーを表示",
+    "Mostrar Mixer",
+    "显示混音器",
+    "顯示混音器"
+   ],
+   "rationale": "Own dynamic Show Mixer action direction, from the same action row as discovery. Native locale/navigation scope is unchanged.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "mixerNamedElement": {
    "canonical": "mixer",
    "variants": [
@@ -4319,7 +4396,7 @@
     "패닝",
     "밸런스"
    ],
-   "rationale": "Negative-case table excluding non-insert channel-strip buttons from empty-slot enumeration; read-only.",
+   "rationale": "Retained measured compound negative fragments excluding non-insert channel-strip buttons from empty-slot enumeration; case-insensitive containment of the own aggregate. These 29 fragments span routing, setting, meters and controls, not one Record menu row. The three qualified own routing-help predicates additionally exclude translated routing slots. No single-row derivation or completeness for every translated control is claimed.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",
@@ -4578,21 +4655,30 @@
   "playheadPositionFieldLabel": {
    "canonical": "position",
    "variants": [
-    "재생헤드 위치"
+    "playhead position",
+    "재생헤드 위치",
+    "再生ヘッドの位置",
+    "Position der Abspielposition",
+    "Posición del cursor de reproducción",
+    "Position de la tête de lecture",
+    "Posizione testina di riproduzione",
+    "Posição do Cursor de Reprodução",
+    "播放头位置",
+    "播放磁頭位置"
    ],
-   "rationale": "Identifies the playhead position text field description; read-only.",
+   "rationale": "Identifies the playhead position text field description; read-only. Uses the existing Playhead Position group's Logic.framework row, not the unrelated Live Loops start-position choice. The generic English position containment tolerance and original Korean reading remain. Static derivation does not establish native text-field publication in every locale.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
+    "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
+    "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "playheadPositionGroupLabel": {
@@ -4622,7 +4708,7 @@
    "roles": [
     "AXGroup"
    ],
-   "match": "exact_strict",
+   "match": "contains",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "derived",
@@ -5947,9 +6033,12 @@
    "variants": [
     "session player",
     "드러머",
-    "세션 플레이어"
+    "세션 플레이어",
+    "Session Player",
+    "鼓手",
+    "伴奏乐手"
    ],
-   "rationale": "Classifies a region as drummer/session-player content; read-only.",
+   "rationale": "Classifies a drummer / session-player region from its own name/help; read-only. The two Logic noun rows supply shipped locale values; existing Korean and English containment fragments remain. This does not infer region ancestry, a track/strip association, or native locale qualification.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",
@@ -5960,7 +6049,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -6090,7 +6179,7 @@
     "OK",
     "확인"
    ],
-   "rationale": "Save As dialog commit button; file existence verifies the result.",
+   "rationale": "Retained scoped Save As commit-button family (exact match): Save/OK are alternatives on the structurally classified panel, and file existence verifies the result. Neither an unrelated Save/OK row among the corpus candidates nor the panel-window title establishes both button providers. No additional locale member or derivability claim is made.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -6220,9 +6309,30 @@
     "input",
     "output",
     "입력",
-    "출력"
+    "출력",
+    "Send slot",
+    "센드 슬롯",
+    "センドスロット",
+    "Send-Slot",
+    "Ranura de envío",
+    "Slot d’envoi ",
+    "发送插槽",
+    "Input slot",
+    "입력 슬롯",
+    "入力スロット",
+    "Input-Slot",
+    "Ranura de entrada",
+    "Slot d’entrée ",
+    "输入插槽",
+    "Output slot",
+    "출력 슬롯",
+    "出力スロット",
+    "Output-Slot",
+    "Ranura de salida",
+    "Slot de sortie ",
+    "输出插槽"
    ],
-   "rationale": "Excludes send/IO buttons from empty audio-plugin slot detection; read-only.",
+   "rationale": "Excludes send/IO buttons from empty audio-plugin slot detection and external-MIDI classification; read-only. Composes the same three own QuickHelp Title authorities used by the routing readers. All six original fragments remain negative containment tolerances, not independent row values or endpoint identity.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",
@@ -6233,7 +6343,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "unmeasured"
    }
   },
@@ -6299,7 +6409,7 @@
     "Default",
     "기본"
    ],
-   "rationale": "Identifies the plugin Setting AXPopUpButton by its value substring; read-only locator.",
+   "rationale": "Retained case-sensitive substrings of the plug-in AXPopUpButton VALUE, which can be an arbitrary preset name; read-only locator. A Setting control title or an unrelated Default/Preset row is not authority for those names. The four existing fragments remain compatibility, not a claim of localized preset-name completeness.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -6346,9 +6456,26 @@
    "canonical": "Show Mixer",
    "variants": [
     "Hide Mixer",
-    "믹서 보기"
+    "믹서 보기",
+    "믹서 가리기",
+    "Mixer einblenden",
+    "Mixer ausblenden",
+    "Mostrar mezclador",
+    "Ocultar mezclador",
+    "Afficher la table de mixage",
+    "Masquer la table de mixage",
+    "Mostra mixer",
+    "Nascondi mixer",
+    "ミキサーを表示",
+    "ミキサーを非表示",
+    "Mostrar Mixer",
+    "Ocultar Mixer",
+    "显示混音器",
+    "隐藏混音器",
+    "顯示混音器",
+    "隱藏混音器"
    ],
-   "rationale": "Used only as a best-effort mixer reveal before structural mixer readback.",
+   "rationale": "Discovers the dynamic Mixer action before structural readback. The MAMobileGeneralUI Show/Hide Mixer keys describe exactly the two actions read on the opened EN/KO desktop menu; bare Mixer and preferences rows do not. Shipped additional discovery values do not establish native ten-locale navigation or restoration.",
    "roles": [
     "AXMenuItem"
    ],
@@ -6356,14 +6483,14 @@
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "showStepInputKeyboardMenuItem": {
@@ -6609,21 +6736,37 @@
   "sliderZoomHint": {
    "canonical": "zoom",
    "variants": [
-    "확대"
+    "확대",
+    "Horizontal Zoom",
+    "Vertical Zoom",
+    "Horizontal-Zoom",
+    "Vertikal-Zoom",
+    "Zoom horizontal",
+    "Zoom vertical",
+    "Zoom orizzontale",
+    "Zoom verticale",
+    "横方向にズーム",
+    "縦方向にズーム",
+    "수평 확대/축소",
+    "수직 확대/축소",
+    "水平缩放",
+    "垂直缩放",
+    "水平縮放",
+    "垂直縮放"
    ],
-   "rationale": "Classifies a slider as a zoom control; read-only.",
+   "rationale": "Negative exclusion of own horizontal/vertical zoom sliders from volume/pan selection. Composes the two Logic own-slider rows, corroborated by archived own AXSlider description/help (the horizontal row also names horizontalZoomSlider). The original zoom/확대 containment fragments remain. Score Settings Enlarged is an unrelated checkbox title, not this authority; no additional native qualification is claimed.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
+    "ja-JP": "derived",
+    "de-DE": "derived",
     "es-ES": "derived",
-    "fr-FR": "unmeasured",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "sortTracksByAudioChannelMenuItem": {
@@ -7392,7 +7535,7 @@
     "content",
     "contents"
    ],
-   "rationale": "Generic content-group fallback by normalized description; read-only classifier.",
+   "rationale": "Retained generic content-group fallback by normalized whole description, distinct from the derived explicit Tracks contents composition. The archived Japanese surface has no generic コンテンツ group; menu/help occurrences do not establish one. No generic Japanese member is invented, and the measured English/Korean fallback remains.",
    "roles": [
     "AXGroup"
    ],
@@ -7569,7 +7712,7 @@
    "roles": [
     "AXButton"
    ],
-   "match": "exact",
+   "match": "contains",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
@@ -7653,7 +7796,7 @@
     "獨奏"
    ],
    "rationale": "Identifies the track Solo button by description substring; read-only state extraction.",
-   "match": "exact",
+   "match": "contains",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
@@ -7693,8 +7836,11 @@
   },
   "trackTypeAux": {
    "canonical": "aux",
-   "variants": [],
-   "rationale": "Classifies an aux track; read-only classifier.",
+   "variants": [
+    "Aux.",
+    "辅助"
+   ],
+   "rationale": "Classifies an aux track by the shipped Logic Aux noun, also used by mixerTypeFilterAux. The existing lowercase containment tolerance remains; this is not track/strip association or native locale qualification.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -7705,7 +7851,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -7734,8 +7880,10 @@
   },
   "trackTypeDrummer": {
    "canonical": "drummer",
-   "variants": [],
-   "rationale": "Classifies a drummer track; read-only classifier.",
+   "variants": [
+    "鼓手"
+   ],
+   "rationale": "Classifies a drummer track by the shipped Logic Drummer noun; read-only header classifier. The lowercase English containment tolerance remains; this does not establish track/strip association or native locale qualification.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -7746,8 +7894,8 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "trackTypeExternalMIDI": {
@@ -7835,7 +7983,7 @@
    "variants": [
     "stereo out"
    ],
-   "rationale": "Classifies the master / stereo-out track; read-only classifier.",
+   "rationale": "Retained Master/Stereo Out header-aggregate fragments; read-only classifier. The matching Bass Amp Master candidate names a plug-in parameter, not this header/default-output name. A plain Master row alone also cannot establish the Stereo Out name provider or distinguish a user-assigned name. No new track/strip association or translated default name is inferred.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -7876,42 +8024,6 @@
     "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
-   }
-  },
-  "transportContainerControlKeywords": {
-   "canonical": "play",
-   "variants": [
-    "stop",
-    "record",
-    "cycle",
-    "loop",
-    "metronome",
-    "rewind",
-    "forward",
-    "재생",
-    "녹음",
-    "사이클",
-    "메트로놈",
-    "클릭",
-    "再生",
-    "録音",
-    "サイクル",
-    "メトロノーム",
-    "クリック"
-   ],
-   "rationale": "Counts distinct transport-control labels to classify the control bar; read-only.",
-   "match": "contains",
-   "coverage": {
-    "en-US": "derived",
-    "ko-KR": "derived",
-    "ja-JP": "derived",
-    "de-DE": "derived",
-    "es-ES": "derived",
-    "fr-FR": "derived",
-    "it-IT": "derived",
-    "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
    }
   },
   "transportContainerMetadata": {
@@ -7996,6 +8108,34 @@
     "zh-TW": "derived"
    }
   },
+  "transportForwardControl": {
+   "canonical": "forward",
+   "variants": [
+    "앞으로",
+    "早送り",
+    "Vorspulen",
+    "Adelante",
+    "Avance",
+    "Avanti",
+    "Avança",
+    "前进",
+    "往前"
+   ],
+   "rationale": "Identifies the Forward family for read-only transport-container classification. Values read from Logic 12.3 (6674) StrTransportBtns|||Forward; the existing lowercase English containment tolerance is retained. Static derivation is not runtime qualification.",
+   "match": "contains",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "transportKeywordFalseFriends": {
    "canonical": "catch playhead",
    "variants": [
@@ -8009,7 +8149,51 @@
     "재생헤드 위치",
     "재생헤드 썸네일",
     "루프 브라우저",
-    "live loop 그리드 보기/가리기"
+    "live loop 그리드 보기/가리기",
+    "Abspielposition folgen",
+    "Seguir cursor al reproducir",
+    "Capturer la tête de lecture",
+    "Segui testina di riproduzione",
+    "再生ヘッドをキャッチします",
+    "Seguir o cursor de reprodução",
+    "跟随播放头",
+    "抓取播放磁頭",
+    "Symbol der Abspielposition",
+    "Cuadro de cursor de reproducción",
+    "Barre de défilement de la tête de lecture",
+    "Testina di riproduzione",
+    "再生ヘッドのつまみ",
+    "Miniatura do cursor de reprodução",
+    "播放头缩略图",
+    "播放磁頭指標",
+    "Loop-Übersicht",
+    "Explorador de loops",
+    "Navigateur de boucles",
+    "Browser Loop",
+    "ループブラウザ",
+    "Navegador de Loops",
+    "循环浏览器",
+    "循環樂段瀏覽器",
+    "Session Player",
+    "伴奏乐手",
+    "Live Loops-Raster ein-/ausblenden",
+    "Mostrar/ocultar parrilla de Live Loops",
+    "Afficher/Masquer la grille des Live Loops",
+    "Mostra/nascondi griglia Live Loops",
+    "Live Loopsグリッドを表示/非表示",
+    "Live Loop 그리드 보기/가리기",
+    "Mostrar/Ocultar Grade de Live Loops",
+    "显示/隐藏实时循环乐段网格",
+    "顯示/隱藏即時循環樂段格線",
+    "Live Loops-Raster",
+    "Parrilla de Live Loops",
+    "Grille des Live Loops",
+    "Griglia Live Loops",
+    "Live Loopsグリッド",
+    "Live Loop 그리드",
+    "Grade de Live Loops",
+    "实时循环乐段网格",
+    "即時循環樂段格線"
    ],
    "rationale": "Negative guard: labels carrying a transport keyword that are not transport ",
    "match": "contains",
@@ -8022,7 +8206,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -8120,6 +8304,59 @@
     "錄音"
    ],
    "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only.",
+   "match": "contains",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "transportRewindControl": {
+   "canonical": "rewind",
+   "variants": [
+    "되감기",
+    "早戻し",
+    "Zurückspulen",
+    "Retroceder",
+    "Rembobinage",
+    "Indietro",
+    "Retrocede",
+    "倒回",
+    "倒轉"
+   ],
+   "rationale": "Identifies the Rewind family for read-only transport-container classification. Values read from Logic 12.3 (6674) StrTransportBtns|||Rewind; the existing lowercase English containment tolerance is retained. Static derivation is not runtime qualification.",
+   "match": "contains",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "transportStopControl": {
+   "canonical": "stop",
+   "variants": [
+    "정지",
+    "停止",
+    "Stoppen",
+    "Detener",
+    "Interrompi",
+    "Para"
+   ],
+   "rationale": "Identifies the Stop family for read-only transport-container classification. Values read from Logic 12.3 (6674) StrTransportBtns|||Stop; the existing lowercase English containment tolerance is retained. Static derivation is not runtime qualification.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",

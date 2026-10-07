@@ -687,7 +687,7 @@ extension AccessibilityChannel {
                 // Discovery accepts the same folded title OR description. Direction
                 // cannot discard that evidence by rereading only a verbatim title.
                 guard case .success(false) = AXLocalePolicy.elementMatchesResult(
-                    item, AXLocalePolicy.showMixerMenuItem.canonicalOnly, runtime: runtime.ax)
+                    item, AXLocalePolicy.mixerMenuShowDirection, runtime: runtime.ax)
                 else { return false }
             }
             if let revealedMixer {
@@ -699,8 +699,11 @@ extension AccessibilityChannel {
                         item, AXLocalePolicy.mixerMenuHideDirection, runtime: runtime.ax)
                     else { return false }
                 } else {
-                    // Preserve the temporary inspection path's historical default.
-                    guard AXHelpers.getTitle(item, runtime: runtime.ax) != "Hide Mixer" else { return false }
+                    // Temporary observation uses the same own action direction as explicit
+                    // final-state setting; translated discovery cannot authorize a Hide leaf.
+                    guard case .success(false) = AXLocalePolicy.elementMatchesResult(
+                        item, AXLocalePolicy.mixerMenuHideDirection, runtime: runtime.ax)
+                    else { return false }
                 }
             }
             // The final-state caller checks retained custody AFTER the deciding Mixer read.
