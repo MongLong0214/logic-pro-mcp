@@ -39,6 +39,19 @@ enum AXMixerStripBinding {
     @TaskLocal static var current: Binding?
 }
 
+/// The unique input control observed on one physical strip in a captured AX frame.
+/// Its source is display evidence only; this custody is never encoded or imported.
+struct AXMixerInputSlotBinding: @unchecked Sendable {
+    let owner: AXMixerStripBinding.Binding
+    let control: AXUIElement
+    let source: String
+
+    func matches(_ other: Self) -> Bool {
+        owner.matches(other.owner) && CFEqual(control, other.control)
+            && source.utf8.elementsEqual(other.source.utf8)
+    }
+}
+
 extension AXLogicProElements {
     // MARK: - Mixer
 
@@ -827,33 +840,42 @@ extension AXLogicProElements {
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> InputSlotReading {
+        inputSlotRead(in: strip, runtime: runtime).reading
+    }
+
+    /// The same status-preserving walk also returns its sole deciding input control.
+    static func inputSlotRead(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> (reading: InputSlotReading, control: AXUIElement?) {
         guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else {
-            return .unreadable
+            return (.unreadable, nil)
         }
         var unidentifiedButtonNamesBus = false
         var source: String?
+        var control: AXUIElement?
         for visit in walk {
             // A truncated subtree cannot establish absence or uniqueness. Only this input
             // reading needs the extra boundary check; the output/send readers are unchanged.
             if visit.depth == 4 {
                 guard let children = childrenIfRead(visit.element, runtime: runtime), children.isEmpty else {
-                    return .unreadable
+                    return (.unreadable, nil)
                 }
             }
             guard case let .success(role) = slotDecidingString(
                 visit.element, kAXRoleAttribute as String, runtime: runtime
-            ) else { return .unreadable }
+            ) else { return (.unreadable, nil) }
             guard role == (kAXButtonRole as String) else { continue }
             guard case let .success(help) = slotDecidingString(
                 visit.element, kAXHelpAttribute as String, runtime: runtime
-            ) else { return .unreadable }
+            ) else { return (.unreadable, nil) }
             let loweredHelp = (help ?? "").lowercased()
             guard AXLocalePolicy.inputSlotHelpKeyword.containsAny(in: loweredHelp) else {
                 guard !AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: loweredHelp),
                       !AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: loweredHelp) else { continue }
                 guard case let .success(description) = slotDecidingString(
                     visit.element, kAXDescriptionAttribute as String, runtime: runtime
-                ) else { return .unreadable }
+                ) else { return (.unreadable, nil) }
                 if let description,
                    RoutingGraphPublication.classifyOutputLabel(description).0 == .bus {
                     unidentifiedButtonNamesBus = true
@@ -865,12 +887,13 @@ extension AXLogicProElements {
                     visit.element, kAXDescriptionAttribute as String, runtime: runtime
                   ), let description,
                   !description.isEmpty else {
-                return .unreadable
+                return (.unreadable, nil)
             }
             source = description
+            control = visit.element
         }
-        guard !unidentifiedButtonNamesBus else { return .unreadable }
-        return source.map(InputSlotReading.source) ?? .noSlot
+        guard !unidentifiedButtonNamesBus else { return (.unreadable, nil) }
+        return (source.map(InputSlotReading.source) ?? .noSlot, control)
     }
 
     // MARK: - Send slots (#291)
