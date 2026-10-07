@@ -867,10 +867,13 @@ extension AXLogicProElements {
         in header: AXUIElement,
         labels: [String],
         legacyTitle: String,
-        ax: AXHelpers.Runtime
+        ax: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> AXUIElement? {
         let checkboxes = AXHelpers.findAllDescendants(
-            of: header, role: kAXCheckBoxRole, maxDepth: 4, runtime: ax
+            of: header, role: kAXCheckBoxRole, maxDepth: 4, runtime: ax,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }
         )
         let candidates = trackToggleCandidates(among: checkboxes, labels: labels, runtime: ax)
         if let match = candidates.first {
@@ -878,11 +881,13 @@ extension AXLogicProElements {
         }
         // Legacy fallback: AXButton with description prefix / single-letter title.
         for label in labels {
-            if let button = findButtonByDescriptionPrefix(in: header, prefix: label, runtime: ax) {
+            if let button = findButtonByDescriptionPrefix(in: header, prefix: label, runtime: ax, observingExposure: observingExposure) {
                 return button
             }
         }
-        return AXHelpers.findDescendant(of: header, role: kAXButtonRole, title: legacyTitle, runtime: ax)
+        return AXHelpers.findDescendant(of: header, role: kAXButtonRole, title: legacyTitle, runtime: ax,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) })
     }
 
     /// The record-enable control inside one track header.
@@ -891,9 +896,12 @@ extension AXLogicProElements {
     /// cannot name different controls. They did until #1020: the poller matched the header by
     /// `trackRecordButton`, whose Spanish member `Grabar` is not inside `Activar grabación`, so
     /// `logic://tracks` read every Spanish track as disarmed while the write verified its arm.
-    static func trackArmControl(in header: AXUIElement, ax: AXHelpers.Runtime) -> AXUIElement? {
+    static func trackArmControl(
+        in header: AXUIElement, ax: AXHelpers.Runtime, observingExposure: AXTrackBinding.Exposure? = nil
+    ) -> AXUIElement? {
         findTrackToggleControl(
-            in: header, labels: AXLocalePolicy.trackRecordEnableCheckbox.labels, legacyTitle: "R", ax: ax
+            in: header, labels: AXLocalePolicy.trackRecordEnableCheckbox.labels, legacyTitle: "R", ax: ax,
+            observingExposure: observingExposure
         )
     }
 

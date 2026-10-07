@@ -220,6 +220,10 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeSiblingStacks(navigation: true, postReleaseOwnershipLoss: "row_role_loss")
     }
 
+    @Test func registeredSiblingAutomationRowLossCannotResumeAnOldInverse() async throws {
+        try await observeSiblingStacks(navigation: true, postReleaseOwnershipLoss: "row_automation_role_loss")
+    }
+
     @Test func registeredNewlyRevealedSiblingDisclosuresAcquireEveryHeldChild() async throws {
         try await observeSiblingStacks(navigation: true, siblingCase: "revealed")
     }
@@ -284,10 +288,12 @@ struct Issue965FreshPopulationAcquisitionTests {
         let transportLoss = postReleaseOwnershipLoss?.hasPrefix("transport_") == true
         let mixerLoss = postReleaseOwnershipLoss?.hasPrefix("mixer_") == true
         let rowLoss = postReleaseOwnershipLoss?.hasPrefix("row_") == true
+        let automationRowLoss = postReleaseOwnershipLoss?.hasPrefix("row_automation_") == true
         let censusLossKind = collectorLoss ? postReleaseOwnershipLoss?.dropFirst("collector_".count).description
             : viewportLoss ? postReleaseOwnershipLoss?.dropFirst("viewport_".count).description
             : transportLoss ? postReleaseOwnershipLoss?.dropFirst("transport_".count).description
             : mixerLoss ? postReleaseOwnershipLoss?.dropFirst("mixer_".count).description
+            : automationRowLoss ? postReleaseOwnershipLoss?.dropFirst("row_automation_".count).description
             : rowLoss ? postReleaseOwnershipLoss?.dropFirst("row_".count).description : postReleaseOwnershipLoss
         let mouse = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
             let isSecond = point == CGPoint(x: 26, y: 36)
@@ -355,7 +361,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                        (collectorLoss && CFEqual(element, fixture.window) && attribute == kAXTitleAttribute as String)
                         || ((viewportLoss || (transportLoss && fixture.reads.recorded.contains("transport_scan_ready"))
                             || (mixerLoss && fixture.reads.recorded.contains("mixer_scan_ready"))
-                            || (rowLoss && fixture.reads.recorded.contains("row_stack_open")))
+                            || (rowLoss && fixture.reads.recorded.contains("row_stack_open")
+                                && (!automationRowLoss || fixture.reads.recorded.contains("row_automation_ready"))))
                             && censusLossKind == "role_loss" && CFEqual(element, first) && attribute == kAXRoleAttribute as String) {
                         fixture.reads.record("post_release_loss_installed")
                         if censusLossKind == "role_loss" { fixture.builder.setRole(first, kAXButtonRole as String) }
@@ -367,6 +374,13 @@ struct Issue965FreshPopulationAcquisitionTests {
                    fixture.builder.attributeValue(first, attribute) as? String == kAXButtonRole as String,
                    !fixture.reads.recorded.contains("post_release_loss_actually_sampled") {
                     fixture.reads.record("post_release_loss_actually_sampled")
+                }
+                if automationRowLoss, CFEqual(element, headers[1]), attribute == kAXTitleAttribute as String,
+                   fixture.reads.recorded.contains("post_release_loss_actually_sampled"),
+                   !fixture.reads.recorded.contains("post_release_loss_returned") {
+                    fixture.builder.setRole(first, kAXDisclosureTriangleRole as String)
+                    fixture.reads.record("row_automation_recovery")
+                    fixture.reads.record("post_release_loss_returned")
                 }
                 if let lateOwnershipLoss, fixture.events.count == 2 {
                     if CFEqual(element, second), attribute == kAXPositionAttribute as String,
@@ -480,7 +494,15 @@ struct Issue965FreshPopulationAcquisitionTests {
                     }
                 }
             }, observingLegacyChildren: { element in
-                if rowLoss, CFEqual(element, headers[0]),
+                if automationRowLoss, CFEqual(element, headers[0]),
+                   fixture.reads.recorded.contains("row_stack_open"),
+                   !fixture.reads.recorded.contains("post_release_loss_installed") {
+                    fixture.reads.record("row_legacy_header_read")
+                    if fixture.reads.recorded.filter({ $0 == "row_legacy_header_read" }).count == 3 {
+                        fixture.reads.record("row_automation_ready")
+                    }
+                }
+                if rowLoss, !automationRowLoss, CFEqual(element, headers[0]),
                    fixture.reads.recorded.contains("post_release_loss_actually_sampled"),
                    !fixture.reads.recorded.contains("post_release_loss_returned") {
                     fixture.builder.setRole(first, kAXDisclosureTriangleRole as String)
@@ -518,8 +540,13 @@ struct Issue965FreshPopulationAcquisitionTests {
                 let open = try #require(fixture.reads.recorded.firstIndex(of: "row_stack_open"))
                 let installed = try #require(fixture.reads.recorded.firstIndex(of: "post_release_loss_installed"))
                 let sampled = try #require(fixture.reads.recorded.firstIndex(of: "post_release_loss_actually_sampled"))
-                let recovered = try #require(fixture.reads.recorded.firstIndex(of: "row_pan_recovery"))
+                let recovered = try #require(fixture.reads.recorded.firstIndex(of:
+                    automationRowLoss ? "row_automation_recovery" : "row_pan_recovery"))
                 #expect(open < installed && installed < sampled && sampled < recovered)
+                if automationRowLoss {
+                    let ready = try #require(fixture.reads.recorded.firstIndex(of: "row_automation_ready"))
+                    #expect(open < ready && ready < installed)
+                }
             }
             if transportLoss || mixerLoss {
                 let ready = try #require(fixture.reads.recorded.firstIndex(of: transportLoss ? "transport_scan_ready" : "mixer_scan_ready"))

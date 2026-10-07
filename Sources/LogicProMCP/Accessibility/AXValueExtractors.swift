@@ -328,20 +328,20 @@ enum AXValueExtractors {
         observingExposure: AXTrackBinding.Exposure? = nil,
         stoppingBeforeHelp stop: () -> Bool
     ) -> TrackState? {
-        let extractedName = extractTrackName(from: header, runtime: runtime)
+        let extractedName = extractTrackName(from: header, runtime: runtime, observingExposure: observingExposure)
         // #1040: a toggle that was not found, or whose value would not read, stays nil. These ended
         // in `?? false`, which published "off" for a control nobody had read; `extractTrackStackState`
         // below refuses the same move for the stack arrow.
-        let muted = extractTrackButtonState(from: header, prefix: "Mute", runtime: runtime)
-        let soloed = extractTrackButtonState(from: header, prefix: "Solo", runtime: runtime)
+        let muted = extractTrackButtonState(from: header, prefix: "Mute", runtime: runtime, observingExposure: observingExposure)
+        let soloed = extractTrackButtonState(from: header, prefix: "Solo", runtime: runtime, observingExposure: observingExposure)
         // The arm is read from the control the arm write verifies against (#1020), not by keyword.
-        let armed = AXLogicProElements.trackArmControl(in: header, ax: runtime)
+        let armed = AXLogicProElements.trackArmControl(in: header, ax: runtime, observingExposure: observingExposure)
             .flatMap { extractButtonState($0, runtime: runtime) }
         // Input Monitoring is read the way Mute and Solo are, through its own label set (#1040), and
         // is unread (nil) on the same terms.
-        let inputMonitoring = extractTrackButtonState(from: header, prefix: "Input Monitoring", runtime: runtime)
+        let inputMonitoring = extractTrackButtonState(from: header, prefix: "Input Monitoring", runtime: runtime, observingExposure: observingExposure)
         let selected = extractSelectedState(header, runtime: runtime) ?? false
-        guard let trackType = inferTrackType(from: header, runtime: runtime, stoppingBeforeHelp: stop) else {
+        guard let trackType = inferTrackType(from: header, runtime: runtime, observingExposure: observingExposure, stoppingBeforeHelp: stop) else {
             return nil
         }
         let stack = extractTrackStackState(from: header, runtime: runtime, observingChildren: observingStackChildren)
@@ -357,7 +357,7 @@ enum AXValueExtractors {
             isSelected: selected,
             volume: extractTrackHeaderVolume(from: header, runtime: runtime, observingExposure: observingExposure),
             pan: extractTrackHeaderPan(from: header, runtime: runtime, observingExposure: observingExposure),
-            automationMode: extractTrackAutomationMode(from: header, runtime: runtime),
+            automationMode: extractTrackAutomationMode(from: header, runtime: runtime, observingExposure: observingExposure),
             color: extractTrackColor(from: header, runtime: runtime),
             liveIdentityBacked: extractedName.liveIdentityBacked,
             isStackHeader: stack.isStackHeader,
@@ -476,11 +476,15 @@ enum AXValueExtractors {
 
     static func extractTrackAutomationModeIfReadable(
         from header: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> AutomationMode? {
-        let elements = AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
+        let elements = AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime,
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) })
         let candidates = elements.filter { element in
-            guard AXHelpers.getRole(element, runtime: runtime) == (kAXGroupRole as String),
+            let role = AXHelpers.getRole(element, runtime: runtime)
+            observingExposure?.observeRole(element: element, role: role)
+            guard role == (kAXGroupRole as String),
                   let description = AXHelpers.getDescription(element, runtime: runtime)?
                     .trimmingCharacters(in: .whitespacesAndNewlines),
                   !description.isEmpty else { return false }
@@ -534,9 +538,10 @@ enum AXValueExtractors {
 
     static func extractTrackAutomationMode(
         from header: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> AutomationMode {
-        extractTrackAutomationModeIfReadable(from: header, runtime: runtime) ?? .off
+        extractTrackAutomationModeIfReadable(from: header, runtime: runtime, observingExposure: observingExposure) ?? .off
     }
 
     /// Read transport bar elements and build a TransportState.
@@ -849,21 +854,26 @@ enum AXValueExtractors {
 
     private static func extractTrackName(
         from header: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> (name: String, liveIdentityBacked: Bool) {
         // Logic 12.2 commonly exposes the authoritative live name on an
         // AXTextField's description while AXValue stays the numeric placeholder
         // "0". Prefer text-field metadata when it contains a real name; fall
         // back to static text only when the text-field path is empty/useless.
         let textFields = AXHelpers.findAllDescendants(
-            of: header, role: kAXTextFieldRole, maxDepth: 3, runtime: runtime
+            of: header, role: kAXTextFieldRole, maxDepth: 3, runtime: runtime,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }
         )
         for field in textFields {
             if let candidate = trackNameFieldReading(field, runtime: runtime) { return (candidate, true) }
         }
 
         if let text = AXHelpers.findDescendant(
-            of: header, role: kAXStaticTextRole, maxDepth: 3, runtime: runtime
+            of: header, role: kAXStaticTextRole, maxDepth: 3, runtime: runtime,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }
         ),
            let name = extractTextValue(text, runtime: runtime),
            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -886,7 +896,8 @@ enum AXValueExtractors {
     private static func extractTrackButtonState(
         from header: AXUIElement,
         prefix: String,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> Bool? {
         let localizedKeywords: [String: AXLocalePolicy.LabelSet] = [
             "Mute": AXLocalePolicy.trackMuteButton,
@@ -894,8 +905,12 @@ enum AXValueExtractors {
             "Input Monitoring": AXLocalePolicy.trackInputMonitoringButton,
         ]
         let labels = localizedKeywords[prefix]
-        let controls = AXHelpers.findAllDescendants(of: header, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
-            + AXHelpers.findAllDescendants(of: header, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime)
+        let controls = AXHelpers.findAllDescendants(of: header, role: kAXButtonRole, maxDepth: 4, runtime: runtime,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) })
+            + AXHelpers.findAllDescendants(of: header, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime,
+                observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+                observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) })
         for control in controls {
             let desc = (
                 AXHelpers.getDescription(control, runtime: runtime)
@@ -913,7 +928,8 @@ enum AXValueExtractors {
     private struct StoppedBeforeHelp: Error {}
 
     private static func inferTrackType(
-        from header: AXUIElement, runtime: AXHelpers.Runtime, stoppingBeforeHelp stop: () -> Bool
+        from header: AXUIElement, runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil, stoppingBeforeHelp stop: () -> Bool
     ) -> TrackType? {
         // Logic 12.2 often puts the human track name on the AXLayoutItem and
         // the type hint on a descendant icon/control, so scan both levels.
@@ -951,7 +967,8 @@ enum AXValueExtractors {
             AXHelpers.getTitle(header, runtime: runtime),
             AXHelpers.getIdentifier(header, runtime: runtime)
         ]
-        let descendants = AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
+        let descendants = AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime,
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) })
         let descendantSignals = descendants.map { element in
             [
                 AXHelpers.getDescription(element, runtime: runtime),
@@ -968,7 +985,7 @@ enum AXValueExtractors {
         }) else { return nil }
         let signals = headerSignals + [helps[0]]
             + zip(descendantSignals, helps.dropFirst()).flatMap { readFirst, help in readFirst + [help] }
-        let trackName = extractTrackName(from: header, runtime: runtime).name
+        let trackName = extractTrackName(from: header, runtime: runtime, observingExposure: observingExposure).name
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         // A signal that IS the track name is the name, not a reading of the track. The name field

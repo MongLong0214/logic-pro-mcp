@@ -542,12 +542,20 @@ enum AXHelpers {
         title: String? = nil,
         identifier: String? = nil,
         maxDepth: Int = 10,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        observingRole: (AXUIElement, String?) -> Void = { _, _ in },
+        observingChildren: (AXUIElement, [AXUIElement]) -> Void = { _, _ in }
     ) -> AXUIElement? {
         guard maxDepth > 0 else { return nil }
         let children = getChildren(element, runtime: runtime)
+        observingChildren(element, children)
         for child in children {
-            let roleMatch = role == nil || getRole(child, runtime: runtime) == role
+            let roleMatch: Bool
+            if let role {
+                let observedRole = getRole(child, runtime: runtime)
+                observingRole(child, observedRole)
+                roleMatch = observedRole == role
+            } else { roleMatch = true }
             let titleMatch = title == nil || getTitle(child, runtime: runtime) == title
             let idMatch = identifier == nil || getIdentifier(child, runtime: runtime) == identifier
             if roleMatch && titleMatch && idMatch {
@@ -555,7 +563,8 @@ enum AXHelpers {
             }
             if let found = findDescendant(
                 of: child, role: role, title: title, identifier: identifier,
-                maxDepth: maxDepth - 1, runtime: runtime
+                maxDepth: maxDepth - 1, runtime: runtime,
+                observingRole: observingRole, observingChildren: observingChildren
             ) {
                 return found
             }
