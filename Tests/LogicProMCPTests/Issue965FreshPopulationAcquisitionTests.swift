@@ -186,6 +186,11 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeSiblingStacks(navigation: true, ownershipLoss: loss)
     }
 
+    @Test(arguments: ["closed", "role_loss", "replacement"])
+    func registeredSiblingLateDecidingLossCannotResumeAnOldInverse(loss: String) async throws {
+        try await observeSiblingStacks(navigation: true, lateOwnershipLoss: loss)
+    }
+
     @Test func registeredNewlyRevealedSiblingDisclosuresAcquireEveryHeldChild() async throws {
         try await observeSiblingStacks(navigation: true, siblingCase: "revealed")
     }
@@ -195,7 +200,8 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeSiblingStacks(navigation: true, siblingCase: siblingCase)
     }
 
-    private func observeSiblingStacks(navigation: Bool, ownershipLoss: String? = nil, siblingCase: String? = nil) async throws {
+    private func observeSiblingStacks(navigation: Bool, ownershipLoss: String? = nil, siblingCase: String? = nil,
+                                      lateOwnershipLoss: String? = nil) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-siblings-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -281,6 +287,45 @@ struct Issue965FreshPopulationAcquisitionTests {
         let channel = fixture.channel(disclosure: first, additionalDisclosure: second,
             thirdDisclosure: revealed ? third : nil, wrongAdditionalDisclosureHit: siblingCase == "wrong_hit", observationMouse: mouse,
             observingAttribute: { element, attribute in
+                if let lateOwnershipLoss, fixture.events.count == 2 {
+                    if CFEqual(element, second), attribute == kAXPositionAttribute as String,
+                       !fixture.reads.recorded.contains("late_loss_armed") {
+                        fixture.reads.record("late_loss_armed")
+                    }
+                    if fixture.reads.recorded.contains("late_loss_armed"),
+                       !fixture.reads.recorded.contains("late_loss_installed") {
+                        if CFEqual(element, first), attribute == kAXValueAttribute as String,
+                           (fixture.builder.attributeValue(first, attribute) as? NSNumber)?.intValue == 1,
+                           !fixture.reads.recorded.contains("late_loss_early_open") {
+                            fixture.reads.record("late_loss_early_open")
+                        }
+                        if CFEqual(element, fixture.window), attribute == kAXTitleAttribute as String,
+                           fixture.reads.recorded.contains("late_loss_early_open") {
+                            fixture.reads.record("late_loss_installed")
+                            if lateOwnershipLoss == "closed" { fixture.builder.setAttribute(first, kAXValueAttribute as String, 0) }
+                            if lateOwnershipLoss == "role_loss" { fixture.builder.setRole(first, kAXButtonRole as String) }
+                            if lateOwnershipLoss == "replacement" { fixture.builder.setChildren(headers[0], [replacement]) }
+                        }
+                    }
+                }
+                if let lateOwnershipLoss, fixture.reads.recorded.contains("late_loss_installed"),
+                   !fixture.reads.recorded.contains("late_loss_returned") {
+                    if (lateOwnershipLoss == "closed" && CFEqual(element, first) && attribute == kAXValueAttribute as String
+                        && (fixture.builder.attributeValue(first, attribute) as? NSNumber)?.intValue == 0)
+                        || (lateOwnershipLoss == "role_loss" && CFEqual(element, first) && attribute == kAXRoleAttribute as String
+                            && fixture.builder.attributeValue(first, attribute) as? String == kAXButtonRole as String) {
+                        if !fixture.reads.recorded.contains("late_loss_actually_sampled") {
+                            fixture.reads.record("late_loss_actually_sampled")
+                        }
+                    }
+                    if fixture.reads.recorded.contains("late_loss_actually_sampled"),
+                       CFEqual(element, fixture.window), attribute == kAXTitleAttribute as String {
+                        fixture.builder.setAttribute(first, kAXValueAttribute as String, 1)
+                        fixture.builder.setRole(first, kAXDisclosureTriangleRole as String)
+                        fixture.builder.setChildren(headers[0], [first])
+                        fixture.reads.record("late_loss_returned")
+                    }
+                }
                 if let ownershipLoss, fixture.events.count == 2, CFEqual(element, second),
                    attribute == kAXPositionAttribute as String,
                    !fixture.reads.recorded.contains("sibling_loss_installed") {
@@ -311,6 +356,15 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.reads.record("sibling_title_\(index)")
                 }
             }, observingChildren: { element in
+                if lateOwnershipLoss == "replacement", CFEqual(element, headers[0]),
+                   fixture.reads.recorded.contains("late_loss_installed"),
+                   !fixture.reads.recorded.contains("late_loss_returned"),
+                   !fixture.reads.recorded.contains("late_loss_actually_sampled") {
+                    let children = fixture.builder.makeAXRuntime().children(headers[0])
+                    if children.count == 1, CFEqual(children[0], replacement) {
+                        fixture.reads.record("late_loss_actually_sampled")
+                    }
+                }
                 if ownershipLoss == "replacement", CFEqual(element, headers[0]),
                    fixture.reads.recorded.contains("sibling_loss_installed"),
                    !fixture.reads.recorded.contains("sibling_loss_returned") {
@@ -345,6 +399,18 @@ struct Issue965FreshPopulationAcquisitionTests {
                 return await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
         let body = try #require(sharedJSONObject(sharedToolText(result)))
+        if lateOwnershipLoss != nil {
+            #expect(fixture.reads.recorded.filter { $0.hasPrefix("late_loss_") } == [
+                "late_loss_armed", "late_loss_early_open", "late_loss_installed",
+                "late_loss_actually_sampled", "late_loss_returned"
+            ])
+            #expect(fixture.events.recorded == ["first_down", "first_up"])
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored")
+            #expect(await cache.getTracks().isEmpty)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            return
+        }
         if let siblingCase, ["alias", "wrong_hit", "release_expansion", "release_restoration", "cancel"].contains(siblingCase) {
             let events = siblingCase == "alias" ? [] : siblingCase == "wrong_hit"
                 ? ["first_down", "first_up", "first_down", "first_up"]

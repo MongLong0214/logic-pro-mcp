@@ -192,7 +192,23 @@ extension AccessibilityChannel {
         }
 
         private func value(_ target: Disclosure) -> Int? {
-            AXLogicProElements.heldTrackDisclosureValue(header: target.header, disclosure: target.disclosure, runtime: logic)
+            let observed = AXLogicProElements.heldTrackDisclosureValue(header: target.header, disclosure: target.disclosure, runtime: logic)
+            if !restorationStarted, acquired.contains(where: {
+                CFEqual($0.target.header, target.header) && CFEqual($0.target.disclosure, target.disclosure)
+            }) {
+                exposure?.observeValue(header: target.header, disclosure: target.disclosure, value: observed)
+            }
+            return observed
+        }
+
+        private var forwardExposure: AXTrackBinding.Exposure? {
+            restorationStarted || acquired.isEmpty ? nil : exposure
+        }
+
+        private func acquiredHeadersRemainOwned(_ headers: [AXUIElement]) -> Bool {
+            guard let forwardExposure else { return true }
+            forwardExposure.observeHeaders(headers)
+            return !forwardExposure.hasObservedLoss
         }
 
         private func owned(target: Disclosure, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
@@ -209,8 +225,11 @@ extension AccessibilityChannel {
                   AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
                   case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
                   doc.utf8.elementsEqual(document.utf8), !AXLogicProElements.dialogPresent(runtime: logic),
-                  AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic).map({ CFEqual($0, rail) }) == true,
-                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                  AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic,
+                    observingExposure: forwardExposure).map({ CFEqual($0, rail) }) == true,
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic,
+                    observingExposure: forwardExposure),
+                  acquiredHeadersRemainOwned(headers),
                   headers.filter({ CFEqual($0, target.header) }).count == 1,
                   acquired.allSatisfy({ entry in
                       headers.filter({ CFEqual($0, entry.target.header) }).count == 1

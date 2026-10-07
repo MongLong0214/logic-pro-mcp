@@ -40,6 +40,22 @@ enum AXTrackBinding {
             guard let selected, CFEqual(selected, held.disclosure),
                   children.filter({ CFEqual($0, held.disclosure) }).count == 1 else { lose(); return }
         }
+        /// Forward ownership checks consume their actual samples, including
+        /// discovery reads made before a later successful control reread.
+        func observeRole(element: AXUIElement, role: String?) {
+            let owned = lock.withLock { controls.contains { CFEqual($0.disclosure, element) } }
+            if owned, role != kAXDisclosureTriangleRole as String { lose() }
+        }
+        func observeChildren(element: AXUIElement, children: [AXUIElement]) {
+            let held = lock.withLock { controls.first { CFEqual($0.header, element) } }
+            if let held, children.filter({ CFEqual($0, held.disclosure) }).count != 1 { lose() }
+        }
+        func observeValue(header: AXUIElement, disclosure: AXUIElement, value: Int?) {
+            let owned = lock.withLock { controls.contains {
+                CFEqual($0.header, header) && CFEqual($0.disclosure, disclosure)
+            } }
+            if owned, value != 1 { lose() }
+        }
         func retainAcquiredDisclosure(header: AXUIElement, disclosure: AXUIElement) -> Bool {
             lock.withLock {
                 guard !ended, !controls.contains(where: {
@@ -246,8 +262,10 @@ extension AXLogicProElements {
 
     /// Owned disclosure navigation reuses the shared status-preserving rail discovery,
     /// but cannot choose the first of competing named rails.
-    static func uniqueTrackHeaderRail(in window: AXUIElement, runtime: Runtime) -> AXUIElement? {
-        guard case .complete(let candidates) = verifiedTrackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax) else { return nil }
+    static func uniqueTrackHeaderRail(in window: AXUIElement, runtime: Runtime,
+                                      observingExposure: AXTrackBinding.Exposure? = nil) -> AXUIElement? {
+        guard case .complete(let candidates) = verifiedTrackHeaderCandidates(in: window, maxDepth: 32,
+            runtime: runtime.ax, observingExposure: observingExposure) else { return nil }
         let rails = !candidates.lists.isEmpty ? candidates.lists
             : !candidates.scrollAreas.isEmpty ? candidates.scrollAreas : candidates.groups
         guard rails.count == 1,
@@ -428,12 +446,14 @@ extension AXLogicProElements {
     /// the legacy reader's best-effort contract for its existing callers.
     static func allTrackHeadersVerifiedRead(
         in window: AXUIElement,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> VerifiedTrackHeaderRead {
         guard !projectPickerPreventsTrackRead(window, runtime: runtime) else {
             return .unavailable
         }
-        switch verifiedTrackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax) {
+        switch verifiedTrackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax,
+                                             observingExposure: observingExposure) {
         case .complete(let candidates):
             switch readTrackHeaderCandidates(candidates, runtime: runtime.ax) {
             case .read(let headers):
@@ -561,7 +581,8 @@ extension AXLogicProElements {
     private static func verifiedTrackHeaderCandidates(
         in root: AXUIElement,
         maxDepth: Int,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> TrackHeaderCandidatesRead {
         var candidates = TrackHeaderCandidates()
         var encounteredUnreadableAX = false
@@ -581,6 +602,7 @@ extension AXLogicProElements {
             var diagnosticRole = "absent"
             switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
             case .success(.some(let role)):
+                observingExposure?.observeRole(element: element, role: role)
                 // Popup text controls can refuse AXChildren while the original
                 // Arrange rail remains readable. They cannot contain an Arrange
                 // rail; track/strip names are still independently read afterward.
@@ -610,8 +632,10 @@ extension AXLogicProElements {
                     candidates.outlinesAndTables.append(element)
                 }
             case .success(.none):
+                observingExposure?.observeRole(element: element, role: nil)
                 break
             case .failure(let error):
+                observingExposure?.observeRole(element: element, role: nil)
                 encounteredUnreadableAX = true
                 unreadableStage = "track_header_candidate_role"
                 unreadableStatus = error.diagnosticLabel
@@ -621,6 +645,7 @@ extension AXLogicProElements {
             guard remainingDepth > 0 else { return }
             switch AXHelpers.childrenResult(element, runtime: runtime) {
             case .success(let children):
+                observingExposure?.observeChildren(element: element, children: children)
                 for (index, child) in children.enumerated() {
                     visit(child, remainingDepth: remainingDepth - 1, path: path + [index])
                 }
