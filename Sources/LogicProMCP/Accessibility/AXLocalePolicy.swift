@@ -2676,13 +2676,6 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Choose%20a%20Project#value"
     )
 
-    /// Transport text-field description hints (tempo/position fields).
-    static let transportTextFieldHint = LabelSet(
-        canonical: "tempo",
-        variants: ["bpm", "position", "템포", "재생헤드 위치"],
-        rationale: "Classifies transport tempo/position text fields inside the control bar; read-only."
-    )
-
     /// Region container "Track Content" group (normalized exact match).
     ///
     /// `トラックコンテンツ` is measured, not translated: on a ja-JP Logic 12.3
@@ -3586,7 +3579,6 @@ enum AXLocalePolicy {
         trackHeadersDescription,
         eventListTab,
         projectPickerWindow,
-        transportTextFieldHint,
         trackContentExplicit,
         trackContentGeneric,
         regionKindDrummer,

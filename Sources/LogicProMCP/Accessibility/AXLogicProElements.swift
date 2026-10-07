@@ -1094,7 +1094,8 @@ enum AXLogicProElements {
         }.contains { text in
             let description = AXHelpers.getDescription(text, runtime: runtime)?.lowercased() ?? ""
             let value = (AXValueExtractors.extractTextValue(text, runtime: runtime) ?? "").lowercased()
-            return AXLocalePolicy.transportTextFieldHint.containsAny(in: description)
+            return AXLocalePolicy.tempoFieldLabel.containsAny(in: description)
+                || AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: description)
                 || value.contains(" bpm")
                 || value.filter({ $0 == "." }).count >= 2
                 || value.contains(":")

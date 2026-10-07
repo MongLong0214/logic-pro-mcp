@@ -99,7 +99,11 @@ struct Issue60LocalePhase4Tests {
              ["프로젝트 선택", "choose a project", "choose project", "new from template",
               "プロジェクトを選択", "Wähle ein Projekt aus", "Seleccionar un proyecto", "Choisir un projet",
               "Scegli un progetto", "Escolha um projeto", "选取项目", "選擇計畫案"]),
-            ("transportTextFieldHint", AXLocalePolicy.transportTextFieldHint.labels, ["tempo", "bpm", "position", "템포", "재생헤드 위치"]),
+            // The compound container predicate now reuses the extractor's two field authorities.
+            ("tempoFieldLabel", AXLocalePolicy.tempoFieldLabel.labels,
+             ["tempo", "bpm", "템포", "テンポ", "Ritmo", "Andamento", "速度", "拍速"]),
+            ("playheadPositionFieldLabel", AXLocalePolicy.playheadPositionFieldLabel.labels,
+             ["position", "재생헤드 위치"]),
             // `Spuren enthält` added 2026-09-12 (#876), same census, same reason as the row above.
             // Extended 2026-09-28 (#904) by composition, not from a row: Apple's `%@ contents`
             // template with the `Tracks` noun, whose Korean, Japanese and German products are the
@@ -155,7 +159,8 @@ struct Issue60LocalePhase4Tests {
             ("headerPanHint", AXLocalePolicy.headerPanHint),
             ("trackHeadersDescription", AXLocalePolicy.trackHeadersDescription),
             ("projectPickerWindow", AXLocalePolicy.projectPickerWindow),
-            ("transportTextFieldHint", AXLocalePolicy.transportTextFieldHint),
+            ("tempoFieldLabel", AXLocalePolicy.tempoFieldLabel),
+            ("playheadPositionFieldLabel", AXLocalePolicy.playheadPositionFieldLabel),
             ("trackContentExplicit", AXLocalePolicy.trackContentExplicit),
             ("trackContentGeneric", AXLocalePolicy.trackContentGeneric),
             ("regionKindDrummer", AXLocalePolicy.regionKindDrummer),
@@ -199,13 +204,13 @@ struct Issue60LocalePhase4Tests {
         // Plain forms match (the actual EN/KO strings Logic emits).
         #expect(AXLocalePolicy.mixerInspectorContext.containsAny(in: "inspector"))
         #expect(AXLocalePolicy.sliderSendHint.containsAny(in: "send level"))
-        #expect(AXLocalePolicy.transportTextFieldHint.containsAny(in: "tempo"))
+        #expect(AXLocalePolicy.tempoFieldLabel.containsAny(in: "tempo"))
         // Accented-Latin forms must NOT match — folding them would widen matching
         // beyond the original `text.contains(token)` and misclassify in accented
         // locales (French/Spanish/Portuguese Logic UIs).
         #expect(!AXLocalePolicy.mixerInspectorContext.containsAny(in: "ínspector"))
         #expect(!AXLocalePolicy.sliderSendHint.containsAny(in: "sénd"))
-        #expect(!AXLocalePolicy.transportTextFieldHint.containsAny(in: "témpo"))
+        #expect(!AXLocalePolicy.tempoFieldLabel.containsAny(in: "témpo"))
         #expect(!AXLocalePolicy.pluginBypassControl.containsAny(in: "bypáss"))
         // Case-insensitivity is retained (needed for the raw-help region site).
         #expect(AXLocalePolicy.regionHelpKeyword.containsAny(in: "Audio Region at bar 5"))

@@ -8157,29 +8157,6 @@
     "zh-TW": "derived"
    }
   },
-  "transportTextFieldHint": {
-   "canonical": "tempo",
-   "variants": [
-    "bpm",
-    "position",
-    "템포",
-    "재생헤드 위치"
-   ],
-   "rationale": "Classifies transport tempo/position text fields inside the control bar; read-only.",
-   "match": "contains",
-   "coverage": {
-    "en-US": "derived",
-    "ko-KR": "derived",
-    "ja-JP": "derived",
-    "de-DE": "derived",
-    "es-ES": "derived",
-    "fr-FR": "derived",
-    "it-IT": "derived",
-    "pt-BR": "derived",
-    "zh-CN": "derived",
-    "zh-TW": "derived"
-   }
-  },
   "undoMenuItemPrefix": {
    "canonical": "Undo %@",
    "variants": [

@@ -94,6 +94,80 @@ private func slots(_ children: [AXUIElement], _ b: FakeAXRuntimeBuilder) -> [AXL
     AXLogicProElements.audioPluginInsertSlots(children: children, runtime: b.makeAXRuntime())
 }
 
+@Test func frenchInputSlotHelpNeverCreatesAnEmptyInsert() {
+    let b = FakeAXRuntimeBuilder()
+    let genuine = [
+        button(b, 904901, y: 400, height: 18, description: ""),
+        button(b, 904902, y: 418, height: 18, description: ""),
+        button(b, 904903, y: 436, height: 18, description: ""),
+    ]
+    // Independently read QuickHelp INS_012_InputSlot French title. This own input help must
+    // not authorize an insert merely because its button shares the empty cluster's geometry.
+    // The geometry and control are synthetic; no native French insertion is qualified here.
+    let input = button(b, 904904, y: 454, height: 18, description: "", help: "Slot d’entrée")
+    let read = slots(genuine + [input], b)
+    #expect(read.count == 3)
+    #expect(!read.contains { CFEqual($0.element, input) })
+    #expect(read.map(\.index) == [0, 1, 2])
+    for (index, element) in genuine.enumerated() {
+        #expect(read.contains { CFEqual($0.element, element) && $0.index == index && $0.isEmpty })
+    }
+    #expect(b.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["Input slot", "Output slot", "Send slot", "입력 슬롯", "출력 슬롯", "센드 슬롯",
+                  "Slot d’entrée", "Slot de sortie", "Slot d’envoi"])
+func ownRoutingSlotHelpNeverConsumesAnInsertIndex(_ help: String) {
+    let b = FakeAXRuntimeBuilder()
+    let genuine = [
+        button(b, 904911, y: 400, height: 18, description: ""),
+        button(b, 904912, y: 418, height: 18, description: ""),
+        button(b, 904913, y: 436, height: 18, description: ""),
+    ]
+    let routing = button(b, 904914, y: 454, height: 18, description: "", help: help)
+    let read = slots(genuine + [routing], b)
+    #expect(read.count == 3)
+    #expect(!read.contains { CFEqual($0.element, routing) })
+    #expect(read.map(\.index) == [0, 1, 2])
+    for (index, element) in genuine.enumerated() {
+        #expect(read.contains { CFEqual($0.element, element) && $0.index == index && $0.isEmpty })
+    }
+    #expect(b.actionCalls.isEmpty)
+}
+
+@Test(arguments: ["image", "checkbox", "switch", "children"])
+func routingExclusionPreservesEmptyOccupiedAndRoleBoundaries(_ shape: String) {
+    let b = FakeAXRuntimeBuilder()
+    let genuine = [
+        button(b, 904921, y: 400, height: 18, description: ""),
+        button(b, 904922, y: 418, height: 18, description: ""),
+        button(b, 904923, y: 436, height: 18, description: ""),
+    ]
+    let plugin = occupied(b, 904924, "Channel EQ", y: 454)
+    let decoy = button(b, 904925, y: 472, height: 18, description: "")
+    switch shape {
+    case "image": b.setAttribute(decoy, kAXRoleAttribute as String, kAXImageRole as String)
+    case "checkbox": b.setAttribute(decoy, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    case "switch": b.setAttribute(decoy, kAXSubroleAttribute as String, kAXSwitchSubrole as String)
+    default:
+        let child = b.element(904926)
+        b.setAttribute(child, kAXRoleAttribute as String, kAXStaticTextRole as String)
+        b.setChildren(decoy, [child])
+    }
+    let read = slots(genuine + [plugin, decoy], b)
+    #expect(read.count == 4)
+    #expect(!read.contains { CFEqual($0.element, decoy) })
+    #expect(read.map(\.index) == [0, 1, 2, 3])
+    for (index, element) in genuine.enumerated() {
+        #expect(read.contains { CFEqual($0.element, element) && $0.index == index && $0.isEmpty })
+    }
+    #expect(read.contains {
+        CFEqual($0.element, plugin) && $0.index == 3 && $0.name == "Channel EQ"
+            && $0.readStatus == .occupiedReadable
+    })
+    #expect(b.actionCalls.isEmpty)
+}
+
 private func mixerRuntime(
     _ b: FakeAXRuntimeBuilder, stripChildren: [AXUIElement]
 ) -> AXLogicProElements.Runtime {
