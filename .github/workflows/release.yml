@@ -68,14 +68,24 @@ jobs:
           uname -m
           sw_vers
 
-      - name: Run test suite
-        # Keep release logs bounded. The codebase still contains deprecated
-        # Swift Testing APIs, and unsuppressed diagnostics can expand to
-        # hundreds of megabytes before the actual test result is visible.
-        # CI's coverage test already uses the same compiler flag.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: swift test -Xswiftc -suppress-warnings --no-parallel
+      # Maintainer-reviewed verifier source, independent of the candidate/tag.
+      # Updating this pin requires reviewing its registry/Atlas/format compatibility.
+      - name: Checkout authenticated trusted verifier
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: fa73358acc837b4d0d33c1b52bf3337232cb7a76
+          path: trusted-verifier-src
+
+      - name: Resolve and build trusted verifier without changing pins
+        working-directory: trusted-verifier-src
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = fa73358acc837b4d0d33c1b52bf3337232cb7a76
+          test -z "$(git status --porcelain)"
+          swift package resolve --force-resolved-versions
+          git diff --exit-code Package.resolved
+          swift build -c release --product trusted-verifier --force-resolved-versions
+          git diff --exit-code Package.resolved
 
       - name: Detect release mode
         id: mode
@@ -104,24 +114,34 @@ jobs:
             fi
           done
           echo "mode=adhoc" >> "$GITHUB_OUTPUT"
-          echo "Release mode: ADHOC (codesign --sign -; no notarization)"
-
-      - name: Build universal binary
-        run: bash Scripts/release-build-universal.sh
-
-      - name: Codesign binary (ADHOC)
-        run: |
-          codesign --force --sign - LogicProMCP
-
-      - name: Verify adhoc artifact
-        run: |
-          codesign --verify --strict --verbose=2 LogicProMCP
+          echo "Release mode: owner-staged ADHOC (no downstream signing or notarization)"
 
       - name: Package
         env:
-          RELEASE_MODE: ${{ steps.mode.outputs.mode }}
-          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
-        run: bash Scripts/release-package.sh
+          QUALIFICATION_CANDIDATE_URL: ${{ secrets.QUALIFICATION_CANDIDATE_URL }}
+          QUALIFICATION_CANDIDATE_SHA256: ${{ secrets.QUALIFICATION_CANDIDATE_SHA256 }}
+          QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
+          QUALIFICATION_EVIDENCE_SHA256: ${{ secrets.QUALIFICATION_EVIDENCE_SHA256 }}
+          TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          private=$(mktemp -d)
+          trap 'rm -rf "$private"' EXIT
+          bash Scripts/release-fetch-qualified-inputs.sh stage "$private"
+          tag_body=$(git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME")
+          test "$(printf '%s\n' "$tag_body" | grep -c '^Final-candidate-SHA256: ')" = 1
+          test "$(printf '%s\n' "$tag_body" | grep -c '^Qualification-manifest-SHA256: ')" = 1
+          export EXPECTED_BINARY_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Final-candidate-SHA256: //p')
+          export EXPECTED_MANIFEST_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Qualification-manifest-SHA256: //p')
+          export LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY"
+          bash Scripts/release-consume-final.sh stage "${GITHUB_REF_NAME#v}" "$GITHUB_SHA" \
+            "$private/LogicProMCP" "$private/bundle" \
+            "$PWD/trusted-verifier-src/.build/release/trusted-verifier" "$private/public"
+          # ONLY public distribution assets. Raw evidence/reports stay private.
+          for asset in LogicProMCP LogicProMCP-macOS-universal.tar.gz \
+                       LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt release-artifacts.sha256; do
+            cp "$private/public/$asset" "$asset"
+          done
 
       - name: Verify Formula install paths against tarball
         # Issue #22: v3.4.6/v3.5.0 shipped a Formula whose pkgshare.install
@@ -174,6 +194,25 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Checkout authenticated trusted verifier
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: fa73358acc837b4d0d33c1b52bf3337232cb7a76
+          path: trusted-verifier-src
+
+      - name: Resolve and build trusted verifier without changing pins
+        working-directory: trusted-verifier-src
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = fa73358acc837b4d0d33c1b52bf3337232cb7a76
+          test -z "$(git status --porcelain)"
+          swift package resolve --force-resolved-versions
+          git diff --exit-code Package.resolved
+          swift build -c release --product trusted-verifier --force-resolved-versions
+          git diff --exit-code Package.resolved
+
       - name: Download verified release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -182,9 +221,33 @@ jobs:
       # artifact experiences that directly, which is why it outlived the certification system that
       # used to run beside it.
       - name: Reverify downloaded release artifact
+        env:
+          QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
+          QUALIFICATION_EVIDENCE_SHA256: ${{ secrets.QUALIFICATION_EVIDENCE_SHA256 }}
+          TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
         run: |
-          test -f release-artifacts.sha256
+          set -euo pipefail
+          # Check declared outer file types before checksums can open them.
+          for artifact in LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt release-artifacts.sha256; do
+            if [ ! -f "$artifact" ] || [ -L "$artifact" ]; then
+              echo "Downloaded release input must be a regular non-link file" >&2
+              exit 1
+            fi
+          done
           shasum -a 256 --check release-artifacts.sha256
+          private=$(mktemp -d)
+          trap 'rm -rf "$private"' EXIT
+          bash Scripts/release-fetch-qualified-inputs.sh verify "$private"
+          git fetch --quiet --no-tags --depth=1 origin "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          tag_body=$(git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME")
+          test "$(printf '%s\n' "$tag_body" | grep -c '^Final-candidate-SHA256: ')" = 1
+          test "$(printf '%s\n' "$tag_body" | grep -c '^Qualification-manifest-SHA256: ')" = 1
+          export EXPECTED_BINARY_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Final-candidate-SHA256: //p')
+          export EXPECTED_MANIFEST_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Qualification-manifest-SHA256: //p')
+          export LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY"
+          bash Scripts/release-consume-final.sh verify "${GITHUB_REF_NAME#v}" "$GITHUB_SHA" \
+            "$PWD/LogicProMCP" "$private/bundle" \
+            "$PWD/trusted-verifier-src/.build/release/trusted-verifier" "$PWD"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
@@ -231,7 +294,13 @@ jobs:
         working-directory: ${{ runner.temp }}/artifact
         run: |
           set -euo pipefail
-          test -f release-artifacts.sha256
+          # Check declared outer file types before checksums can open them.
+          for artifact in LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt release-artifacts.sha256; do
+            if [ ! -f "$artifact" ] || [ -L "$artifact" ]; then
+              echo "Downloaded release input must be a regular non-link file" >&2
+              exit 1
+            fi
+          done
           shasum -a 256 --check release-artifacts.sha256
 
       - name: Record what this runner actually is

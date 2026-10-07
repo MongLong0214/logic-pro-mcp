@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""Release scripts run the live gate, and published tags name the qualified commit (#985).
+"""The standalone live producer still builds before qualifying (#985).
 
-The live qualification tests in the suite are enabled only when `.build/release/LogicProMCP` exists, and they drive that
-binary against a running Logic. Run before the release build, they drove whatever this tree built last, or were
-skipped. `Scripts/release-qualify.sh` builds release, stops unless Logic is running and the new binary reports its
-permissions granted, then runs the whole suite, and both release scripts call it before they tag or publish. The tag-triggered workflow checks the recorded commit before
-building on a runner that cannot drive Logic.
-
-The gate is checked by running it: `swift` and `pgrep` are stubbed on PATH, the release binary is a stub at its path,
-and the calls they receive are the answer.
+Release entrypoints now consume owner-staged final artifacts, not rebuild them.
+Their source contract checks supplement actual trusted-consumer tests; they do
+not establish trust by matching historical workflow names.
 """
 import os
 import re
@@ -97,16 +92,21 @@ def gate_problems(gate_text):
 
 
 def caller_problems(name, text):
+    if name == "release-stable.sh":
+        return ([] if 'exec bash "$(dirname "$0")/release.sh" "$@"' in text
+                else [f"{name}: stable entrypoint must delegate all inputs to the shared consumer"])
     lines = [line.strip() for line in text.splitlines()]
     code = [(i, line) for i, line in enumerate(lines) if line and not line.startswith("#")]
-    gate = [i for i, line in code if re.fullmatch(r'run "?Scripts/release-qualify\.sh"?', line)]
+    gate = [i for i, line in code if line.startswith('bash Scripts/release-consume-final.sh stage ')]
     direct = [line for _, line in code if re.search(r"\bswift test\b", line)]
-    publish = [i for i, line in code if re.match(r'run "?(git tag|git push origin|gh release create)\b', line)]
+    publish = [i for i, line in code if re.match(r'git (tag|push origin)\b', line)]
     problems = []
     if len(gate) != 1:
-        problems.append(f"{name}: expected one `run Scripts/release-qualify.sh`, found {len(gate)}")
+        problems.append(f"{name}: expected one final-artifact consumer, found {len(gate)}")
     if direct:
-        problems.append(f"{name}: runs swift test outside the gate: {direct}")
+        problems.append(f"{name}: runs swift test in the release consumer: {direct}")
+    if re.search(r'\bswift build\b|\bcodesign --force\b|\bgh release create\b', text):
+        problems.append(f"{name}: rebuilds/signs or publishes instead of consuming final artifacts")
     if not publish:
         problems.append(f"{name}: no tag or publish step found to order the gate against")
     elif gate and gate[0] > publish[0]:
@@ -115,14 +115,16 @@ def caller_problems(name, text):
 
 
 def tag_record_problems(name, text):
+    if name == "release-stable.sh":
+        return caller_problems(name, text)
     code = [(i, line.strip()) for i, line in enumerate(text.splitlines())
             if line.strip() and not line.lstrip().startswith("#")]
     record = [i for i, line in code if line == "QUALIFIED=$(git rev-parse HEAD)"]
-    gate = [i for i, line in code if re.fullmatch(r'run "?Scripts/release-qualify\.sh"?', line)]
-    tags = [line for _, line in code if re.match(r'run "?git tag\b', line)]
+    gate = [i for i, line in code if line.startswith('bash Scripts/release-consume-final.sh stage ')]
+    tags = [line for _, line in code if re.match(r'git tag\b', line)]
     problems = []
     if len(record) != 1 or not gate or record[0] >= gate[0]:
-        problems.append(f"{name}: record qualified HEAD before the live gate")
+        problems.append(f"{name}: record qualified HEAD before final-artifact consumption")
     if not tags or any("Live-qualified: $QUALIFIED" not in line for line in tags):
         problems.append(f"{name}: tag must name the qualified commit")
     return problems
@@ -135,12 +137,12 @@ def workflow_problems(text):
         return ["release.yml: build-release must precede publish"]
     block = text[build.end():publish.start()]
     check = re.search(r'(?m)^\s+Scripts/release-tag-is-qualified\.sh "\$\{GITHUB_REF_NAME\}"\s*$', block)
-    suite = re.search(r"(?m)^\s+- name: Run test suite\s*$", block)
+    package = re.search(r"(?m)^\s+- name: Package\s*$", block)
     problems = []
     if not check:
         problems.append("release.yml: build-release lacks tag qualification step")
-    elif not suite or check.start() >= suite.start():
-        problems.append("release.yml: tag qualification must precede the test suite")
+    elif not package or check.start() >= package.start():
+        problems.append("release.yml: tag qualification must precede final-artifact consumption")
     return problems
 
 
@@ -311,14 +313,15 @@ class EveryReleaseScriptRunsTheGate(unittest.TestCase):
                 self.assertEqual(caller_problems(name, _read(os.path.join(REPO, "Scripts", name))), [])
 
     def test_a_script_that_runs_the_suite_itself_is_refused(self):
-        text = 'run "swift test --no-parallel"\nrun "swift build -c release"\nrun "gh release create v1"\n'
+        text = 'swift test --no-parallel\nswift build -c release\ngit tag v1\n'
         self.assertEqual(caller_problems("x", text), [
-            "x: expected one `run Scripts/release-qualify.sh`, found 0",
-            "x: runs swift test outside the gate: ['run \"swift test --no-parallel\"']",
+            "x: expected one final-artifact consumer, found 0",
+            "x: runs swift test in the release consumer: ['swift test --no-parallel']",
+            "x: rebuilds/signs or publishes instead of consuming final artifacts",
         ])
 
     def test_a_gate_after_the_tag_is_refused(self):
-        text = 'run git tag "$VERSION" -m x\nrun Scripts/release-qualify.sh\n'
+        text = 'git tag "$VERSION" -m x\nbash Scripts/release-consume-final.sh stage v1\n'
         self.assertEqual(caller_problems("x", text), ["x: the gate runs after the first tag or publish step"])
 
 
@@ -353,11 +356,10 @@ class TagsNameTheLiveQualifiedCommit(unittest.TestCase):
                 self.assertEqual(tag_record_problems(name, _read(os.path.join(REPO, "Scripts", name))), [])
 
     def test_a_caller_without_the_tag_line_is_refused(self):
-        for name in CALLERS:
+        for name in ("release.sh",):
             with self.subTest(name=name):
                 text = _read(os.path.join(REPO, "Scripts", name))
-                broken = text.replace(" -m 'Live-qualified: $QUALIFIED'", "", 1) if name == "release.sh" else (
-                    text.replace(' -m "Live-qualified: $QUALIFIED"', "", 1))
+                broken = text.replace(' -m "Live-qualified: $QUALIFIED"', "", 1)
                 self.assertNotEqual(broken, text)
                 self.assertIn(f"{name}: tag must name the qualified commit", tag_record_problems(name, broken))
 
