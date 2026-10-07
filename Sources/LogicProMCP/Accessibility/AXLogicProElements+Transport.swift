@@ -5,6 +5,81 @@ import Foundation
 extension AXLogicProElements {
     // MARK: - Transport
 
+    struct ObservedTransportActivity {
+        let controlBar: AXUIElement
+        let play: AXUIElement
+        let record: AXUIElement
+        let isPlaying: Bool
+        let isRecording: Bool
+    }
+
+    /// Approval evidence uses the existing labelled Control Bar discriminator, not
+    /// TransportState's compatibility defaults or the first matching checkbox.
+    static func observedTransportActivity(
+        in window: AXUIElement, runtime: Runtime,
+        checking check: () throws -> Void
+    ) throws -> ObservedTransportActivity? {
+        let permits = { (try? check()) != nil }
+        func text(_ element: AXUIElement, _ attribute: String) throws -> String? {
+            try check()
+            let read: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(element, attribute, runtime: runtime.ax)
+            switch read {
+            case .success(let value): return value
+            case .failure(let error) where error.isDefinitiveAbsence: return nil
+            case .failure: throw AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+            }
+        }
+        guard case .success(let groups) = AXHelpers.censusDescendantResult(
+            of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime.ax,
+            requiresCompleteTraversal: true, permittingRead: permits) else {
+            try check(); return nil
+        }
+        var labelled: [AXUIElement] = []
+        var withControls: [AXUIElement] = []
+        do {
+            for group in groups.matches {
+                guard AXLocalePolicy.controlBarGroupLabel.matches(try text(group, kAXDescriptionAttribute), mode: .exactStrict) else { continue }
+                labelled.append(group)
+                try check()
+                guard case .success(let children) = AXHelpers.childrenResult(group, runtime: runtime.ax) else { return nil }
+                var holdsCheckbox = false
+                for child in children {
+                    guard let role = try text(child, kAXRoleAttribute) else { return nil }
+                    holdsCheckbox = holdsCheckbox || role == kAXCheckBoxRole as String
+                }
+                if holdsCheckbox { withControls.append(group) }
+            }
+            guard let bar = controlBarCandidate(labelled: labelled, withControls: withControls) else { return nil }
+            guard case .success(let controls) = AXHelpers.censusDescendantResult(
+                of: bar, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime.ax,
+                requiresCompleteTraversal: true, permittingRead: permits) else {
+                try check(); return nil
+            }
+            var play: [AXUIElement] = []
+            var record: [AXUIElement] = []
+            for control in controls.matches {
+                let title = try text(control, kAXTitleAttribute)
+                let description = try text(control, kAXDescriptionAttribute)
+                if AXLocalePolicy.transportPlayControl.matches(title, mode: .exactStrict)
+                    || AXLocalePolicy.transportPlayControl.matches(description, mode: .exactStrict) { play.append(control) }
+                if AXLocalePolicy.transportRecordControl.matches(title, mode: .exactStrict)
+                    || AXLocalePolicy.transportRecordControl.matches(description, mode: .exactStrict) { record.append(control) }
+            }
+            guard play.count == 1, record.count == 1, !CFEqual(play[0], record[0]) else { return nil }
+            func value(_ control: AXUIElement) throws -> Bool? {
+                try check()
+                let read: Result<NSNumber?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(control, kAXValueAttribute, runtime: runtime.ax)
+                guard case .success(.some(let value)) = read, value == 0 || value == 1 else { return nil }
+                return value.boolValue
+            }
+            guard let playing = try value(play[0]), let recording = try value(record[0]) else { return nil }
+            try check()
+            return .init(controlBar: bar, play: play[0], record: record[0], isPlaying: playing, isRecording: recording)
+        } catch is AXHelpers.AXStatusError {
+            try check(); return nil
+        }
+    }
+
     /// Find the transport bar area (toolbar/group containing play, stop, record, etc.)
     static func getTransportBar(runtime: Runtime = .production) -> AXUIElement? {
         guard let window = mainWindow(runtime: runtime) else { return nil }
@@ -287,11 +362,13 @@ extension AXLogicProElements {
         }
         // Exactly one, or nothing. Two bars that both hold transport controls is a tree this code
         // has never seen and must not guess about; the callers all fail closed on nil.
-        if withControls.count == 1 { return withControls[0] }
-        // No labelled candidate holds a control: fall back to a lone labelled group rather than
-        // regressing to first-of-many, so a Logic that renders the bar differently still resolves.
-        if withControls.isEmpty, labelled.count == 1 { return labelled[0] }
-        return nil
+        return controlBarCandidate(labelled: labelled, withControls: withControls)
+    }
+
+    /// Shared selection rule; strict callers preserve read failures before reaching it.
+    private static func controlBarCandidate(labelled: [AXUIElement], withControls: [AXUIElement]) -> AXUIElement? {
+        let candidates = withControls.isEmpty ? labelled : withControls
+        return candidates.count == 1 ? candidates[0] : nil
     }
 
     /// Find an AXCheckBox inside Logic Pro's control bar by its name.

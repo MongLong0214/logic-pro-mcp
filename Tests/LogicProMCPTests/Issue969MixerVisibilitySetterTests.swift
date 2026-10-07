@@ -6,7 +6,7 @@ import Testing
 
 @Suite("#969 explicit final Mixer visibility", .serialized)
 struct Issue969MixerVisibilitySetterTests {
-    private final class Fixture: @unchecked Sendable {
+    final class Fixture: @unchecked Sendable {
         let builder = FakeAXRuntimeBuilder()
         let app: AXUIElement
         let window: AXUIElement
@@ -16,6 +16,9 @@ struct Issue969MixerVisibilitySetterTests {
         let toggle: AXUIElement
         let mixer: AXUIElement
         var showing: Bool
+        var extraWindowChildren: [AXUIElement] = []
+        var afterVisibilityChange: (@Sendable () -> Void)?
+        var attributeReadObserver: (@Sendable (AXUIElement, String) -> Void)?
         var events: [String] = []
         var leafAcknowledged = true
         var leafChangesVisibility = true
@@ -77,7 +80,7 @@ struct Issue969MixerVisibilitySetterTests {
         }
 
         func updateVisibility() {
-            builder.setChildren(window, showing ? [rail, mixer] : [rail])
+            builder.setChildren(window, extraWindowChildren + (showing ? [rail, mixer] : [rail]))
             builder.setAttribute(toggle, kAXTitleAttribute as String, showing ? "Hide Mixer" : "Show Mixer")
         }
 
@@ -94,6 +97,7 @@ struct Issue969MixerVisibilitySetterTests {
             let ax = builder.makeAXRuntime(appElement: app,
                 appElementProvider: { [self] _ in currentApp ?? app },
                 attributeValueHandler: { [self] element, attribute in
+                    attributeReadObserver?(element, attribute)
                     observeDecisiveMixerRead(element, attribute)
                     if afterFinalFocusRead != nil {
                         if CFEqual(element, mixer), attribute == kAXIdentifierAttribute as String {
@@ -112,6 +116,7 @@ struct Issue969MixerVisibilitySetterTests {
                     return nil
                 },
                 attributeValueResultHandler: { [self] element, attribute in
+                    attributeReadObserver?(element, attribute)
                     observeDecisiveMixerRead(element, attribute)
                     if let failedMetadata, CFEqual(element, failedMetadata.0), attribute == failedMetadata.1 {
                         return .failure(.init(raw: Int32(AXError.cannotComplete.rawValue)))
@@ -156,6 +161,7 @@ struct Issue969MixerVisibilitySetterTests {
                         if leafChangesVisibility { showing = contradictoryShow ? true : contradictoryHide ? false : !showing }
                         events.append(showing ? "show_mixer" : "hide_mixer")
                         updateVisibility()
+                        afterVisibilityChange?()
                         builder.setAttribute(view, kAXSelectedAttribute as String, leafLeavesMenuOpen)
                         return leafAcknowledged
                     }

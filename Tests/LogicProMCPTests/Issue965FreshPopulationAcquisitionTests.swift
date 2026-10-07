@@ -402,15 +402,36 @@ struct Issue965FreshPopulationAcquisitionTests {
     }
 
     @Test func disappearingNameWitnessIsNotAStablePopulation() async throws {
+        final class NamePhase: @unchecked Sendable {
+            private let lock = NSLock()
+            private var observed = true
+            var nameIsObserved: Bool { lock.withLock { observed } }
+            func extractionPassedSelection() { lock.withLock { observed.toggle() } }
+        }
         let fixture = Fixture()
-        let titleReads = Reads()
+        let field = fixture.builder.element(965_904)
+        fixture.builder.setRole(field, kAXTextFieldRole as String)
+        fixture.builder.setChildren(field, [])
+        fixture.builder.setChildren(fixture.header, [field])
+        fixture.builder.removeAttribute(fixture.header, kAXTitleAttribute as String)
+        let phase = NamePhase()
+        let extractionReads = Reads()
+        let lostNameReads = Reads()
         let runtime = fixture.builder.makeLogicRuntime(
             appElement: fixture.app,
             attributeValueHandler: { element, attribute in
-                guard CFEqual(element, fixture.header), attribute == kAXTitleAttribute as String else { return nil }
-                titleReads.record(attribute)
+                // extractTrackState reads its primary name BEFORE this selected
+                // value, then inferTrackType reads the name again. Advance the
+                // before/after phase only at that actual extraction boundary.
+                if CFEqual(element, fixture.header), attribute == kAXSelectedAttribute as String {
+                    extractionReads.record(attribute)
+                    phase.extractionPassedSelection()
+                }
+                guard CFEqual(element, field), attribute == kAXValueAttribute as String else { return nil }
                 // A genuine name and the extractor's fallback have identical wire bytes.
-                return titleReads.count.isMultiple(of: 2) ? .some(nil) : .some("Untitled" as NSString)
+                if phase.nameIsObserved { return .some("Untitled" as NSString) }
+                lostNameReads.record(attribute)
+                return .some(nil)
             },
             setAttributeHandler: nil, performActionHandler: nil,
             executeAppleScript: { _ in .error("fixture forbids AppleScript") }
@@ -429,7 +450,8 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
         #expect(!population.stable,
                 "wire equality cannot hide loss of the live name witness needed to issue a target")
-        #expect(titleReads.count == 18, "all three bounded attempts must reject before/after identity disagreement")
+        #expect(extractionReads.count == 6, "all three before/after attempts must reject identity disagreement")
+        #expect(lostNameReads.count >= 3, "the actual after-extraction must consume the missing-name fault")
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
     }
 

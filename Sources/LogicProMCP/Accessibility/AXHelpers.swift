@@ -656,7 +656,9 @@ enum AXHelpers {
         title: String? = nil,
         identifier: String? = nil,
         maxDepth: Int = 10,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        requiresCompleteTraversal: Bool = false,
+        permittingRead: () -> Bool = { true }
     ) -> Result<Census, AXStatusError> {
         var hits: [AXUIElement] = []
         switch collectMatchingResult(
@@ -666,6 +668,8 @@ enum AXHelpers {
             identifier: identifier,
             maxDepth: maxDepth,
             runtime: runtime,
+            requiresCompleteTraversal: requiresCompleteTraversal,
+            permittingRead: permittingRead,
             into: &hits
         ) {
         case .success:
@@ -708,9 +712,12 @@ enum AXHelpers {
         identifier: String?,
         maxDepth: Int,
         runtime: Runtime,
+        requiresCompleteTraversal: Bool,
+        permittingRead: () -> Bool,
         into results: inout [AXUIElement]
     ) -> Result<Void, AXStatusError> {
-        guard maxDepth > 0 else { return .success(()) }
+        guard maxDepth > 0 || requiresCompleteTraversal else { return .success(()) }
+        guard permittingRead() else { return .failure(AXStatusError(raw: AXError.cannotComplete.rawValue)) }
         let children: [AXUIElement]
         switch childrenResult(element, runtime: runtime) {
         case let .success(observed):
@@ -720,13 +727,20 @@ enum AXHelpers {
         case let .failure(error):
             return .failure(error)
         }
+        // Opt-in proof readers cannot treat a depth-bound, unvisited subtree as empty.
+        if maxDepth <= 0 {
+            return children.isEmpty ? .success(()) : .failure(AXStatusError(raw: AXError.cannotComplete.rawValue))
+        }
         for child in children {
+            guard permittingRead() else { return .failure(AXStatusError(raw: AXError.cannotComplete.rawValue)) }
             switch descendantMatchesResult(
                 child,
                 role: role,
                 title: title,
                 identifier: identifier,
-                runtime: runtime
+                runtime: runtime,
+                requiresCompleteTraversal: requiresCompleteTraversal,
+                permittingRead: permittingRead
             ) {
             case .success(true):
                 results.append(child)
@@ -742,6 +756,8 @@ enum AXHelpers {
                 identifier: identifier,
                 maxDepth: maxDepth - 1,
                 runtime: runtime,
+                requiresCompleteTraversal: requiresCompleteTraversal,
+                permittingRead: permittingRead,
                 into: &results
             ) {
             case .success:
@@ -758,7 +774,9 @@ enum AXHelpers {
         role: String?,
         title: String?,
         identifier: String?,
-        runtime: Runtime
+        runtime: Runtime,
+        requiresCompleteTraversal: Bool,
+        permittingRead: () -> Bool
     ) -> Result<Bool, AXStatusError> {
         for (attribute, expected) in [
             (kAXRoleAttribute as String, role),
@@ -766,6 +784,7 @@ enum AXHelpers {
             (kAXIdentifierAttribute as String, identifier),
         ] {
             guard let expected else { continue }
+            guard permittingRead() else { return .failure(AXStatusError(raw: AXError.cannotComplete.rawValue)) }
             let value: String?
             switch stringAttributeResult(element, attribute, runtime: runtime) {
             case let .success(observed):
@@ -773,6 +792,7 @@ enum AXHelpers {
             case let .failure(error):
                 return .failure(error)
             }
+            if requiresCompleteTraversal && value == nil { return .failure(.malformedAttribute) }
             guard value == expected else { return .success(false) }
         }
         return .success(true)

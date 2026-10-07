@@ -604,7 +604,7 @@ struct WorkflowCommandCensusTests {
         let transport = try #require(WorkflowSkillCatalog.publicCommands["logic_transport"])
         #expect(transport.contains("toggle_autopunch"))
         let project = WorkflowSkillCatalog.publicCommands["logic_project"] ?? []
-        for command in ["export_run", "export_resume", "cleanup_apply"] {
+        for command in ["export_run", "export_resume", "cleanup_apply", "apply_session_repair"] {
             #expect(project.contains(command),
                     "logic_project.\(command) executes in the dispatcher + is documented in API.md but is missing from the census")
         }

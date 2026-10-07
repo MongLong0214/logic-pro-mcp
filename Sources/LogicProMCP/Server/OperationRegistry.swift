@@ -82,6 +82,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case projectCleanupPlan = "project.cleanup_plan"
     case projectInspectSession = "project.inspect_session"
     case projectPlanSessionRepair = "project.plan_session_repair"
+    case projectApplySessionRepair = "project.apply_session_repair"
     case projectCleanupApply = "project.cleanup_apply"
     case midiSendNote = "midi.send_note"
     case midiSendChord = "midi.send_chord"
@@ -334,7 +335,7 @@ enum OperationRegistry {
             "project.bounce", "project.is_running", "project.launch", "project.quit",
             "project.get_regions", "project.export_plan", "project.export_run",
             "project.export_resume", "project.audit", "project.cleanup_plan",
-            "project.inspect_session", "project.plan_session_repair", "project.cleanup_apply",
+            "project.inspect_session", "project.plan_session_repair", "project.apply_session_repair", "project.cleanup_apply",
         ],
         ToolID.logicMidi.rawValue: [
             "midi.send_note", "midi.send_chord", "midi.send_cc", "midi.send_program_change",
@@ -391,7 +392,7 @@ enum OperationRegistry {
         ToolID.logicProject.rawValue: [
             "new", "open", "save", "save_as", "close", "bounce", "is_running", "launch",
             "quit", "get_regions", "export_plan", "export_run", "export_resume", "audit",
-            "cleanup_plan", "inspect_session", "plan_session_repair", "cleanup_apply",
+            "cleanup_plan", "inspect_session", "plan_session_repair", "apply_session_repair", "cleanup_apply",
         ],
         ToolID.logicMidi.rawValue: [
             "send_note", "send_chord", "send_cc", "send_program_change", "send_pitch_bend",
@@ -869,6 +870,8 @@ enum OperationRegistry {
             ["allow_ui_navigation", "domains", "project_ref", "scope", "snapshot_id"]
         ),
         (.projectPlanSessionRepair, "plan_session_repair", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short, ["snapshot_id", "policy", "names", "plan_id", "digest", "on_ambiguity", "allow_create_aux", "allow_stack_membership_change", "allow_replace_send"]),
+        (.projectApplySessionRepair, "apply_session_repair", Mutability.`mutating`, ConfirmationPolicy.l1,
+            VerificationPolicy.readbackRequired, DeadlineClass.long, ["plan_id", "digest", "confirmed", "idempotency_key"]),
         (
             .projectCleanupApply,
             "cleanup_apply",

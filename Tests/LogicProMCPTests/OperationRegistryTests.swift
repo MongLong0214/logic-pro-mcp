@@ -595,6 +595,7 @@ struct OperationRegistryTests {
         ("project.audit", "audit", .readOnly, .short, .none),
         ("project.cleanup_plan", "cleanup_plan", .readOnly, .short, .none),
         ("project.plan_session_repair", "plan_session_repair", .readOnly, .short, .none),
+        ("project.apply_session_repair", "apply_session_repair", .mutating, .long, .readbackRequired),
         ("project.inspect_session", "inspect_session", .readOnly, .short, .none),
         ("project.cleanup_apply", "cleanup_apply", .mutating, .medium, .readbackRequired),
     ]
@@ -607,6 +608,7 @@ struct OperationRegistryTests {
         ("logic_project", "save", .l1),
         ("logic_project", "launch", .l1),
         ("logic_project", "cleanup_apply", .l1),
+        ("logic_project", "apply_session_repair", .l1),
         ("logic_project", "open", .l2),
         ("logic_project", "save_as", .l2),
         ("logic_project", "bounce", .l2),
@@ -670,7 +672,7 @@ struct OperationRegistryTests {
             .map(\.command))
         #expect(expected == Set([
             "new", "open", "save", "save_as", "close", "bounce", "launch", "quit",
-            "export_run", "export_resume", "cleanup_apply",
+            "export_run", "export_resume", "cleanup_apply", "apply_session_repair",
         ]))
         #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
         for entry in Self.projectCommands {
@@ -683,7 +685,7 @@ struct OperationRegistryTests {
     func projectDeadlineParity() {
         #expect(Self.projectCommands.filter { $0.deadline == .short }.count == 8)
         #expect(Self.projectCommands.filter { $0.deadline == .medium }.count == 5)
-        #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 5)
+        #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 6)
 
         for entry in Self.projectCommands {
             #expect(OperationRegistry.deadlineSeconds(tool: "logic_project", command: entry.command)

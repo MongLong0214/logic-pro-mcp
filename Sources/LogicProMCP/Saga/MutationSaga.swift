@@ -32,6 +32,8 @@ struct SagaStep: Codable, Equatable, Sendable {
 struct SagaPlan: Codable, Equatable, Sendable {
     let steps: [SagaStep]
     let idempotencyKey: String
+    var canonicalPlanID: String? = nil
+    var canonicalDigest: String? = nil
 }
 
 enum StepResultState: String, Codable, Equatable, Sendable {
@@ -54,6 +56,7 @@ enum SagaReadSource: String, Codable, Equatable, Sendable {
     case axTrackHeaderPan = "ax_track_header_pan"
     case axTrackName = "ax_track_name"
     case axTrackToggle = "ax_track_toggle"
+    case axProjectMixerVisibility = "ax_project_mixer_visibility"
 
     /// Short label for the human summary string.
     var label: String {
@@ -62,6 +65,7 @@ enum SagaReadSource: String, Codable, Equatable, Sendable {
         case .axTrackHeaderPan: "header_pan"
         case .axTrackName: "track_name"
         case .axTrackToggle: "track_toggle"
+        case .axProjectMixerVisibility: "mixer_visibility"
         }
     }
 }
@@ -78,20 +82,23 @@ enum SagaProvenance: String, Codable, Equatable, Sendable {
 struct SagaReadEvidence: Codable, Equatable, Sendable {
     let readSource: SagaReadSource
     let provenance: SagaProvenance
-    let trackIndex: Int
+    let trackIndex: Int?
+    var projectReference: String? = nil
     let field: String
     let observed: Value
     let sampledAt: String
 
     /// Human summary, e.g. `ax_live tracks[3].volume (header_fader)`.
     var summary: String {
-        "ax_live tracks[\(trackIndex)].\(field) (\(readSource.label))"
+        if let trackIndex { return "ax_live tracks[\(trackIndex)].\(field) (\(readSource.label))" }
+        return "ax_live project[\(projectReference ?? "unobserved")].\(field) (\(readSource.label))"
     }
 
     enum CodingKeys: String, CodingKey {
         case readSource = "read_source"
         case provenance
         case trackIndex = "track_index"
+        case projectReference = "project_ref"
         case field
         case observed
         case sampledAt = "sampled_at"
@@ -263,6 +270,7 @@ actor MutationSaga {
 
     private let targetRegistry: TargetRegistry
     private let enabled: Bool
+    private let approvedSessionRepair: ApprovedSessionRepair?
     private var sessions: [String: SagaOutcome] = [:]
 
     /// Route-health probe for preflight. REQUIRED — a silent skip default
@@ -275,10 +283,12 @@ actor MutationSaga {
     init(
         targetRegistry: TargetRegistry,
         enabled: Bool = FeatureFlags.adr004MutationSaga,
+        approvedSessionRepair: ApprovedSessionRepair? = nil,
         routeAvailable: @escaping @Sendable (OperationID) async -> Bool
     ) {
         self.targetRegistry = targetRegistry
         self.enabled = enabled
+        self.approvedSessionRepair = approvedSessionRepair
         self.routeAvailable = routeAvailable
     }
 
@@ -328,14 +338,19 @@ actor MutationSaga {
                 ))
             }
 
-            if let definition = Self.reversibleDefinitions[step.operationID] {
+            let approvedView = approvedSessionRepair?.supports(step) == true
+                && plan.canonicalPlanID == approvedSessionRepair?.plan.canonicalPlanID
+                && plan.canonicalDigest == approvedSessionRepair?.plan.canonicalDigest
+            let definition = approvedView ? ReversibleDefinition(tool: .logicNavigate, command: "toggle_view",
+                valueParameter: "visible", tolerance: .exact) : Self.reversibleDefinitions[step.operationID]
+            if let definition {
                 let spec = OperationRegistry.spec(
                     tool: definition.tool.rawValue,
                     command: definition.command
                 )
                 if spec?.id != step.operationID
                     || spec?.mutability != Mutability.`mutating`
-                    || spec?.verification != .readbackRequired
+                    || (!approvedView && spec?.verification != .readbackRequired)
                     || spec?.retry != .neverAutomatic
                     || spec?.availability == .unsupported
                     || registeredSpec?.tool != definition.tool

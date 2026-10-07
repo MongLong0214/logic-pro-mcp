@@ -349,6 +349,7 @@ struct SystemDispatcher: OperationTraceDispatching {
         // driven directly (tests / non-server): the saga path then derives its
         // own instant from the registry budget.
         sagaLifecycleDeadline: ContinuousClock.Instant? = nil,
+        approvedSessionRepair: ApprovedSessionRepair? = nil,
         // #413 — the consent-gated record-arm key-command assignment. nil-free
         // default wires the production engine (its functional verifier drives the
         // real arm actuator); tests inject a canned Outcome to exercise the
@@ -870,7 +871,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             let traceID = await startTraceIfEnabled(command: command)
             let plan: SagaPlan
             do {
-                plan = try SagaWire.plan(from: params)
+                plan = try approvedSessionRepair?.plan ?? SagaWire.plan(from: params)
             } catch {
                 return await finalizeTrace(SagaWire.invalidParams(error), traceID: traceID)
             }
@@ -969,6 +970,21 @@ struct SystemDispatcher: OperationTraceDispatching {
                         mutationGate?.release(mutationClaim)
                     }
                 }
+                let lifecycleBudgetSeconds = OperationRegistry.spec(
+                    tool: ToolID.logicSystem.rawValue, command: "saga_execute"
+                )?.deadline.seconds ?? DeadlineClass.long.seconds
+                let lifecycleDeadline = sagaLifecycleDeadline
+                    ?? ContinuousClock.now.advanced(by: .seconds(lifecycleBudgetSeconds))
+                let inherited = OperationTraceContext.current
+                let approvedContext = approvedSessionRepair.map { _ in
+                    OperationTraceContext(parentTraceID: inherited?.traceID,
+                        mutationGateAcquired: mutationClaim != nil,
+                        ownsGate: {
+                            guard let mutationGate, let mutationClaim else { return false }
+                            return mutationGate.stillOwns(mutationClaim) && (inherited?.ownsGate() ?? true)
+                        }, deadline: lifecycleDeadline,
+                        cancellationRequested: { Task.isCancelled || inherited?.cancellationRequested() == true })
+                }
                 // ADR-004 / issue #287 — qualification-only fault seam. #399 (CEO
                 // audit P0): the seam and its wiring are compiled solely in debug
                 // via `FAULT_TEST_SEAM`. The release executor is
@@ -986,7 +1002,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                     faultSeam: SagaPartialStateFaultSeam.resolve(
                         environment: ProcessInfo.processInfo.environment,
                         stepCount: plan.steps.count
-                    )
+                    ), approvedSessionRepair: approvedSessionRepair
                 )
                 #else
                 let executor = ProductionSagaStepExecutor(
@@ -996,40 +1012,14 @@ struct SystemDispatcher: OperationTraceDispatching {
                     dialogPresent: dialogPresent,
                     liveReadback: sagaLiveReadback ?? .unavailable,
                     liveTrackName: liveTrackName,
-                    liveTrackNames: liveTrackNames
+                    liveTrackNames: liveTrackNames, approvedSessionRepair: approvedSessionRepair
                 )
                 #endif
                 let saga = MutationSaga(
                     targetRegistry: targetRegistry,
+                    approvedSessionRepair: approvedSessionRepair,
                     routeAvailable: Self.sagaRouteProbe(router: router)
                 )
-                let preflight = await saga.preflight(plan)
-                let availability = await executor.captureBeforeStateAvailability(plan: plan)
-                let availabilityIssues = SagaWire.availabilityIssues(availability, plan: plan)
-                if !preflight.issues.isEmpty || !availabilityIssues.isEmpty {
-                    let result = SagaWire.scopedStateC(
-                        SagaWire.executionFailureError(
-                            preflightIssues: preflight.issues,
-                            availabilityIssues: availabilityIssues
-                        ),
-                        hint: "Saga preflight rejected the plan",
-                        extras: [
-                            "idempotency_key": plan.idempotencyKey,
-                            "duplicate": false,
-                            "issues": preflight.issues.map(SagaWire.preflightIssue)
-                                + availabilityIssues,
-                            "before_state_availability": SagaWire.availabilityObjects(
-                                availability,
-                                plan: plan
-                            ),
-                        ]
-                    )
-                    await sagaJournal.completeBeforeWrite(
-                        journalClaim,
-                        outcome: SagaWire.storedOutcome(from: result)
-                    )
-                    return await finalizeTrace(result, traceID: traceID)
-                }
                 let refreshAfterWrite: @Sendable () async -> Void
                 if let sagaRefreshAfterWrite {
                     refreshAfterWrite = sagaRefreshAfterWrite
@@ -1055,12 +1045,6 @@ struct SystemDispatcher: OperationTraceDispatching {
                 // #412: ONE shared absolute lifecycle deadline. Server dispatch
                 // supplies it (shared with the outer transport timer); a
                 // direct/test call derives it from the registry budget.
-                let lifecycleBudgetSeconds = OperationRegistry.spec(
-                    tool: ToolID.logicSystem.rawValue,
-                    command: "saga_execute"
-                )?.deadline.seconds ?? DeadlineClass.long.seconds
-                let lifecycleDeadline = sagaLifecycleDeadline
-                    ?? ContinuousClock.now.advanced(by: .seconds(lifecycleBudgetSeconds))
                 let deadlineReached: @Sendable () -> Bool = {
                     ContinuousClock.now >= lifecycleDeadline
                 }
@@ -1081,7 +1065,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                 // bytes. Abandon side effects fire ONLY when the timeout actually
                 // terminalized the saga as a timeout, and BEFORE the continuation
                 // resumes so the dispatcher `defer` above observes the flag.
-                let outerTraceContext = OperationTraceContext.current
+                let outerTraceContext = approvedContext ?? OperationTraceContext.current
                 let raceResult: CallTool.Result = await withCheckedContinuation { continuation in
                     let race = SagaDeadlineRace()
                     let timeoutHandle = SagaTimeoutHandle()
@@ -1093,6 +1077,34 @@ struct SystemDispatcher: OperationTraceDispatching {
                     // and fail the saga closed as feature-disabled.
                     let workTask = Task(priority: .userInitiated) {
                         await OperationTraceContext.$current.withValue(outerTraceContext) {
+                            // Availability includes synchronous AX reads. It belongs to
+                            // the same lifecycle race as execution, not before its timer.
+                            let preflight = await saga.preflight(plan)
+                            let availability = await executor.captureBeforeStateAvailability(plan: plan)
+                            let availabilityIssues = SagaWire.availabilityIssues(availability, plan: plan)
+                            if !preflight.issues.isEmpty || !availabilityIssues.isEmpty {
+                                let result = SagaWire.scopedStateC(
+                                    SagaWire.executionFailureError(
+                                        preflightIssues: preflight.issues,
+                                        availabilityIssues: availabilityIssues
+                                    ),
+                                    hint: "Saga preflight rejected the plan",
+                                    extras: [
+                                        "idempotency_key": plan.idempotencyKey,
+                                        "duplicate": false,
+                                        "issues": preflight.issues.map(SagaWire.preflightIssue) + availabilityIssues,
+                                        "before_state_availability": SagaWire.availabilityObjects(availability, plan: plan),
+                                    ]
+                                )
+                                let (winner, _) = await sagaJournal.finalizeReturningWinner(
+                                    journalClaim, proposed: SagaWire.storedOutcome(from: result),
+                                    verifiedIfCancelled: true
+                                )
+                                let didWin = race.resume(continuation,
+                                    returning: toolTextResult(winner.body, isError: winner.isError))
+                                if didWin { timeoutHandle.cancel() }
+                                return
+                            }
                             let outcome = await OperationTraceParentBoundary.$onWriteBoundary.withValue(
                                 onWriteBoundary
                             ) {

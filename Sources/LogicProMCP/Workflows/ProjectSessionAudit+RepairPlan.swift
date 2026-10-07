@@ -98,15 +98,17 @@ extension ProjectSessionAudit {
         // receiving-aux branches are reachable only through a graph that carries one.
         let graph = graphOverride ?? SessionPopulationObservation.routingGraph(capture: capture)
         let assessment = assessIntent(policy: policy, capture: capture, graph: graph)
+        let viewOnly = policy.mixerVisible != nil && policy.targets.isEmpty && policy.roles.isEmpty
+            && policy.outputs.isEmpty && policy.receivers.isEmpty && names.isEmpty
         var reasons = Set<String>()
         if !snapshotCurrent { reasons.insert("snapshot_changed") }
-        if request.scope != .wholeProject { reasons.insert("whole_project_scope_required") }
+        if !viewOnly && request.scope != .wholeProject { reasons.insert("whole_project_scope_required") }
         let gate = assessmentGate(policy: policy, capture: capture, graph: graph)
-        if let gate { reasons.insert(gate.reason.rawValue) }
+        if !viewOnly, let gate { reasons.insert(gate.reason.rawValue) }
         // The whole binding the assessor applies: the gate, and the registry epoch it checks per
         // finding (#1090 review R2, R1090-002). Receiver evidence is read only from a graph both pass.
         let epochMismatch = graphEpochMismatch(graph, capture: capture)
-        if let epochMismatch { reasons.insert(epochMismatch.rawValue) }
+        if !viewOnly, let epochMismatch { reasons.insert(epochMismatch.rawValue) }
         let graphBound = gate == nil && epochMismatch == nil
         var proposalReadReasons = reasons
         if !request.domains.contains(.routing) { proposalReadReasons.insert("routing_not_requested") }
@@ -282,6 +284,33 @@ extension ProjectSessionAudit {
             "target": .string($0.target), "name": .string($0.name)
         ]) }
         steps = auxSteps + steps
+        if let desired = policy.mixerVisible {
+            var blocked = Set<String>()
+            if !FeatureFlags.adr004MutationSaga { blocked.insert("mutation_saga_unavailable") }
+            let observation = capture.freshPopulation?.presentationObservation
+            if capture.freshPopulation?.stable != true || capture.freshPopulation?.presentationBinding == nil {
+                blocked.insert("project_view_binding_unavailable")
+            }
+            if observation?.mixerVisible == nil { blocked.insert("mixer_visibility_unobserved") }
+            if observation?.isPlaying == nil || observation?.isRecording == nil {
+                blocked.insert("transport_state_unobserved")
+            } else if observation?.isPlaying != false || observation?.isRecording != false {
+                blocked.insert("transport_not_stopped")
+            }
+            if case .issued(let reference)? = capture.projectIssuance {
+                if policy.projectRef != reference { blocked.insert("approved_project_reference_required") }
+            } else { blocked.insert("approved_project_reference_required") }
+            reasons.formUnion(blocked)
+            steps.append(.object([
+                "id": .string("mixer_visibility"), "kind": .string("mixer_visibility"),
+                "target_ref": policy.projectRef.map { .string($0.rawValue) } ?? .null,
+                "before": .object(["visible": observation?.mixerVisible.map(Value.bool) ?? .null]),
+                "after": .object(["visible": .bool(desired)]),
+                "dependencies": .array([]), "blocked_reasons": .array(blocked.sorted().map(Value.string)),
+                "required_invariants": .array(["project_bound_view", "observed_stopped_non_recording",
+                    "conditional_inverse_visibility", "menu_cleanup"].map(Value.string))
+            ]))
+        }
         // Preview is this canonical step array; no independently generated preview can drift.
         var body: [String: Value] = [
             "schema": .string(sessionRepairPlanSchema), "read_only": .bool(true),

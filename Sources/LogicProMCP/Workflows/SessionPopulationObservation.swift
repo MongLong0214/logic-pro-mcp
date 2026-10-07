@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import Foundation
 
 /// #965 session-population report shared by fresh request acquisition and the existing audit.
@@ -23,6 +24,67 @@ enum SessionPopulationObservation {
         var stable: Bool
         var uiEffects: UIEffects = .init()
         var mixerPresentation: MixerPresentation? = nil
+        var presentationObservation: PresentationObservation? = nil
+        var presentationBinding: PresentationBinding? = nil
+    }
+
+    struct PresentationObservation: Encodable, Equatable, Sendable {
+        let mixerVisible: Bool?
+        let isPlaying: Bool?
+        let isRecording: Bool?
+        enum CodingKeys: String, CodingKey {
+            case mixerVisible = "mixer_visible", isPlaying = "is_playing", isRecording = "is_recording"
+        }
+        func encode(to encoder: Encoder) throws {
+            var values = encoder.container(keyedBy: CodingKeys.self)
+            try values.encode(mixerVisible, forKey: .mixerVisible)
+            try values.encode(isPlaying, forKey: .isPlaying)
+            try values.encode(isRecording, forKey: .isRecording)
+        }
+    }
+
+    /// Process-local custody from the actual request reader; JSON cannot recreate it.
+    final class PresentationBinding: @unchecked Sendable {
+        let window: AXUIElement
+        let title: String
+        let document: String
+        let mixer: AXUIElement?
+        let transport: AXLogicProElements.ObservedTransportActivity?
+        let runtime: AXLogicProElements.Runtime
+        let pid: pid_t?
+        let app: AXUIElement?
+        let focus: AXUIElement?
+        let navigationBaseline: AccessibilityChannel.OwnedMixerObservationNavigation?
+        init(window: AXUIElement, title: String, document: String, mixer: AXUIElement?,
+             transport: AXLogicProElements.ObservedTransportActivity?, runtime: AXLogicProElements.Runtime) {
+            self.window = window; self.title = title; self.document = document
+            self.mixer = mixer; self.transport = transport; self.runtime = runtime
+            pid = runtime.logicProPID()
+            app = AXLogicProElements.appRoot(runtime: runtime)
+            focus = app.flatMap { AXHelpers.getAttribute($0, kAXFocusedUIElementAttribute as String, runtime: runtime.ax) }
+            navigationBaseline = .init(window: window, runtime: runtime, expectedProject: nil,
+                requiresProjectReference: false, referenceIsCurrent: { true })
+        }
+
+        func matches(_ other: PresentationBinding) -> Bool {
+            func same(_ lhs: AXUIElement?, _ rhs: AXUIElement?) -> Bool {
+                switch (lhs, rhs) {
+                case (nil, nil): return true
+                case (.some(let a), .some(let b)): return CFEqual(a, b)
+                default: return false
+                }
+            }
+            guard CFEqual(window, other.window), title.utf8.elementsEqual(other.title.utf8),
+                  document.utf8.elementsEqual(other.document.utf8), pid == other.pid,
+                  same(app, other.app), same(focus, other.focus), same(mixer, other.mixer) else { return false }
+            switch (transport, other.transport) {
+            case (nil, nil): return true
+            case (.some(let a), .some(let b)):
+                return CFEqual(a.controlBar, b.controlBar) && CFEqual(a.play, b.play) && CFEqual(a.record, b.record)
+                    && a.isPlaying == b.isPlaying && a.isRecording == b.isRecording
+            default: return false
+            }
+        }
     }
 
     /// Presentation is independent of population coverage: All plus enabled type filters
@@ -496,6 +558,7 @@ enum SessionPopulationObservation {
         let color: DomainSection?
         let overall: Overall
         let uiEffects: UIEffects
+        var presentationObservation: PresentationObservation? = nil
 
         enum CodingKeys: String, CodingKey {
             case schema
@@ -515,6 +578,7 @@ enum SessionPopulationObservation {
             case color
             case overall
             case uiEffects = "ui_effects"
+            case presentationObservation = "presentation_observation"
         }
     }
 
@@ -1046,7 +1110,8 @@ enum SessionPopulationObservation {
             routing: routing,
             color: color,
             overall: Overall(complete: incompleteDomains.isEmpty, incompleteDomains: incompleteDomains),
-            uiEffects: capture.freshPopulation?.uiEffects ?? UIEffects()
+            uiEffects: capture.freshPopulation?.uiEffects ?? UIEffects(),
+            presentationObservation: capture.freshPopulation?.presentationObservation
         )
     }
 

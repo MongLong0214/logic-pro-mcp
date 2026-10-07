@@ -438,6 +438,12 @@ extension OperationRegistry {
                                                   sample: Self.planSessionRepairSamples[$0])) }),
                 // A retained plan by id, or a retained inspection with a policy to plan from.
                 required: [["plan_id", "snapshot_id+policy"]]),
+            "project.apply_session_repair": .init(params: [
+                "plan_id": .unconstrained("checked against the retained canonical plan", sample: .string("plan_unavailable")),
+                "digest": .unconstrained("checked against the exact retained digest", sample: .string(String(repeating: "0", count: 64))),
+                "confirmed": .unconstrained("must be exactly true before execution", sample: .bool(true)),
+                "idempotency_key": .unconstrained("checked by the Saga wire key parser", sample: .string("repair-957")),
+            ], required: [["plan_id"], ["digest"], ["confirmed"], ["idempotency_key"]]),
 
             // logic_system: the saga commands validate their own wire format (they are opted out of
             // the generic unknown-parameter gate).
