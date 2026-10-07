@@ -8,6 +8,7 @@ enum AXTrackBinding {
     final class Exposure: @unchecked Sendable {
         private let lock = NSLock()
         private var ended = false
+        private var observedLoss = false
         let header: AXUIElement
         let disclosure: AXUIElement
         let runtime: AXLogicProElements.Runtime
@@ -18,10 +19,21 @@ enum AXTrackBinding {
             self.originalHeaders = originalHeaders
         }
         func end() { lock.withLock { ended = true } }
+        var hasObservedLoss: Bool { lock.withLock { observedLoss } }
+        private func lose() { lock.withLock { ended = true; observedLoss = true } }
+
+        /// Consume the actual collector's sampled facts; a later retry cannot
+        /// erase a positively observed closed/missing acquired disclosure.
+        func observeHeaders(_ headers: [AXUIElement]) {
+            if headers.filter({ CFEqual($0, header) }).count != 1 { lose() }
+        }
+        func observeStackState(header: AXUIElement, isStackHeader: Bool?, collapsed: Bool?) {
+            if CFEqual(self.header, header), collapsed == true || isStackHeader == false { lose() }
+        }
         var isCurrent: Bool {
-            guard !lock.withLock({ ended }),
-                  AXLogicProElements.heldTrackDisclosureValue(header: header, disclosure: disclosure, runtime: runtime) == 1
-            else { end(); return false }
+            guard !lock.withLock({ ended }) else { return false }
+            guard AXLogicProElements.heldTrackDisclosureValue(header: header, disclosure: disclosure, runtime: runtime) == 1
+            else { lose(); return false }
             return !lock.withLock { ended }
         }
     }

@@ -80,16 +80,26 @@ struct Issue965FreshPopulationAcquisitionTests {
         func channel(unreadableRail: Bool = false, disclosure: AXUIElement? = nil,
                      observationMouse: AXMouseHelper.Runtime? = nil,
                      wrongDisclosureHit: Bool = false,
-                     observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil) -> AccessibilityChannel {
+                     observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil,
+                     readingAttribute: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+                     observingChildren: (@Sendable (AXUIElement) -> Void)? = nil) -> AccessibilityChannel {
             let ax = builder.makeAXRuntime(
                     appElement: app,
                     attributeValueHandler: { element, attribute in
                         reads.record(attribute)
                         observingAttribute?(element, attribute)
+                        if let read = readingAttribute?(element, attribute) {
+                            switch read {
+                            case .success(let value): return .some(value)
+                            case .failure: return .some(nil)
+                            }
+                        }
                         return nil
                     },
+                    attributeValueResultHandler: readingAttribute,
                     childrenResultHandler: { element in
-                        unreadableRail && CFEqual(element, rail)
+                        observingChildren?(element)
+                        return unreadableRail && CFEqual(element, rail)
                             ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
                     },
                     setAttributeHandler: { _, _, _ in events.record("setter"); return false },
@@ -138,6 +148,10 @@ struct Issue965FreshPopulationAcquisitionTests {
 
     @Test func registeredStackKeepsOriginalReferenceAndEndsDescendantReference() async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, verifyReferences: true)
+    }
+
+    @Test func registeredSingleStackKnownClosedExposureCannotReopenItsOldInverse() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, knownOuterReopen: true)
     }
 
     @Test(arguments: ["down_failed", "held_focus", "wrong_hit"])
@@ -291,7 +305,7 @@ struct Issue965FreshPopulationAcquisitionTests {
 
     private func observeStack(navigation: Bool, initiallyExpanded: Bool,
                               verifyReferences: Bool = false, mouseCase: String? = nil,
-                              releaseCase: String? = nil) async throws {
+                              releaseCase: String? = nil, knownOuterReopen: Bool = false) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -365,18 +379,69 @@ struct Issue965FreshPopulationAcquisitionTests {
         let cache = StateCache()
         let registry = TargetRegistry()
         let gate = LogicMutationGate()
+        let fileReader: LogicProjectFileReader.Runtime = knownOuterReopen ? .init(
+            currentDocumentPath: { nil }, now: Date.init, readPlistData: { _ in nil },
+            mtime: { _ in
+                guard fixture.reads.recorded.contains("outer_extractor_returned_zero") else { return nil }
+                fixture.reads.record("closed_population_metadata")
+                if fixture.reads.recorded.filter({ $0 == "closed_population_metadata" }).count == 2 {
+                    fixture.reads.record("same_outer_reopened_on_retry")
+                    fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+                    fixture.builder.setChildren(fixture.rail, headers)
+                }
+                return nil
+            }, sleep: { _ in }) : .unavailable
         let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
             poller: StatePoller(axChannel: fixture.channel(disclosure: disclosure, observationMouse: observationMouse,
-                wrongDisclosureHit: mouseCase == "wrong_hit"), cache: cache,
-                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
+                wrongDisclosureHit: mouseCase == "wrong_hit", observingAttribute: { element, attribute in
+                    if knownOuterReopen, fixture.events.count == 2, CFEqual(element, headers[0]),
+                       attribute == kAXHelpAttribute as String { fixture.reads.record("outer_row_help_before_stack_read") }
+                }, readingAttribute: { element, attribute in
+                    guard knownOuterReopen, fixture.events.count == 2, CFEqual(element, disclosure),
+                          attribute == kAXValueAttribute as String,
+                          fixture.reads.recorded.contains("outer_row_help_before_stack_read"),
+                          !fixture.reads.recorded.contains("outer_extractor_returned_zero") else { return nil }
+                    fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
+                    fixture.builder.setChildren(fixture.rail, collapsed)
+                    fixture.reads.record("outer_extractor_returned_zero")
+                    return .success(NSNumber(value: 0))
+                }, observingChildren: { element in
+                    if knownOuterReopen, CFEqual(element, fixture.rail),
+                       fixture.reads.recorded.contains("outer_extractor_returned_zero"),
+                       !fixture.reads.recorded.contains("same_outer_reopened_on_retry"),
+                       fixture.builder.makeAXRuntime().children(fixture.rail).count == 19 {
+                        fixture.reads.record("closed_rail_actually_read")
+                    }
+                }), cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: fileReader, keyboardFocus: { .notTextEditing })),
             dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
-            liveTrackNames: { [:] }, projectFileReader: .unavailable)
+            liveTrackNames: { [:] }, projectFileReader: fileReader)
         let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
         let params: [String: Value] = ["domains": .array([.string("tracks")]), "allow_ui_navigation": .bool(navigation)]
         let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
             commandParams: params, mutationGate: gate) {
                 await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
+        if knownOuterReopen {
+            #expect(fixture.reads.recorded.filter { $0 == "outer_extractor_returned_zero" }.count == 1)
+            #expect(fixture.reads.recorded.contains("outer_row_help_before_stack_read"))
+            #expect(fixture.reads.recorded.contains("closed_rail_actually_read"))
+            #expect(fixture.reads.recorded.filter { $0 == "closed_population_metadata" }.count >= 2)
+            #expect(fixture.reads.recorded.filter { $0 == "same_outer_reopened_on_retry" }.count == 1)
+            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up"],
+                    "a positively observed closed exposure cannot renew its original inverse")
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 42)
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored")
+            let current = await cache.getTracks()
+            #expect(current.isEmpty)
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            return
+        }
         if let releaseCase {
             #expect(fixture.reads.recorded.filter { $0 == "release_fault_down_effect" }.count == 1)
             #expect(fixture.reads.recorded.filter { $0 == "release_fault_up_unposted" }.count == 1)

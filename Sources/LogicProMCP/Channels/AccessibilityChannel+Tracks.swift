@@ -53,6 +53,7 @@ extension AccessibilityChannel {
             guard var state = AXValueExtractors.extractTrackState(
                 from: header, index: index, runtime: runtime.ax, stoppingBeforeHelp: stop
             ) else { return (nil, true) }
+            exposure?.observeStackState(header: header, isStackHeader: state.isStackHeader, collapsed: state.stackCollapsed)
             if let window, let document, state.liveIdentityBacked, state.placeholder != true {
                 // Baseline rows were already exposed and keep ordinary custody. Only
                 // newly acquired headers depend on this temporary disclosure's lifetime.
@@ -265,6 +266,9 @@ extension AccessibilityChannel {
             guard effects.navigationPerformed else { return effects }
             // Do not start another gesture while the earlier release is unverified.
             guard !releaseUnverified else { return effects }
+            guard exposure?.hasObservedLoss != true else {
+                effects.reason = "stack_navigation_ownership_lost"; return effects
+            }
             guard let expandedHeaders, await owned(expectedHeaders: expandedHeaders, expectedValue: 1, stoppingWhen: stop) else {
                 effects.reason = "stack_navigation_ownership_lost"; return effects
             }
