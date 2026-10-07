@@ -111,6 +111,7 @@ extension AXLogicProElements {
 
     static func mixerPopulationAreaLookup(
         in window: AXUIElement, runtime: Runtime, requiresCompleteAbsence: Bool = false,
+        observingExposure: AXTrackBinding.Exposure? = nil,
         checking check: () throws -> Void = {}
     ) throws -> (lookup: MixerAreaLookup, binding: MixerAreaBinding?) {
         try check()
@@ -123,7 +124,7 @@ extension AXLogicProElements {
         // would make a full mixer read silently return only selected-track +
         // output strips.
         let scan = try mixerAreaCandidates(in: window, runtime: runtime.ax,
-            requiresCompleteAbsence: requiresCompleteAbsence, checking: check)
+            requiresCompleteAbsence: requiresCompleteAbsence, observingExposure: observingExposure, checking: check)
         // Existing fake/older AXIdentifier contracts remain supported, including an empty
         // ID-bound container. They no longer require separate unchecked recursive walks.
         let legacy = scan.candidates.first { $0.legacyRole == (kAXGroupRole as String) }
@@ -317,6 +318,7 @@ extension AXLogicProElements {
         in root: AXUIElement,
         runtime: AXHelpers.Runtime,
         requiresCompleteAbsence: Bool,
+        observingExposure: AXTrackBinding.Exposure?,
         checking check: () throws -> Void
     ) throws -> (candidates: [MixerAreaCandidate], sawUnreadMixerContainer: Bool, sawIncompleteAbsence: Bool) {
         var candidates: [MixerAreaCandidate] = []
@@ -333,6 +335,7 @@ extension AXLogicProElements {
             owners: [],
             remainingNodes: &remainingNodes,
             requiresCompleteAbsence: requiresCompleteAbsence,
+            observingExposure: observingExposure,
             checking: check,
             into: &candidates,
             sawUnreadMixerContainer: &sawUnreadMixerContainer,
@@ -351,6 +354,7 @@ extension AXLogicProElements {
         owners: [AXUIElement],
         remainingNodes: inout Int,
         requiresCompleteAbsence: Bool,
+        observingExposure: AXTrackBinding.Exposure?,
         checking check: () throws -> Void,
         into candidates: inout [MixerAreaCandidate],
         sawUnreadMixerContainer: inout Bool,
@@ -385,6 +389,7 @@ extension AXLogicProElements {
             return AXHelpers.getAttribute(element, attribute, runtime: runtime)
         }
         let role = try metadata(kAXRoleAttribute)
+        observingExposure?.observeRole(element: element, role: role)
         let identifier = try metadata(kAXIdentifierAttribute)
         let description = try metadata(kAXDescriptionAttribute)
         let title = try metadata(kAXTitleAttribute)
@@ -409,12 +414,15 @@ extension AXLogicProElements {
             }
             return false
         }
+        observingExposure?.observeChildren(element: element, children: children)
 
         if isMixerContainer {
             var stripCount = 0
             for child in children {
                 try check()
-                if AXHelpers.getRole(child, runtime: runtime) == (kAXLayoutItemRole as String) { stripCount += 1 }
+                let childRole = AXHelpers.getRole(child, runtime: runtime)
+                observingExposure?.observeRole(element: child, role: childRole)
+                if childRole == (kAXLayoutItemRole as String) { stripCount += 1 }
             }
             if stripCount > 0 || legacyRole != nil {
                 candidates.append(MixerAreaCandidate(
@@ -443,6 +451,7 @@ extension AXLogicProElements {
                 owners: isMixerContainer ? owners + [element] : owners,
                 remainingNodes: &remainingNodes,
                 requiresCompleteAbsence: requiresCompleteAbsence,
+                observingExposure: observingExposure,
                 checking: check,
                 into: &candidates,
                 sawUnreadMixerContainer: &sawUnreadMixerContainer,

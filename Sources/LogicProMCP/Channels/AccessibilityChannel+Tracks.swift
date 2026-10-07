@@ -245,6 +245,7 @@ extension AccessibilityChannel {
                   let currentViewport = Self.readViewport(window, ax: logic.ax, exposure: forwardExposure), currentViewport.count == viewport.count,
                   zip(currentViewport, viewport).allSatisfy({ CFEqual($0.control, $1.control) && $0.value == $1.value }),
                   let currentTransport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
+                    observingExposure: forwardExposure,
                     checking: { try SessionPopulationObservation.requireOwnedAcquisition() }),
                   CFEqual(currentTransport.controlBar, transport.controlBar), CFEqual(currentTransport.play, transport.play),
                   CFEqual(currentTransport.record, transport.record), !currentTransport.isPlaying, !currentTransport.isRecording,

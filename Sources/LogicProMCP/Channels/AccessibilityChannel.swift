@@ -539,7 +539,7 @@ actor AccessibilityChannel: Channel {
             var strips: [ChannelStripState]?
             var presentation: AXLogicProElements.MixerPresentationRead?
             let lookup = try AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: logic,
-                requiresCompleteAbsence: true, checking: checkAXRead)
+                requiresCompleteAbsence: true, observingExposure: exposure, checking: checkAXRead)
             let mixerVisible: Bool?
             switch lookup.lookup {
             case .found: mixerVisible = true
@@ -560,7 +560,8 @@ actor AccessibilityChannel: Channel {
                     }
                 }
             }
-            let transport = try AXLogicProElements.observedTransportActivity(in: window, runtime: logic, checking: checkAXRead)
+            let transport = try AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
+                observingExposure: exposure, checking: checkAXRead)
             let locale = try readObservedUILocale(in: window, checking: checkAXRead)
             try check()
             return Read(title: title, document: document, documentReadable: documentReadable,

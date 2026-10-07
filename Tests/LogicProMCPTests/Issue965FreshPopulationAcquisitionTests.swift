@@ -206,6 +206,11 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeSiblingStacks(navigation: true, postReleaseOwnershipLoss: "viewport_" + loss)
     }
 
+    @Test(arguments: ["transport_role_loss", "transport_replacement", "mixer_role_loss", "mixer_replacement"])
+    func registeredSiblingPresentationCensusLossCannotResumeAnOldInverse(loss: String) async throws {
+        try await observeSiblingStacks(navigation: true, postReleaseOwnershipLoss: loss)
+    }
+
     @Test func registeredNewlyRevealedSiblingDisclosuresAcquireEveryHeldChild() async throws {
         try await observeSiblingStacks(navigation: true, siblingCase: "revealed")
     }
@@ -267,8 +272,12 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar])
         let collectorLoss = postReleaseOwnershipLoss?.hasPrefix("collector_") == true
         let viewportLoss = postReleaseOwnershipLoss?.hasPrefix("viewport_") == true
+        let transportLoss = postReleaseOwnershipLoss?.hasPrefix("transport_") == true
+        let mixerLoss = postReleaseOwnershipLoss?.hasPrefix("mixer_") == true
         let censusLossKind = collectorLoss ? postReleaseOwnershipLoss?.dropFirst("collector_".count).description
-            : viewportLoss ? postReleaseOwnershipLoss?.dropFirst("viewport_".count).description : postReleaseOwnershipLoss
+            : viewportLoss ? postReleaseOwnershipLoss?.dropFirst("viewport_".count).description
+            : transportLoss ? postReleaseOwnershipLoss?.dropFirst("transport_".count).description
+            : mixerLoss ? postReleaseOwnershipLoss?.dropFirst("mixer_".count).description : postReleaseOwnershipLoss
         let mouse = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
             let isSecond = point == CGPoint(x: 26, y: 36)
             let isThird = revealed && point == CGPoint(x: 36, y: 46)
@@ -299,7 +308,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                     return
                     (firstOpen || !(1...7).contains($0.offset)) && (secondOpen || !(17...23).contains($0.offset))
                 }.map(\.element))
-                if let censusLossKind, !collectorLoss, !viewportLoss, fixture.events.count == 4 {
+                if let censusLossKind, !collectorLoss, !viewportLoss, !transportLoss, !mixerLoss, fixture.events.count == 4 {
                     fixture.reads.record("post_release_loss_installed")
                     if censusLossKind == "role_loss" { fixture.builder.setRole(first, kAXButtonRole as String) }
                     if censusLossKind == "replacement" { fixture.builder.setChildren(headers[0], [replacement]) }
@@ -311,14 +320,25 @@ struct Issue965FreshPopulationAcquisitionTests {
         let channel = fixture.channel(disclosure: first, additionalDisclosure: second,
             thirdDisclosure: revealed ? third : nil, wrongAdditionalDisclosureHit: siblingCase == "wrong_hit", observationMouse: mouse,
             observingAttribute: { element, attribute in
-                if collectorLoss || viewportLoss, fixture.events.count == 4,
+                if collectorLoss || viewportLoss || transportLoss || mixerLoss, fixture.events.count == 4,
                    !fixture.reads.recorded.contains("post_release_loss_installed") {
                     if CFEqual(element, second), attribute == kAXValueAttribute as String {
                         fixture.reads.record("collector_value_read")
                     }
+                    if transportLoss, CFEqual(element, controlBar), attribute == kAXRoleAttribute as String,
+                       fixture.reads.recorded.filter({ $0 == "collector_value_read" }).count >= 2 {
+                        fixture.reads.record("transport_scan_ready")
+                    }
+                    if mixerLoss, CFEqual(element, headers[31]), attribute == kAXTitleAttribute as String,
+                       fixture.reads.recorded.filter({ $0 == "collector_value_read" }).count >= 2,
+                       !fixture.reads.recorded.contains("mixer_scan_ready") {
+                        fixture.reads.record("mixer_scan_ready")
+                    }
                     if fixture.reads.recorded.filter({ $0 == "collector_value_read" }).count >= 2,
                        (collectorLoss && CFEqual(element, fixture.window) && attribute == kAXTitleAttribute as String)
-                        || (viewportLoss && censusLossKind == "role_loss" && CFEqual(element, first) && attribute == kAXRoleAttribute as String) {
+                        || ((viewportLoss || (transportLoss && fixture.reads.recorded.contains("transport_scan_ready"))
+                            || (mixerLoss && fixture.reads.recorded.contains("mixer_scan_ready")))
+                            && censusLossKind == "role_loss" && CFEqual(element, first) && attribute == kAXRoleAttribute as String) {
                         fixture.reads.record("post_release_loss_installed")
                         if censusLossKind == "role_loss" { fixture.builder.setRole(first, kAXButtonRole as String) }
                         if censusLossKind == "replacement" { fixture.builder.setChildren(headers[0], [replacement]) }
@@ -399,7 +419,9 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.reads.record("sibling_title_\(index)")
                 }
             }, observingChildren: { element in
-                if viewportLoss, censusLossKind == "replacement", CFEqual(element, headers[0]),
+                if viewportLoss || (transportLoss && fixture.reads.recorded.contains("transport_scan_ready"))
+                    || (mixerLoss && fixture.reads.recorded.contains("mixer_scan_ready")),
+                   censusLossKind == "replacement", CFEqual(element, headers[0]),
                    fixture.events.count == 4,
                    fixture.reads.recorded.filter({ $0 == "collector_value_read" }).count >= 2,
                    !fixture.reads.recorded.contains("post_release_loss_installed") {
@@ -466,6 +488,11 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
         let body = try #require(sharedJSONObject(sharedToolText(result)))
         if postReleaseOwnershipLoss != nil {
+            if transportLoss || mixerLoss {
+                let ready = try #require(fixture.reads.recorded.firstIndex(of: transportLoss ? "transport_scan_ready" : "mixer_scan_ready"))
+                let installed = try #require(fixture.reads.recorded.firstIndex(of: "post_release_loss_installed"))
+                #expect(ready < installed)
+            }
             #expect(fixture.reads.recorded.filter { $0.hasPrefix("post_release_loss_") } == [
                 "post_release_loss_installed", "post_release_loss_actually_sampled", "post_release_loss_returned"
             ])
