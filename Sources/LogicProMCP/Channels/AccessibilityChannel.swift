@@ -689,8 +689,21 @@ actor AccessibilityChannel: Channel {
                 } else { sameStackExposure = false }
                 try check()
             }
-            let stable = sameWindow && before.title != nil && before.documentReadable && after.documentReadable
+            // Both passes copy identity before reading their rows. Corroborate it
+            // after the final census, so a same-window project switch during a
+            // deciding value read cannot certify the earlier document's rows.
+            try check()
+            let finalTitle = AXHelpers.getTitle(window, runtime: logic.ax)
+            let finalDocument: String?
+            let finalDocumentReadable: Bool
+            switch AXLogicProElements.projectPickerDocumentRead(window, runtime: logic) {
+            case .success(let value): finalDocument = value; finalDocumentReadable = true
+            case .failure: finalDocument = nil; finalDocumentReadable = false
+            }
+            try check()
+            let stable = sameWindow && before.title != nil && before.documentReadable && after.documentReadable && finalDocumentReadable
                 && sameBytes(before.title, after.title) && sameBytes(before.document, after.document)
+                && sameBytes(after.title, finalTitle) && sameBytes(after.document, finalDocument)
                 && sameElements(before.headers, after.headers)
                 && (!wantsTracks || after.tracks == nil || (sameElements(after.headers, currentHeaders) && sameStackExposure))
                 && (!wantsStrips || sameElements(before.mixer.map { [$0] }, after.mixer.map { [$0] }))
