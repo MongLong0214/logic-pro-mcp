@@ -1002,9 +1002,12 @@ enum AXLogicProElements {
     static func findButtonByDescriptionPrefix(
         in element: AXUIElement,
         prefix: String,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        observingExposure: AXTrackBinding.Exposure? = nil
     ) -> AXUIElement? {
-        let buttons = AXHelpers.findAllDescendants(of: element, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
+        let buttons = AXHelpers.findAllDescendants(of: element, role: kAXButtonRole, maxDepth: 4, runtime: runtime,
+            observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) })
         return buttons.first { button in
             guard let desc = AXHelpers.getDescription(button, runtime: runtime) else { return false }
             return desc.hasPrefix(prefix)

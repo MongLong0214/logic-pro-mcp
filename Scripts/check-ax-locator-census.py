@@ -80,7 +80,10 @@ import sys
 # falls by what was actually gained and not by what a loose regex hid.
 # 52 -> 51 (#1138): splitting strict/legacy volume enumeration removed the old bound-lookup
 # shape whose window included the historical `sliders.first` comment. This is a candidate count.
-BLIND_SITE_BUDGET = 51
+# 51 -> 50 (#1160): the exposure callbacks move extractTrackButtonState's first walker beyond
+# the detector's fixed lookahead. Its first-match behavior is unchanged; this tightens the
+# candidate budget, not a claim that another ambiguous lookup was fixed.
+BLIND_SITE_BUDGET = 50
 
 SEARCH_ROOTS = ("Sources", "Scripts")
 
