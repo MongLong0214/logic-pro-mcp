@@ -721,7 +721,7 @@ enum AXValueExtractors {
             } else if AXLocalePolicy.subdivisionSliderLabel.containsAny(in: desc),
                       let value = extractSliderValue(slider, runtime: runtime) {
                 subdivisionValue = Int(value)
-            } else if AXLocalePolicy.tickSliderLabel.containsAny(in: desc),
+            } else if AXLocalePolicy.tickSliderLabel.matches(desc, mode: .exact),
                       let value = extractSliderValue(slider, runtime: runtime) {
                 tickValue = Int(value)
             }

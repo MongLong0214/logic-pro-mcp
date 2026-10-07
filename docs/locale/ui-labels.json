@@ -7272,17 +7272,19 @@
   "tickSliderLabel": {
    "canonical": "tick",
    "variants": [
-    "틱"
+    "틱",
+    "ティック",
+    "tic"
    ],
-   "rationale": "Identifies the tick slider in the Playhead Position group; verbatim description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats.",
-   "match": "contains",
+   "rationale": "Identifies the tick slider in the Playhead Position group; whole description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats. MAApplication's `tick` row supplies all ten locale values in Logic 12.3 (6674); canonical `tick` also covers case-only `Tick`. Unlike neighbouring Logic.framework rows, this row says `ティック` in Japanese and `tic` in French. Bundle derivation does not claim native readback in those locales.",
+   "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
+    "es-ES": "derived",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",

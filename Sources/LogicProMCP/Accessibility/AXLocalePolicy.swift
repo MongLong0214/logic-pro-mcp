@@ -1862,8 +1862,9 @@ enum AXLocalePolicy {
 
     static let tickSliderLabel = LabelSet(
         canonical: "tick",
-        variants: ["틱"],
-        rationale: "Identifies the tick slider in the Playhead Position group; verbatim description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats."
+        variants: ["틱", "ティック", "tic"],
+        rationale: "Identifies the tick slider in the Playhead Position group; whole description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats. MAApplication's `tick` row supplies all ten locale values in Logic 12.3 (6674); canonical `tick` also covers case-only `Tick`. Unlike neighbouring Logic.framework rows, this row says `ティック` in Japanese and `tic` in French. Bundle derivation does not claim native readback in those locales.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAApplication.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/tick#value"
     )
 
     /// The current project-key popup; its observed value remains opaque and localized.
