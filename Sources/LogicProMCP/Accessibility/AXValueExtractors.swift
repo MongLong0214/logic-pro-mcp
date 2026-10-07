@@ -324,7 +324,7 @@ enum AXValueExtractors {
         from header: AXUIElement,
         index: Int,
         runtime: AXHelpers.Runtime = .production,
-        observingStackChildren: (([AXUIElement]) -> Void)? = nil,
+        observingStackChildren: (([AXUIElement], AXUIElement?) -> Void)? = nil,
         stoppingBeforeHelp stop: () -> Bool
     ) -> TrackState? {
         let extractedName = extractTrackName(from: header, runtime: runtime)
@@ -383,13 +383,12 @@ enum AXValueExtractors {
     static func extractTrackStackState(
         from header: AXUIElement,
         runtime: AXHelpers.Runtime = .production,
-        observingChildren: (([AXUIElement]) -> Void)? = nil
+        observingChildren: (([AXUIElement], AXUIElement?) -> Void)? = nil
     ) -> (isStackHeader: Bool?, collapsed: Bool?) {
         switch AXHelpers.childrenResult(header, runtime: runtime) {
         case .failure:
             return (nil, nil)
         case .success(let children):
-            observingChildren?(children)
             var triangle: AXUIElement?
             // A child whose ROLE will not read is a child we cannot rule out. `getRole` collapses
             // every failure into `nil`, so using it here would let "this child did not answer" pass
@@ -414,6 +413,7 @@ enum AXValueExtractors {
                 }
                 if triangle != nil { break }
             }
+            observingChildren?(children, triangle)
             guard let triangle else {
                 // No arrow among the children we could identify. That is only "not a stack main
                 // track" if we could identify all of them.

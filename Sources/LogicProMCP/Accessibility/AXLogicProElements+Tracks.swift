@@ -34,9 +34,11 @@ enum AXTrackBinding {
             let owned = lock.withLock { controls.contains { CFEqual($0.header, header) } }
             if owned, collapsed == true || isStackHeader == false { lose() }
         }
-        func observeDisclosureChildren(header: AXUIElement, children: [AXUIElement]) {
+        func observeDisclosureChildren(header: AXUIElement, children: [AXUIElement], selected: AXUIElement?) {
             let held = lock.withLock { controls.first { CFEqual($0.header, header) } }
-            if let held, children.filter({ CFEqual($0, held.disclosure) }).count != 1 { lose() }
+            guard let held else { return }
+            guard let selected, CFEqual(selected, held.disclosure),
+                  children.filter({ CFEqual($0, held.disclosure) }).count == 1 else { lose(); return }
         }
         func retainAcquiredDisclosure(header: AXUIElement, disclosure: AXUIElement) -> Bool {
             lock.withLock {
