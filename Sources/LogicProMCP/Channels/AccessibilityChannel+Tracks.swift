@@ -89,10 +89,17 @@ extension AccessibilityChannel {
         let transport: AXLogicProElements.ObservedTransportActivity
         let referenceIsCurrent: @Sendable () async -> Bool
         private struct Viewport { let control: AXUIElement; let value: Double }
+        private typealias Disclosure = (header: AXUIElement, disclosure: AXUIElement)
+        private struct AcquiredDisclosure {
+            let target: Disclosure
+            let beforeHeaders: [AXUIElement]
+            let afterHeaders: [AXUIElement]
+        }
         private let viewport: [Viewport]
         private var observedFocus: AXUIElement
         private var expandedHeaders: [AXUIElement]?
         private var releaseUnverified = false
+        private var acquired: [AcquiredDisclosure] = []
         private(set) var exposure: AXTrackBinding.Exposure?
         private(set) var effects = SessionPopulationObservation.UIEffects()
 
@@ -117,7 +124,18 @@ extension AccessibilityChannel {
                 guard expectedProject?.projectName?.utf8.elementsEqual(AccessibilityChannel.projectName(fromWindowTitle: title).utf8) == true,
                       expectedProject?.projectFilePath?.utf8.elementsEqual(url.path.utf8) == true else { return nil }
             }
-            var collapsed: [(AXUIElement, AXUIElement)] = []
+            guard let collapsed = Self.collapsedDisclosures(in: headers, runtime: logic), collapsed.count == 1 else { return nil }
+            self.logic = logic; self.mouse = mouse; self.pid = pid; self.app = app
+            self.window = window; self.title = title; self.document = document; self.rail = rail
+            header = collapsed[0].header; disclosure = collapsed[0].disclosure; originalHeaders = headers
+            originalFocus = focus; observedFocus = focus; self.selected = selected
+            self.transport = transport; self.viewport = viewport; self.referenceIsCurrent = referenceIsCurrent
+        }
+
+        /// Reuse the same status-preserving direct-child shape at every revealed rail.
+        /// Newly observed peer membership is not parent/depth evidence.
+        private static func collapsedDisclosures(in headers: [AXUIElement], runtime logic: AXLogicProElements.Runtime) -> [Disclosure]? {
+            var collapsed: [Disclosure] = []
             for header in headers {
                 guard case .success(let children) = AXHelpers.childrenResult(header, runtime: logic.ax) else { return nil }
                 var triangles: [AXUIElement] = []
@@ -134,14 +152,7 @@ extension AccessibilityChannel {
                     if value == 0 { collapsed.append((header, triangle)) }
                 }
             }
-            // This increment acquires one unambiguous existing stack; nested/multiple
-            // disclosure traversal and global hidden membership remain unqualified.
-            guard collapsed.count == 1 else { return nil }
-            self.logic = logic; self.mouse = mouse; self.pid = pid; self.app = app
-            self.window = window; self.title = title; self.document = document; self.rail = rail
-            header = collapsed[0].0; disclosure = collapsed[0].1; originalHeaders = headers
-            originalFocus = focus; observedFocus = focus; self.selected = selected
-            self.transport = transport; self.viewport = viewport; self.referenceIsCurrent = referenceIsCurrent
+            return collapsed
         }
 
         private static func selectedHeaders(_ headers: [AXUIElement], ax: AXHelpers.Runtime) -> [AXUIElement]? {
@@ -171,11 +182,11 @@ extension AccessibilityChannel {
             a.count == b.count && zip(a, b).allSatisfy { CFEqual($0, $1) }
         }
 
-        private func value() -> Int? {
-            AXLogicProElements.heldTrackDisclosureValue(header: header, disclosure: disclosure, runtime: logic)
+        private func value(_ target: Disclosure) -> Int? {
+            AXLogicProElements.heldTrackDisclosureValue(header: target.header, disclosure: target.disclosure, runtime: logic)
         }
 
-        private func owned(expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+        private func owned(target: Disclosure, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   await referenceIsCurrent(), logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
                   let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(app, currentApp),
@@ -190,11 +201,15 @@ extension AccessibilityChannel {
                   doc.utf8.elementsEqual(document.utf8), !AXLogicProElements.dialogPresent(runtime: logic),
                   AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic).map({ CFEqual($0, rail) }) == true,
                   case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
-                  headers.filter({ CFEqual($0, header) }).count == 1,
+                  headers.filter({ CFEqual($0, target.header) }).count == 1,
+                  acquired.allSatisfy({ entry in
+                      headers.filter({ CFEqual($0, entry.target.header) }).count == 1
+                          && (CFEqual(entry.target.disclosure, target.disclosure) || value(entry.target) == 1)
+                  }),
                   same(headers.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders),
                   expectedHeaders.map({ same(headers, $0) }) ?? true,
                   let currentSelection = Self.selectedHeaders(headers, ax: logic.ax), same(currentSelection, selected),
-                  let currentValue = value(), expectedValue.map({ $0 == currentValue }) ?? true,
+                  let currentValue = value(target), expectedValue.map({ $0 == currentValue }) ?? true,
                   let currentViewport = Self.readViewport(window, ax: logic.ax), currentViewport.count == viewport.count,
                   zip(currentViewport, viewport).allSatisfy({ CFEqual($0.control, $1.control) && $0.value == $1.value }),
                   let currentTransport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
@@ -207,22 +222,22 @@ extension AccessibilityChannel {
             return true
         }
 
-        private func frame() -> CGRect? {
-            guard case .success(let position) = AXHelpers.getAttributeResult(disclosure, kAXPositionAttribute as String, runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
-                  case .success(let size) = AXHelpers.getAttributeResult(disclosure, kAXSizeAttribute as String, runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
+        private func frame(_ target: Disclosure) -> CGRect? {
+            guard case .success(let position) = AXHelpers.getAttributeResult(target.disclosure, kAXPositionAttribute as String, runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
+                  case .success(let size) = AXHelpers.getAttributeResult(target.disclosure, kAXSizeAttribute as String, runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
                   let point = AXHelpers.point(fromRawAttribute: position), let extent = AXHelpers.size(fromRawAttribute: size),
                   point.x.isFinite, point.y.isFinite, extent.width.isFinite, extent.height.isFinite,
                   extent.width > 0, extent.height > 0 else { return nil }
             return CGRect(origin: point, size: extent)
         }
 
-        private func event(_ event: CGEventType, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
-            guard await owned(expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
-                  let frame = frame(), let hitTest = logic.ax.elementAtPosition,
-                  case .success(.some(let hit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(hit, disclosure),
-                  await owned(expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
-                  self.frame() == frame,
-                  case .success(.some(let finalHit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(finalHit, disclosure),
+        private func event(_ event: CGEventType, target: Disclosure, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            guard await owned(target: target, expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
+                  let frame = frame(target), let hitTest = logic.ax.elementAtPosition,
+                  case .success(.some(let hit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(hit, target.disclosure),
+                  await owned(target: target, expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
+                  self.frame(target) == frame,
+                  case .success(.some(let finalHit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(finalHit, target.disclosure),
                   case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
                   doc.utf8.elementsEqual(document.utf8),
                   let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax), CFEqual(main, window),
@@ -236,58 +251,83 @@ extension AccessibilityChannel {
 
         func expand(stoppingWhen stop: @Sendable () -> Bool) async {
             exposure = .init(header: header, disclosure: disclosure, runtime: logic, originalHeaders: originalHeaders)
-            guard await event(.leftMouseDown, expectedHeaders: originalHeaders, expectedValue: 0, stoppingWhen: stop),
-                  acceptHeldGestureFocus() else { effects.reason = "stack_expansion_unverified"; return }
-            guard await event(.leftMouseUp, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop) else {
+            var target: Disclosure = (header, disclosure)
+            var beforeHeaders = originalHeaders
+            while true {
+                guard await event(.leftMouseDown, target: target, expectedHeaders: beforeHeaders, expectedValue: 0, stoppingWhen: stop)
+                else { effects.reason = "stack_expansion_unverified"; return }
+                // A TRUE-posted Down is outstanding before the next fallible read.
+                // Only a known posted paired Up can clear this cleanup latch.
                 releaseUnverified = true
-                effects.reason = "stack_mouse_release_unverified"
-                return
-            }
-            guard value() == 1,
-                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
-                  same(headers.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders) else {
-                effects.reason = "stack_expansion_unverified"; return
-            }
-            // A changed focus is reported, never written back or treated as full restoration.
-            if let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax) {
-                if !CFEqual(focus, observedFocus) { effects.changed.append("keyboard_focus") }
-                guard CFEqual(focus, originalFocus) || CFEqual(focus, disclosure) || CFEqual(focus, header) else {
-                    effects.reason = "stack_navigation_focus_conflict"; exposure?.end(); return
+                guard acceptHeldGestureFocus(target) else { effects.reason = "stack_mouse_release_unverified"; return }
+                guard await event(.leftMouseUp, target: target, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop) else {
+                    releaseUnverified = true
+                    effects.reason = "stack_mouse_release_unverified"
+                    return
                 }
-                observedFocus = focus
+                releaseUnverified = false
+                guard value(target) == 1,
+                      case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                      same(headers.filter { row in beforeHeaders.contains { CFEqual($0, row) } }, beforeHeaders) else {
+                    effects.reason = "stack_expansion_unverified"; return
+                }
+                guard acceptHeldGestureFocus(target),
+                      await owned(target: target, expectedHeaders: headers, expectedValue: 1, stoppingWhen: stop) else {
+                    effects.reason = "stack_navigation_ownership_lost"; return
+                }
+                if !acquired.isEmpty,
+                   exposure?.retainAcquiredDisclosure(header: target.header, disclosure: target.disclosure) != true {
+                    effects.reason = "stack_navigation_ownership_lost"; return
+                }
+                acquired.append(.init(target: target, beforeHeaders: beforeHeaders, afterHeaders: headers))
+                expandedHeaders = headers
+                if !effects.changed.contains("stack_disclosure") { effects.changed.append("stack_disclosure") }
+                let newlyExposed = headers.filter { row in !beforeHeaders.contains { CFEqual($0, row) } }
+                guard let collapsed = Self.collapsedDisclosures(in: newlyExposed, runtime: logic) else {
+                    effects.reason = "stack_disclosure_unreadable"; return
+                }
+                guard collapsed.count <= 1 else { effects.reason = "stack_disclosure_ambiguous"; return }
+                guard let next = collapsed.first else { return }
+                guard !acquired.contains(where: { CFEqual($0.target.header, next.header) || CFEqual($0.target.disclosure, next.disclosure) }) else {
+                    effects.reason = "stack_navigation_ownership_lost"; return
+                }
+                beforeHeaders = headers
+                target = next
             }
-            guard await owned(expectedHeaders: headers, expectedValue: 1, stoppingWhen: stop) else {
-                effects.reason = "stack_navigation_ownership_lost"; return
-            }
-            expandedHeaders = headers
-            effects.changed.append("stack_disclosure")
         }
 
         func restore(stoppingWhen stop: @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
-            defer { exposure?.end() }
+            // Captured descendant authority ends before the first inverse gesture.
+            // Cleanup is guarded by the separate held navigation facts below.
+            exposure?.end()
             guard effects.navigationPerformed else { return effects }
             // Do not start another gesture while the earlier release is unverified.
             guard !releaseUnverified else { return effects }
             guard exposure?.hasObservedLoss != true else {
                 effects.reason = "stack_navigation_ownership_lost"; return effects
             }
-            guard let expandedHeaders, await owned(expectedHeaders: expandedHeaders, expectedValue: 1, stoppingWhen: stop) else {
+            guard expandedHeaders != nil, !acquired.isEmpty else {
                 effects.reason = "stack_navigation_ownership_lost"; return effects
             }
-            guard await event(.leftMouseDown, expectedHeaders: expandedHeaders, expectedValue: 1, stoppingWhen: stop),
-                  acceptHeldGestureFocus() else { effects.reason = "stack_restoration_unverified"; return effects }
-            guard await event(.leftMouseUp, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop) else {
+            while let entry = acquired.last {
+                guard await owned(target: entry.target, expectedHeaders: entry.afterHeaders, expectedValue: 1, stoppingWhen: stop) else {
+                    effects.reason = "stack_navigation_ownership_lost"; return effects
+                }
+                guard await event(.leftMouseDown, target: entry.target, expectedHeaders: entry.afterHeaders, expectedValue: 1, stoppingWhen: stop)
+                else { effects.reason = "stack_restoration_unverified"; return effects }
                 releaseUnverified = true
-                effects.reason = "stack_mouse_release_unverified"
-                return effects
-            }
-            if let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-               CFEqual(focus, originalFocus) || CFEqual(focus, disclosure) || CFEqual(focus, header) {
-                observedFocus = focus
-            }
-            guard value() == 0,
-                  await owned(expectedHeaders: originalHeaders, expectedValue: 0, stoppingWhen: stop) else {
-                effects.reason = "stack_restoration_unverified"; return effects
+                guard acceptHeldGestureFocus(entry.target) else { effects.reason = "stack_mouse_release_unverified"; return effects }
+                guard await event(.leftMouseUp, target: entry.target, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop) else {
+                    releaseUnverified = true
+                    effects.reason = "stack_mouse_release_unverified"
+                    return effects
+                }
+                releaseUnverified = false
+                guard acceptHeldGestureFocus(entry.target), value(entry.target) == 0,
+                      await owned(target: entry.target, expectedHeaders: entry.beforeHeaders, expectedValue: 0, stoppingWhen: stop) else {
+                    effects.reason = "stack_restoration_unverified"; return effects
+                }
+                acquired.removeLast()
             }
             effects.restoration = CFEqual(observedFocus, originalFocus) ? "restored" : "partially_restored"
             if effects.restoration != "restored" { effects.reason = "keyboard_focus_not_restored" }
@@ -296,9 +336,10 @@ extension AccessibilityChannel {
 
         /// A successful Down may focus its held target. Corroborate that limited
         /// effect before the Up's full ownership/hit-test checks; never write focus.
-        private func acceptHeldGestureFocus() -> Bool {
+        private func acceptHeldGestureFocus(_ target: Disclosure) -> Bool {
             guard let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-                  CFEqual(focus, observedFocus) || CFEqual(focus, disclosure) || CFEqual(focus, header) else { return false }
+                  CFEqual(focus, observedFocus) || CFEqual(focus, originalFocus)
+                    || CFEqual(focus, target.disclosure) || CFEqual(focus, target.header) else { return false }
             if !CFEqual(focus, observedFocus), !effects.changed.contains("keyboard_focus") { effects.changed.append("keyboard_focus") }
             observedFocus = focus
             return true
