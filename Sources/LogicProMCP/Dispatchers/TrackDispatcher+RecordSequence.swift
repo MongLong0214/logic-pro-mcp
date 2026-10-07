@@ -159,15 +159,33 @@ extension TrackDispatcher {
         // above), so the goto-dialog is enabled on any non-empty project,
         // and on an empty project the playhead is already at bar 1 and the
         // slider fallback succeeds trivially.
-        let gotoResult = await withWriteBoundaryArmed(traceID) {
-            await router.route(
-                operation: "transport.goto_position",
-                params: ["bar": "1"]
+        // Use the public seek's fresh pre/readback contract, not a raw channel acknowledgement.
+        // Ordinary dialog OK is State B until its observed transition verifies; an indeterminate
+        // global-input target must stay unverified even if the playhead happens to match.
+        let beforePosition = await TransportDispatcher.liveTransportState(router: router, cache: cache)
+        let gotoResult: CallTool.Result
+        if let unchanged = TransportDispatcher.gotoPositionUnchangedResult(
+            requestedPosition: "1.1.1.1", beforeTransport: beforePosition
+        ) {
+            gotoResult = unchanged
+        } else {
+            let routedGoto = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "transport.goto_position", params: ["bar": "1"])
+            }
+            gotoResult = await TransportDispatcher.finalizeGotoPositionResult(
+                routedGoto, requestedPosition: "1.1.1.1", beforeTransport: beforePosition,
+                router: router, cache: cache
             )
         }
-        guard gotoResult.isSuccess else {
+        guard !(gotoResult.isError ?? false) else {
+            let positionDetail: String
+            if case .text(let text, _, _) = gotoResult.content.first {
+                positionDetail = text
+            } else {
+                positionDetail = "position verification unavailable"
+            }
             return toolTextResult(
-                "record_sequence failed to reset playhead to bar 1 (required for accurate import): \(gotoResult.message)",
+                "record_sequence failed to reset playhead to bar 1 (required for accurate import): \(positionDetail)",
                 isError: true
             )
         }
