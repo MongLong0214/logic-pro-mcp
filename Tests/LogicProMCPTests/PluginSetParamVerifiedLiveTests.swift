@@ -4041,8 +4041,8 @@ func testIssue955PublicReadResolvesOccupiedInsertReference(_ contextEndsAfterRea
             router: router, cache: cache, targetRegistry: registry
         )
         let object = try #require(sharedJSONObject(sharedToolText(result)))
-        #expect(object["plugin_view_restore_attempted"] as? Bool == true)
-        #expect(object["plugin_view_restore_observed"] as? Bool == true)
+        #expect(try #require(object["plugin_view_restore_attempted"] as? Bool))
+        #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
         #expect(fixture.currentPluginViewTitle == "컨트롤")
         if contextEndsAfterRead {
             #expect(object["state"] as? String == "C")
@@ -4064,13 +4064,15 @@ func testIssue955PublicReadResolvesOccupiedInsertReference(_ contextEndsAfterRea
         #expect(ChannelRouter.routingTable["plugin.get_param_verified"] == [.accessibility])
         let oracle = try #require(SemanticOracleTable.byOperationID[.pluginsGetParamVerified])
         let actualResponse = try JSONSerialization.data(withJSONObject: object)
-        #expect(oracle.evaluate(responseData: actualResponse, readbackData: Data()) == true)
+        let actualVerdict = try #require(oracle.evaluate(responseData: actualResponse, readbackData: Data()) as Bool?)
+        #expect(actualVerdict)
         for (key, value) in [("observed_raw", true as Any), ("write_attempted", true as Any),
                              ("raw_unit", "dB" as Any), ("parameter_read_status", "unknown" as Any)] {
             var corrupted = object
             corrupted[key] = value
             let corruptedResponse = try JSONSerialization.data(withJSONObject: corrupted)
-            #expect(oracle.evaluate(responseData: corruptedResponse, readbackData: Data()) == false)
+            let corruptedVerdict = try #require(oracle.evaluate(responseData: corruptedResponse, readbackData: Data()) as Bool?)
+            #expect(!corruptedVerdict)
         }
     }
 }
@@ -4088,14 +4090,16 @@ func testIssue955ReadBooleanNeverPressesParameterAndRestoresView(_ configuration
     )
     let object = try #require(sharedJSONObject(result.message))
     #expect(object["state"] as? String == "A", "Boolean read should use the existing observed control: \(object)")
-    #expect(object["observed_raw"] as? Bool == value)
+    let observedValue = try #require(object["observed_raw"] as? Bool)
+    let valueMatches = observedValue == value
+    #expect(valueMatches)
     #expect(object["raw_unit"] as? String == "boolean")
     #expect(object["parameter_read_status"] as? String == "read")
     #expect(fixture.currentPluginViewTitle == initialView)
     #expect(fixture.controlsCheckboxPressCount.value == 0)
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.currentSliderValue == 51)
-    #expect(object["plugin_view_restore_observed"] as? Bool == true)
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
 }
 
 @Test func testIssue955ProjectLossAfterCleanupKeepsRestorationReceiptButNotValue() async throws {
@@ -4117,8 +4121,8 @@ func testIssue955ReadBooleanNeverPressesParameterAndRestoresView(_ configuration
     #expect(object["error"] as? String == "project_identity_mismatch")
     #expect(object["observed_raw"] == nil)
     #expect(object["observed_display"] == nil)
-    #expect(object["plugin_view_restore_attempted"] as? Bool == true)
-    #expect(object["plugin_view_restore_observed"] as? Bool == true)
+    #expect(try #require(object["plugin_view_restore_attempted"] as? Bool))
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
     #expect(fixture.currentPluginViewTitle == "컨트롤")
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)
@@ -4190,7 +4194,7 @@ func testIssue955ReadNeverInventsZeroForUnavailableSlider(_ kind: String) async 
     let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: parameterReadRuntime(fixture))
     let object = try #require(sharedJSONObject(result.message))
     #expect(object["state"] as? String == "A")
-    #expect(b.attributeValue(b.element(1100), kAXSelectedAttribute as String) as? Bool == false)
+    #expect(!(try #require(b.attributeValue(b.element(1100), kAXSelectedAttribute as String) as? Bool)))
     #expect(!fixture.axActions.value.contains(where: { $0.element == b.elementID(b.element(1100)) }))
     #expect(fixture.sliderWriteCount.value == 0)
 }
@@ -4211,9 +4215,9 @@ func testIssue955ReadNeverInventsZeroForUnavailableSlider(_ kind: String) async 
     #expect(object["observed_raw"] == nil)
     #expect(fixture.editorViewMenuPressCount.value == 1)
     #expect(fixture.controlsViewMenuPressCount.value == 0, "Do not apply an inverse after project ownership ended")
-    #expect(object["plugin_view_restore_attempted"] as? Bool == false)
-    #expect(object["plugin_view_restore_observed"] as? Bool == false)
-    #expect(object["plugin_view_restore_unobserved"] as? Bool == true)
+    #expect(!(try #require(object["plugin_view_restore_attempted"] as? Bool)))
+    #expect(!(try #require(object["plugin_view_restore_observed"] as? Bool)))
+    #expect(try #require(object["plugin_view_restore_unobserved"] as? Bool))
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)
 }
@@ -4249,8 +4253,8 @@ func testIssue955PublicReadRejectsInvalidInputsBeforeTargetLookup(_ key: String)
     #expect(object["state"] as? String == "C")
     #expect(object["observed_raw"] == nil)
     #expect(fixture.controlsViewMenuPressCount.value == 0, "Ownership must be checked at the inverse AXPick, not only on restore entry")
-    #expect(object["plugin_view_restore_observed"] as? Bool == false)
-    #expect(object["plugin_view_restore_unobserved"] as? Bool == true)
+    #expect(!(try #require(object["plugin_view_restore_observed"] as? Bool)))
+    #expect(try #require(object["plugin_view_restore_unobserved"] as? Bool))
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)
 }
@@ -4289,7 +4293,7 @@ func testIssue955ReadRefusalReportsCleanupOfItsNewEditor(_ popupOpen: Bool) asyn
     #expect(object["state"] as? String == "C")
     #expect(object["error"] as? String == (popupOpen ? "window_open_failed" : "readback_unavailable"))
     #expect(object["observed_raw"] == nil)
-    #expect(object["editor_close_observed"] as? Bool == true, "Refusal must retain the observed cleanup result")
+    #expect(try #require(object["editor_close_observed"] as? Bool), "Refusal must retain the observed cleanup result")
     #expect(fixture.targetOpenControlPressCount.value == 1)
     #expect(fixture.pluginCloseControlPressCount.value == 1)
     let remainingWindows = try #require(b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement])
@@ -4324,9 +4328,9 @@ func testIssue955ReadDoesNotCloseAnEditorAfterOwnershipEnds(_ changed: String) a
     let object = try #require(sharedJSONObject(result.message))
     #expect(object["state"] as? String == "C")
     #expect(object["observed_raw"] == nil)
-    #expect(object["editor_close_attempted"] as? Bool == false)
-    #expect(object["editor_close_observed"] as? Bool == false)
-    #expect(object["editor_cleanup_unobserved"] as? Bool == true)
+    #expect(!(try #require(object["editor_close_attempted"] as? Bool)))
+    #expect(!(try #require(object["editor_close_observed"] as? Bool)))
+    #expect(try #require(object["editor_cleanup_unobserved"] as? Bool))
     #expect(object["editor_still_open"] == nil, "Lost custody cannot establish the original editor's residual state")
     #expect(fixture.pluginCloseControlPressCount.value == 0, "Do not close a window through lost ownership")
     #expect(fixture.sliderWriteCount.value == 0)
@@ -4350,7 +4354,7 @@ func testIssue955BooleanReadReportsTheActualDisplayStatus(_ status: String) asyn
     let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams("limiter_on"), runtime: runtime)
     let object = try #require(sharedJSONObject(result.message))
     #expect(object["state"] as? String == "A")
-    #expect(object["observed_raw"] as? Bool == false)
+    #expect(!(try #require(object["observed_raw"] as? Bool)))
     #expect(object["display_read_status"] as? String == status)
     if status == "read" { #expect(object["observed_display"] as? String == "Off") }
     else { #expect(object["observed_display"] is NSNull) }
