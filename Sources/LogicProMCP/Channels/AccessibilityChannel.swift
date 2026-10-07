@@ -346,10 +346,15 @@ actor AccessibilityChannel: Channel {
         if request.allowUINavigation, request.needsTracks, runtime.canPostEvents(),
            let mouse = runtime.observationMouseRuntime,
            case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime) {
-            stackNavigation = .init(window: window, logic: runtime.logicRuntime, mouse: mouse,
+            if let candidate = OwnedTrackStackObservationNavigation(window: window, logic: runtime.logicRuntime, mouse: mouse,
                 expectedProject: navigationProject, requiresProjectReference: request.projectRef != nil,
-                referenceIsCurrent: navigationReferenceIsCurrent)
-            await stackNavigation?.expand(stoppingWhen: stop)
+                referenceIsCurrent: navigationReferenceIsCurrent),
+               navigation.map({ CFEqual(candidate.window, $0.window)
+                   && candidate.title.utf8.elementsEqual($0.title.utf8)
+                   && candidate.document.utf8.elementsEqual($0.document.utf8) }) ?? true {
+                stackNavigation = candidate
+                await candidate.expand(stoppingWhen: stop)
+            }
         }
         func mergedEffects(_ stack: SessionPopulationObservation.UIEffects, _ mixer: SessionPopulationObservation.UIEffects) -> SessionPopulationObservation.UIEffects {
             guard stack.navigationPerformed else { return mixer }

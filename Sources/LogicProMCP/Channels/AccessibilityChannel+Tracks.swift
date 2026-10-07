@@ -89,6 +89,7 @@ extension AccessibilityChannel {
         private let viewport: [Viewport]
         private var observedFocus: AXUIElement
         private var expandedHeaders: [AXUIElement]?
+        private var releaseUnverified = false
         private(set) var exposure: AXTrackBinding.Exposure?
         private(set) var effects = SessionPopulationObservation.UIEffects()
 
@@ -234,7 +235,11 @@ extension AccessibilityChannel {
             exposure = .init(header: header, disclosure: disclosure, runtime: logic, originalHeaders: originalHeaders)
             guard await event(.leftMouseDown, expectedHeaders: originalHeaders, expectedValue: 0, stoppingWhen: stop),
                   acceptHeldGestureFocus() else { effects.reason = "stack_expansion_unverified"; return }
-            _ = await event(.leftMouseUp, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop)
+            guard await event(.leftMouseUp, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop) else {
+                releaseUnverified = true
+                effects.reason = "stack_mouse_release_unverified"
+                return
+            }
             guard value() == 1,
                   case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
                   same(headers.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders) else {
@@ -258,12 +263,18 @@ extension AccessibilityChannel {
         func restore(stoppingWhen stop: @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
             defer { exposure?.end() }
             guard effects.navigationPerformed else { return effects }
+            // Do not start another gesture while the earlier release is unverified.
+            guard !releaseUnverified else { return effects }
             guard let expandedHeaders, await owned(expectedHeaders: expandedHeaders, expectedValue: 1, stoppingWhen: stop) else {
                 effects.reason = "stack_navigation_ownership_lost"; return effects
             }
             guard await event(.leftMouseDown, expectedHeaders: expandedHeaders, expectedValue: 1, stoppingWhen: stop),
                   acceptHeldGestureFocus() else { effects.reason = "stack_restoration_unverified"; return effects }
-            _ = await event(.leftMouseUp, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop)
+            guard await event(.leftMouseUp, expectedHeaders: nil, expectedValue: nil, stoppingWhen: stop) else {
+                releaseUnverified = true
+                effects.reason = "stack_mouse_release_unverified"
+                return effects
+            }
             if let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                CFEqual(focus, originalFocus) || CFEqual(focus, disclosure) || CFEqual(focus, header) {
                 observedFocus = focus

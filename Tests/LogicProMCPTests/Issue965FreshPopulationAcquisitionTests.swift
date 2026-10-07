@@ -145,6 +145,11 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, mouseCase: mouseCase)
     }
 
+    @Test(arguments: ["expansion", "restoration"])
+    func registeredStackDoesNotCertifyAnUnpostedMouseRelease(releaseCase: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, releaseCase: releaseCase)
+    }
+
     @Test(arguments: ["gate", "cancel", "deadline"])
     func scopedTrackBindingDoesNotReadAXAfterCutoff(cutoff: String) {
         let fixture = Fixture()
@@ -269,8 +274,10 @@ struct Issue965FreshPopulationAcquisitionTests {
             let coverage = tracks["coverage"] as? String
             if coverage == "partial" {
                 #expect(childRows.isEmpty)
-                #expect((tracks["reasons"] as? [String])?.contains("collapsed_track_stack") == true)
-                #expect(rows.first?["stack_collapsed"] as? Bool == true)
+                let reasons = try #require(tracks["reasons"] as? [String])
+                #expect(reasons.contains("collapsed_track_stack"))
+                let collapsedStack = try #require(rows.first?["stack_collapsed"] as? Bool)
+                #expect(collapsedStack)
             } else {
                 #expect(coverage == "unavailable" || coverage == "unstable")
             }
@@ -283,7 +290,8 @@ struct Issue965FreshPopulationAcquisitionTests {
     }
 
     private func observeStack(navigation: Bool, initiallyExpanded: Bool,
-                              verifyReferences: Bool = false, mouseCase: String? = nil) async throws {
+                              verifyReferences: Bool = false, mouseCase: String? = nil,
+                              releaseCase: String? = nil) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -326,6 +334,20 @@ struct Issue965FreshPopulationAcquisitionTests {
                 Issue.record("unexpected disclosure event"); return false
             }
             fixture.events.record(type == .leftMouseDown ? "disclosure_down" : "disclosure_up")
+            let eventCount = fixture.events.count
+            let failedReleaseGesture = releaseCase == "expansion" ? 1 : 3
+            if releaseCase != nil, eventCount == failedReleaseGesture, type == .leftMouseDown {
+                // The disclosure can take effect on Down even when the paired
+                // Up fails to create/post an event. Keep all other custody intact.
+                let expanding = releaseCase == "expansion"
+                fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, expanding ? 1 : 0)
+                fixture.builder.setChildren(fixture.rail, expanding ? headers : collapsed)
+                fixture.reads.record("release_fault_down_effect")
+            }
+            if releaseCase != nil, eventCount == failedReleaseGesture + 1, type == .leftMouseUp {
+                fixture.reads.record("release_fault_up_unposted")
+                return false
+            }
             if type == .leftMouseDown {
                 if mouseCase == "down_failed" { return false }
                 if mouseCase == "held_focus" {
@@ -355,6 +377,33 @@ struct Issue965FreshPopulationAcquisitionTests {
             commandParams: params, mutationGate: gate) {
                 await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
+        if let releaseCase {
+            #expect(fixture.reads.recorded.filter { $0 == "release_fault_down_effect" }.count == 1)
+            #expect(fixture.reads.recorded.filter { $0 == "release_fault_up_unposted" }.count == 1)
+            let expectedEvents = releaseCase == "expansion" ? ["disclosure_down", "disclosure_up"]
+                : ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"]
+            #expect(fixture.events.recorded == expectedEvents,
+                    "an unposted release must not launch a dependent restoration gesture")
+            let expectedCount = releaseCase == "expansion" ? 42 : 19
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == expectedCount)
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == (releaseCase == "expansion" ? 1 : 0))
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored",
+                    "observed rail reversal cannot prove that the held mouse was released")
+            #expect(effects["reason"] as? String == "stack_mouse_release_unverified")
+            let current = await cache.getTracks()
+            #expect(current.isEmpty, "unverified release must not certify current cache rows")
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                                                            runtime: fixture.builder.makeAXRuntime())
+            let heldFocus = try #require(focus)
+            #expect(CFEqual(heldFocus, fixture.rail))
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+            #expect(gate.currentOperation() == nil)
+            return
+        }
         if let mouseCase {
             let expectedEvents = mouseCase == "wrong_hit" ? [] : mouseCase == "down_failed" ? ["disclosure_down"]
                 : ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"]
@@ -363,7 +412,8 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
             let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                                                             runtime: fixture.builder.makeAXRuntime())
-            #expect(focus.map { CFEqual($0, mouseCase == "held_focus" ? disclosure : fixture.rail) } == true)
+            let actualFocus = try #require(focus)
+            #expect(CFEqual(actualFocus, mouseCase == "held_focus" ? disclosure : fixture.rail))
             #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
             #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
             #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
@@ -373,7 +423,8 @@ struct Issue965FreshPopulationAcquisitionTests {
             if mouseCase == "held_focus" {
                 #expect(effects["restoration"] as? String == "partially_restored")
                 #expect(effects["reason"] as? String == "keyboard_focus_not_restored")
-                #expect((effects["changed"] as? [String])?.contains("keyboard_focus") == true)
+                let changed = try #require(effects["changed"] as? [String])
+                #expect(changed.contains("keyboard_focus"))
             }
             return
         }
@@ -395,7 +446,8 @@ struct Issue965FreshPopulationAcquisitionTests {
             for (index, shouldResolve) in [(0, true), (1, false)] {
                 let reference = try #require(rows[index]["track_ref"] as? String)
                 let held = try #require(await registry.resolve(TargetReference(rawValue: reference)))
-                #expect(held.physicalTrack.map { CFEqual($0.header, headers[index]) } == true)
+                let heldPhysical = try #require(held.physicalTrack)
+                #expect(CFEqual(heldPhysical.header, headers[index]))
                 if index == 1 {
                     // Recycle the same physical header and raw name at its captured
                     // ordinal BEFORE its first mutation lookup, without reacquisition.
@@ -420,7 +472,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                 }
                 var resolved = false
                 if case .success(let target) = outcome { resolved = true; #expect(target.index == index) }
-                #expect(resolved == shouldResolve)
+                if shouldResolve { #expect(resolved) } else { #expect(!resolved) }
                 if index == 1 {
                     fixture.builder.setChildren(fixture.rail, collapsed)
                     fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
@@ -431,10 +483,12 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == (initiallyExpanded ? 1 : 0))
         #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
         #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
-        #expect(fixture.builder.attributeValue(headers[0], kAXSelectedAttribute as String) as? Bool == true)
+        let selected = try #require(fixture.builder.attributeValue(headers[0], kAXSelectedAttribute as String) as? Bool)
+        #expect(selected)
         let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                                                         runtime: fixture.builder.makeAXRuntime())
-        #expect(focus.map { CFEqual($0, fixture.rail) } == true)
+        let actualFocus = try #require(focus)
+        #expect(CFEqual(actualFocus, fixture.rail))
         if !navigation { #expect(fixture.events.count == 0) }
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
         #expect(gate.currentOperation() == nil)
