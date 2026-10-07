@@ -542,12 +542,20 @@ enum AXHelpers {
         title: String? = nil,
         identifier: String? = nil,
         maxDepth: Int = 10,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        observingRole: (AXUIElement, String?) -> Void = { _, _ in },
+        observingChildren: (AXUIElement, [AXUIElement]) -> Void = { _, _ in }
     ) -> AXUIElement? {
         guard maxDepth > 0 else { return nil }
         let children = getChildren(element, runtime: runtime)
+        observingChildren(element, children)
         for child in children {
-            let roleMatch = role == nil || getRole(child, runtime: runtime) == role
+            let roleMatch: Bool
+            if let role {
+                let observedRole = getRole(child, runtime: runtime)
+                observingRole(child, observedRole)
+                roleMatch = observedRole == role
+            } else { roleMatch = true }
             let titleMatch = title == nil || getTitle(child, runtime: runtime) == title
             let idMatch = identifier == nil || getIdentifier(child, runtime: runtime) == identifier
             if roleMatch && titleMatch && idMatch {
@@ -555,7 +563,8 @@ enum AXHelpers {
             }
             if let found = findDescendant(
                 of: child, role: role, title: title, identifier: identifier,
-                maxDepth: maxDepth - 1, runtime: runtime
+                maxDepth: maxDepth - 1, runtime: runtime,
+                observingRole: observingRole, observingChildren: observingChildren
             ) {
                 return found
             }
@@ -669,7 +678,9 @@ enum AXHelpers {
         maxDepth: Int = 10,
         runtime: Runtime = .production,
         requiresCompleteTraversal: Bool = false,
-        permittingRead: () -> Bool = { true }
+        permittingRead: () -> Bool = { true },
+        observingRole: (AXUIElement, String?) -> Void = { _, _ in },
+        observingChildren: (AXUIElement, [AXUIElement]) -> Void = { _, _ in }
     ) -> Result<Census, AXStatusError> {
         var hits: [AXUIElement] = []
         switch collectMatchingResult(
@@ -681,6 +692,8 @@ enum AXHelpers {
             runtime: runtime,
             requiresCompleteTraversal: requiresCompleteTraversal,
             permittingRead: permittingRead,
+            observingRole: observingRole,
+            observingChildren: observingChildren,
             into: &hits
         ) {
         case .success:
@@ -725,6 +738,8 @@ enum AXHelpers {
         runtime: Runtime,
         requiresCompleteTraversal: Bool,
         permittingRead: () -> Bool,
+        observingRole: (AXUIElement, String?) -> Void,
+        observingChildren: (AXUIElement, [AXUIElement]) -> Void,
         into results: inout [AXUIElement]
     ) -> Result<Void, AXStatusError> {
         guard maxDepth > 0 || requiresCompleteTraversal else { return .success(()) }
@@ -733,6 +748,7 @@ enum AXHelpers {
         switch childrenResult(element, runtime: runtime) {
         case let .success(observed):
             children = observed
+            observingChildren(element, observed)
         case let .failure(error) where error.isDefinitiveAbsence:
             children = []
         case let .failure(error):
@@ -751,7 +767,8 @@ enum AXHelpers {
                 identifier: identifier,
                 runtime: runtime,
                 requiresCompleteTraversal: requiresCompleteTraversal,
-                permittingRead: permittingRead
+                permittingRead: permittingRead,
+                observingRole: observingRole
             ) {
             case .success(true):
                 results.append(child)
@@ -769,6 +786,8 @@ enum AXHelpers {
                 runtime: runtime,
                 requiresCompleteTraversal: requiresCompleteTraversal,
                 permittingRead: permittingRead,
+                observingRole: observingRole,
+                observingChildren: observingChildren,
                 into: &results
             ) {
             case .success:
@@ -787,7 +806,8 @@ enum AXHelpers {
         identifier: String?,
         runtime: Runtime,
         requiresCompleteTraversal: Bool,
-        permittingRead: () -> Bool
+        permittingRead: () -> Bool,
+        observingRole: (AXUIElement, String?) -> Void
     ) -> Result<Bool, AXStatusError> {
         for (attribute, expected) in [
             (kAXRoleAttribute as String, role),
@@ -800,7 +820,9 @@ enum AXHelpers {
             switch stringAttributeResult(element, attribute, runtime: runtime) {
             case let .success(observed):
                 value = observed
+                if attribute == kAXRoleAttribute as String { observingRole(element, observed) }
             case let .failure(error):
+                if attribute == kAXRoleAttribute as String { observingRole(element, nil) }
                 return .failure(error)
             }
             if requiresCompleteTraversal && value == nil { return .failure(.malformedAttribute) }
@@ -834,10 +856,13 @@ enum AXHelpers {
         of element: AXUIElement,
         role: String? = nil,
         maxDepth: Int = 5,
-        runtime: Runtime = .production
+        runtime: Runtime = .production,
+        observingRole: (AXUIElement, String?) -> Void = { _, _ in },
+        observingChildren: (AXUIElement, [AXUIElement]) -> Void = { _, _ in }
     ) -> [AXUIElement] {
         var results: [AXUIElement] = []
-        collectDescendants(of: element, role: role, maxDepth: maxDepth, runtime: runtime, into: &results)
+        collectDescendants(of: element, role: role, maxDepth: maxDepth, runtime: runtime,
+            observingRole: observingRole, observingChildren: observingChildren, into: &results)
         return results
     }
 
@@ -846,15 +871,25 @@ enum AXHelpers {
         role: String?,
         maxDepth: Int,
         runtime: Runtime,
+        observingRole: (AXUIElement, String?) -> Void,
+        observingChildren: (AXUIElement, [AXUIElement]) -> Void,
         into results: inout [AXUIElement]
     ) {
         guard maxDepth > 0 else { return }
         let children = getChildren(element, runtime: runtime)
+        observingChildren(element, children)
         for child in children {
-            if role == nil || getRole(child, runtime: runtime) == role {
+            let matches: Bool
+            if let role {
+                let observedRole = getRole(child, runtime: runtime)
+                observingRole(child, observedRole)
+                matches = observedRole == role
+            } else { matches = true }
+            if matches {
                 results.append(child)
             }
-            collectDescendants(of: child, role: role, maxDepth: maxDepth - 1, runtime: runtime, into: &results)
+            collectDescendants(of: child, role: role, maxDepth: maxDepth - 1, runtime: runtime,
+                observingRole: observingRole, observingChildren: observingChildren, into: &results)
         }
     }
 
