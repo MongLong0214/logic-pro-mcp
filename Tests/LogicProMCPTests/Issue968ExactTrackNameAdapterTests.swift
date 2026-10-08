@@ -53,6 +53,10 @@ private final class ExactNameFixture: @unchecked Sendable {
     var legacyHeaderRoleObservations = 0
     var onLegacyHeaderRoleRead: (@Sendable () -> Void)?
     var boundaryCancellation = false
+    var passiveHeaderNameLabel = false
+    var menuEditorValueWrites: [String] = []
+    var menuEditorSetterAcknowledgesOnly = false
+    var onMenuEditorValueSet: (@Sendable () -> Void)?
 
     init(_ name: String = "A") {
         app = builder.element(968_100)
@@ -96,6 +100,15 @@ private final class ExactNameFixture: @unchecked Sendable {
                     return nil
                 },
                 setAttributeHandler: { [self] element, attribute, value in
+                    if let menuFocusedEditor, CFEqual(element, menuFocusedEditor),
+                       attribute == kAXValueAttribute as String, let name = value as? String {
+                        menuEditorValueWrites.append(name)
+                        if !menuEditorSetterAcknowledgesOnly {
+                            builder.setAttribute(element, attribute, name)
+                        }
+                        onMenuEditorValueSet?()
+                        return true
+                    }
                     if permitsSelection, CFEqual(element, rail), attribute == kAXSelectedChildrenAttribute as String,
                        let selected = value as? [AXUIElement], selected.count == 1 {
                         selectionWrites.append(selected[0])
@@ -115,6 +128,7 @@ private final class ExactNameFixture: @unchecked Sendable {
                         Issue.record("Unexpected exact-name fixture setter")
                         return false
                     }
+                    if passiveHeaderNameLabel, CFEqual(element, field) { return false }
                     writes.append(name)
                     actedNameFields.append(element)
                     builder.setAttribute(element, kAXDescriptionAttribute as String, name)
@@ -137,6 +151,7 @@ private final class ExactNameFixture: @unchecked Sendable {
                     }
                     events.append(action)
                     actedNameFields.append(element)
+                    if passiveHeaderNameLabel, CFEqual(element, field) { return false }
                     if action == kAXPressAction as String, let editOnPress {
                         builder.setAttribute(field, kAXDescriptionAttribute as String, editOnPress)
                     }
@@ -194,7 +209,9 @@ private final class ExactNameFixture: @unchecked Sendable {
                         Issue.record("Unexpected key event"); return false
                     }
                     postedReturn = true
-                    let name = String(decoding: typedCodeUnits, as: UTF16.self)
+                    guard let editor = menuFocusedEditor,
+                          let name: String = AXHelpers.getAttribute(editor, kAXValueAttribute as String,
+                            runtime: builder.makeAXRuntime()) else { return false }
                     writes.append(name)
                     builder.setAttribute(header, kAXTitleAttribute as String, name)
                     builder.setAttribute(field, kAXDescriptionAttribute as String, name)
@@ -892,13 +909,21 @@ struct Issue968ExactTrackNameAdapterTests {
         }
     }
 
-    @Test func ordinaryMenuRenameRetainsItsExistingFocusedEditorTypingCapability() async throws {
+    @Test(arguments: [false, true], ["typing", "axvalue", "ack_only", "foreign_focus", "foreign_role"])
+    func ordinaryMenuRenameRetainsItsExistingFocusedEditorTypingCapability(passiveHeaderLabel: Bool, editorRoute: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let f = ExactNameFixture()
             let (other, otherField) = f.appendTrack(name: "B", selected: true)
             f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
             f.builder.setAttribute(f.header, kAXTitleAttribute as String, "A")
-            f.builder.setChildren(f.header, [])
+            // Native Logic also retains a noneditable, numeric-zero name label on the
+            // header. It is not the String-valued editor opened by Rename Track.
+            if passiveHeaderLabel {
+                f.passiveHeaderNameLabel = true
+                f.builder.setAttribute(f.field, kAXValueAttribute as String, NSNumber(value: 0))
+                f.builder.setAttributeSettable(f.field, kAXValueAttribute as String, false)
+            }
+            f.builder.setChildren(f.header, passiveHeaderLabel ? [f.field] : [])
             f.permitsSelection = true
             let bar = f.builder.element(968_180)
             let trackMenu = f.builder.element(968_181)
@@ -916,22 +941,38 @@ struct Issue968ExactTrackNameAdapterTests {
             f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
             f.builder.setAttribute(editor, kAXWindowAttribute as String, f.window)
             f.builder.setAttribute(editor, kAXValueAttribute as String, "A")
+            f.builder.setAttributeSettable(editor, kAXValueAttribute as String, editorRoute != "typing")
+            if editorRoute == "foreign_role" {
+                f.builder.setAttribute(editor, kAXRoleAttribute as String, kAXSliderRole as String)
+            }
+            f.menuEditorSetterAcknowledgesOnly = editorRoute == "ack_only"
+            if editorRoute == "foreign_focus" {
+                f.onMenuEditorValueSet = {
+                    f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, otherField)
+                }
+            }
             f.builder.setChildren(bar, [trackMenu])
             f.builder.setChildren(trackMenu, [menu])
             f.builder.setChildren(menu, [rename])
             let (project, target) = try await f.prepare(typedProducer: true)
             let scalar = await f.rename(project: project, target: target, expected: nil, desired: "C")
             let body = try #require(sharedJSONObject(sharedToolText(scalar)))
-            #expect(body["state"] as? String == "A")
-            #expect(f.writes == ["C"])
-            #expect(f.typedCodeUnits == Array("C".utf16))
-            #expect(f.postedReturn)
+            let succeeds = editorRoute == "typing" || editorRoute == "axvalue"
+            #expect(body["state"] as? String == (succeeds ? "A" : "B"))
+            #expect(f.writes == (succeeds ? ["C"] : []))
+            #expect(f.typedCodeUnits == (editorRoute == "typing" ? Array("C".utf16) : []))
+            #expect(f.menuEditorValueWrites == (["typing", "foreign_role"].contains(editorRoute) ? [] : ["C"]))
+            if succeeds {
+                #expect(f.postedReturn)
+            } else {
+                #expect(!f.postedReturn)
+            }
             #expect(f.events == ["rename_menu"])
             #expect(f.selectionWrites.count == 1)
             #expect(f.selectionWrites.allSatisfy { CFEqual($0, f.header) })
             #expect(f.actedNameFields.isEmpty)
             #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
-            #expect(AXHelpers.getChildren(f.header, runtime: f.runtime.ax).isEmpty)
+            #expect(AXHelpers.getChildren(f.header, runtime: f.runtime.ax).count == (passiveHeaderLabel ? 1 : 0))
             let selected = try #require(AXValueExtractors.extractSelectedState(f.header, runtime: f.runtime.ax) as Bool?)
             let otherSelected = try #require(AXValueExtractors.extractSelectedState(other, runtime: f.runtime.ax) as Bool?)
             #expect(selected)
