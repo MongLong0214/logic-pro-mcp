@@ -657,7 +657,7 @@ enum OperationRegistry {
                 "near_silence_dbfs", "near_silence_threshold_dbfs", "output_root", "path",
             ]
         ),
-        (.audioAnalyzeSpectrum, "analyze_spectrum", Mutability.readOnly, ["path"]),
+        (.audioAnalyzeSpectrum, "analyze_spectrum", Mutability.readOnly, ["path", "target_curve"]),
         (.audioRecommendEQ, "recommend_eq", Mutability.readOnly, ["path", "minimum_level"]),
         (.audioCompareSpectra, "compare_spectra", Mutability.readOnly, ["before_path", "after_path", "output_root", "comparison_mode"]),
     ] as [(OperationID, String, Mutability, Set<String>)]).map { entry in
