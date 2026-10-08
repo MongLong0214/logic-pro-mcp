@@ -152,10 +152,96 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
     }
 
+    @Test("fresh inspection reports the held hidden-track view without querying Help or actuating it",
+          arguments: [false, true])
+    func registeredInspectionReportsHiddenTrackView(shown: Bool) async throws {
+        let fixture = hiddenViewFixture(shown: shown)
+        let result = try await inspect(fixture: fixture, domains: ["tracks"])
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let tracks = try #require(body["tracks"] as? [String: Any])
+        let witnesses = try #require(tracks["witnesses"] as? [String: Any])
+        let actual = try #require(witnesses["hidden_tracks_shown"] as? Bool)
+        if shown { #expect(actual) }
+        else { #expect(!actual) }
+        #expect(tracks["coverage"] as? String == "partial")
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        #expect(fixture.reads.helpCount == 0)
+    }
+
+    @Test(arguments: ["nonbinary", "fractional", "duplicate", "wrong_window", "wrong_parent",
+                      "wrong_description", "label_extension", "other_mode", "missing_parent", "absent_control"])
+    func registeredInspectionDoesNotInventHiddenView(fault: String) async throws {
+        let fixture = hiddenViewFixture(shown: false, fault: fault)
+        let result = try await inspect(fixture: fixture, domains: ["tracks"])
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let tracks = try #require(body["tracks"] as? [String: Any])
+        let witnesses = try #require(tracks["witnesses"] as? [String: Any])
+        #expect(witnesses["hidden_tracks_shown"] == nil)
+        #expect(tracks["coverage"] as? String == "partial")
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        #expect(fixture.reads.helpCount == 0)
+    }
+
+    private func hiddenViewFixture(shown: Bool, fault: String? = nil) -> Fixture {
+        let fixture = Fixture()
+        let split = fixture.builder.element(965_970)
+        let headerSplit = fixture.builder.element(965_976)
+        let legendSplit = fixture.builder.element(965_977)
+        let headerScroll = fixture.builder.element(965_971)
+        let legend = fixture.builder.element(965_972)
+        let hide = fixture.builder.element(965_973)
+        fixture.builder.setRole(split, kAXSplitGroupRole as String)
+        fixture.builder.setRole(headerSplit, kAXSplitGroupRole as String)
+        fixture.builder.setRole(legendSplit, kAXSplitGroupRole as String)
+        fixture.builder.setRole(headerScroll, kAXScrollAreaRole as String)
+        fixture.builder.setRole(legend, kAXGroupRole as String)
+        fixture.builder.setRole(fixture.rail, kAXGroupRole as String)
+        fixture.builder.setAttribute(fixture.rail, kAXDescriptionAttribute as String, "Tracks header")
+        fixture.builder.setRole(hide, kAXCheckBoxRole as String)
+        fixture.builder.setAttribute(hide, kAXDescriptionAttribute as String, "Show/Hide Hidden Tracks   H")
+        fixture.builder.setAttribute(hide, kAXValueAttribute as String, NSNumber(value: shown ? 1 : 0))
+        fixture.builder.setAttribute(hide, kAXWindowAttribute as String, fixture.window)
+        fixture.builder.setAttribute(fixture.header, kAXParentAttribute as String, fixture.rail)
+        fixture.builder.setAttribute(fixture.rail, kAXParentAttribute as String, headerScroll)
+        fixture.builder.setAttribute(split, kAXParentAttribute as String, fixture.window)
+        fixture.builder.setChildren(headerScroll, [fixture.rail])
+        fixture.builder.setChildren(legend, [hide])
+        fixture.builder.setChildren(headerSplit, [headerScroll])
+        fixture.builder.setChildren(legendSplit, [legend])
+        fixture.builder.setChildren(split, [legendSplit, headerSplit])
+        fixture.builder.setChildren(fixture.window, [split])
+        switch fault {
+        case "nonbinary": fixture.builder.setAttribute(hide, kAXValueAttribute as String, NSNumber(value: 2))
+        case "fractional": fixture.builder.setAttribute(hide, kAXValueAttribute as String, NSNumber(value: 0.5))
+        case "duplicate":
+            let other = fixture.builder.element(965_974)
+            fixture.builder.setRole(other, kAXCheckBoxRole as String)
+            fixture.builder.setAttribute(other, kAXDescriptionAttribute as String, "Show/Hide Hidden Tracks   H")
+            fixture.builder.setAttribute(other, kAXValueAttribute as String, NSNumber(value: 0))
+            fixture.builder.setAttribute(other, kAXWindowAttribute as String, fixture.window)
+            fixture.builder.setChildren(legend, [hide, other])
+        case "wrong_window": fixture.builder.setAttribute(hide, kAXWindowAttribute as String, fixture.builder.element(965_975))
+        case "wrong_parent": fixture.builder.setAttribute(split, kAXParentAttribute as String, fixture.builder.element(965_975))
+        case "wrong_description": fixture.builder.setAttribute(hide, kAXDescriptionAttribute as String, "Other Show/Hide Hidden Tracks")
+        case "label_extension": fixture.builder.setAttribute(hide, kAXDescriptionAttribute as String, "Show/Hide Hidden Tracksuit")
+        case "other_mode": fixture.builder.setAttribute(hide, kAXDescriptionAttribute as String, "Show/Hide Hidden Tracks Other Mode")
+        case "missing_parent": fixture.builder.removeAttribute(fixture.header, kAXParentAttribute as String)
+        case "absent_control": fixture.builder.setChildren(legend, [])
+        default: break
+        }
+        return fixture
+    }
+
     @Test("permitted stack observation exposes real descendants but restores the current cache rail",
           arguments: [false, true])
     func registeredStackObservationDistinguishesCapturedAndRestoredMembership(navigation: Bool) async throws {
         try await observeStack(navigation: navigation, initiallyExpanded: false)
+    }
+
+    @Test func registeredHiddenViewSampleCannotRenewAnEndedStackInverse() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, hiddenViewLoss: true)
     }
 
     @Test("an already expanded rail really exposes all forty-two fixture headers without navigation")
@@ -989,7 +1075,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                               knownOuterReplacement: Bool = false, knownInnerReopen: Bool = false,
                               knownInnerReplacement: Bool = false, disclosureDecision: String? = nil,
                               delayedLanding: Bool = false, headerFocus: String? = nil,
-                              helpMovesFocus: Bool = false, focusRestoration: String? = nil) async throws {
+                              helpMovesFocus: Bool = false, focusRestoration: String? = nil,
+                              hiddenViewLoss: Bool = false) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -1059,6 +1146,10 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(!headers.contains { row in grandchildren.contains { CFEqual(row, $0) } })
         }
         fixture.builder.setChildren(fixture.rail, initiallyExpanded ? headers : collapsed)
+        if hiddenViewLoss {
+            fixture.builder.setRole(fixture.rail, kAXGroupRole as String)
+            fixture.builder.setAttribute(fixture.rail, kAXDescriptionAttribute as String, "Tracks header")
+        }
         fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [fixture.window])
         fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
         fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
@@ -1214,13 +1305,33 @@ struct Issue965FreshPopulationAcquisitionTests {
                 wrongDisclosureHit: mouseCase == "wrong_hit", focusSetter: { element, attribute, value in
                     guard let focusRestoration else { Issue.record("no AX setters"); return false }
                     #expect(CFEqual(element, workspace) && attribute == kAXFocusedAttribute as String)
-                    #expect((value as? NSNumber)?.boolValue == true)
+                    do {
+                        let number = try #require(value as? NSNumber)
+                        #expect(number.boolValue)
+                    } catch { return false }
                     fixture.reads.record("workspace_focus_setter")
                     if focusRestoration == "declined" { return false }
                     fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                         focusRestoration == "wrong_readback" ? otherLabel : workspace)
                     return true
                 }, observingAttribute: { element, attribute in
+                    if hiddenViewLoss, fixture.events.count == 2, CFEqual(element, headers.last!),
+                       attribute == kAXTitleAttribute as String {
+                        fixture.reads.record("hidden_view_last_row_name")
+                    }
+                    if hiddenViewLoss, fixture.events.count == 2, CFEqual(element, headers[0]),
+                       attribute == kAXParentAttribute as String,
+                       fixture.reads.recorded.contains("hidden_view_last_row_name"),
+                       !fixture.reads.recorded.contains("hidden_view_parent_read") {
+                        fixture.reads.record("hidden_view_parent_read")
+                    }
+                    if hiddenViewLoss, CFEqual(element, fixture.window), attribute == kAXTitleAttribute as String,
+                       fixture.reads.recorded.contains("hidden_view_held_header_missing"),
+                       !fixture.reads.recorded.contains("hidden_view_same_header_recovered") {
+                        fixture.builder.setChildren(fixture.rail, headers)
+                        fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+                        fixture.reads.record("hidden_view_same_header_recovered")
+                    }
                     if mouseCase == "unrelated_text_focus", fixture.events.count == 1 {
                         fixture.reads.record("ax_read_during_held_down")
                     }
@@ -1326,6 +1437,12 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.reads.record("focus_read_missing_after_true_down")
                     return .success(nil)
                 }, observingChildren: { element in
+                    if hiddenViewLoss, CFEqual(element, fixture.rail),
+                       fixture.reads.recorded.contains("hidden_view_parent_read"),
+                       !fixture.reads.recorded.contains("hidden_view_held_header_missing") {
+                        fixture.builder.setChildren(fixture.rail, Array(headers.dropFirst()))
+                        fixture.reads.record("hidden_view_held_header_missing")
+                    }
                     if knownOuterReplacement, CFEqual(element, headers[0]),
                        fixture.reads.recorded.contains("replacement_disclosure_installed"),
                        !fixture.reads.recorded.contains("same_outer_reopened_on_retry") {
@@ -1495,6 +1612,18 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
             #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
             #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            return
+        }
+        if hiddenViewLoss {
+            #expect(fixture.reads.recorded.filter { $0 == "hidden_view_held_header_missing" }.count == 1)
+            #expect(fixture.reads.recorded.filter { $0 == "hidden_view_same_header_recovered" }.count == 1)
+            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up"],
+                    "a positively sampled missing held header cannot regain inverse authority")
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "not_restored")
+            #expect(body["snapshot_id"] == nil)
+            #expect(await cache.getTracks().isEmpty)
             return
         }
         if let nestedFault {
