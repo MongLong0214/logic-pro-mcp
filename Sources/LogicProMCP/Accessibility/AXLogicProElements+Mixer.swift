@@ -1214,8 +1214,7 @@ extension AXLogicProElements {
         guard let successor else {
             return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
         }
-        let role: Result<String?, AXHelpers.AXStatusError> =
-            AXHelpers.getAttributeResult(successor, kAXRoleAttribute as String, runtime: runtime)
+        let role = slotDecidingString(successor, kAXRoleAttribute as String, runtime: runtime)
         switch role {
         case let .failure(error) where !error.isDefinitiveAbsence:
             return SendSlotObservation(ordinal: ordinal, state: .unreadable)
@@ -1226,8 +1225,7 @@ extension AXLogicProElements {
                 return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
             }
         }
-        let help: Result<String?, AXHelpers.AXStatusError> =
-            AXHelpers.getAttributeResult(successor, kAXHelpAttribute as String, runtime: runtime)
+        let help = slotDecidingString(successor, kAXHelpAttribute as String, runtime: runtime)
         switch help {
         case let .failure(error) where !error.isDefinitiveAbsence:
             return SendSlotObservation(ordinal: ordinal, state: .unreadable)
