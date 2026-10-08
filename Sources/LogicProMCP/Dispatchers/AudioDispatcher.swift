@@ -12,7 +12,7 @@ struct AudioDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_audio",
-        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq, compare_spectra. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path }; recommend_eq -> { path: absolute audio file path, minimum_level?: number }; compare_spectra -> { before_path: absolute audio file path, after_path: absolute audio file path, output_root?: absolute allowlist root }; comparison returns content-bound native-format analyses and raw after-minus-before band energy differences under matching analysis policy and channel interpretation; unavailable or floor-censored bands have no deltaDb, complete means every band is comparable, and limitations disclose unequal duration/window coverage; no time alignment, level normalization, quality judgment or EQ application; each recommended band carries reason, prominenceDb (how far the peak stood above its local baseline), resolutionLimited, and a confidence derived from those two — 0 where the peak only just cleared the detection threshold, 1 where it cleared it by as much again, capped at 0.5 when Q is a lower bound. analyze_spectrum returns per-band energy; a band whose edges enclose no FFT bin at the file's sample rate is marked measured:false and its energyDb is the floor sentinel, not a reading. `classification` is a coarse advisory heuristic — it reads white noise as drums and a pure tone as vocal — and `levelConfidence` is a loudness figure, not a measure of how sure that classification is. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
+        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq, compare_spectra. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path }; recommend_eq -> { path: absolute audio file path, minimum_level?: number }; compare_spectra -> { before_path: absolute audio file path, after_path: absolute audio file path, output_root?: absolute allowlist root, comparison_mode?: absolute|spectral_shape }; comparison returns content-bound native-format analyses and raw after-minus-before band energy differences under matching analysis policy and channel interpretation; unavailable or floor-censored bands have no deltaDb, complete means every band is comparable, and limitations disclose unequal duration/window coverage. Default absolute mode preserves the existing response. Opt-in spectral_shape adds shapeComparison: levelOffsetDb is the median of shared measured uncensored band deltas, residualDb subtracts that offset, and unavailable bands retain their reason; no eligible bands means no offset and an incomplete result. This band offset is not perceived loudness or applied signal gain; neither mode aligns or normalizes audio, judges quality or applies EQ. Each recommended band carries reason, prominenceDb (how far the peak stood above its local baseline), resolutionLimited, and a confidence derived from those two — 0 where the peak only just cleared the detection threshold, 1 where it cleared it by as much again, capped at 0.5 when Q is a lower bound. analyze_spectrum returns per-band energy; a band whose edges enclose no FFT bin at the file's sample rate is marked measured:false and its energyDb is the floor sentinel, not a reading. `classification` is a coarse advisory heuristic — it reads white noise as drums and a pure tone as vocal — and `levelConfidence` is a loudness figure, not a measure of how sure that classification is. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
         commandDescription: "Audio command to execute"
     )
 
@@ -146,6 +146,18 @@ struct AudioDispatcher: OperationTraceDispatching {
                 extras: ["operation": "audio.compare_spectra", "write_attempted": false]
             )
         }
+        let mode: SpectralComparisonResult.Mode
+        if let requested = params["comparison_mode"] {
+            guard let name = requested.stringValue, let selected = SpectralComparisonResult.Mode(rawValue: name) else {
+                return toolInvalidParamsResult(
+                    "compare_spectra 'comparison_mode' must be 'absolute' or 'spectral_shape'",
+                    extras: ["operation": "audio.compare_spectra", "write_attempted": false]
+                )
+            }
+            mode = selected
+        } else {
+            mode = .absolute
+        }
         // Only output_root is exposed here; both artifacts use the same shipped compute caps.
         let confinement = params["output_root"].map { ["output_root": $0] } ?? [:]
         let inputPolicy = policy(from: confinement)
@@ -158,7 +170,7 @@ struct AudioDispatcher: OperationTraceDispatching {
                 path: afterPath, analysisRef: "audio.compare_spectra.after", artifactFingerprint: "",
                 policy: inputPolicy, runtime: runtime, computeArtifactFingerprint: true
             )
-            return toolTextResult(encodeJSON(try SpectralComparisonResult(before: before, after: after)))
+            return toolTextResult(encodeJSON(try SpectralComparisonResult(before: before, after: after, mode: mode)))
         } catch let failure as SpectralComparisonResult.Failure {
             return toolStateCResult(
                 .spectralAnalysisFailed, hint: "Spectra cannot be compared: \(failure.rawValue)",

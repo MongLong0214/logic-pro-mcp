@@ -25,10 +25,57 @@ struct SpectralAnalysisPolicy: Codable, Equatable, Sendable {
 }
 
 struct SpectralComparisonResult: Codable, Equatable, Sendable {
+    enum Mode: String, CaseIterable, Sendable {
+        case absolute
+        case spectralShape = "spectral_shape"
+    }
+
     struct Band: Codable, Equatable, Sendable {
         let centerHz: Double
         let deltaDb: Double?
         let unavailableReason: String?
+    }
+
+    struct ShapeComparison: Codable, Equatable, Sendable {
+        struct Band: Codable, Equatable, Sendable {
+            let centerHz: Double
+            let residualDb: Double?
+            let unavailableReason: String?
+        }
+
+        let method: String
+        let referenceBandCount: Int
+        let levelOffsetDb: Double?
+        let bands: [Band]
+        let complete: Bool
+        let limitations: [String]
+
+        init(rawBands: [SpectralComparisonResult.Band]) throws {
+            let deltas = rawBands.compactMap(\.deltaDb).sorted()
+            let offset: Double?
+            if deltas.isEmpty {
+                offset = nil
+            } else {
+                let middle = deltas.count / 2
+                offset = deltas.count.isMultiple(of: 2)
+                    ? deltas[middle - 1] / 2 + deltas[middle] / 2
+                    : deltas[middle]
+            }
+            bands = try rawBands.map { band in
+                let residual = band.deltaDb.flatMap { delta in offset.map { delta - $0 } }
+                if let residual, !residual.isFinite { throw Failure.invalidBands }
+                return Band(centerHz: band.centerHz, residualDb: residual,
+                            unavailableReason: band.unavailableReason)
+            }
+            method = "median_shared_uncensored_band_delta.v1"
+            referenceBandCount = deltas.count
+            levelOffsetDb = offset
+            complete = !deltas.isEmpty && deltas.count == rawBands.count
+            var limits = ["band_offset_not_perceived_loudness", "no_signal_alignment_or_audio_normalization"]
+            if deltas.isEmpty { limits.append("no_shared_uncensored_bands") }
+            if !complete { limits.append("some_bands_unavailable") }
+            limitations = limits
+        }
     }
 
     let before: SpectralAnalysisResult
@@ -37,6 +84,8 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
     /// True only when every band has a measured, uncensored difference.
     let complete: Bool
     let limitations: [String]
+    /// Omitted in absolute mode to preserve the existing serialized response.
+    let shapeComparison: ShapeComparison?
 
     enum Failure: String, Error {
         case incompleteInput = "incomplete_input"
@@ -45,7 +94,7 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         case unboundArtifact = "unbound_artifact"
     }
 
-    init(before: SpectralAnalysisResult, after: SpectralAnalysisResult) throws {
+    init(before: SpectralAnalysisResult, after: SpectralAnalysisResult, mode: Mode = .absolute) throws {
         guard before.complete, after.complete else { throw Failure.incompleteInput }
         guard let policy = before.analysisPolicy, policy == after.analysisPolicy,
               before.sampleRate > 0, before.sampleRate == after.sampleRate,
@@ -95,5 +144,6 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         }
         if !complete { limits.append("some_bands_unavailable") }
         limitations = limits
+        shapeComparison = mode == .spectralShape ? try ShapeComparison(rawBands: bands) : nil
     }
 }

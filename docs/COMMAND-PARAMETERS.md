@@ -10,7 +10,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 |---|---|---|---|---|---|---|---|---|---|
 | `analyze_file` | `expected_channel_count`, `expected_duration_seconds`, `expected_sample_rate`, `max_decoded_frames`, `max_duration_drift_seconds`, `max_input_duration_seconds`, `max_input_file_size_bytes`, `max_peak_dbfs`, `max_silence_ratio`, `maximum_decoded_frames`, `maximum_duration_drift_seconds`, `maximum_input_duration_seconds`, `maximum_input_file_size_bytes`, `maximum_peak_dbfs`, `maximum_silence_ratio`, `min_duration_seconds`, `min_file_size_bytes`, `minimum_duration_seconds`, `minimum_file_size_bytes`, `near_silence_dbfs`, `near_silence_threshold_dbfs`, `output_root`, `path` | none | closed | read_only | none | none | none | never_automatic | default_install |
 | `analyze_spectrum` | `path` | `path` | closed | read_only | none | none | none | never_automatic | default_install |
-| `compare_spectra` | `after_path`, `before_path`, `output_root` | `before_path`; `after_path` | closed | read_only | none | none | none | never_automatic | default_install |
+| `compare_spectra` | `after_path`, `before_path`, `comparison_mode`: string (absolute, spectral_shape), `output_root` | `before_path`; `after_path` | closed | read_only | none | none | none | never_automatic | default_install |
 | `recommend_eq` | `minimum_level`: number, `path` | `path` | closed | read_only | none | none | none | never_automatic | default_install |
 
 ## `logic_edit`

@@ -367,6 +367,8 @@ extension OperationRegistry {
                                     sample: .string("/tmp/lpm-957-no-such-file.wav"))],
                                             required: [["path"]]),
             "audio.compare_spectra": .init(params: [
+                "comparison_mode": .enforced(.string, .string("absolute"),
+                                    allowed: SpectralComparisonResult.Mode.allCases.map(\.rawValue)),
                 "before_path": .unconstrained("read as text; the analyzer refuses a path it cannot open",
                                     sample: .string("/tmp/lpm-957-no-such-file.wav")),
                 "after_path": .unconstrained("read as text; the analyzer refuses a path it cannot open",
