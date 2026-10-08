@@ -39,8 +39,8 @@ WHAT IT REFUSES
   9  a citation with no binding, or whose binding target does not contain the cited value
  10  an index or absence file whose bytes are not the bytes `build` wrote, or an index row whose
       value is in no absence set -- a row whose value is not in the corpus was not taken from it
- 11  a pull request body that neither cites nor may opt out (the opt-out is refused for a change
-      touching a Logic-facing path, and is not read from a code block or an HTML comment); such
+ 11  a pull request body that neither cites nor visibly states it makes no claim about Logic
+      (quoted Apple values cannot opt out; code blocks and HTML comments do not count); such
       a change may instead name a `canon_not_applicable` record it writes, bound to Logic-facing
       code it changes
 
@@ -288,7 +288,7 @@ RATCHETS = (
     R("docs/canon/NOT-A-RECORD.json", "files", "shrink",
       "files in docs/observations that are declared not to be records", _ratchet_members),
     R("docs/canon/LOGIC-FACING.json", "prefixes", "grow",
-      "path prefixes whose changes may not use the opt-out", _ratchet_members),
+      "path prefixes used for Logic-facing source bindings", _ratchet_members),
     R("docs/canon/PROSE-NUMBERS.json", "numbers", "shrink",
       "numbers docs/canon/README.md may state with no artifact behind them", ratchet.key_members),
     R("docs/canon/MANIFEST.json", "sources", "grow",
@@ -976,8 +976,8 @@ def check_record(path: str, failures: list, without_canon: set, manifest: dict,
 #: to type is a sentence somebody has to mean.
 NO_FACT_OPT_OUT = "states no fact about Logic"
 
-#: Paths whose contents ARE claims about Logic. A change touching one of these may not use the
-#: opt-out, whatever its description says.
+#: Paths classified for Logic-facing source bindings. Directory membership alone does not prove
+#: a body claims a native fact: protocol-only changes may truthfully say they do not.
 #:
 #: This exists because the opt-out was a substring search over the whole body, and review
 #: 2026-09-15 walked straight through it: a description that asserted Logic's Korean AXHelp for the
@@ -986,7 +986,9 @@ NO_FACT_OPT_OUT = "states no fact about Logic"
 #: shape: writing a `logic-canon://` reference by hand is work and typing one sentence is not, so
 #: the cheapest honest-looking path led away from the rule.
 #:
-#: Whether a change states a fact about Logic is therefore derived from WHAT IT TOUCHES.
+#: The original rule also refused declarations solely from WHAT A CHANGE TOUCHES. That blanket
+#: refusal manufactured a native-evidence requirement for synthetic protocol validation. Keep
+#: quoted-value and visibility checks, and use paths to bind explicitly named evidence instead.
 #: Read from a FILE so the merge-base ratchet can see it, and so a new Logic-facing directory
 #: cannot appear without the list learning about it. Held as a tuple first, and two directories
 #: that declare LabelSets were not in it -- `SelectorAtlas/` and the package root -- so a change
@@ -1003,29 +1005,27 @@ def logic_facing_prefixes() -> list:
     """The prefixes, refusing an absent or empty file rather than returning nothing.
 
     `_waiver` returns an empty set for a file that does not exist, which is right for a waiver --
-    nothing is waived -- and catastrophic here: no prefixes means nothing is Logic-facing means
-    every change may use the opt-out. The one place the same helper has to fail the other way.
+    nothing is waived -- but no prefixes here would erase the scope of source bindings and
+    LabelSet classification. The one place the same helper has to fail the other way.
     """
     if not os.path.exists(LOGIC_FACING_PATH):
         raise CanonWaiverError(
             f"{os.path.relpath(LOGIC_FACING_PATH, REPO)} is missing. Without it no path is "
-            f"Logic-facing and every change may use the opt-out, so this refuses rather than "
+            f"Logic-facing for source bindings, so this refuses rather than "
             f"quietly allowing everything.")
     prefixes = sorted(_waiver(LOGIC_FACING_PATH, "prefixes"))
     if not prefixes:
         raise CanonWaiverError(
             f"{os.path.relpath(LOGIC_FACING_PATH, REPO)} lists no prefixes, which would make "
-            f"every change eligible for the opt-out.")
+            f"source bindings unscoped.")
     return prefixes
 
 
 def check_labelsets_are_logic_facing(failures: list) -> None:
     """Rule 14: a file that declares a LabelSet is Logic-facing, and must be declared one.
 
-    The list decides whether a change may use the opt-out, so a file matching Logic's interface
-    from outside it is a file whose change can say it states no fact about Logic. Two did. This
-    makes the list self-maintaining: declare a LabelSet somewhere new and the list must learn
-    about it in the same change.
+    The list scopes Logic-facing source bindings. A new LabelSet outside it would escape that
+    scope, so the list must learn about it in the same change.
     """
     try:
         prefixes = logic_facing_prefixes()
@@ -1050,8 +1050,7 @@ def check_labelsets_are_logic_facing(failures: list) -> None:
                     failures.append(
                         f"{rel} declares a LabelSet and is under no prefix in "
                         f"{os.path.relpath(LOGIC_FACING_PATH, REPO)}. A file that matches Logic's "
-                        f"interface is Logic-facing, and a change touching only such files could "
-                        f"otherwise use the opt-out.")
+                        f"interface must be classified for Logic-facing source bindings.")
 
 
 #: How GitHub's renderer (cmark-gfm) divides a body into blocks, as far as that decides what a
@@ -1381,7 +1380,7 @@ def check_exceptions_state_no_fact(failures: list) -> None:
 
 
 def logic_facing(changed):
-    """The changed paths whose contents are claims about Logic.
+    """The changed paths classified for Logic-facing source bindings.
 
     A path under a prefix is Logic-facing UNLESS it is named in `exceptions`, and those entries are
     proved by `check_exceptions_state_no_fact` on every run rather than taken on trust.
@@ -1606,7 +1605,7 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
     """
     if require_changed and not changed_paths:
         return Diagnosis(ACTIONABLE, [(EMPTY_CHANGED_LIST, (
-            f"{label}: the list of changed files is empty, so whether this change may opt out "
+            f"{label}: the list of changed files is empty, so changed-source scope "
             f"cannot be derived.\n"
             f"  A pull request changes something. An empty list means the diff command failed, "
             f"and the CI step's\n"
@@ -1615,7 +1614,7 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
             f"  change that edits Logic-facing paths. Fail closed instead."))])
 
     touched = logic_facing(changed_paths)
-    # The exceptions NARROW that set, so the opt-out below can rest on them -- and rule 15 is what
+    # The exceptions NARROW that set for source bindings -- and rule 15 is what
     # proves an exception. It runs in the tree check, which is a different invocation: a co-reader
     # pointed out that `--text` returns before it, so this path was trusting a list the run had not
     # checked. In CI the tree check is a required command and does run, but a rule that is only
@@ -1641,13 +1640,6 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
             behavioural = _behavioural_records(body, changed_paths, touched, label)
             if behavioural is not None:
                 return behavioural
-            return Diagnosis(ACTIONABLE, [(LOGIC_FACING_OPT_OUT, (
-                f"{label}: no canonical reference, and this change may not opt out: it edits "
-                f"{len(touched)} file(s)\n  whose contents are claims about Logic, first "
-                f"{touched[0]}.\n"
-                f"  Cite what those claims rest on. See docs/canon/README.md. A change whose "
-                f"evidence is behaviour, not a string, may instead name the schema-3 "
-                f"`canon_not_applicable` record it adds."))])
         if NO_FACT_OPT_OUT in _visible(body):
             # ...unless the body QUOTES something citable. The opt-out says "this states no fact
             # about Logic", and a body carrying a string Logic ships is stating one. This is the
@@ -1662,6 +1654,14 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
                     f"Cite it. (A 32-bit prefix that only collides is settled by "
                     f"`Scripts/logic_canon.py confirm`.)"))])
             return Diagnosis(SATISFIED)
+        if touched:
+            return Diagnosis(ACTIONABLE, [(LOGIC_FACING_OPT_OUT, (
+                f"{label}: no canonical reference, behavioural record or visible no-fact "
+                f"declaration. This change edits {len(touched)} Logic-facing file(s), "
+                f"first {touched[0]}.\n"
+                f"  Cite a claimed Apple value or name its behavioural evidence. If this body "
+                f"states no fact about Logic, say so visibly with the reason. Directory "
+                f"membership alone is not an observed native fact."))])
         # WHICH of the two is wrong decides what to say. A declaration typed into a code block or
         # an HTML comment is a contributor who followed the instruction and got the rendering
         # wrong, and telling them "no opt-out" sends them to write a sentence they already wrote.
@@ -1963,7 +1963,7 @@ def _usage(message: str) -> int:
     EVERY argument form below used to be POSITIONAL: `--text` had to be argv[1], `--changed` had
     to be argv[3], and the whole `--changed` clause was ignored unless argc was exactly 5. Adding
     `--format` to that shape would have made `--text b.md --format json --changed c.txt` run with
-    NO file list -- which is the mode where a change that edits Logic-facing paths may opt out.
+    NO file list -- silently skipping changed-source scope for behavioural evidence.
     A dropped flag has to be an error rather than a quieter check.
     """
     print(f"check-canon-citations: {message}\n{USAGE}", file=sys.stderr)

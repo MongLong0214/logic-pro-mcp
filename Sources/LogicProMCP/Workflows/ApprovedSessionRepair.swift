@@ -40,6 +40,72 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let name: String
         let binding: AXTrackBinding.Binding
     }
+    private struct CapturedGoals: Sendable {
+        let projectRef: TargetReference
+        let document: String
+        let mixer: MixerTask?
+        let names: [NameGoal]
+    }
+
+    /// The existing adapter's finite scope and captured footprint, shared with planning.
+    /// This reads no host state. Availability at this instant is not execution authority:
+    /// retained application still revalidates the registry and independently reads AX.
+    static func canVerifyCapturedGoals(policy: ProjectSessionAudit.IntentPolicy, policyValue: Value,
+                                      names: [ProjectSessionAudit.ApprovedName],
+                                      source: SessionPopulationObservation.Capture,
+                                      request: SessionPopulationObservation.Request) -> Bool {
+        FeatureFlags.adr002TargetRef && capturedGoals(policy: policy, policyValue: policyValue,
+            names: names, source: source, request: request) != nil
+    }
+
+    private static func capturedGoals(policy: ProjectSessionAudit.IntentPolicy, policyValue: Value,
+                                      names: [ProjectSessionAudit.ApprovedName],
+                                      source: SessionPopulationObservation.Capture,
+                                      request: SessionPopulationObservation.Request) -> CapturedGoals? {
+        guard policy.trackSort == nil, policy.roles.isEmpty, policy.outputs.isEmpty,
+              policy.sends.isEmpty, policy.receivers.isEmpty, policy.protectedPaths.isEmpty,
+              names.count == policy.targets.count,
+              !names.isEmpty || policy.mixerVisible != nil,
+              case .issued(let issued)? = source.projectIssuance, policy.projectRef == issued else { return nil }
+        var goals: [NameGoal] = []
+        if !names.isEmpty {
+            guard request.domains.contains(.tracks), source.referencesEnabled,
+                  SessionPopulationObservation.trackRowReadbackReasons(capture: source).isEmpty,
+                  let references = source.issued, let projectPath = source.project.filePath,
+                  source.freshPopulation?.stable == true else { return nil }
+            for name in names {
+                guard let target = policy.targets.first(where: { $0.handle == name.target }),
+                      case .located(let index) = ProjectSessionAudit.locate(target.trackRef, in: references) else { return nil }
+                let rows = source.tracks.filter { $0.id == index }
+                guard rows.count == 1, let row = rows.first,
+                      row.name.utf8.elementsEqual(name.name.utf8), let binding = row.physicalBinding,
+                      binding.exposure?.hasEnded != true,
+                      binding.projectPath?.utf8.elementsEqual(projectPath.utf8) == true,
+                      goals.allSatisfy({ !CFEqual($0.binding.header, binding.header) }) else { return nil }
+                goals.append(.init(reference: target.trackRef, name: name.name, binding: binding))
+            }
+            guard let document = goals.first?.binding.document,
+                  goals.allSatisfy({ $0.binding.document.utf8.elementsEqual(document.utf8)
+                      && CFEqual($0.binding.window, goals[0].binding.window) }) else { return nil }
+        }
+        guard let desired = policy.mixerVisible else {
+            guard policyValue.objectValue?["presentation"] == nil,
+                  let document = goals.first?.binding.document else { return nil }
+            return .init(projectRef: issued, document: document, mixer: nil, names: goals)
+        }
+        guard policyValue.objectValue?["presentation"]?.objectValue.map({ Set($0.keys) == ["mixer_visible"] }) == true,
+              let fresh = source.freshPopulation, fresh.stable,
+              let before = fresh.presentationObservation?.mixerVisible,
+              fresh.presentationObservation?.isPlaying == false,
+              fresh.presentationObservation?.isRecording == false,
+              let binding = fresh.presentationBinding,
+              binding.navigationBaseline != nil, binding.transport != nil,
+              binding.pid != nil, binding.app != nil, binding.focus != nil,
+              goals.allSatisfy({ CFEqual($0.binding.window, binding.window)
+                  && $0.binding.document.utf8.elementsEqual(binding.document.utf8) }) else { return nil }
+        return .init(projectRef: issued, document: binding.document,
+            mixer: .init(before: before, desired: desired, binding: binding), names: goals)
+    }
     let plan: SagaPlan
     let projectRef: TargetReference
     private let mixerTask: MixerTask?
@@ -77,44 +143,25 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               SHA256.hash(data: Data(encoded.utf8)).map({ String(format: "%02x", $0) }).joined() == digest else { return nil }
         guard let policyObject = object["approved_policy"]?.objectValue,
               case .accepted(let policy) = ProjectSessionAudit.parseIntentPolicy(policyObject),
-              policy.trackSort == nil, policy.roles.isEmpty, policy.outputs.isEmpty, policy.sends.isEmpty, policy.receivers.isEmpty,
               let names = ProjectSessionAudit.parseApprovedNames(object["approved_names"], policy: policy),
-              names.count == policy.targets.count,
               ["reasons", "questions", "receiver_questions", "findings", "new_object_inventory"].allSatisfy({
                   object[$0]?.arrayValue?.isEmpty == true
               }),
               let unchanged = object["unchanged_tasks"]?.arrayValue,
               unchanged.count == names.count,
               Set(unchanged.compactMap(\.stringValue)) == Set(names.map { "name_" + $0.target }),
-              case .issued(let issued)? = source.capture.projectIssuance, policy.projectRef == issued else { return nil }
-        var goals: [NameGoal] = []
-        if !names.isEmpty {
-            guard source.request.domains.contains(.tracks),
-                  SessionPopulationObservation.trackRowReadbackReasons(capture: source.capture).isEmpty,
-                  let references = source.capture.issued,
-                  let projectPath = source.capture.project.filePath,
-                  source.capture.freshPopulation?.stable == true else { return nil }
-            for name in names {
-                guard let target = policy.targets.first(where: { $0.handle == name.target }),
-                      case .located(let index) = ProjectSessionAudit.locate(target.trackRef, in: references) else { return nil }
-                let rows = source.capture.tracks.filter { $0.id == index }
-                guard rows.count == 1, let row = rows.first,
-                      row.name.utf8.elementsEqual(name.name.utf8), let binding = row.physicalBinding,
-                      let current = await registry.resolve(target.trackRef), current.kind == .track,
-                      current.physicalTrack?.matches(binding) == true,
-                      binding.projectPath?.utf8.elementsEqual(projectPath.utf8) == true,
-                      goals.allSatisfy({ !CFEqual($0.binding.header, binding.header) }) else { return nil }
-                goals.append(.init(reference: target.trackRef, name: name.name, binding: binding))
-            }
-            guard let document = goals.first?.binding.document,
-                  goals.allSatisfy({ $0.binding.document.utf8.elementsEqual(document.utf8)
-                      && CFEqual($0.binding.window, goals[0].binding.window) }) else { return nil }
+              let captured = capturedGoals(policy: policy, policyValue: .object(policyObject), names: names,
+                  source: source.capture, request: source.request) else { return nil }
+        let issued = captured.projectRef
+        let goals = captured.names
+        for goal in goals {
+            guard let current = await registry.resolve(goal.reference), current.kind == .track,
+                  current.physicalTrack?.matches(goal.binding) == true else { return nil }
         }
         if steps.isEmpty {
-            guard !goals.isEmpty, policyObject["presentation"] == nil,
-                  policy.mixerVisible == nil, let document = goals.first?.binding.document else { return nil }
+            guard captured.mixer == nil else { return nil }
             return .init(plan: .init(steps: [], idempotencyKey: key, canonicalPlanID: id, canonicalDigest: digest),
-                projectRef: issued, document: document, nameGoals: goals, projectEpoch: source.capture.projectEpoch,
+                projectRef: issued, document: captured.document, nameGoals: goals, projectEpoch: source.capture.projectEpoch,
                 cache: cache, registry: registry, journal: journal)
         }
         guard steps.count == 1,
@@ -124,24 +171,14 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               issued.rawValue == rawRef,
               let before = step["before"]?.objectValue?["visible"]?.boolValue,
               let desired = step["after"]?.objectValue?["visible"]?.boolValue,
-              policy.mixerVisible == desired,
-              policyObject["presentation"]?.objectValue.map({ Set($0.keys) == ["mixer_visible"] }) == true,
-              let fresh = source.capture.freshPopulation, fresh.stable,
-              fresh.presentationObservation?.mixerVisible == before,
-              fresh.presentationObservation?.isPlaying == false,
-              fresh.presentationObservation?.isRecording == false,
-              let binding = fresh.presentationBinding,
-              binding.navigationBaseline != nil, binding.transport != nil,
-              binding.pid != nil, binding.app != nil, binding.focus != nil,
-              goals.allSatisfy({ CFEqual($0.binding.window, binding.window)
-                  && $0.binding.document.utf8.elementsEqual(binding.document.utf8) })
+              let mixer = captured.mixer, mixer.before == before, mixer.desired == desired
         else { return nil }
         let saga = SagaPlan(steps: [.init(operationID: .navigateToggleView, targetRef: issued,
             params: ["view": .string("mixer"), "visible": .bool(desired)],
             expectedInverse: .init(operationID: .navigateToggleView, valueParameter: "visible"))],
             idempotencyKey: key, canonicalPlanID: id, canonicalDigest: digest)
-        return .init(plan: saga, projectRef: issued, document: binding.document,
-            mixerTask: .init(before: before, desired: desired, binding: binding), nameGoals: goals,
+        return .init(plan: saga, projectRef: issued, document: captured.document,
+            mixerTask: mixer, nameGoals: goals,
             projectEpoch: source.capture.projectEpoch, cache: cache, registry: registry, journal: journal)
     }
 

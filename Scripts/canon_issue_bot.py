@@ -73,8 +73,8 @@ HEADINGS = {
     "unrelated_binding":
         "The references here resolve, but none of them bears on what this is about.",
     "logic_facing_opt_out":
-        "This declares that it states no fact about Logic, but it touches files whose contents "
-        "are claims about Logic.",
+        "This touches Logic-facing files, but the body has no citation, accepted behavioural "
+        "record, or visible declaration that it states no fact about Logic.",
     "unproved_exceptions":
         "The Logic-facing exception list is not proved, which is a repository-side problem "
         "rather than anything about this issue.",

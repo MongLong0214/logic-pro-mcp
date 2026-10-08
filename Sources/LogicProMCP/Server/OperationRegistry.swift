@@ -660,7 +660,7 @@ enum OperationRegistry {
         ),
         (.audioAnalyzeSpectrum, "analyze_spectrum", Mutability.readOnly, ["path", "target_curve"]),
         (.audioRecommendEQ, "recommend_eq", Mutability.readOnly, ["path", "minimum_level"]),
-        (.audioCompareSpectra, "compare_spectra", Mutability.readOnly, ["before_path", "after_path", "output_root"]),
+        (.audioCompareSpectra, "compare_spectra", Mutability.readOnly, ["before_path", "after_path", "output_root", "comparison_mode"]),
     ] as [(OperationID, String, Mutability, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,

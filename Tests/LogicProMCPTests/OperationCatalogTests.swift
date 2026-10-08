@@ -150,7 +150,7 @@ struct OperationCatalogTests {
         ],
         .audioAnalyzeSpectrum: ["path", "target_curve"],
         .audioRecommendEQ: ["minimum_level", "path"],
-        .audioCompareSpectra: ["after_path", "before_path", "output_root"],
+        .audioCompareSpectra: ["after_path", "before_path", "comparison_mode", "output_root"],
         .systemListRecentTraces: ["limit"],
         .systemGetTrace: ["trace_id"],
         .systemClearTraces: ["confirmed"],

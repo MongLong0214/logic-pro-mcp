@@ -721,6 +721,18 @@ class TheGapsReviewFound(unittest.TestCase):
         result = self._check("This renames a private helper and states no fact about Logic.\n")
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_protocol_validation_is_not_a_native_observation_because_of_its_directory(self):
+        body = ("This pull request body states no fact about Logic. It rejects synthetic "
+                "failed protocol replies, not a current native benchmark.\n")
+        changed = ["Scripts/livekit/probe_668_cycle_cost.py",
+                   "Scripts/test_probe_668_cycle_cost.py"]
+        result = self._check(body, changed=changed)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # The declaration cannot excuse an actual quoted Apple value, even on this same change.
+        quoted = self._check(body + f'Logic shows "{REAL_VALUE}".\n', changed=changed)
+        self.assertNotEqual(quoted.returncode, 0)
+        self.assertIn("quotes", quoted.stderr)
+
 
 class AValueCitationInABody(unittest.TestCase):
     """`Count In` and `Audio Units` are both `logic-canon://strings/en#value`.
