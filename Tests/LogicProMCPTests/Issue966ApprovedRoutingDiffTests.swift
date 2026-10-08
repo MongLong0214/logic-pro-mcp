@@ -955,6 +955,10 @@ struct Issue966ApprovedRoutingDiffTests {
         #expect(body["preview"]?.arrayValue == [])
         #expect(body["unchanged_tasks"]?.arrayValue == [.string("main_output.target.approved")])
         #expect(body["new_object_inventory"]?.arrayValue == [])
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable, "sampled compliance does not supply the retained routing-goal verifier")
+        let reasons = try #require(body["reasons"]?.arrayValue)
+        #expect(!reasons.isEmpty)
     }
 
     @Test(arguments: [false, true])
