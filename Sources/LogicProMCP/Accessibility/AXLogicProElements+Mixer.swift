@@ -747,20 +747,53 @@ extension AXLogicProElements {
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> String? {
-        slotDescription(in: strip, matching: AXLocalePolicy.outputSlotHelpKeyword, runtime: runtime)
+        outputSlotRead(in: strip, runtime: runtime)?.destination
     }
 
     /// The output slot's button itself (#291 R2): the element `logic_mixer set_output_verified`
     /// presses to open the strip's output popup.
     ///
-    /// Found by the same walk and help match `outputSlotDestination` reads through, so the button
-    /// that is pressed is the button whose description the before and after reads come from. A
-    /// second search for "the output button" would be a second place to pick a different one.
+    /// Uses the same status-preserving unique-control selection as `outputSlotDestination`.
+    /// An unread possible competitor or repeated output control cannot supply either a label or
+    /// a button to press. Each call is one read, not an atomic snapshot across separate calls.
     static func outputSlotButton(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> AXUIElement? {
-        slotButton(in: strip, matching: AXLocalePolicy.outputSlotHelpKeyword, runtime: runtime)
+        outputSlotRead(in: strip, runtime: runtime)?.control
+    }
+
+    /// Keep the deciding label and its sole control together. A failed deciding read or omitted
+    /// subtree cannot establish uniqueness, even when an earlier output button read successfully.
+    /// This is display/control evidence only, not destination endpoint identity.
+    private static func outputSlotRead(
+        in strip: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> (destination: String, control: AXUIElement)? {
+        guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else { return nil }
+        var found: (destination: String, control: AXUIElement)?
+        for visit in walk {
+            if visit.depth == 4 {
+                guard let children = childrenIfRead(visit.element, runtime: runtime), children.isEmpty else {
+                    return nil
+                }
+            }
+            guard case let .success(role) = slotDecidingString(
+                visit.element, kAXRoleAttribute as String, runtime: runtime
+            ) else { return nil }
+            guard role == (kAXButtonRole as String) else { continue }
+            guard case let .success(help) = slotDecidingString(
+                visit.element, kAXHelpAttribute as String, runtime: runtime
+            ) else { return nil }
+            guard AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: (help ?? "").lowercased()) else {
+                continue
+            }
+            guard found == nil,
+                  case let .success(description) = slotDecidingString(
+                    visit.element, kAXDescriptionAttribute as String, runtime: runtime
+                  ), let description, !description.isEmpty else { return nil }
+            found = (description, visit.element)
+        }
+        return found
     }
 
     /// The first button under the strip whose help matches, or nil.
@@ -778,8 +811,8 @@ extension AXLogicProElements {
 
     /// The description of the first slot button whose help matches, or nil.
     ///
-    /// Shared by the input and output readers so the two cannot drift apart — a second copy of this
-    /// walk is a second place for the "found it but it named nothing" case to be decided differently.
+    /// Legacy input display helper. Safety-sensitive input and output reads use the checked walks
+    /// below instead of treating a failed read as an element without a matching slot.
     private static func slotDescription(
         in strip: AXUIElement,
         matching keyword: AXLocalePolicy.LabelSet,
@@ -871,8 +904,8 @@ extension AXLogicProElements {
         var source: String?
         var control: AXUIElement?
         for visit in walk {
-            // A truncated subtree cannot establish absence or uniqueness. Only this input
-            // reading needs the extra boundary check; the output/send readers are unchanged.
+            // A truncated subtree cannot establish absence or uniqueness. The output reader
+            // checks the same boundary rather than accepting a candidate ahead of unseen children.
             if visit.depth == 4 {
                 guard let children = childrenIfRead(visit.element, runtime: runtime), children.isEmpty else {
                     return (.unreadable, nil)
@@ -968,9 +1001,9 @@ extension AXLogicProElements {
     ///
     /// The ordinal is the index among send slots of both shapes in this walk — the same pre-order,
     /// the same depth, as `slotDescription` — and not a slot number Logic assigns; on the measured
-    /// strip it runs opposite to the order on screen. Unlike the output reader, this one does not
-    /// pass over an element whose role or help will not read: the output reader answers one slot
-    /// or `nil`, but a send slot passed over is a slot missing from a list that says it is whole.
+    /// strip it runs opposite to the order on screen. Like the checked output reader, this one
+    /// does not pass over an element whose role or help will not read: a send slot passed over is
+    /// a slot missing from a list that says it is whole.
     static func sendSlotObservations(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
@@ -1158,18 +1191,24 @@ extension AXLogicProElements {
         return AXLocalePolicy.sendLevelKnobHelpKeyword.containsAny(in: (help ?? "").lowercased())
     }
 
-    /// A role or help that decides whether an element is part of a send slot, with the two
+    /// A string that decides whether an element is part of a routing slot, with the two
     /// statuses that are answers (`isDefinitiveAbsence`) read as "has none", so `.failure` is only
-    /// ever a read that did not happen.
+    /// ever an unread or malformed value, never a silently omitted possible competitor.
     private static func slotDecidingString(
         _ element: AXUIElement,
         _ attribute: String,
         runtime: AXHelpers.Runtime
     ) -> Result<String?, AXHelpers.AXStatusError> {
-        let read: Result<String?, AXHelpers.AXStatusError> =
+        let read: Result<AnyObject?, AXHelpers.AXStatusError> =
             AXHelpers.getAttributeResult(element, attribute, runtime: runtime)
         if case let .failure(error) = read, error.isDefinitiveAbsence { return .success(nil) }
-        return read
+        return read.flatMap { value in
+            guard let value else { return .success(nil) }
+            guard CFGetTypeID(value) == CFStringGetTypeID(), let string = value as? String else {
+                return .failure(.malformedAttribute)
+            }
+            return .success(string)
+        }
     }
 
     /// One slot's reading from the element that follows its button, if any.
@@ -1181,8 +1220,7 @@ extension AXLogicProElements {
         guard let successor else {
             return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
         }
-        let role: Result<String?, AXHelpers.AXStatusError> =
-            AXHelpers.getAttributeResult(successor, kAXRoleAttribute as String, runtime: runtime)
+        let role = slotDecidingString(successor, kAXRoleAttribute as String, runtime: runtime)
         switch role {
         case let .failure(error) where !error.isDefinitiveAbsence:
             return SendSlotObservation(ordinal: ordinal, state: .unreadable)
@@ -1193,8 +1231,7 @@ extension AXLogicProElements {
                 return SendSlotObservation(ordinal: ordinal, state: .observedEmpty)
             }
         }
-        let help: Result<String?, AXHelpers.AXStatusError> =
-            AXHelpers.getAttributeResult(successor, kAXHelpAttribute as String, runtime: runtime)
+        let help = slotDecidingString(successor, kAXHelpAttribute as String, runtime: runtime)
         switch help {
         case let .failure(error) where !error.isDefinitiveAbsence:
             return SendSlotObservation(ordinal: ordinal, state: .unreadable)
@@ -1237,9 +1274,8 @@ extension AXLogicProElements {
 
     /// Every descendant of `element` to `maxDepth`, in the order `AXHelpers.findAllDescendants`
     /// visits them and each with its depth below `element` (children are depth 1), or `nil` when a
-    /// children read at any level failed with a status that is not an answer. The one way this
-    /// differs from the output reader's walk: that one flattens a failed read into "no children",
-    /// which is the absence-as-claim an absent `send_slots` exists to refuse. The depth is what
+    /// children read at any level failed with a status that is not an answer. Input, output and
+    /// send readers share this walk rather than flattening a failed read into "no children". The depth is what
     /// lets a group be paired with its next SIBLING rather than with its own last descendant.
     private static func preOrderDescendants(
         of element: AXUIElement,

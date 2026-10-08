@@ -131,6 +131,74 @@ struct Issue291OutputSlotReadTests {
         #expect(read == "Stereo Output")
     }
 
+    @Test("an output cannot be selected while another possible control is ambiguous or unread",
+          arguments: ["duplicate", "same_label", "same_control", "late_role", "late_help", "late_children", "deep", "malformed_role", "malformed_help"])
+    func outputSelectionRequiresEveryPossibleControlRead(shape: String) {
+        let builder = FakeAXRuntimeBuilder()
+        let element = strip(builder, id: 29_700,
+                            outputHelp: "Output slot. Click and hold to choose the channel strip output.",
+                            outputDescription: "Stereo Output", withSendButton: false)
+        let first = builder.element(29_701)
+        let other = builder.element(29_702)
+        builder.setAttribute(other, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(other, kAXHelpAttribute as String,
+                             "Output slot. Click and hold to choose the channel strip output.")
+        builder.setAttribute(other, kAXDescriptionAttribute as String,
+                             shape == "same_label" ? "Stereo Output" : "Bus 2")
+        if shape == "malformed_role" { builder.setAttribute(other, kAXRoleAttribute as String, 42) }
+        if shape == "malformed_help" { builder.setAttribute(other, kAXHelpAttribute as String, 42) }
+        if shape == "deep" {
+            var descendant = other
+            for offset in (0..<4).reversed() {
+                let group = builder.element(29_710 + offset)
+                builder.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+                builder.setChildren(group, [descendant])
+                descendant = group
+            }
+            builder.setChildren(element, [first, descendant])
+        } else {
+            builder.setChildren(element, [first, shape == "same_control" ? first : other])
+        }
+        let runtime = builder.makeAXRuntime(
+            attributeValueResultHandler: { candidate, attribute in
+                if CFEqual(candidate, other),
+                   (shape == "late_role" && attribute == kAXRoleAttribute as String)
+                    || (shape == "late_help" && attribute == kAXHelpAttribute as String) {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                return nil
+            }, childrenResultHandler: { candidate in
+                shape == "late_children" && CFEqual(candidate, other)
+                    ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
+            }, setAttributeHandler: nil, performActionHandler: nil
+        )
+        #expect(AXLogicProElements.outputSlotDestination(in: element, runtime: runtime) == nil)
+        #expect(AXLogicProElements.outputSlotButton(in: element, runtime: runtime) == nil)
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
+    @Test("a definitive no-help answer on an unrelated button does not hide the unique output",
+          arguments: [AXError.noValue.rawValue, AXError.attributeUnsupported.rawValue])
+    func absentUnrelatedHelpStillAllowsUniqueOutput(status: Int32) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let element = strip(builder, id: 29_730,
+                            outputHelp: "Output slot. Click and hold to choose the channel strip output.",
+                            outputDescription: "Stereo Output", withSendButton: false)
+        let other = builder.element(29_733)
+        builder.setAttribute(other, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setChildren(element, [builder.element(29_731), other])
+        let runtime = builder.makeAXRuntime(
+            attributeValueResultHandler: { candidate, attribute in
+                CFEqual(candidate, other) && attribute == kAXHelpAttribute as String
+                    ? .failure(.init(raw: status)) : nil
+            }, setAttributeHandler: nil, performActionHandler: nil
+        )
+        #expect(AXLogicProElements.outputSlotDestination(in: element, runtime: runtime) == "Stereo Output")
+        let control = try #require(AXLogicProElements.outputSlotButton(in: element, runtime: runtime))
+        #expect(CFEqual(control, builder.element(29_731)))
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
     /// `sends` was `[SendState] = []`, so every strip of every project serialised `"sends": []` while
     /// nothing had ever populated it. A consumer read that as "this strip has no sends"; the truth
     /// was "nobody looked". An absent key is how the two are told apart.
@@ -160,12 +228,9 @@ struct Issue291OutputSlotReadTests {
     func defaultGetMixerStatePopulatesOutput() throws {
         let builder = FakeAXRuntimeBuilder()
         let strip = makeLiveDumpStrip(builder, id: 29_600)
-        let slot = builder.element(29_690)
-        builder.setAttribute(slot, kAXRoleAttribute as String, kAXButtonRole as String)
-        builder.setAttribute(slot, kAXHelpAttribute as String,
-                             "Output slot. Click and hold to choose the channel strip output.")
-        builder.setAttribute(slot, kAXDescriptionAttribute as String, "Stereo Output")
-        builder.setChildren(strip, AXHelpers.getChildren(strip, runtime: builder.makeAXRuntime()) + [slot])
+        // The live-dump fixture already has its output slot. Change that control, rather than
+        // adding a second output button and relying on the reader to silently select the first.
+        builder.setAttribute(builder.element(29_614), kAXDescriptionAttribute as String, "Bus 3")
 
         let fixture = make123MixerFixture(stripCount: 3, firstStrip: strip, builder: builder)
         let result = AccessibilityChannel.defaultGetMixerState(runtime: fixture.runtime)
@@ -174,7 +239,7 @@ struct Issue291OutputSlotReadTests {
             try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]]
         )
         let first = try #require(strips.first)
-        #expect(try #require(first["output"] as? String) == "Stereo Output")
+        #expect(try #require(first["output"] as? String) == "Bus 3")
     }
 
     /// The whole point of the change: the field stops being permanently null.
