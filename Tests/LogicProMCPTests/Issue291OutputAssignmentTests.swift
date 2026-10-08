@@ -812,9 +812,17 @@ func outputAssignmentRefusesAnUnfollowableDependency(_ dependency: R2Dependency)
     let envelope = try await runChannel(fixture, destination: .bus(2))
 
     #expect(envelope["state"] as? String == "C")
-    #expect(envelope["error"] as? String == "routing_dependency_unknown")
-    #expect(envelope["dependency_strip"] as? Int == strip)
-    #expect(envelope["dependency_unread"] as? String == part)
+    if dependency == .ownInput {
+        // The unread role could itself be another output control. Output uniqueness therefore
+        // fails before the later dependency traversal can identify this as an input failure.
+        #expect(envelope["error"] as? String == "readback_unavailable")
+        #expect(envelope["dependency_strip"] == nil)
+        #expect(envelope["dependency_unread"] == nil)
+    } else {
+        #expect(envelope["error"] as? String == "routing_dependency_unknown")
+        #expect(envelope["dependency_strip"] as? Int == strip)
+        #expect(envelope["dependency_unread"] as? String == part)
+    }
     #expect(fixture.presses.isEmpty)
 }
 
