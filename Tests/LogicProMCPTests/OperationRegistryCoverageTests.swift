@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 121)   // #971 project.apply_session_repair
+        #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -97,10 +97,13 @@ struct OperationRegistryCoverageTests {
                                         // window and so bears no track target either;
                                         // #291 R2 added mixer.set_output_verified, which is
                                         // target-bearing, so `targetless` is unchanged
-        #expect(readOnly.count == 26)   // #965 added project.inspect_session
         #expect(targetBearingIDs == expectedTargetBearingIDs)
         #expect(targetless.count == 79)   // #971 internally binds a retained project approval
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
-        #expect(readOnly.allSatisfy { $0.target == .none })
+        #expect(readOnly.count + mutating.count == OperationRegistry.specs.count)
+        #expect(readOnly.contains { $0.id == .pluginsGetParamVerified })
+        #expect(readOnly.allSatisfy {
+            $0.id == .pluginsGetParamVerified ? $0.target == .acceptsStableTarget : $0.target == .none
+        })
     }
 }

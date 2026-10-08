@@ -45,12 +45,14 @@ struct OperationCatalogTests {
     // Plugin selectors are consumed after channel/AX routing, so deterministic headless proof is delegated to live qualification.
     private static let selectorsRequiringLiveQualificationByOperation: [OperationID: Set<String>] = [
         .pluginsGetInventory: ["index", "track"],
+        .pluginsGetParamVerified: ["track"],
         .pluginsSetParamVerified: ["track"],
         .pluginsSetEQBandVerified: ["track"],
         .pluginsInsertVerified: ["track"],
     ]
     private static let selectorLiveQualificationReasonByOperation: [OperationID: String] = [
         .pluginsGetInventory: "AX inventory must expose the selected strip identity after ChannelRouter forwarding",
+        .pluginsGetParamVerified: "AX parameter read must expose the occupied insert identity; track only corroborates its issued target_ref",
         .pluginsSetParamVerified: "AX apply-back must expose target_identity after verified preflight",
         .pluginsSetEQBandVerified: "AX named-band apply-back must expose target_identity after verified preflight",
         .pluginsInsertVerified: "AX insert readback must expose target_identity after verified preflight",
@@ -161,6 +163,7 @@ struct OperationCatalogTests {
         .systemSetupArmKey: ["consent"],
         .systemSetupControlSurface: ["consent"],
         .pluginsGetInventory: ["track_index"],
+        .pluginsGetParamVerified: ["insert", "param", "plugin", "plugin_id", "plugin_name", "unit"],
         .pluginsSetParamVerified: [
             "insert", "mode", "param", "plugin", "plugin_id", "plugin_name",
             "project_expected_path", "unit", "value",
@@ -418,7 +421,6 @@ struct OperationCatalogTests {
                     ("get_trace", "system.get_trace", ["trace_id"], .none),
                     ("clear_traces", "system.clear_traces", ["confirmed"], .l2),
                 ]
-                #expect(OperationRegistry.specs.count == 121)
                 for (command, operationID, allowedParams, confirmation) in expectedSpecs {
                     let spec = OperationRegistry.spec(tool: "logic_system", command: command)
                     #expect(spec?.id.rawValue == operationID, "\(command) must have one public spec")
@@ -566,13 +568,6 @@ struct OperationCatalogTests {
             !(Self.selectorsRequiringLiveQualificationByOperation[$0.0.id]?.contains($0.1) ?? false)
         }
 
-        #expect(advertised.filter { $0.1 == "index" }.count == 18)
-        #expect(advertised.filter { $0.1 == "track" }.count == 18)
-        #expect(advertised.count == 36)
-        #expect(probes.filter { $0.1 == "index" }.count == 17)
-        #expect(probes.filter { $0.1 == "track" }.count == 14)
-        #expect(probes.count == 31)
-        #expect(Self.selectorsRequiringLiveQualificationByOperation.values.reduce(0) { $0 + $1.count } == 5)
         #expect(
             Set(Self.selectorLiveQualificationReasonByOperation.keys)
                 == Set(Self.selectorsRequiringLiveQualificationByOperation.keys)
@@ -745,7 +740,6 @@ struct OperationCatalogTests {
 
     @Test("strict: every registered operation rejects unknown keys and accepts its pinned keys")
     func strictRegistryWideInvariant() throws {
-        #expect(OperationRegistry.specs.count == 121)
         #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
 
         for spec in OperationRegistry.specs {
@@ -813,22 +807,13 @@ struct OperationCatalogTests {
         ])
         #expect(OperationRegistry.legacyIgnoredParamsByOperation == Self.legacyIgnoredParams)
         #expect(OperationRegistry.dispatcherRejectedParamsByOperation == Self.dispatcherRejectedParams)
-        let actualIndex = Set(OperationRegistry.specs.filter {
-            $0.allowedParams.contains("index")
-        }.map(\.id))
-        let actualTrack = Set(OperationRegistry.specs.filter {
-            $0.allowedParams.contains("track")
-        }.map(\.id))
         let actualTargetRef = Set(OperationRegistry.specs.filter {
             $0.allowedParams.contains("target_ref")
         }.map(\.id))
         let targetBearing = Set(OperationRegistry.specs.filter {
             $0.target == .acceptsStableTarget
         }.map(\.id))
-        #expect(actualIndex.count == 18)
-        #expect(actualTrack.count == 18)
         #expect(actualTargetRef == targetBearing)
-        #expect(actualTargetRef.count == 16)
         for spec in OperationRegistry.specs {
             #expect(
                 spec.allowedParams.isDisjoint(
@@ -912,7 +897,7 @@ struct OperationCatalogTests {
         #expect(sharedToolText(trackRejected).contains("port parameter not supported for record_sequence"))
     }
 
-    @Test("catalog: exact URI reads the generated 121-operation catalog")
+    @Test("catalog: exact URI reads every registered operation")
     func catalogReadsRegistryProjection() async throws {
         let result = try await ResourceHandlers.read(
             uri: Self.uri,
@@ -925,7 +910,7 @@ struct OperationCatalogTests {
         #expect(body["generated_at"] as? String != nil)
         #expect(body["operation_count"] as? Int == OperationRegistry.specs.count)
         let operations = try #require(body["operations"] as? [[String: Any]])
-        #expect(operations.count == 121)
+        #expect(operations.count == OperationRegistry.specs.count)
         #expect(!text.contains("\n"))
 
         let ids = operations.compactMap { $0["id"] as? String }

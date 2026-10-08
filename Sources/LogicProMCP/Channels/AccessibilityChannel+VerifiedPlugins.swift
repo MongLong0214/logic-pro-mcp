@@ -1278,7 +1278,7 @@ extension AccessibilityChannel {
         case let .failure(error):
             return .error(error)
         case let .success(target):
-            return await performVerifiedParamWrite(
+            return await performVerifiedParameterAccess(
                 operation: operation,
                 referenceParams: params,
                 track: track,
@@ -1286,15 +1286,13 @@ extension AccessibilityChannel {
                 pluginID: target.pluginID,
                 paramKey: target.paramKey,
                 paramAlias: target.paramAlias,
-                requested: value,
+                access: .write(requested: value, walkTarget: target.walkTarget,
+                    displayUnit: target.responseDisplayUnit, budget: incrementWalkBudget),
                 writeMethod: target.metadata.writeMethod ?? "",
-                walkTarget: target.walkTarget,
-                responseDisplayUnit: target.responseDisplayUnit,
                 runtime: runtime,
                 entryLookup: entryLookup,
                 pluginWindowOpener: pluginWindowOpener,
-                pluginPopupMenuCleaner: pluginPopupMenuCleaner,
-                incrementWalkBudget: incrementWalkBudget
+                pluginPopupMenuCleaner: pluginPopupMenuCleaner
             )
         }
     }
@@ -1566,15 +1564,121 @@ extension AccessibilityChannel {
         return nil
     }
 
-    // MARK: - set_param_verified live write/readback (R6 steps 6-13)
+    // MARK: - Shared occupied-instance acquisition and parameter access
 
-    /// The live AX write/readback round-trip for a `.writeReadback` parameter.
-    /// Reached ONLY after steps 1-5 pass, so identity/mode/path/capability are
-    /// already validated. Every failure is a terminal HC v2 State C; success is
-    /// State A with the full requested/observed payload. No State A is ever
-    /// emitted unless an actual `AXValue` write landed AND the read-back value
-    /// matched within tolerance.
-    private static func performVerifiedParamWrite(
+    /// A read has no requested value and cannot enter the setter/walker branch.
+    /// UI acquisition and its owned view/editor cleanup are shared with writers.
+    private enum VerifiedParameterAccess {
+        case read(unit: String, contextIsCurrent: () -> Bool, openerOverride: PluginWindowOpener?)
+        case write(requested: Double, walkTarget: SliderIncrementWalk.Target?, displayUnit: String, budget: Int)
+
+        var isRead: Bool { if case .read = self { return true }; return false }
+        var readOpenerOverride: PluginWindowOpener? {
+            if case let .read(_, _, opener) = self { return opener }
+            return nil
+        }
+    }
+
+    static func defaultGetParamVerified(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production,
+        entryLookup: VerifiedPluginCatalog.EntryLookup = VerifiedPluginCatalog.productionEntryLookup,
+        pluginWindowOpener: PluginWindowOpener? = nil
+    ) async -> ChannelResult {
+        let operation = "logic_plugins.get_param_verified"
+        guard params["value"] == nil, params["mode"] == nil,
+              let trackRaw = params["track"], let track = Int(trackRaw), track >= 0,
+              let insertRaw = params["insert"], let insert = Int(insertRaw), insert >= 0,
+              let pluginAlias = params["plugin"], let suppliedParam = params["param"], !suppliedParam.isEmpty,
+              let expectedPath = params["project_expected_path"], !expectedPath.isEmpty,
+              params["expected_track_name"] != nil,
+              params["expected_slot_read_status"] == "ok",
+              params["expected_plugin_identity"] != nil else {
+            return .error(invalidParamsStateC(operation,
+                "a read requires a resolved occupied insert, project binding and named parameter; value/mode are not read inputs"))
+        }
+        guard let pluginID = VerifiedPluginCatalog.canonicalPluginID(from: pluginAlias) else {
+            return .error(HonestContract.encodeV2StateC(error: .unknownPluginIdentity,
+                extras: ["operation": operation, "write_attempted": false]))
+        }
+        let paramKey = VerifiedPluginCatalog.canonicalParamKey(pluginID: pluginID, alias: suppliedParam)
+            ?? suppliedParam.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let metadata = entryLookup(pluginID)?.parameters.first(where: { $0.id == paramKey }) else {
+            return .error(HonestContract.encodeV2StateC(error: .unsupportedParamReadback,
+                extras: ["operation": operation, "param": suppliedParam,
+                    "parameter_read_status": "unknown", "write_attempted": false]))
+        }
+        let nativeSlider = metadata.readbackMethod == "ax_slider_axvalue" && metadata.axDescription != nil
+        let controlsCheckbox = metadata.readbackMethod == "ax_controls_view_checkbox_value"
+            && metadata.controlsViewControlRole == "AXCheckBox" && metadata.controlsViewRowLabel != nil
+        guard nativeSlider || controlsCheckbox, let rawUnit = metadata.unit else {
+            return .error(HonestContract.encodeV2StateC(error: .unsupportedParamReadback,
+                extras: ["operation": operation, "param": suppliedParam,
+                    "parameter_read_status": "unsupported", "write_attempted": false]))
+        }
+        guard params["unit"] == nil || params["unit"] == rawUnit else {
+            return .error(invalidParamsStateC(operation,
+                "this read returns '\(rawUnit)' AXValue and the host's verbatim display, not a raw-to-engineering conversion"))
+        }
+        guard case .found(let projectWindow) = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime),
+              case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(projectWindow, runtime: runtime),
+              let documentURL = URL(string: document), documentURL.isFileURL,
+              AppleScriptChannel.projectPathsMatch(expectedPath, documentURL.path) else {
+            return .error(HonestContract.encodeV2StateC(error: .projectIdentityMismatch,
+                extras: ["operation": operation, "write_attempted": false]))
+        }
+        let contextIsCurrent: () -> Bool = {
+            guard !Task.isCancelled,
+                  case .found(let currentWindow) = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime),
+                  CFEqual(currentWindow, projectWindow),
+                  case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(currentWindow, runtime: runtime),
+                  currentDocument.utf8.elementsEqual(document.utf8) else { return false }
+            return true
+        }
+        // A read does not cancel somebody else's menu or post global Escape.
+        // Reuse the existing injected window-list reader, refusing unread or open popups.
+        let popupCheck: PluginPopupMenuCleaner = { runtime in
+            guard let count = logicOwnedPopupMenuWindowCount(runtime: runtime) else { return .popupCountUnavailable }
+            return count == 0 ? .noPopupObserved : .couldNotDismiss(initialPopupCount: count, remainingPopupCount: count)
+        }
+        let result = await performVerifiedParameterAccess(
+            operation: operation, referenceParams: params, track: track, insert: insert,
+            pluginID: pluginID, paramKey: paramKey, paramAlias: suppliedParam,
+            access: .read(unit: rawUnit, contextIsCurrent: contextIsCurrent, openerOverride: pluginWindowOpener),
+            writeMethod: metadata.writeMethod ?? "", runtime: runtime, entryLookup: entryLookup,
+            pluginWindowOpener: pluginWindowOpener ?? livePluginWindowOpener, pluginPopupMenuCleaner: popupCheck
+        )
+        guard contextIsCurrent() else {
+            return parameterReadContextFailure(result, error: .projectIdentityMismatch, operation: operation)
+        }
+        return result
+    }
+
+    /// Context loss invalidates the sampled value, not the observed cleanup history.
+    /// Never let a later bookend turn a known view/editor side effect into silence.
+    static func parameterReadContextFailure(
+        _ result: ChannelResult, error: HonestContract.FailureError, operation: String
+    ) -> ChannelResult {
+        var extras: [String: Any] = [
+            "operation": operation, "write_attempted": false, "parameter_read_status": "unknown",
+            "what_was_observed": "the acquired target/project context ended during parameter acquisition or cleanup",
+        ]
+        if let data = result.message.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for (key, value) in object where key.hasPrefix("plugin_view_")
+                || key == "editor_close_observed" || key == "editor_close_attempted"
+                || key == "editor_cleanup_unobserved" || key == "editor_still_open" || key == "recovery_hint"
+                || key == "opener_action_attempted" {
+                extras[key] = value
+            }
+        }
+        return .error(HonestContract.encodeV2StateC(error: error, extras: extras))
+    }
+
+    /// Shared exact occupied-insert acquisition, observed parameter access and
+    /// owned UI cleanup. Reads return before every setter/walker branch. Writes
+    /// retain their established requested-versus-observed verification contract.
+    private static func performVerifiedParameterAccess(
         operation: String,
         referenceParams: [String: String],
         track: Int,
@@ -1582,15 +1686,12 @@ extension AccessibilityChannel {
         pluginID: String,
         paramKey: String,
         paramAlias: String,
-        requested: Double,
+        access: VerifiedParameterAccess,
         writeMethod: String,
-        walkTarget: SliderIncrementWalk.Target?,
-        responseDisplayUnit: String,
         runtime: AXLogicProElements.Runtime,
         entryLookup: VerifiedPluginCatalog.EntryLookup,
         pluginWindowOpener: PluginWindowOpener,
-        pluginPopupMenuCleaner: PluginPopupMenuCleaner,
-        incrementWalkBudget: Int
+        pluginPopupMenuCleaner: PluginPopupMenuCleaner
     ) async -> ChannelResult {
         let identity = resolvedIdentity(track: track, insert: insert, pluginID: pluginID)
         let controlsViewCheckbox = writeMethod == "ax_controls_view_checkbox_press"
@@ -1680,6 +1781,7 @@ extension AccessibilityChannel {
         // Step 6 — track verified select. Drive the AX-native selection ladder,
         // then confirm the target header reads back as selected (a write that the
         // AX API accepted vacuously must not be trusted — v3.0.9 lesson).
+        if !access.isRead {
         guard AXLogicProElements.selectTrackViaAX(at: track, runtime: runtime) else {
             return .error(trackSelectionFailedStateC(operation, identity, "AX track selection write failed for track \(track)"))
         }
@@ -1701,6 +1803,9 @@ extension AccessibilityChannel {
                     "safe_to_retry": false,
                 ]
             ))
+        }
+        } else if !AXPluginTrackBinding.isStable(target, runtime: runtime) {
+            return .error(incompleteInventoryStateC(operation, identity, "the acquired Arrange/Mixer target changed before the read"))
         }
 
         // Step 7 — inventory complete + slot occupied at `insert` (reuse the
@@ -1787,13 +1892,44 @@ extension AccessibilityChannel {
         // editor from that failed attempt still needs best-effort cleanup.
         var constructedWindowsNeedingCleanup: [AXUIElement] = []
         var restorePluginViewOnExit: (() -> ControlsViewBooleanParameterWriter.ViewRestoration)?
+        var readContextEnded = false
+        var acquisitionActionAttempted = false
+        func acquisitionAllowed() -> Bool {
+            guard case let .read(_, contextIsCurrent, _) = access else { return true }
+            guard !readContextEnded, contextIsCurrent(),
+                  targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
+                    originalSlot: slots[insert].element, runtime: runtime) else {
+                readContextEnded = true
+                return false
+            }
+            return true
+        }
+        func beginAcquisitionAction() -> Bool {
+            guard acquisitionAllowed() else { return false }
+            acquisitionActionAttempted = true
+            return true
+        }
+        func editorCloseAllowed(_ window: AXUIElement) -> Bool {
+            guard case let .read(_, contextIsCurrent, _) = access else { return true }
+            guard !readContextEnded, contextIsCurrent(),
+                  targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
+                    originalSlot: slots[insert].element, runtime: runtime),
+                  case .success(let editors) = AXLogicProElements.matchingPluginEditorWindows(
+                    forTrackName: trackName, matchingPluginID: pluginID, runtime: runtime),
+                  editors.contains(where: { CFEqual($0, window) }) else {
+                readContextEnded = true
+                return false
+            }
+            return true
+        }
         defer {
             if !constructedWindowsNeedingCleanup.isEmpty {
                 _ = closePluginEditorsOpenedByThisOperation(
                     constructedWindowsNeedingCleanup,
                     trackName: trackName,
                     pluginID: pluginID,
-                    runtime: runtime
+                    runtime: runtime,
+                    allowingChanges: editorCloseAllowed
                 )
             }
         }
@@ -1808,7 +1944,7 @@ extension AccessibilityChannel {
             if restoration.leftViewChanged {
                 extras["plugin_view_left_changed"] = true
                 extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
-                extras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this write. Select the prior view manually before continuing."
+                extras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this operation. Select the prior view manually before continuing."
             } else if !restoration.confirmed {
                 // A failed restore confirmation does not establish that the
                 // view changed. When AX cannot classify the current view, say
@@ -1823,30 +1959,52 @@ extension AccessibilityChannel {
             append(pluginViewRestoration: restorePluginViewOnExit?(), to: &extras)
         }
 
-        /// A write may be fully verified before this operation's editor closes.
-        /// Keep State A for the established write verdict, while making a
-        /// failed observed close actionable rather than deferring that surprise
-        /// to the next duplicate-instance call.
-        func verifiedWriteEnvelope(extras: [String: Any]) -> String {
-            var completedExtras = extras
-            appendPluginViewRestoration(to: &completedExtras)
-            guard !constructedWindowsNeedingCleanup.isEmpty else {
-                return HonestContract.encodeV2StateA(extras: completedExtras)
+        func appendOwnedEditorCleanup(to extras: inout [String: Any]) {
+            if access.isRead {
+                extras["opener_action_attempted"] = acquisitionActionAttempted
+                if constructedWindowsNeedingCleanup.isEmpty, acquisitionActionAttempted, readContextEnded {
+                    extras["editor_cleanup_unobserved"] = true
+                }
             }
+            guard !constructedWindowsNeedingCleanup.isEmpty else { return }
+            let windows = constructedWindowsNeedingCleanup
+            var closeAttempted = false
             let closeObserved = closePluginEditorsOpenedByThisOperation(
-                constructedWindowsNeedingCleanup,
+                windows,
                 trackName: trackName,
                 pluginID: pluginID,
-                runtime: runtime
+                runtime: runtime,
+                allowingChanges: { window in
+                    guard editorCloseAllowed(window) else { return false }
+                    closeAttempted = true
+                    return true
+                }
             )
-            // The explicit attempt above owns cleanup for the successful
-            // envelope. Prevent `defer` from pressing close controls again.
+            // This explicit attempt owns cleanup on success and refusal alike.
             constructedWindowsNeedingCleanup.removeAll()
-            completedExtras["editor_close_observed"] = closeObserved
+            extras["editor_close_observed"] = closeObserved
+            if access.isRead { extras["editor_close_attempted"] = closeAttempted }
             if !closeObserved {
-                completedExtras["editor_still_open"] = true
-                completedExtras["recovery_hint"] = "The \(pluginID) editor opened for this write is still visible on track \(track). Close it before another duplicate-instance write."
+                if access.isRead, readContextEnded {
+                    extras["editor_cleanup_unobserved"] = true
+                    extras["recovery_hint"] = "Editor ownership ended before cleanup could be confirmed. Inspect the open editor manually before continuing."
+                } else if !access.isRead || windows.contains(where: {
+                    AXLogicProElements.pluginEditorWindowIsOpen($0, runtime: runtime) == true
+                }) {
+                    extras["editor_still_open"] = true
+                    extras["recovery_hint"] = "The \(pluginID) editor opened for this operation is still visible on track \(track). Close it before another duplicate-instance write."
+                } else {
+                    extras["editor_cleanup_unobserved"] = true
+                }
             }
+        }
+
+        /// Data verification and UI cleanup are distinct outcomes. Failed
+        /// cleanup is reported; later read-context loss invalidates sampled data.
+        func verifiedParameterEnvelope(extras: [String: Any]) -> String {
+            var completedExtras = extras
+            appendPluginViewRestoration(to: &completedExtras)
+            appendOwnedEditorCleanup(to: &completedExtras)
             return HonestContract.encodeV2StateA(extras: completedExtras)
         }
 
@@ -1863,6 +2021,7 @@ extension AccessibilityChannel {
             }
             var extras: [String: Any] = [:]
             appendPluginViewRestoration(to: &extras)
+            appendOwnedEditorCleanup(to: &extras)
             for (key, value) in extras {
                 envelope[key] = value
             }
@@ -1884,6 +2043,7 @@ extension AccessibilityChannel {
             HonestContract.encodeV2StateC(error: error, extras: extras)
         }
 
+        let resultAfterAcquisition: ChannelResult = await {
         if duplicatedPluginInstance {
             // #726 follow-up measurement: when no matching editor is open, one
             // target-slot `열기` press creates the target editor. A pre-existing
@@ -1988,13 +2148,18 @@ extension AccessibilityChannel {
                     phase: "the complete editor census before target-slot AXPress"
                 ))
             }
+            guard beginAcquisitionAction() else {
+                return .error(windowIdentityUnresolvedStateC(operation, identity,
+                    "the read's acquired context ended before opening its editor"))
+            }
             _ = pressElement(targetOpenControl, runtime: runtime.ax)
             let matchingEditorsAfterPress: [AXUIElement]
             switch await pollMatchingPluginEditorWindows(
                 trackName: trackName,
                 pluginID: pluginID,
                 runtime: runtime,
-                timeoutMs: 1_250
+                timeoutMs: 1_250,
+                contextIsCurrent: acquisitionAllowed
             ) {
             case let .success(observed):
                 matchingEditorsAfterPress = observed
@@ -2118,16 +2283,22 @@ extension AccessibilityChannel {
             // It cannot require the native slider because the remembered view
             // may be Controls; the requested view is selected below.
             openedCandidate = AXUIElementSendable(boundWindow)
-        } else if controlsViewCheckbox {
+        } else if controlsViewCheckbox || (access.isRead && access.readOpenerOverride == nil) {
             openedCandidate = await openPluginWindowFromTargetSlot(
                 slots[insert].element,
                 pluginID: pluginID,
                 trackName: trackName,
                 axDescription: controlsViewEditorAnchor ?? "",
                 requiringMatchingSlider: false,
-                runtime: runtime
+                runtime: runtime,
+                allowingChanges: beginAcquisitionAction,
+                contextIsCurrent: acquisitionAllowed
             )
         } else {
+            guard beginAcquisitionAction() else {
+                return .error(windowIdentityUnresolvedStateC(operation, identity,
+                    "the read's acquired context ended before its editor opener"))
+            }
             openedCandidate = await pluginWindowOpener(
                 AXUIElementSendable(slots[insert].element),
                 pluginID,
@@ -2218,6 +2389,12 @@ extension AccessibilityChannel {
                 )
             ))
         }
+        let window = opened.element
+        if let beforeNormalAcquisition = pluginEditorWindowsBeforeNormalAcquisition,
+           !beforeNormalAcquisition.contains(where: { CFEqual($0, window) }) {
+            // Register the acquired editor before popup or view setup can refuse.
+            constructedWindowsNeedingCleanup = [window]
+        }
         let popupCleanup = pluginPopupMenuCleaner(runtime)
         guard popupCleanup.isClean else {
             var diagnostics = pluginWindowAcquisitionDiagnostics(
@@ -2234,16 +2411,6 @@ extension AccessibilityChannel {
                 safeToRetry: false
             ))
         }
-        let window = opened.element
-        if let beforeNormalAcquisition = pluginEditorWindowsBeforeNormalAcquisition,
-           !beforeNormalAcquisition.contains(where: { CFEqual($0, window) }) {
-            // The opener returned an exact editor element that was not present
-            // before its target-slot acquisition. Register it before popup or
-            // view setup can refuse, so `defer` closes only the editor this
-            // operation created and never a reused caller-owned editor.
-            constructedWindowsNeedingCleanup = [window]
-        }
-
         let requiredView: ControlsViewBooleanParameterWriter.PluginWindowView = controlsViewCheckbox
             ? .controls
             : .editor
@@ -2264,10 +2431,24 @@ extension AccessibilityChannel {
             }
         }
         let viewSession: ControlsViewBooleanParameterWriter.ViewSession
+        func viewChangesAllowed() -> Bool {
+            guard case let .read(_, contextIsCurrent, _) = access else { return true }
+            guard !readContextEnded, contextIsCurrent(),
+                  targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
+                    originalSlot: slots[insert].element, runtime: runtime),
+                  case .success(let editors) = AXLogicProElements.matchingPluginEditorWindows(
+                    forTrackName: trackName, matchingPluginID: pluginID, runtime: runtime),
+                  editors.count == 1, CFEqual(editors[0], window) else {
+                readContextEnded = true
+                return false
+            }
+            return true
+        }
         switch ControlsViewBooleanParameterWriter.prepareView(
             requiredView,
             in: window,
             windowRefresher: refreshPluginWindowForViewSelection,
+            allowingChanges: viewChangesAllowed,
             runtime: runtime.ax
         ) {
         case let .refused(failure, restoration):
@@ -2295,8 +2476,33 @@ extension AccessibilityChannel {
         case let .ready(session):
             viewSession = session
         }
-        restorePluginViewOnExit = { viewSession.restore() }
+        restorePluginViewOnExit = { viewSession.restore(allowingChanges: viewChangesAllowed) }
         let resultAfterViewPreparation: ChannelResult = {
+        func unavailableRead(_ status: String, error: AXHelpers.AXStatusError? = nil) -> ChannelResult {
+            var extras: [String: Any] = ["operation": operation, "param": paramAlias,
+                "parameter_read_status": status, "write_attempted": false]
+            if let error { extras["parameter_read_error"] = error.diagnosticLabel }
+            return .error(HonestContract.encodeV2StateC(error: .readbackUnavailable, extras: extras))
+        }
+        func finiteNumericValue(_ raw: AnyObject?) -> Double? {
+            let value: Double?
+            if let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() {
+                value = number.doubleValue
+            } else if let text = raw as? String { value = Double(text) }
+            else { value = nil }
+            guard let value, value.isFinite else { return nil }
+            return value
+        }
+        func parameterDisplay(_ control: AXUIElement) -> (value: String?, status: String) {
+            switch AXHelpers.getAttributeResult(control, kAXValueDescriptionAttribute as String, runtime: runtime.ax)
+                as Result<AnyObject?, AXHelpers.AXStatusError> {
+            case .success(.none): return (nil, "absent")
+            case .success(.some(let value)):
+                guard let text = value as? String else { return (nil, "malformed") }
+                return (text, "read")
+            case .failure(let error): return (nil, error.isDefinitiveAbsence ? "absent" : "unreadable")
+            }
+        }
         if controlsViewCheckbox, let controlsViewRowLabel {
             // This must run before the legacy slider locator: Controls view
             // deliberately removes the parameter's identity from the control
@@ -2325,6 +2531,63 @@ extension AccessibilityChannel {
             ) {
                 return .error(failure)
             }
+            if case let .read(rawUnit, contextIsCurrent, _) = access {
+                let checkbox: AXUIElement
+                switch ControlsViewBooleanParameterWriter.locate(label: controlsViewRowLabel, in: window, runtime: runtime.ax) {
+                case .found(.checkBox(let control)): checkbox = control
+                case .found, .refused:
+                    return .error(HonestContract.encodeV2StateC(error: .paramControlNotFound,
+                        extras: ["operation": operation, "param": paramAlias,
+                            "parameter_read_status": "unknown", "write_attempted": false]))
+                }
+                func currentControl() -> Bool {
+                    guard contextIsCurrent(),
+                          targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
+                            originalSlot: slots[insert].element, runtime: runtime),
+                          controlsViewAcquiredPluginWindowFailureStateC(acquiredWindow: window, operation: operation,
+                            identity: identity, pluginID: pluginID, trackName: trackName, runtime: runtime) == nil,
+                          case .found(.checkBox(let current)) = ControlsViewBooleanParameterWriter.locate(
+                            label: controlsViewRowLabel, in: window, runtime: runtime.ax), CFEqual(current, checkbox) else { return false }
+                    return true
+                }
+                guard currentControl() else {
+                    return .error(windowIdentityUnresolvedStateC(operation, identity, "the read's acquired target/editor/control context ended"))
+                }
+                let observed: Bool
+                switch AXValueExtractors.extractButtonStateResult(checkbox, runtime: runtime.ax) {
+                case .success(.some(let value)): observed = value
+                case .success(.none):
+                    return .error(HonestContract.encodeV2StateC(error: .readbackUnavailable,
+                        extras: ["operation": operation, "param": paramAlias,
+                            "parameter_read_status": "unknown", "write_attempted": false]))
+                case .failure(let error):
+                    return .error(HonestContract.encodeV2StateC(error: .readbackUnavailable,
+                        extras: ["operation": operation, "param": paramAlias,
+                            "parameter_read_status": "unreadable", "parameter_read_error": error.diagnosticLabel,
+                            "write_attempted": false]))
+                }
+                let display = parameterDisplay(checkbox)
+                switch AXValueExtractors.extractButtonStateResult(checkbox, runtime: runtime.ax) {
+                case .success(.some(let latest)):
+                    guard latest == observed else { return unavailableRead("unstable") }
+                case .success(.none): return unavailableRead("unknown")
+                case .failure(let error): return unavailableRead("unreadable", error: error)
+                }
+                guard currentControl() else {
+                    return .error(windowIdentityUnresolvedStateC(operation, identity, "the read's acquired target/editor/control context ended after its Boolean read"))
+                }
+                return .success(verifiedParameterEnvelope(extras: [
+                    "operation": operation, "target_identity": identity, "param": paramAlias,
+                    "observed_raw": observed, "raw_unit": rawUnit,
+                    "observed_display": display.value ?? NSNull(), "display_read_status": display.status,
+                    "parameter_read_status": "read", "observation_scope": "current_insert_parameter",
+                    "verify_source": "ax_plugin_window", "write_attempted": false,
+                ]))
+            }
+            guard case let .write(requested, _, _, _) = access else {
+                return .error(HonestContract.encodeV2StateC(error: .unsupportedParamReadback,
+                    extras: ["operation": operation, "parameter_read_status": "unsupported", "write_attempted": false]))
+            }
             return performControlsViewCheckboxWrite(
                 operation: operation,
                 identity: identity,
@@ -2333,7 +2596,7 @@ extension AccessibilityChannel {
                 rowLabel: controlsViewRowLabel,
                 window: window,
                 runtime: runtime.ax,
-                verifiedWriteEnvelope: verifiedWriteEnvelope,
+                verifiedWriteEnvelope: verifiedParameterEnvelope,
                 stateCWithPluginViewRestoration: stateCWithPluginViewRestoration
             )
         }
@@ -2394,6 +2657,63 @@ extension AccessibilityChannel {
             runtime: runtime
         ) {
             return .error(failure)
+        }
+
+        if case let .read(rawUnit, contextIsCurrent, _) = access {
+            func currentControl() -> Bool {
+                guard contextIsCurrent(),
+                      targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
+                        originalSlot: slots[insert].element, runtime: runtime),
+                      acquiredPluginWindowFailureStateC(acquiredWindow: window, operation: operation,
+                        identity: identity, pluginID: pluginID, trackName: trackName,
+                        axDescription: axDescription, detail: "the editor changed during the parameter read", runtime: runtime) == nil,
+                      case .unique(let current) = AXLogicProElements.pluginWindowSliderResolution(
+                        in: window, axDescription: axDescription, runtime: runtime.ax), CFEqual(current, slider) else { return false }
+                return true
+            }
+            guard currentControl() else {
+                return .error(windowIdentityUnresolvedStateC(operation, identity, "the read's acquired target/editor/control context ended"))
+            }
+            let raw: AnyObject?
+            switch AXHelpers.getAttributeResult(slider, kAXValueAttribute as String, runtime: runtime.ax)
+                as Result<AnyObject?, AXHelpers.AXStatusError> {
+            case .success(let value): raw = value
+            case .failure(let error):
+                return .error(HonestContract.encodeV2StateC(error: .readbackUnavailable,
+                    extras: ["operation": operation, "param": paramAlias, "write_attempted": false,
+                        "parameter_read_status": error.isDefinitiveAbsence ? "absent" : "unreadable",
+                        "parameter_read_error": error.diagnosticLabel]))
+            }
+            guard let observed = finiteNumericValue(raw) else {
+                return .error(HonestContract.encodeV2StateC(error: .readbackUnavailable,
+                    extras: ["operation": operation, "param": paramAlias, "write_attempted": false,
+                        "parameter_read_status": raw == nil ? "absent" : "malformed"]))
+            }
+            let display = parameterDisplay(slider)
+            switch AXHelpers.getAttributeResult(slider, kAXValueAttribute as String, runtime: runtime.ax)
+                as Result<AnyObject?, AXHelpers.AXStatusError> {
+            case .success(let latestRaw):
+                guard let latest = finiteNumericValue(latestRaw) else {
+                    return unavailableRead(latestRaw == nil ? "absent" : "malformed")
+                }
+                guard latest == observed else { return unavailableRead("unstable") }
+            case .failure(let error):
+                return unavailableRead(error.isDefinitiveAbsence ? "absent" : "unreadable", error: error)
+            }
+            guard currentControl() else {
+                return .error(windowIdentityUnresolvedStateC(operation, identity, "the read's acquired target/editor/control context ended after its value read"))
+            }
+            return .success(verifiedParameterEnvelope(extras: [
+                "operation": operation, "target_identity": identity, "param": paramAlias,
+                "observed_raw": observed, "raw_unit": rawUnit,
+                "observed_display": display.value ?? NSNull(), "display_read_status": display.status,
+                "parameter_read_status": "read", "observation_scope": "current_insert_parameter",
+                "verify_source": "ax_plugin_window", "write_attempted": false,
+            ]))
+        }
+
+        guard case let .write(requested, walkTarget, responseDisplayUnit, incrementWalkBudget) = access else {
+            return .error(invalidParamsStateC(operation, "missing parameter access"))
         }
 
         // Step 10 — read the before value (for rollback + provenance). A
@@ -2533,7 +2853,7 @@ extension AccessibilityChannel {
 
             // Step 13 — tolerance gate.
             if abs(after - requested) <= tolerance {
-                return .success(verifiedWriteEnvelope(extras: [
+                return .success(verifiedParameterEnvelope(extras: [
                     "operation": operation,
                     "target_identity": identity,
                     "param": paramAlias,
@@ -2636,7 +2956,7 @@ extension AccessibilityChannel {
                 } else {
                     extras["tolerance"] = tolerance
                 }
-                return .success(verifiedWriteEnvelope(extras: extras))
+                return .success(verifiedParameterEnvelope(extras: extras))
             case .noProgress(_, _), .budgetExhausted(_, _), .overshot(_, _), .readbackLost(_):
                 let rollback = rollbackSliderValue(
                     slider,
@@ -2674,7 +2994,13 @@ extension AccessibilityChannel {
             ))
         }
         }()
-        return finishPluginViewSessionResult(resultAfterViewPreparation)
+        return resultAfterViewPreparation
+        }()
+        let finished = finishPluginViewSessionResult(resultAfterAcquisition)
+        if access.isRead, readContextEnded {
+            return parameterReadContextFailure(finished, error: .windowIdentityUnresolved, operation: operation)
+        }
+        return finished
     }
 
     /// The additive ADR-011 / ADR-018 Controls-view checkbox branch. It is
@@ -3308,7 +3634,9 @@ extension AccessibilityChannel {
         trackName: String,
         axDescription: String,
         requiringMatchingSlider: Bool = true,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        allowingChanges: () -> Bool = { true },
+        contextIsCurrent: () -> Bool = { true }
     ) async -> AXUIElementSendable? {
         switch AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
@@ -3324,12 +3652,13 @@ extension AccessibilityChannel {
         case .pluginIdentityMismatch:
             return nil
         case let .unique(window):
-            guard demotePluginWindowBeforeAcquisition(window, runtime: runtime) else {
+            guard demotePluginWindowBeforeAcquisition(window, runtime: runtime, allowingChanges: allowingChanges) else {
                 return nil
             }
             // Live measurement: `열기` opens and fronts the editor; after
             // demotion, pressing `열기` again removes it from AXWindows. The
             // slot's open control is a toggle, so raise the known editor instead.
+            guard allowingChanges() else { return nil }
             _ = AXHelpers.performAction(window, kAXRaiseAction as String, runtime: runtime.ax)
             if pluginWindowIsFront(window, runtime: runtime.ax) {
                 return AXUIElementSendable(window)
@@ -3350,6 +3679,7 @@ extension AccessibilityChannel {
             // continue`) skips past a control that DID open the window. Honest-
             // contract: trust the OBSERVED window, not the unreliable return —
             // only advance to the next ranked control if the poll shows no window.
+            guard allowingChanges() else { return nil }
             _ = pressElement(element, runtime: runtime.ax)
             switch await pollOpenPluginWindow(
                 pluginID: pluginID,
@@ -3357,7 +3687,8 @@ extension AccessibilityChannel {
                 axDescription: axDescription,
                 requiringMatchingSlider: requiringMatchingSlider,
                 runtime: runtime,
-                timeoutMs: 1_250
+                timeoutMs: 1_250,
+                contextIsCurrent: contextIsCurrent
             ) {
             case .unreadable:
                 return nil
@@ -3379,11 +3710,14 @@ extension AccessibilityChannel {
 
     private static func demotePluginWindowBeforeAcquisition(
         _ window: AXUIElement,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        allowingChanges: () -> Bool = { true }
     ) -> Bool {
+        guard allowingChanges() else { return false }
         let mainCleared = AXHelpers.setAttribute(
             window, kAXMainAttribute as String, false as CFTypeRef, runtime: runtime.ax
         )
+        guard allowingChanges() else { return false }
         let focusCleared = AXHelpers.setAttribute(
             window, kAXFocusedAttribute as String, false as CFTypeRef, runtime: runtime.ax
         )
@@ -3391,6 +3725,7 @@ extension AccessibilityChannel {
             return true
         }
         guard let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime),
+              allowingChanges(),
               AXHelpers.performAction(arrangeWindow, kAXRaiseAction as String, runtime: runtime.ax) else { return false }
         return !pluginWindowIsFront(window, runtime: runtime.ax)
     }
@@ -3605,7 +3940,8 @@ extension AccessibilityChannel {
         axDescription: String,
         requiringMatchingSlider: Bool = true,
         runtime: AXLogicProElements.Runtime,
-        timeoutMs: Int
+        timeoutMs: Int,
+        contextIsCurrent: () -> Bool = { true }
     ) async -> AXLogicProElements.PluginWindowMatch {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000.0)
         var lastUniqueWindow: AXUIElement?
@@ -3628,7 +3964,7 @@ extension AccessibilityChannel {
             case .none:
                 lastUniqueWindow = nil
             }
-            guard Date() < deadline else { break }
+            guard contextIsCurrent(), Date() < deadline else { break }
             try? await Task.sleep(for: .milliseconds(100))
         } while Date() < deadline
         if let lastUniqueWindow {
@@ -3644,7 +3980,8 @@ extension AccessibilityChannel {
         trackName: String,
         pluginID: String,
         runtime: AXLogicProElements.Runtime,
-        timeoutMs: Int
+        timeoutMs: Int,
+        contextIsCurrent: () -> Bool = { true }
     ) async -> Result<[AXUIElement], AXHelpers.AXStatusError> {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000.0)
         var matchingEditors: [AXUIElement] = []
@@ -3662,7 +3999,7 @@ extension AccessibilityChannel {
             if !matchingEditors.isEmpty {
                 return .success(matchingEditors)
             }
-            guard Date() < deadline else { break }
+            guard contextIsCurrent(), Date() < deadline else { break }
             try? await Task.sleep(for: .milliseconds(100))
         } while Date() < deadline
         return .success(matchingEditors)
@@ -3695,7 +4032,8 @@ extension AccessibilityChannel {
         _ window: AXUIElement,
         trackName: String,
         pluginID: String,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        allowingChanges: (AXUIElement) -> Bool = { _ in true }
     ) -> Bool {
         guard let closeButton: AXUIElement = AXHelpers.getAttribute(
             window, kAXCloseButtonAttribute, runtime: runtime.ax
@@ -3703,6 +4041,7 @@ extension AccessibilityChannel {
             return false
         }
         for attempt in 0..<3 {
+            guard allowingChanges(window) else { return false }
             _ = pressElement(closeButton, runtime: runtime.ax)
             if AXLogicProElements.pluginEditorWindowIsOpen(window, runtime: runtime) == false {
                 return true
@@ -3723,7 +4062,8 @@ extension AccessibilityChannel {
         _ windows: [AXUIElement],
         trackName: String,
         pluginID: String,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        allowingChanges: (AXUIElement) -> Bool = { _ in true }
     ) -> Bool {
         var everyCloseObserved = true
         for window in windows {
@@ -3731,7 +4071,8 @@ extension AccessibilityChannel {
                 window,
                 trackName: trackName,
                 pluginID: pluginID,
-                runtime: runtime
+                runtime: runtime,
+                allowingChanges: allowingChanges
             ) {
                 everyCloseObserved = false
             }

@@ -1,5 +1,6 @@
 @preconcurrency import ApplicationServices
 import Foundation
+import MCP
 import Testing
 @testable import LogicProMCP
 
@@ -3912,4 +3913,576 @@ private final class Counter: @unchecked Sendable {
     #expect(obj["error"] as? String == "duplicate_plugin_editor_already_open")
     let hint = try #require(obj["recovery_hint"] as? String)
     #expect(hint.contains("Close the open"))
+}
+
+// #955 B0: use the actual channel entry point, not a requested-value echo or
+// a writer with an unchanged target. Every AX access is injected by LiveFixture.
+private func parameterReadRuntime(
+    _ fixture: LiveFixture,
+    onScreenWindowList: @escaping @Sendable () -> [[String: Any]]? = { [] },
+    actionNamesRead: (@Sendable (AXUIElement) -> Result<[String], AXHelpers.AXStatusError>?)? = nil,
+    attributeRead: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil
+) -> AXLogicProElements.Runtime {
+    let original = fixture.runtime.ax
+    let ax = AXHelpers.Runtime(
+        axApp: original.axApp, attributeValue: original.attributeValue,
+        attributeIsSettable: original.attributeIsSettable, setAttributeValue: original.setAttributeValue,
+        children: original.children, performAction: original.performAction, childCount: original.childCount,
+        actionNames: original.actionNames, actionNamesResult: { element in
+            actionNamesRead?(element) ?? original.actionNamesResult?(element) ?? .success(original.actionNames(element))
+        },
+        childrenResult: original.childrenResult,
+        attributeValueResult: { element, attribute in
+            attributeRead?(element, attribute) ?? original.attributeValueResult!(element, attribute)
+        },
+        performActionResult: original.performActionResult, elementAtPosition: original.elementAtPosition
+    )
+    return AXLogicProElements.Runtime(
+        logicProPID: fixture.runtime.logicProPID, ax: ax,
+        executeAppleScript: { _ in
+            Issue.record("A parameter read must not escape to AppleScript")
+            return .error("unexpected AppleScript")
+        },
+        onScreenWindowList: onScreenWindowList,
+        postPopupMenuEscape: { Issue.record("A parameter read must not post global Escape") },
+        focusedApplicationPID: { 4242 }
+    )
+}
+
+private func parameterReadParams(_ param: String = "threshold") -> [String: String] {
+    ["track": "0", "insert": "6", "plugin": "Compressor", "param": param,
+     "project_expected_path": expectedPath, "expected_track_name": trackName,
+     "expected_slot_read_status": "ok", "expected_plugin_identity": "logic.stock.effect.compressor"]
+}
+
+@Test func testIssue955ReadThresholdUsesObservedValueWithoutAudioMutation() async throws {
+    let fixture = LiveFixture(beforeValue: 51)
+    fixture.builder.setAttribute(fixture.builder.element(1001), kAXDocumentAttribute as String,
+                                 URL(fileURLWithPath: expectedPath).absoluteString)
+    let readRuntime = parameterReadRuntime(fixture)
+    let channel = AccessibilityChannel(runtime: .axBacked(
+        isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true },
+        logicRuntime: readRuntime, canPostEvents: { false }
+    ))
+    let result = await channel.execute(operation: "plugin.get_param_verified", params: [
+        "track": "0", "insert": "6", "plugin": "Compressor", "param": "threshold",
+        "unit": "normalized", "project_expected_path": expectedPath,
+        "expected_track_name": trackName, "expected_slot_read_status": "ok",
+        "expected_plugin_identity": "logic.stock.effect.compressor",
+    ])
+    let data = try #require(result.message.data(using: .utf8))
+    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        Issue.record("The parameter read must return an observed HC v2 result, not: \(result.message)")
+        return
+    }
+    #expect(object["state"] as? String == "A")
+    #expect(object["operation"] as? String == "logic_plugins.get_param_verified")
+    #expect(object["observed_raw"] as? Double == 51)
+    #expect(object["raw_unit"] as? String == "normalized")
+    #expect(object["observed_display"] as? String == "51 %")
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+    #expect(fixture.currentSliderValue == 51)
+    #expect(fixture.pluginCloseControlPressCount.value == 0)
+}
+
+// End registry custody only after the actual AX reader has finished restoration.
+// This preserves the real acquisition/read/cleanup path inside the routing seam.
+private actor ParameterReadRegistryEndChannel: Channel {
+    nonisolated let id: ChannelID = .accessibility
+    let reader: AccessibilityChannel
+    let registry: TargetRegistry
+    init(reader: AccessibilityChannel, registry: TargetRegistry) {
+        self.reader = reader
+        self.registry = registry
+    }
+    func start() async throws {}
+    func stop() async {}
+    func healthCheck() async -> ChannelHealth { .healthy() }
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        let result = await reader.execute(operation: operation, params: params)
+        await registry.bumpTopologyGeneration()
+        return result
+    }
+}
+
+@Test(arguments: [false, true])
+func testIssue955PublicReadResolvesOccupiedInsertReference(_ contextEndsAfterRead: Bool) async throws {
+    try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        let fixture = LiveFixture(beforeValue: 51, controlsViewInitiallySelected: true, viewSettleDelay: 0)
+        fixture.builder.setAttribute(fixture.builder.element(1001), kAXDocumentAttribute as String,
+                                     URL(fileURLWithPath: expectedPath).absoluteString)
+        let readRuntime = parameterReadRuntime(fixture)
+        let router = ChannelRouter()
+        let reader = AccessibilityChannel(runtime: .axBacked(
+            isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true },
+            logicRuntime: readRuntime, canPostEvents: { false }
+        ))
+        let cache = StateCache()
+        let project = ProjectInfo(name: "AcidWashBass copy", filePath: expectedPath)
+        await cache.updateProject(project)
+        await cache.updateTracks([TrackState(id: 0, name: trackName, type: .audio)])
+        let registry = TargetRegistry()
+        if contextEndsAfterRead {
+            await router.register(ParameterReadRegistryEndChannel(reader: reader, registry: registry))
+        } else { await router.register(reader) }
+        let initialSnapshot = await registry.currentSnapshot
+        _ = await registry.snapshotForObservedProject(project, ifCurrent: initialSnapshot, stoppingWhen: { false })
+        let descriptor = TargetDescriptor(trackIndex: 0, trackName: trackName)
+        let fingerprint = TargetRefResolver.pluginInsertFingerprint(
+            descriptor: descriptor, insert: 6, pluginIdentity: "logic.stock.effect.compressor"
+        )
+        let reference = await registry.bind(kind: .pluginInsert, descriptor: descriptor, fingerprint: fingerprint)
+        let result = await PluginsDispatcher.handle(
+            verifiedGate: VerifiedOpGate(), command: "get_param_verified",
+            params: ["target_ref": .string(reference.rawValue), "param": .string("threshold")],
+            router: router, cache: cache, targetRegistry: registry
+        )
+        let object = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(try #require(object["plugin_view_restore_attempted"] as? Bool))
+        #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
+        #expect(fixture.currentPluginViewTitle == "컨트롤")
+        if contextEndsAfterRead {
+            #expect(object["state"] as? String == "C")
+            #expect(object["error"] as? String == "stale_target_reference")
+            #expect(object["observed_raw"] == nil)
+            #expect(object["observed_display"] == nil)
+            #expect(fixture.sliderWriteCount.value == 0)
+            #expect(fixture.controlsCheckboxPressCount.value == 0)
+            return
+        }
+        #expect(object["state"] as? String == "A", "Public reader must be reachable: \(object)")
+        #expect(object["observed_raw"] as? Double == 51)
+        #expect(object["target_ref"] as? String == reference.rawValue)
+        #expect(object["target_fingerprint"] as? String == fingerprint)
+        #expect(fixture.sliderWriteCount.value == 0)
+        #expect(fixture.controlsCheckboxPressCount.value == 0)
+        #expect(fixture.currentSliderValue == 51)
+        #expect(OperationRegistry.spec(tool: "logic_plugins", command: "get_param_verified")?.mutability == .readOnly)
+        #expect(ChannelRouter.routingTable["plugin.get_param_verified"] == [.accessibility])
+        let oracle = try #require(SemanticOracleTable.byOperationID[.pluginsGetParamVerified])
+        let actualResponse = try JSONSerialization.data(withJSONObject: object)
+        let actualVerdict = try #require(oracle.evaluate(responseData: actualResponse, readbackData: Data()) as Bool?)
+        #expect(actualVerdict)
+        for (key, value) in [("observed_raw", true as Any), ("write_attempted", true as Any),
+                             ("raw_unit", "dB" as Any), ("parameter_read_status", "unknown" as Any)] {
+            var corrupted = object
+            corrupted[key] = value
+            let corruptedResponse = try JSONSerialization.data(withJSONObject: corrupted)
+            let corruptedVerdict = try #require(oracle.evaluate(responseData: corruptedResponse, readbackData: Data()) as Bool?)
+            #expect(!corruptedVerdict)
+        }
+    }
+}
+
+@Test(arguments: [("limiter_on", false), ("limiter_on", true), ("auto_release", false), ("auto_release", true)], [false, true])
+func testIssue955ReadBooleanNeverPressesParameterAndRestoresView(_ configuration: (String, Bool), _ alreadyControls: Bool) async throws {
+    let (param, value) = configuration
+    let fixture = LiveFixture(controlsViewRowLabel: param == "limiter_on" ? "Limiter On" : "Auto Release", controlsCheckboxBefore: value,
+                              controlsViewInitiallySelected: alreadyControls, viewSettleDelay: 0)
+    fixture.builder.setAttribute(fixture.builder.element(1001), kAXDocumentAttribute as String,
+                                 URL(fileURLWithPath: expectedPath).absoluteString)
+    let initialView = fixture.currentPluginViewTitle
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(param), runtime: parameterReadRuntime(fixture)
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A", "Boolean read should use the existing observed control: \(object)")
+    let observedValue = try #require(object["observed_raw"] as? Bool)
+    let valueMatches = observedValue == value
+    #expect(valueMatches)
+    #expect(object["raw_unit"] as? String == "boolean")
+    #expect(object["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == initialView)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.currentSliderValue == 51)
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
+}
+
+@Test func testIssue955ProjectLossAfterCleanupKeepsRestorationReceiptButNotValue() async throws {
+    let fixture = LiveFixture(controlsViewInitiallySelected: true, viewSettleDelay: 0)
+    let arrange = fixture.builder.element(1001)
+    fixture.builder.setAttribute(arrange, kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        // The value was sampled in Editor view. Project ownership ends only after
+        // cleanup has restored Controls view, at the final native bookend.
+        if CFEqual(element, arrange), attribute == kAXDocumentAttribute as String,
+           fixture.editorViewMenuPressCount.value > 0, fixture.controlsViewMenuPressCount.value > 0 {
+            return .success(URL(fileURLWithPath: "/tmp/Other.logicx").absoluteString as NSString)
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == "project_identity_mismatch")
+    #expect(object["observed_raw"] == nil)
+    #expect(object["observed_display"] == nil)
+    #expect(try #require(object["plugin_view_restore_attempted"] as? Bool))
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
+    #expect(fixture.currentPluginViewTitle == "컨트롤")
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: [("not_a_parameter", "unknown"), ("gain", "unsupported")])
+func testIssue955ReadDistinguishesUnknownFromUnsupported(_ param: String, _ status: String) async throws {
+    let fixture = LiveFixture()
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(param), runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["parameter_read_status"] as? String == status)
+    #expect(object["observed_raw"] == nil)
+    #expect(fixture.axActions.value.isEmpty)
+}
+
+@Test(arguments: ["absent", "unreadable", "boolean", "text", "nonfinite"])
+func testIssue955ReadNeverInventsZeroForUnavailableSlider(_ kind: String) async throws {
+    let fixture = LiveFixture()
+    fixture.builder.setAttribute(fixture.builder.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let slider = fixture.builder.element(1005)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard CFEqual(element, slider), attribute == kAXValueAttribute as String else { return nil }
+        switch kind {
+        case "absent": return .success(nil)
+        case "unreadable": return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        case "boolean": return .success(NSNumber(value: true))
+        case "text": return .success("not a number" as NSString)
+        default: return .success(NSNumber(value: Double.nan))
+        }
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == "readback_unavailable")
+    #expect(object["parameter_read_status"] as? String == (["absent", "unreadable"].contains(kind) ? kind : "malformed"))
+    #expect(object["observed_raw"] == nil)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue955ReadRejectsReplacementControlAfterSampling() async throws {
+    let fixture = LiveFixture()
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let slider = b.element(1005)
+    let replacement = b.element(900_955)
+    b.setAttribute(replacement, kAXRoleAttribute as String, kAXSliderRole as String)
+    b.setAttribute(replacement, kAXDescriptionAttribute as String, "Threshold")
+    b.setAttribute(replacement, kAXValueAttribute as String, 99.0)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, slider), attribute == kAXValueAttribute as String {
+            b.setChildren(b.element(1004), fixture.runtime.ax.children(b.element(1004)).map { CFEqual($0, slider) ? replacement : $0 })
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["observed_raw"] == nil)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue955ReadDoesNotSelectAnUnselectedTrack() async throws {
+    let fixture = LiveFixture(trackSelected: false)
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A")
+    #expect(!(try #require(b.attributeValue(b.element(1100), kAXSelectedAttribute as String) as? Bool)))
+    #expect(!fixture.axActions.value.contains(where: { $0.element == b.elementID(b.element(1100)) }))
+    #expect(fixture.sliderWriteCount.value == 0)
+}
+
+@Test func testIssue955ReadDoesNotRestoreIntoAChangedProject() async throws {
+    let fixture = LiveFixture(controlsViewInitiallySelected: true, viewSettleDelay: 0)
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, b.element(1005)), attribute == kAXValueAttribute as String {
+            b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: "/tmp/Other.logicx").absoluteString)
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["observed_raw"] == nil)
+    #expect(fixture.editorViewMenuPressCount.value == 1)
+    #expect(fixture.controlsViewMenuPressCount.value == 0, "Do not apply an inverse after project ownership ended")
+    #expect(!(try #require(object["plugin_view_restore_attempted"] as? Bool)))
+    #expect(!(try #require(object["plugin_view_restore_observed"] as? Bool)))
+    #expect(try #require(object["plugin_view_restore_unobserved"] as? Bool))
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: ["track", "insert", "unit", "plugin", "value", "mode", "project_expected_path"])
+func testIssue955PublicReadRejectsInvalidInputsBeforeTargetLookup(_ key: String) async throws {
+    var params: [String: Value] = ["target_ref": .string("ins_unissued"), "param": .string("threshold")]
+    params[key] = .object(["unexpected": .bool(true)])
+    let result = await PluginsDispatcher.handle(
+        verifiedGate: VerifiedOpGate(), command: "get_param_verified", params: params,
+        router: ChannelRouter(), cache: StateCache(), targetRegistry: TargetRegistry()
+    )
+    let object = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == "invalid_params")
+}
+
+@Test func testIssue955ReadStopsInverseWhenProjectChangesAfterMenuOpens() async throws {
+    let fixture = LiveFixture(controlsViewInitiallySelected: true, viewSettleDelay: 0)
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        // Restore preflight succeeded. Ownership ends while the inverse's menu is
+        // being read, before its actual AXPick; entry-only checking is insufficient.
+        if CFEqual(element, b.element(100_902)), attribute == kAXEnabledAttribute as String,
+           fixture.editorViewMenuPressCount.value > 0 {
+            b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: "/tmp/Other.logicx").absoluteString)
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["observed_raw"] == nil)
+    #expect(fixture.controlsViewMenuPressCount.value == 0, "Ownership must be checked at the inverse AXPick, not only on restore entry")
+    #expect(!(try #require(object["plugin_view_restore_observed"] as? Bool)))
+    #expect(try #require(object["plugin_view_restore_unobserved"] as? Bool))
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue955ReadStopsForwardViewPickWhenProjectChangesAfterMenuOpens() async throws {
+    let fixture = LiveFixture(controlsViewRowLabel: "Limiter On", viewSettleDelay: 0)
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, b.element(100_902)), attribute == kAXEnabledAttribute as String {
+            b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: "/tmp/Other.logicx").absoluteString)
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams("limiter_on"), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["observed_raw"] == nil)
+    #expect(fixture.controlsViewMenuPressCount.value == 0)
+    #expect(fixture.editorViewMenuPressCount.value == 0)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: [false, true])
+func testIssue955ReadRefusalReportsCleanupOfItsNewEditor(_ popupOpen: Bool) async throws {
+    let fixture = LiveFixture(sliderBeforeReadable: false, pluginWindowPresent: false, openWindowOnSlotPress: true)
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, onScreenWindowList: {
+        popupOpen ? [[kCGWindowOwnerPID as String: 4242, kCGWindowNumber as String: 955,
+                      kCGWindowLayer as String: LogicOnScreenWindows.popupMenuLevel]] : []
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == (popupOpen ? "window_open_failed" : "readback_unavailable"))
+    #expect(object["observed_raw"] == nil)
+    #expect(try #require(object["editor_close_observed"] as? Bool), "Refusal must retain the observed cleanup result")
+    #expect(fixture.targetOpenControlPressCount.value == 1)
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    let remainingWindows = try #require(b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement])
+    #expect(remainingWindows.count == 1, "The acquired editor must not leak on a popup or value-read refusal")
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: ["project", "slot", "editor"])
+func testIssue955ReadDoesNotCloseAnEditorAfterOwnershipEnds(_ changed: String) async throws {
+    let fixture = LiveFixture(pluginWindowPresent: false, openWindowOnSlotPress: true)
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let editor = b.element(1004)
+    let sampled = MutableBox(false)
+    b.setAttribute(arrange, kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, b.element(1005)), attribute == kAXValueAttribute as String { sampled.value = true }
+        // Parameter read and its identity bookends succeeded. Ownership ends
+        // while cleanup obtains the close button, just before its AXPress.
+        if sampled.value, CFEqual(element, editor), attribute == kAXCloseButtonAttribute as String {
+            switch changed {
+            case "project":
+                b.setAttribute(arrange, kAXDocumentAttribute as String, URL(fileURLWithPath: "/tmp/Other.logicx").absoluteString)
+            case "slot": b.setAttribute(b.element(1306), kAXDescriptionAttribute as String, "Noise Gate")
+            default: b.setAttribute(editor, kAXTitleAttribute as String, "Another Track")
+            }
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["observed_raw"] == nil)
+    #expect(!(try #require(object["editor_close_attempted"] as? Bool)))
+    #expect(!(try #require(object["editor_close_observed"] as? Bool)))
+    #expect(try #require(object["editor_cleanup_unobserved"] as? Bool))
+    #expect(object["editor_still_open"] == nil, "Lost custody cannot establish the original editor's residual state")
+    #expect(fixture.pluginCloseControlPressCount.value == 0, "Do not close a window through lost ownership")
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: ["read", "absent", "unreadable", "malformed"])
+func testIssue955BooleanReadReportsTheActualDisplayStatus(_ status: String) async throws {
+    let fixture = LiveFixture(controlsViewRowLabel: "Limiter On", controlsViewInitiallySelected: true, viewSettleDelay: 0)
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard CFEqual(element, b.element(100_908)), attribute == kAXValueDescriptionAttribute as String else { return nil }
+        switch status {
+        case "read": return .success("Off" as NSString)
+        case "absent": return .success(nil)
+        case "unreadable": return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        default: return .success(NSNumber(value: 7))
+        }
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams("limiter_on"), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A")
+    #expect(!(try #require(object["observed_raw"] as? Bool)))
+    #expect(object["display_read_status"] as? String == status)
+    if status == "read" { #expect(object["observed_display"] as? String == "Off") }
+    else { #expect(object["observed_display"] is NSNull) }
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+    #expect(fixture.sliderWriteCount.value == 0)
+}
+
+@Test(arguments: [false, true])
+func testIssue955ReadRejectsValueDriftDuringDisplayCollection(_ checkbox: Bool) async throws {
+    let fixture = LiveFixture(controlsViewRowLabel: checkbox ? "Limiter On" : nil,
+                              controlsViewInitiallySelected: checkbox, viewSettleDelay: 0)
+    let b = fixture.builder
+    let control = b.element(checkbox ? 100_908 : 1005)
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, control), attribute == kAXValueDescriptionAttribute as String {
+            // Identity did not change, but the paired host display belongs to a
+            // different raw value. Returning 51 with "60 %" would be misleading.
+            b.setAttribute(control, kAXValueAttribute as String, checkbox ? true : 60.0)
+            return .success((checkbox ? "On" : "60 %") as NSString)
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(checkbox ? "limiter_on" : "threshold"), runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(object["parameter_read_status"] as? String == "unstable")
+    #expect(object["observed_raw"] == nil)
+    #expect(object["observed_display"] == nil)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+    #expect(fixture.sliderWriteCount.value == 0)
+}
+
+@Test(arguments: ["track", "insert"])
+func testIssue955PublicReadRejectsStringIndicesDeclaredAsIntegers(_ key: String) async throws {
+    let result = await PluginsDispatcher.handle(
+        verifiedGate: VerifiedOpGate(), command: "get_param_verified",
+        params: ["target_ref": .string("ins_unissued"), "param": .string("threshold"), key: .string("0")],
+        router: ChannelRouter(), cache: StateCache(), targetRegistry: TargetRegistry()
+    )
+    let object = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(object["error"] as? String == "invalid_params", "Typed input validation must precede target lookup")
+}
+
+@Test(arguments: ChannelEQBandCatalog.parameters.map(\.id))
+func testIssue955ReadsEveryDeclaredEQNativeSlider(_ param: String) async throws {
+    let metadata = try #require(ChannelEQBandCatalog.parameters.first(where: { $0.id == param }))
+    let fixture = LiveFixture(thresholdDescription: metadata.axDescription, pluginSlotName: "Channel EQ", beforeValue: 51)
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    var params = parameterReadParams(param)
+    params["plugin"] = "Channel EQ"
+    params["expected_plugin_identity"] = "logic.stock.effect.channel_eq"
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: params, runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A")
+    #expect(object["param"] as? String == param)
+    #expect(object["observed_raw"] as? Double == 51)
+    #expect(object["raw_unit"] as? String == metadata.rawUnit)
+    #expect(object["observed_display"] as? String == "51 %")
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+private actor Issue955ReviewReadStartLatch {
+    private var suspended: CheckedContinuation<Void, Never>?
+    private var ready: CheckedContinuation<Void, Never>?
+    func waitForRelease() async {
+        await withCheckedContinuation { continuation in
+            suspended = continuation
+            ready?.resume()
+            ready = nil
+        }
+    }
+    func waitUntilSuspended() async {
+        if suspended != nil { return }
+        await withCheckedContinuation { ready = $0 }
+    }
+    func release() {
+        suspended?.resume()
+        suspended = nil
+    }
+}
+
+@Test func testIssue955ReviewCancelledReadCannotOpenAnEditor() async throws {
+    let fixture = LiveFixture(pluginWindowPresent: false, openWindowOnSlotPress: true)
+    fixture.builder.setAttribute(fixture.builder.element(1001), kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString)
+    let latch = Issue955ReviewReadStartLatch()
+    let task = Task {
+        await latch.waitForRelease()
+        #expect(Task.isCancelled)
+        return await AccessibilityChannel.defaultGetParamVerified(
+            params: parameterReadParams(), runtime: parameterReadRuntime(fixture))
+    }
+    await latch.waitUntilSuspended()
+    task.cancel()
+    await latch.release()
+    let result = await task.value
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String != "A")
+    #expect(fixture.targetOpenControlPressCount.value == 0)
+    #expect(fixture.axActions.value.isEmpty)
+}
+
+@Test(arguments: ["threshold", "limiter_on"], ["project", "slot"])
+func testIssue955ReadAcquisitionStopsWhenRankingEndsCustody(_ param: String, _ changed: String) async throws {
+    let fixture = LiveFixture(pluginWindowPresent: false, openWindowOnSlotPress: true)
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let ended = MutableBox(false)
+    let runtime = parameterReadRuntime(fixture, actionNamesRead: { element in
+        if CFEqual(element, b.element(13062)), !ended.value {
+            ended.value = true
+            if changed == "project" {
+                b.setAttribute(b.element(1001), kAXDocumentAttribute as String, "file:///tmp/another.logicx/")
+            } else {
+                b.setAttribute(b.element(1306), kAXDescriptionAttribute as String, "Noise Gate")
+            }
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(param), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(ended.value)
+    #expect(object["state"] as? String == "C")
+    #expect(fixture.targetOpenControlPressCount.value == 0)
+    #expect(fixture.axActions.value.isEmpty)
 }

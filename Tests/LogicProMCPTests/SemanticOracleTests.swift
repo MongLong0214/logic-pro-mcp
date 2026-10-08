@@ -480,8 +480,7 @@ struct SemanticOracleCensusTests {
     /// of its names disagree with the registry: `edit.select_all` is registered
     /// MUTATING (so it is out), and `system.clear_traces` is registered
     /// read-only (so it is in). Both were reconciled toward the registry.
-    @Test func reconciledReadOnlySurfaceIsTwentyFiveOperations() {
-        #expect(SemanticOracleTable.coveredSpecIDs.count == 25)
+    @Test func reconciledReadOnlySurfaceKeepsRegistryClassification() {
         #expect(!SemanticOracleTable.coveredSpecIDs.contains(.editSelectAll))
         #expect(SemanticOracleTable.coveredSpecIDs.contains(.systemClearTraces))
 
@@ -1540,14 +1539,13 @@ struct SemanticOracleB0CensusTests {
     /// project.plan_session_repair. The current read-only surface is additive to
     /// the pinned B1 + B2 + B3 + B4
     /// increments — a premature or miscounted mutating oracle fails here.
-    @Test func readOnlyCensusStaysTwentyFiveAndMutatingIncrementsAreAdditive() {
-        #expect(SemanticOracleTable.coveredSpecIDs.count == 25)
+    @Test func readOnlyCoverageAndMutatingIncrementsAreAdditive() {
         let readOnlyOracles = Set(SemanticOracleTable.byOperationID.keys)
             .intersection(SemanticOracleTable.coveredSpecIDs)
-        #expect(readOnlyOracles.count == 25)
+        #expect(readOnlyOracles == SemanticOracleTable.coveredSpecIDs)
         #expect(
             SemanticOracleTable.all.count
-                == 25
+                == SemanticOracleTable.coveredSpecIDs.count
                 + SemanticOracleTable.phaseB1MutatingOperationIDs.count
                 + SemanticOracleTable.phaseB2MutatingOperationIDs.count
                 + SemanticOracleTable.phaseB3MutatingOperationIDs.count

@@ -53,7 +53,7 @@ struct OperationRegistryTests {
         "delete_marker": .defaultInstall,
     ]
 
-    private static let smallToolCount = 22
+    private static let smallToolCount = smallToolCommands.count
     private static let expectedRegistryCount =
         commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
             + editCommands.count + projectCommands.count + midiCommands.count + trackCommands.count
@@ -371,6 +371,7 @@ struct OperationRegistryTests {
         ("logic_system", "system.setup_arm_key", "setup_arm_key", .mutating, .long, .readbackRequired),
         ("logic_system", "system.setup_control_surface", "setup_control_surface", .mutating, .long, .readbackRequired),
         ("logic_plugins", "plugins.get_inventory", "get_inventory", .readOnly, .short, .none),
+        ("logic_plugins", "plugins.get_param_verified", "get_param_verified", .readOnly, .medium, .readbackRequired),
         ("logic_plugins", "plugins.set_param_verified", "set_param_verified", .mutating, .medium, .readbackRequired),
         ("logic_plugins", "plugins.set_eq_band_verified", "set_eq_band_verified", .mutating, .medium, .readbackRequired),
         ("logic_plugins", "plugins.insert_verified", "insert_verified", .mutating, .medium, .readbackRequired),
@@ -412,7 +413,8 @@ struct OperationRegistryTests {
             #expect(spec.mutability == entry.mutability)
             #expect(spec.confirmation == (id == .systemClearTraces ? .l2 : .none))
             #expect(spec.target == (
-                id == .pluginsSetParamVerified || id == .pluginsSetEQBandVerified || id == .pluginsInsertVerified
+                id == .pluginsGetParamVerified || id == .pluginsSetParamVerified
+                    || id == .pluginsSetEQBandVerified || id == .pluginsInsertVerified
                     ? .acceptsStableTarget
                     : .none
             ))
@@ -761,6 +763,17 @@ struct OperationRegistryTests {
             #expect(row.capability == spec.capability.rawValue)
             #expect(row.dirtySections == spec.dirtySections.map(\.rawValue).sorted())
         }
+    }
+
+    @Test("plugin help exposes the qualified parameter reader and its reference-based input")
+    func parameterReaderIsDiscoverableInPluginHelp() async {
+        let result = await SystemDispatcher.handle(
+            command: "help", params: ["category": .string("plugins")],
+            router: ChannelRouter(), cache: StateCache())
+        let text = sharedToolText(result)
+        #expect(text.contains("get_param_verified"))
+        #expect(text.contains("target_ref"))
+        #expect(text.contains("param"))
     }
 
     @Test("tool description command lists match the registry exactly")
