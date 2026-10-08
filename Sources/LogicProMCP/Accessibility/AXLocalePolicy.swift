@@ -2700,6 +2700,16 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Pan%23par#value"
     )
 
+    static let trackHiddenViewControl = LabelSet(
+        canonical: "Show/Hide Hidden Tracks",
+        variants: ["가려진 트랙 보기/가리기", "非表示にしたトラックを表示/非表示",
+                   "Ausgeblendete Spuren ein-/ausblenden", "Mostrar/ocultar pistas ocultas",
+                   "Afficher/Masquer les pistes masquées", "Mostra/nascondi tracce nascoste",
+                   "Mostra/oculta as pistas ocultas", "显示/隐藏隐藏的轨道", "顯示/隱藏已隱藏的音軌"],
+        rationale: "Identifies the hidden-track view checkbox inside the held Tracks legend, without AXHelp. Values are derived from Apple's localized row; runtime hidden-state evidence remains separate from saved track counts or whole population completeness.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Show%2FHide%20Hidden%20Tracks#value"
+    )
+
     /// Track-header rail description (normalized exact match).
     /// No `derivedFrom`: this is a composition, not one row's values. The template and the noun,
     /// multiplied in check-new-labelsets-name-a-row.py against LABELSETS-WITHOUT-A-ROW.json:
@@ -3654,6 +3664,7 @@ enum AXLocalePolicy {
         midiImportCommitButton,
         midiImportDeclineTempoButton,
         midiImportTempoAlertText,
+        trackHiddenViewControl,
         trackHeadersDescription,
         eventListTab,
         projectPickerWindow,

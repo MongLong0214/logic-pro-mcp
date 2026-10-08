@@ -30,6 +30,8 @@ enum SessionPopulationObservation {
         /// post-restoration reading may become the ordinary current cache.
         var hasCapturedTrackExposure = false
         var restoredTracks: [TrackState]? = nil
+        /// The live held view control, not a claim about saved/live population equivalence.
+        var hiddenTracksShown: Bool? = nil
     }
 
     struct PresentationObservation: Encodable, Equatable, Sendable {
@@ -697,6 +699,7 @@ enum SessionPopulationObservation {
         /// Whether `expected_count` equals the whole rail's row count (not the scoped `count`).
         /// Present only beside `expected_count`. A match is evidence, not completeness.
         let expectedCountMatchesRail: Bool?
+        let hiddenTracksShown: Bool?
 
         enum CodingKeys: String, CodingKey {
             case firstRow = "first_row"
@@ -705,6 +708,7 @@ enum SessionPopulationObservation {
             case expectedCount = "expected_count"
             case expectedCountSource = "expected_count_source"
             case expectedCountMatchesRail = "expected_count_matches_rail"
+            case hiddenTracksShown = "hidden_tracks_shown"
         }
 
         func encode(to encoder: Encoder) throws {
@@ -715,6 +719,7 @@ enum SessionPopulationObservation {
             try container.encodeIfPresent(expectedCount, forKey: .expectedCount)
             try container.encodeIfPresent(expectedCountSource, forKey: .expectedCountSource)
             try container.encodeIfPresent(expectedCountMatchesRail, forKey: .expectedCountMatchesRail)
+            try container.encodeIfPresent(hiddenTracksShown, forKey: .hiddenTracksShown)
         }
     }
 
@@ -955,6 +960,9 @@ enum SessionPopulationObservation {
             if !collapsedStackRows.isEmpty {
                 tracksReasons.append(.collapsedTrackStack)
             }
+            if capture.freshPopulation?.hiddenTracksShown == false {
+                tracksReasons.append(.hiddenTracksUnobserved)
+            }
             if live.contains(where: { $0.isStackHeader == nil }) {
                 tracksReasons.append(.stackStateUnreadable)
             }
@@ -968,7 +976,7 @@ enum SessionPopulationObservation {
                     tracksReasons.append(.projectFileNotBound)
                 }
                 // Without an independent expected count nothing rules out rows the rail does not show.
-                tracksReasons.append(.hiddenTracksUnobserved)
+                if !tracksReasons.contains(.hiddenTracksUnobserved) { tracksReasons.append(.hiddenTracksUnobserved) }
             }
             if request.scope == .selection {
                 // The AX reader folds an AXSelected read that failed into `false`
@@ -995,7 +1003,8 @@ enum SessionPopulationObservation {
                 count: rows.count,
                 expectedCount: capture.fileTrackCount,
                 expectedCountSource: capture.fileTrackCount == nil ? nil : "project_file",
-                expectedCountMatchesRail: capture.fileTrackCount.map { $0 == live.count }
+                expectedCountMatchesRail: capture.fileTrackCount.map { $0 == live.count },
+                hiddenTracksShown: capture.freshPopulation?.stable == true ? capture.freshPopulation?.hiddenTracksShown : nil
             ),
             rows: rows,
             ambiguousTrackIndices: ambiguousTrackIndices,

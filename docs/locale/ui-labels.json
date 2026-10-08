@@ -7596,6 +7596,34 @@
     "zh-TW": "derived"
    }
   },
+  "trackHiddenViewControl": {
+   "canonical": "Show/Hide Hidden Tracks",
+   "variants": [
+    "가려진 트랙 보기/가리기",
+    "非表示にしたトラックを表示/非表示",
+    "Ausgeblendete Spuren ein-/ausblenden",
+    "Mostrar/ocultar pistas ocultas",
+    "Afficher/Masquer les pistes masquées",
+    "Mostra/nascondi tracce nascoste",
+    "Mostra/oculta as pistas ocultas",
+    "显示/隐藏隐藏的轨道",
+    "顯示/隱藏已隱藏的音軌"
+   ],
+   "rationale": "Identifies the hidden-track view checkbox inside the held Tracks legend, without AXHelp. Values are derived from Apple's localized row; runtime hidden-state evidence remains separate from saved track counts or whole population completeness.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "trackInputMonitoringButton": {
    "canonical": "Input Monitoring",
    "variants": [
