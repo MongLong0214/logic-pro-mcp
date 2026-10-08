@@ -103,7 +103,8 @@ struct OperationRegistryCoverageTests {
         #expect(readOnly.count + mutating.count == OperationRegistry.specs.count)
         #expect(readOnly.contains { $0.id == .pluginsGetParamVerified })
         #expect(readOnly.allSatisfy {
-            $0.id == .pluginsGetParamVerified ? $0.target == .acceptsStableTarget : $0.target == .none
+            [.pluginsGetParamVerified, .pluginsGetChannelEQStateVerified].contains($0.id)
+                ? $0.target == .acceptsStableTarget : $0.target == .none
         })
     }
 }

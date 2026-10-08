@@ -403,6 +403,14 @@ extension OperationRegistry {
                 "track": .enforced(.integer, .int(0)),
                 "insert": .enforced(.integer, .int(6)),
             ], required: [["target_ref"], ["param"]]),
+            "plugins.get_channel_eq_state_verified": .init(params: [
+                "target_ref": .enforced(.string, .string("ins_lpm_contract_301")), "project_ref": projectRef,
+                "plugin": .enforced(.string, .string("Channel EQ")),
+                "plugin_id": .enforced(.string, .string("logic.stock.effect.channel_eq")),
+                "plugin_name": .enforced(.string, .string("Channel EQ")),
+                "track": .enforced(.integer, .int(0)), "insert": .enforced(.integer, .int(0)),
+                "project_expected_path": .enforced(.string, .string("/tmp/lpm-301.logicx")),
+            ], required: [["target_ref"]]),
             "plugins.insert_verified": .init(params: pluginWriteRules(["insert", "slot", "plugin", "plugin_id", "plugin_name", "mode", "project_expected_path", "track"])
                 .merging([
                     "expected_name": .unconstrained("corroborates a bare track index, which is refused without it "

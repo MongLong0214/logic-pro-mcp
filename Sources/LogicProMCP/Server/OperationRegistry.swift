@@ -48,6 +48,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemSetupControlSurface = "system.setup_control_surface"
     case pluginsGetInventory = "plugins.get_inventory"
     case pluginsGetParamVerified = "plugins.get_param_verified"
+    case pluginsGetChannelEQStateVerified = "plugins.get_channel_eq_state_verified"
     case pluginsSetParamVerified = "plugins.set_param_verified"
     case pluginsSetEQBandVerified = "plugins.set_eq_band_verified"
     case pluginsInsertVerified = "plugins.insert_verified"
@@ -323,7 +324,7 @@ enum OperationRegistry {
             "system.setup_arm_key", "system.setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
-            "plugins.get_inventory", "plugins.get_param_verified", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
+            "plugins.get_inventory", "plugins.get_param_verified", "plugins.get_channel_eq_state_verified", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "edit.undo", "edit.redo", "edit.cut", "edit.copy", "edit.paste", "edit.delete",
@@ -383,7 +384,7 @@ enum OperationRegistry {
             "setup_arm_key", "setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
-            "get_inventory", "get_param_verified", "set_param_verified", "set_eq_band_verified", "insert_verified",
+            "get_inventory", "get_param_verified", "get_channel_eq_state_verified", "set_param_verified", "set_eq_band_verified", "insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
@@ -729,6 +730,15 @@ enum OperationRegistry {
             VerificationPolicy.readbackRequired,
             TargetPolicy.acceptsStableTarget,
             ["insert", "param", "plugin", "plugin_id", "plugin_name", "track", "unit"]
+        ),
+        (
+            .pluginsGetChannelEQStateVerified,
+            "get_channel_eq_state_verified",
+            Mutability.readOnly,
+            DeadlineClass.medium,
+            VerificationPolicy.readbackRequired,
+            TargetPolicy.acceptsStableTarget,
+            ["insert", "plugin", "plugin_id", "plugin_name", "project_expected_path", "track"]
         ),
         (
             .pluginsSetParamVerified,
