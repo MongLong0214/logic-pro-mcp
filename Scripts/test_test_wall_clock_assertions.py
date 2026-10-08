@@ -73,6 +73,21 @@ def main():
     ):
         case(f"{spelling} is caught", hits(src) == [spelling], hits(src))
 
+    # An absolute protocol deadline is input, not an elapsed-time assertion.
+    deadline = 'queue.response(id: 1, phase: "handshake", deadline: DispatchTime.now())'
+    case("a direct absolute deadline is not an elapsed measurement",
+         hits(deadline) == [], hits(deadline))
+    case("a deadline argument with a following argument is accepted",
+         hits("request(deadline: DispatchTime.now(), id: 1)") == [], "")
+    for src in (
+        "request(deadline: DispatchTime.now().uptimeNanoseconds)",
+        "request(deadline: DispatchTime.now() - started)",
+        deadline + "; let started = DispatchTime.now()",
+        "let deadline = DispatchTime.now()",
+    ):
+        case(f"a clock read beyond direct deadline input is caught: {src}",
+             hits(src) == ["DispatchTime.now()"], hits(src))
+
     # COMMENTS ARE NOT CODE. A rule that fired on prose would make its own subject unmentionable —
     # every one of these lines exists in the files this rule now governs.
     for comment in (
@@ -136,6 +151,16 @@ def main():
                                 env=dict(os.environ, LPM_TESTS_DIR=tmp))
         case("and accepts a tree with no wall-clock read",
              ok_run.returncode == 0, (ok_run.stdout + ok_run.stderr).strip()[:300])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "Deadline.swift"), "w", encoding="utf-8") as handle:
+            handle.write(deadline + "\n")
+        deadline_run = subprocess.run(
+            [sys.executable, str(HERE / "check-test-wall-clock-assertions.py")],
+            capture_output=True, text=True, env=dict(os.environ, LPM_TESTS_DIR=tmp))
+        case("the entry point accepts a direct absolute deadline",
+             deadline_run.returncode == 0,
+             (deadline_run.stdout + deadline_run.stderr).strip()[:300])
 
     if failures:
         for f in failures:
