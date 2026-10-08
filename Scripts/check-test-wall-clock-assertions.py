@@ -37,6 +37,11 @@ timing helper that hides the read behind a name of its own would all pass. What 
 the cheap route — the one all three real instances took. There is deliberately no allowlist: a
 site that genuinely needs a clock should change this file and say why in the same commit, so the
 exception is reviewed as prose rather than registered as a line number.
+
+An absolute `deadline: DispatchTime.now()` argument is protocol input, not a measurement of
+elapsed work. The response-queue test needs receipt before that instant and consumption after
+it; scheduler delay cannot invalidate that ordering. Admit only the direct argument, not a
+clock binding, arithmetic, or reading uptime for a later elapsed-time assertion.
 """
 import glob
 import os
@@ -110,11 +115,15 @@ def code_lines(source):
 
 
 def clock_reads(source):
-    """Every clock read in `source`, as (line number, line text, spelling)."""
+    """Clock reads other than direct protocol deadlines, as (line, text, spelling)."""
     found = []
     for number, text in code_lines(source):
         for pattern, spelling in CLOCK_READS:
-            if pattern.search(text):
+            for match in pattern.finditer(text):
+                if (spelling == "DispatchTime.now()"
+                        and re.search(r"\bdeadline\s*:\s*$", text[:match.start()])
+                        and re.match(r"\s*\)\s*[,)]", text[match.end():])):
+                    continue
                 found.append((number, text.strip(), spelling))
     return found
 
@@ -132,7 +141,7 @@ def main():
             print(f"  {path}:{number}: {spelling}", file=sys.stderr)
             print(f"      {text}", file=sys.stderr)
         return 1
-    print(f"OK: no wall-clock reads in {len(swift_tests())} test files (#804)")
+    print(f"OK: no elapsed-time clock reads in {len(swift_tests())} test files (#804)")
     return 0
 
 

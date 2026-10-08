@@ -4878,13 +4878,15 @@ final class QualificationSubprocessSession: @unchecked Sendable {
         phase: String,
         timeout: TimeInterval? = nil
     ) throws -> Result {
+        // Writing or resuming the caller must not start a fresh response budget.
+        let deadline = DispatchTime.now() + (timeout ?? requestTimeout)
         try writeJSON([
             "jsonrpc": "2.0",
             "id": id,
             "method": method,
             "params": params,
         ], direction: .request, operationID: phase)
-        let data = try frames.response(id: id, phase: phase, timeout: timeout ?? requestTimeout)
+        let data = try frames.response(id: id, phase: phase, deadline: deadline)
         record(direction: .response, operationID: phase, data: data)
         let response: RPCResponse<Result>
         do {
@@ -5064,15 +5066,21 @@ final class QualificationSubprocessSession: @unchecked Sendable {
     }
 }
 
-private final class QualificationFrameQueue: @unchecked Sendable {
+final class QualificationFrameQueue: @unchecked Sendable {
     static let maximumFrameBytes = 8 * 1024 * 1024
 
+    private struct ReceivedFrame {
+        let data: Data
+        let receivedAt: DispatchTime
+    }
+
     private let condition = NSCondition()
-    private var responses: [Int: Data] = [:]
+    private var responses: [Int: ReceivedFrame] = [:]
     private var terminalError: Error?
     private var finished = false
 
     func append(_ data: Data) throws {
+        let receivedAt = DispatchTime.now()
         let object: [String: Any]
         do {
             guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -5096,18 +5104,22 @@ private final class QualificationFrameQueue: @unchecked Sendable {
             return
         }
         condition.lock()
-        responses[number.intValue] = data
+        responses[number.intValue] = ReceivedFrame(data: data, receivedAt: receivedAt)
         condition.broadcast()
         condition.unlock()
     }
 
-    func response(id: Int, phase: String, timeout: TimeInterval) throws -> Data {
-        let deadline = DispatchTime.now() + timeout
+    func response(id: Int, phase: String, deadline: DispatchTime) throws -> Data {
         condition.lock()
         defer { condition.unlock() }
         while true {
             if let response = responses.removeValue(forKey: id) {
-                return response
+                // A late frame can already be queued when a delayed waiter wakes.
+                // Conversely, an on-time frame remains on time despite that delay.
+                guard response.receivedAt < deadline else {
+                    throw QualificationTransportError.requestTimeout(phase: phase)
+                }
+                return response.data
             }
             if let terminalError {
                 throw terminalError

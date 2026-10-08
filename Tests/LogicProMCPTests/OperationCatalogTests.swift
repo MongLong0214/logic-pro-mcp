@@ -148,7 +148,7 @@ struct OperationCatalogTests {
             "output_root",
             "path",
         ],
-        .audioAnalyzeSpectrum: ["path"],
+        .audioAnalyzeSpectrum: ["path", "target_curve"],
         .audioRecommendEQ: ["minimum_level", "path"],
         .audioCompareSpectra: ["after_path", "before_path", "output_root"],
         .systemListRecentTraces: ["limit"],
