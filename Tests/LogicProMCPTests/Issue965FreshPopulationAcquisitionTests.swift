@@ -38,10 +38,10 @@ struct Issue965FreshPopulationAcquisitionTests {
         func readTitle(at index: Int) -> Bool {
             lock.withLock {
                 titleReads[index] += 1
-                // The first bookend reads name/type/name, then the strict Mixer
-                // absence walk reads identifying metadata from every header.
-                // The fifth last-header title is the second bookend's name read.
-                guard index == 41, titleReads[index] == 5 else { return false }
+                // Fresh population omits focus-moving Help/type inference. The
+                // first bookend reads the name, then the strict Mixer absence
+                // walk reads metadata. The third title is the second name read.
+                guard index == 41, titleReads[index] == 3 else { return false }
                 collapseReads = titleReads
                 return true
             }
@@ -83,6 +83,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                      wrongAdditionalDisclosureHit: Bool = false,
                      observationMouse: AXMouseHelper.Runtime? = nil,
                      wrongDisclosureHit: Bool = false,
+                     focusSetter: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)? = nil,
                      observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil,
                      readingAttribute: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
                      observingChildren: (@Sendable (AXUIElement) -> Void)? = nil,
@@ -110,7 +111,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                         return unreadableRail && CFEqual(element, rail)
                             ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
                     },
-                    setAttributeHandler: { _, _, _ in events.record("setter"); return false },
+                    setAttributeHandler: { element, attribute, value in
+                        if let focusSetter { return focusSetter(element, attribute, value) }
+                        events.record("setter"); return false
+                    },
                     performActionHandler: { element, action in
                         events.record(action)
                         // A successful AXPress is not expansion on the measured disclosure.
@@ -681,6 +685,25 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, mouseCase: "unrelated_text_focus")
     }
 
+    @Test func registeredStackWaitsForCompletedPairLandingBeforeCaptureAndRestoration() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, delayedLanding: true)
+    }
+
+    @Test(arguments: ["passive", "editable", "insertion", "foreign", "replacement"])
+    func registeredStackReadFocusExceptionIsLimitedToItsHeldPassiveLabel(headerFocus: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, headerFocus: headerFocus)
+    }
+
+    @Test func registeredPopulationDoesNotReadFocusMovingTrackHelp() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, helpMovesFocus: true)
+    }
+
+    @Test(arguments: ["restored", "unavailable", "declined", "wrong_readback", "reparented", "foreign_focus"])
+    func registeredStackRestoresOnlyItsHeldWorkspaceFocus(focusRestoration: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false,
+            headerFocus: "passive", focusRestoration: focusRestoration)
+    }
+
     @Test func finalPreDownStopDoesNotReportNavigationThatNeverPosted() async throws {
         let f = Fixture()
         let disclosure = f.builder.element(965_700)
@@ -906,9 +929,9 @@ struct Issue965FreshPopulationAcquisitionTests {
                 await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
         let atCollapse = try #require(bookends.atCollapse)
-        #expect(Array(atCollapse.prefix(41)) == Array(repeating: 7, count: 41))
-        #expect(atCollapse[41] == 5)
-        #expect(bookends.counts.allSatisfy { $0 >= 7 })
+        #expect(Array(atCollapse.prefix(41)) == Array(repeating: 3, count: 41))
+        #expect(atCollapse[41] == 3)
+        #expect(bookends.counts.allSatisfy { $0 >= 3 })
         #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 19)
         #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
         let body = try #require(sharedJSONObject(sharedToolText(result)))
@@ -964,7 +987,9 @@ struct Issue965FreshPopulationAcquisitionTests {
                               nestedRelease: String? = nil, nestedFault: String? = nil,
                               downFocusRead: String? = nil, knownOuterReopen: Bool = false,
                               knownOuterReplacement: Bool = false, knownInnerReopen: Bool = false,
-                              knownInnerReplacement: Bool = false, disclosureDecision: String? = nil) async throws {
+                              knownInnerReplacement: Bool = false, disclosureDecision: String? = nil,
+                              delayedLanding: Bool = false, headerFocus: String? = nil,
+                              helpMovesFocus: Bool = false, focusRestoration: String? = nil) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -983,6 +1008,36 @@ struct Issue965FreshPopulationAcquisitionTests {
             fixture.builder.setChildren(header, index == 0 ? [disclosure] : [])
         }
         let collapsed = [headers[0]] + Array(headers[24...])
+        let passiveLabel = fixture.builder.element(965_240)
+        let otherLabel = fixture.builder.element(965_241)
+        let workspace = fixture.builder.element(965_242)
+        if let focusRestoration {
+            fixture.builder.setRole(workspace, "AXLayoutArea")
+            fixture.builder.setAttribute(workspace, kAXWindowAttribute as String, fixture.window)
+            fixture.builder.setAttribute(workspace, kAXParentAttribute as String, fixture.window)
+            fixture.builder.setAttributeSettable(workspace, kAXFocusedAttribute as String, focusRestoration != "unavailable")
+            fixture.builder.setChildren(workspace, [])
+        }
+        if helpMovesFocus {
+            fixture.builder.setRole(otherLabel, kAXTextFieldRole as String)
+            fixture.builder.setAttribute(otherLabel, kAXValueAttribute as String, "foreign editor")
+        }
+        if let headerFocus {
+            for label in [passiveLabel, otherLabel] {
+                fixture.builder.setRole(label, kAXTextFieldRole as String)
+                fixture.builder.setAttribute(label, kAXDescriptionAttribute as String, "Track 1")
+                fixture.builder.setAttribute(label, kAXValueAttribute as String, 0)
+                fixture.builder.setAttribute(label, kAXWindowAttribute as String, fixture.window)
+            }
+            if headerFocus == "editable" {
+                fixture.builder.setAttributeSettable(passiveLabel, kAXValueAttribute as String, true)
+                fixture.builder.setAttribute(passiveLabel, kAXValueAttribute as String, "Track 1")
+            }
+            if headerFocus == "insertion" {
+                fixture.builder.setAttribute(passiveLabel, kAXInsertionPointLineNumberAttribute as String, 0)
+            }
+            if headerFocus != "foreign" { fixture.builder.setChildren(headers[0], [disclosure, passiveLabel]) }
+        }
         let inner = fixture.builder.element(965_220)
         let substitutedDisclosure = fixture.builder.element(965_223)
         fixture.builder.setRole(substitutedDisclosure, kAXDisclosureTriangleRole as String)
@@ -1006,7 +1061,8 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture.builder.setChildren(fixture.rail, initiallyExpanded ? headers : collapsed)
         fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [fixture.window])
         fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
-        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.rail)
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                                     focusRestoration == nil ? fixture.rail : workspace)
         fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, true)
         fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, bundle.absoluteString)
         fixture.builder.setAttribute(fixture.rail, kAXSelectedChildrenAttribute as String, [headers[0]])
@@ -1025,7 +1081,8 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture.builder.setRole(scrollbar, kAXScrollBarRole as String)
         fixture.builder.setAttribute(scrollbar, kAXValueAttribute as String, 0.25)
         fixture.builder.setChildren(scrollbar, [])
-        fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar] + (nestedFault == "viewport" ? [scrollbar] : []))
+        fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar]
+            + (nestedFault == "viewport" ? [scrollbar] : []) + (focusRestoration == nil ? [] : [workspace]))
         let replacement = fixture.builder.element(965_231)
         fixture.builder.setRole(replacement, kAXLayoutItemRole as String)
         fixture.builder.setAttribute(replacement, kAXTitleAttribute as String, "Repeated grandchild")
@@ -1063,6 +1120,11 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
             if type == .leftMouseDown {
                 if mouseCase == "down_failed" { return false }
+                if let headerFocus {
+                    let focused = headerFocus == "foreign" || headerFocus == "replacement" ? otherLabel : passiveLabel
+                    if headerFocus == "replacement" { fixture.builder.setChildren(headers[0], [disclosure, otherLabel]) }
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, focused)
+                }
                 if mouseCase == "unrelated_text_focus" {
                     fixture.builder.setRole(replacement, kAXTextFieldRole as String)
                     fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, replacement)
@@ -1086,6 +1148,12 @@ struct Issue965FreshPopulationAcquisitionTests {
                 fixture.builder.setAttribute(target, kAXValueAttribute as String, expanded ? 0 : 1)
                 fixture.builder.setChildren(fixture.rail, isInner ? (expanded ? headers : fullyExposed)
                     : (expanded ? collapsed : headers))
+                if eventCount == 4, focusRestoration == "reparented" {
+                    fixture.builder.setAttribute(workspace, kAXParentAttribute as String, otherLabel)
+                }
+                if eventCount == 4, focusRestoration == "foreign_focus" {
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, otherLabel)
+                }
                 if isInner, !expanded, let nestedFault,
                    ["focus", "project", "viewport"].contains(nestedFault) {
                     fixture.reads.record("child_custody_fault")
@@ -1143,14 +1211,26 @@ struct Issue965FreshPopulationAcquisitionTests {
         let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
             poller: StatePoller(axChannel: fixture.channel(disclosure: disclosure,
                 additionalDisclosure: nested ? inner : nil, observationMouse: observationMouse,
-                wrongDisclosureHit: mouseCase == "wrong_hit", observingAttribute: { element, attribute in
+                wrongDisclosureHit: mouseCase == "wrong_hit", focusSetter: { element, attribute, value in
+                    guard let focusRestoration else { Issue.record("no AX setters"); return false }
+                    #expect(CFEqual(element, workspace) && attribute == kAXFocusedAttribute as String)
+                    do {
+                        let number = try #require(value as? NSNumber)
+                        #expect(number.boolValue)
+                    } catch { return false }
+                    fixture.reads.record("workspace_focus_setter")
+                    if focusRestoration == "declined" { return false }
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                        focusRestoration == "wrong_readback" ? otherLabel : workspace)
+                    return true
+                }, observingAttribute: { element, attribute in
                     if mouseCase == "unrelated_text_focus", fixture.events.count == 1 {
                         fixture.reads.record("ax_read_during_held_down")
                     }
                     if knownOuterReopen, fixture.events.count == 2, CFEqual(element, headers[0]),
-                       attribute == kAXHelpAttribute as String { fixture.reads.record("outer_row_help_before_stack_read") }
+                       attribute == kAXTitleAttribute as String { fixture.reads.record("outer_row_name_before_stack_read") }
                     if knownOuterReplacement, fixture.events.count == 2, CFEqual(element, headers[0]),
-                       attribute == kAXHelpAttribute as String,
+                       attribute == kAXTitleAttribute as String,
                        !fixture.reads.recorded.contains("replacement_disclosure_installed") {
                         fixture.reads.record("replacement_disclosure_installed")
                         if disclosureDecision == "role_loss" {
@@ -1172,11 +1252,11 @@ struct Issue965FreshPopulationAcquisitionTests {
                         if attribute == kAXValueAttribute as String { fixture.reads.record("replacement_disclosure_value_read") }
                     }
                     if knownInnerReopen, fixture.events.count == 4, CFEqual(element, headers[1]),
-                       attribute == kAXHelpAttribute as String {
-                        fixture.reads.record("inner_row_help_before_stack_read")
+                       attribute == kAXTitleAttribute as String {
+                        fixture.reads.record("inner_row_name_before_stack_read")
                     }
                     if knownInnerReplacement, fixture.events.count == 4, CFEqual(element, headers[1]),
-                       attribute == kAXHelpAttribute as String,
+                       attribute == kAXTitleAttribute as String,
                        !fixture.reads.recorded.contains("replacement_disclosure_installed") {
                         fixture.reads.record("replacement_disclosure_installed")
                         if disclosureDecision == "role_loss" {
@@ -1201,7 +1281,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                           fixture.events.count == 4, attribute == kAXTitleAttribute as String,
                           CFEqual(element, grandchildren[1]) else { return }
                     fixture.reads.record("last_grandchild_title")
-                    guard fixture.reads.recorded.filter({ $0 == "last_grandchild_title" }).count == 5 else { return }
+                    guard fixture.reads.recorded.filter({ $0 == "last_grandchild_title" }).count == 3 else { return }
                     fixture.reads.record("last_grandchild_fault")
                     if nestedFault == "inner_closed" {
                         fixture.builder.setAttribute(inner, kAXValueAttribute as String, 0)
@@ -1212,9 +1292,21 @@ struct Issue965FreshPopulationAcquisitionTests {
                         fixture.builder.setChildren(fixture.rail, changed)
                     }
                 }, readingAttribute: { element, attribute in
+                    if helpMovesFocus, fixture.events.count > 0, attribute == kAXHelpAttribute as String {
+                        fixture.reads.record("focus_moving_help_read")
+                        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, otherLabel)
+                    }
+                    if delayedLanding, CFEqual(element, disclosure), attribute == kAXValueAttribute as String,
+                       [2, 4].contains(fixture.events.count) {
+                        let marker = fixture.events.count == 2 ? "pending_expansion_landing" : "pending_restoration_landing"
+                        if !fixture.reads.recorded.contains(marker) {
+                            fixture.reads.record(marker)
+                            return .success(NSNumber(value: fixture.events.count == 2 ? 0 : 1))
+                        }
+                    }
                     if knownOuterReopen, fixture.events.count == 2, CFEqual(element, disclosure),
                           attribute == kAXValueAttribute as String,
-                          fixture.reads.recorded.contains("outer_row_help_before_stack_read"),
+                          fixture.reads.recorded.contains("outer_row_name_before_stack_read"),
                           !fixture.reads.recorded.contains("outer_extractor_returned_zero") {
                         fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
                         fixture.builder.setChildren(fixture.rail, collapsed)
@@ -1223,7 +1315,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                     }
                     if knownInnerReopen, fixture.events.count == 4, CFEqual(element, inner),
                        attribute == kAXValueAttribute as String,
-                       fixture.reads.recorded.contains("inner_row_help_before_stack_read"),
+                       fixture.reads.recorded.contains("inner_row_name_before_stack_read"),
                        !fixture.reads.recorded.contains("inner_extractor_returned_zero") {
                         fixture.builder.setAttribute(inner, kAXValueAttribute as String, 0)
                         fixture.builder.setChildren(fixture.rail, headers)
@@ -1275,7 +1367,15 @@ struct Issue965FreshPopulationAcquisitionTests {
                     }
                 }), cache: cache,
                 runtime: .init(hasVisibleWindow: { true }, projectFileReader: fileReader, keyboardFocus: {
-                    if mouseCase == "unrelated_text_focus", fixture.events.count > 0 {
+                    if focusRestoration != nil {
+                        let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                            runtime: fixture.builder.makeAXRuntime())
+                        if let focus, CFEqual(focus, workspace) { return .notTextEditing }
+                    }
+                    if helpMovesFocus, fixture.reads.recorded.contains("focus_moving_help_read") {
+                        return .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false)
+                    }
+                    if (mouseCase == "unrelated_text_focus" || headerFocus != nil), fixture.events.count > 0 {
                         return .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false)
                     }
                     return .notTextEditing
@@ -1301,10 +1401,14 @@ struct Issue965FreshPopulationAcquisitionTests {
                 }
                 return await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
+        if helpMovesFocus {
+            #expect(!fixture.reads.recorded.contains("focus_moving_help_read"),
+                    "fresh population must not query AXHelp, which moves native Logic focus")
+        }
         if knownOuterReopen || knownOuterReplacement {
             if knownOuterReopen {
                 #expect(fixture.reads.recorded.filter { $0 == "outer_extractor_returned_zero" }.count == 1)
-                #expect(fixture.reads.recorded.contains("outer_row_help_before_stack_read"))
+                #expect(fixture.reads.recorded.contains("outer_row_name_before_stack_read"))
             } else {
                 #expect(!CFEqual(substitutedDisclosure, disclosure))
                 #expect(fixture.reads.recorded.filter { $0 == "replacement_disclosure_installed" }.count == 1)
@@ -1335,7 +1439,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         if knownInnerReopen || knownInnerReplacement {
             if knownInnerReopen {
                 #expect(fixture.reads.recorded.filter { $0 == "inner_extractor_returned_zero" }.count == 1)
-                #expect(fixture.reads.recorded.contains("inner_row_help_before_stack_read"))
+                #expect(fixture.reads.recorded.contains("inner_row_name_before_stack_read"))
             } else {
                 #expect(!CFEqual(substitutedDisclosure, inner))
                 #expect(fixture.reads.recorded.filter { $0 == "replacement_disclosure_installed" }.count == 1)
@@ -1400,7 +1504,7 @@ struct Issue965FreshPopulationAcquisitionTests {
             let lastReadFault = ["inner_closed", "replacement"].contains(nestedFault)
             #expect(fixture.reads.recorded.filter { $0 == (lastReadFault ? "last_grandchild_fault" : "child_custody_fault") }.count == 1)
             if lastReadFault {
-                #expect(fixture.reads.recorded.filter { $0 == "last_grandchild_title" }.count >= 5,
+                #expect(fixture.reads.recorded.filter { $0 == "last_grandchild_title" }.count >= 3,
                         "fault reaches the last grandchild after actual row extraction has begun")
             }
             #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up"],
@@ -1473,6 +1577,49 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(CFEqual(heldFocus, fixture.rail))
             #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
             #expect(gate.currentOperation() == nil)
+            return
+        }
+        if let focusRestoration {
+            let restored = focusRestoration == "restored"
+            let setters = fixture.reads.recorded.filter { $0 == "workspace_focus_setter" }
+            #expect(setters.count == (["restored", "declined", "wrong_readback"].contains(focusRestoration) ? 1 : 0))
+            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"])
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 19)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == (restored ? "restored"
+                : focusRestoration == "foreign_focus" ? "not_restored" : "partially_restored"))
+            if restored {
+                #expect(body["tracks"] != nil && body["snapshot_id"] != nil)
+                let actualFocus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                    runtime: fixture.builder.makeAXRuntime())
+                let focused = try #require(actualFocus)
+                #expect(CFEqual(focused, workspace))
+            } else { #expect(body["state"] as? String == "C" && body["snapshot_id"] == nil) }
+            let current = await cache.getTracks()
+            #expect(current.count == (restored ? 19 : 0))
+            #expect(current.allSatisfy { $0.type == .unknown })
+            // The explicit setter handler records its actual invocations above;
+            // FakeAXRuntimeBuilder's default setter ledger is bypassed by it.
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+            #expect(gate.currentOperation() == nil)
+            return
+        }
+        if let headerFocus {
+            let passive = headerFocus == "passive"
+            #expect(fixture.events.recorded == (passive
+                ? ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"]
+                : ["disclosure_down", "disclosure_up"]))
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == (passive ? 19 : 42))
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(body["state"] as? String == "C" && body["snapshot_id"] == nil)
+            #expect(effects["restoration"] as? String == (passive ? "partially_restored" : "not_restored"))
+            if passive { #expect(effects["reason"] as? String == "keyboard_focus_not_restored") }
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+            #expect(gate.currentOperation() == nil)
+            let current = await cache.getTracks()
+            #expect(current.isEmpty, "partial focus restoration cannot publish a fully restored capture")
             return
         }
         if mouseCase == "unrelated_text_focus" {
@@ -1548,6 +1695,13 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect(tracks["coverage"] as? String == "partial", "exposure alone does not prove hidden/nested/global completion")
         let current = await cache.getTracks()
         #expect(current.count == (initiallyExpanded ? 42 : 19), "collapsed descendants must not become ordinary current cache rows")
+        if delayedLanding {
+            #expect(fixture.reads.recorded.contains("pending_expansion_landing"))
+            #expect(fixture.reads.recorded.contains("pending_restoration_landing"))
+            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"])
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == "restored")
+        }
         if nested {
             #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up",
                 "inner_down", "inner_up", "disclosure_down", "disclosure_up"])

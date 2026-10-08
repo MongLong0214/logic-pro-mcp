@@ -172,20 +172,25 @@ enum AXHelpers {
         @TaskLocal static var current: HelpReadGuard?
 
         private let stop: @Sendable () -> Bool
+        private let allowHelpReads: Bool
         private let lock = NSLock()
         private var refused = false
 
-        init(stop: @escaping @Sendable () -> Bool) {
+        init(allowHelpReads: Bool = true, stop: @escaping @Sendable () -> Bool) {
+            self.allowHelpReads = allowHelpReads
             self.stop = stop
         }
 
-        /// The guard refused a read: whatever was being read is missing some of its help.
+        /// An ownership/editing cutoff interrupted this acquisition.
         var stopped: Bool { lock.withLock { refused } }
 
         /// Whether the next AXHelp read may go ahead. Asks `stop` until it once answers true.
         func permits() -> Bool {
             if stopped { return false }
-            guard stop() else { return true }
+            // Deliberately omitted Help retains the existing unavailable result
+            // without latching a cancellation. Its side effects are not a read-only
+            // acquisition step; other evidence and guarded cleanup can still run.
+            guard stop() else { return allowHelpReads }
             lock.withLock { refused = true }
             return false
         }

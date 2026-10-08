@@ -260,7 +260,16 @@ actor StatePoller {
         let population: SessionPopulationObservation.FreshPopulation
         if runtime.hasVisibleWindow() {
             let focus = runtime.keyboardFocus
-            let guardian = AXHelpers.HelpReadGuard(stop: { stop() || Self.backgroundTickYields(to: focus()) })
+            let readFocusScope = AccessibilityChannel.OwnedTrackStackObservationNavigation.ReadFocusScope()
+            let editingStopsRead: @Sendable () -> Bool = {
+                Self.backgroundTickYields(to: focus())
+                    && !readFocusScope.permits()
+            }
+            // Track-only acquisition omits focus-moving Help. Mixer input/send
+            // identities still require their guarded Help witnesses; suppressing
+            // them turns existing routing observations into unreadable data.
+            let guardian = AXHelpers.HelpReadGuard(allowHelpReads: request.needsStrips,
+                                                  stop: { stop() || editingStopsRead() })
             population = try await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
                 try await axChannel.readFreshSessionPopulation(
                     request: request, fileReader: runtime.projectFileReader,
@@ -270,8 +279,9 @@ actor StatePoller {
                         guard let navigationProject, let targetRegistry else { return false }
                         return await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor == navigationProject
                     },
+                    readFocusScope: readFocusScope,
                     stoppingBeforeAXRead: { stop() || guardian.stopped },
-                    stoppingWhen: { stop() || guardian.stopped || Self.backgroundTickYields(to: focus()) }
+                    stoppingWhen: { stop() || guardian.stopped || editingStopsRead() }
                 )
             }
         } else {
