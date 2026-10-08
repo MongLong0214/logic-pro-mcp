@@ -40,7 +40,8 @@ extension AccessibilityChannel {
     /// Read the retained rail, rather than rediscovering a possibly different window.
     static func readTrackStates(
         from headers: [AXUIElement], in window: AXUIElement? = nil,
-        runtime: AXLogicProElements.Runtime, exposure: AXTrackBinding.Exposure? = nil, stoppingWhen stop: () -> Bool
+        runtime: AXLogicProElements.Runtime, exposure: AXTrackBinding.Exposure? = nil,
+        readingTypeHelp: Bool = true, stoppingWhen stop: () -> Bool
     ) -> (states: [TrackState]?, yielded: Bool) {
         let document: String?
         if let window, case .success(let observed?) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime) {
@@ -54,6 +55,7 @@ extension AccessibilityChannel {
                 from: header, index: index, runtime: runtime.ax,
                 observingStackChildren: { exposure?.observeDisclosureChildren(header: header, children: $0, selected: $1) },
                 observingExposure: exposure,
+                readingTypeHelp: readingTypeHelp,
                 stoppingBeforeHelp: stop
             ) else { return (nil, true) }
             exposure?.observeStackState(header: header, isStackHeader: state.isStackHeader, collapsed: state.stackCollapsed)
@@ -71,9 +73,23 @@ extension AccessibilityChannel {
         return (states, false)
     }
 
-    /// One request's observed disclosure. No selection, focus, viewport or musical
-    /// writes are used to recover custody. Conflicting UI is left to its owner.
-    final class OwnedTrackStackObservationNavigation {
+    /// One request's observed disclosure. No selection, viewport or musical
+    /// writes recover custody. Only its still-owned original workspace focus
+    /// may be restored after all acquired disclosures have been reversed.
+    // One mutation-gate-owned request mutates this navigation. The request-local
+    // reader below only corroborates retained AX facts; it never actuates UI.
+    final class OwnedTrackStackObservationNavigation: @unchecked Sendable {
+        final class ReadFocusScope: @unchecked Sendable {
+            private let lock = NSLock()
+            private var navigation: OwnedTrackStackObservationNavigation?
+            func retain(_ navigation: OwnedTrackStackObservationNavigation?) {
+                lock.withLock { self.navigation = navigation }
+            }
+            func permits() -> Bool {
+                let held = lock.withLock { navigation }
+                return held?.permitsHeldPassiveLabelFocus() == true
+            }
+        }
         let logic: AXLogicProElements.Runtime
         let mouse: AXMouseHelper.Runtime
         let pid: pid_t
@@ -86,6 +102,7 @@ extension AccessibilityChannel {
         let disclosure: AXUIElement
         let originalHeaders: [AXUIElement]
         let originalFocus: AXUIElement
+        private let originalWorkspacePath: [AXUIElement]?
         let selected: [AXUIElement]
         let transport: AXLogicProElements.ObservedTransportActivity
         let referenceIsCurrent: @Sendable () async -> Bool
@@ -100,6 +117,7 @@ extension AccessibilityChannel {
         private var observedFocus: AXUIElement
         private var expandedHeaders: [AXUIElement]?
         private var releaseUnverified = false
+        private var completedClickFocus: (target: Disclosure, labels: [AXUIElement])?
         private var restorationStarted = false
         private var acquired: [AcquiredDisclosure] = []
         private var pending: [Disclosure]
@@ -133,7 +151,28 @@ extension AccessibilityChannel {
             header = collapsed[0].header; disclosure = collapsed[0].disclosure; originalHeaders = headers
             pending = collapsed
             originalFocus = focus; observedFocus = focus; self.selected = selected
+            originalWorkspacePath = Self.workspacePath(focus, in: window, ax: logic.ax)
             self.transport = transport; self.viewport = viewport; self.referenceIsCurrent = referenceIsCurrent
+        }
+
+        private static func workspacePath(_ focus: AXUIElement, in window: AXUIElement,
+                                          ax: AXHelpers.Runtime) -> [AXUIElement]? {
+            guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  AXHelpers.getRole(focus, runtime: ax) == "AXLayoutArea",
+                  let owner: AXUIElement = AXHelpers.getAttribute(focus, kAXWindowAttribute as String, runtime: ax),
+                  CFEqual(owner, window) else { return nil }
+            var path = [focus]
+            for _ in 0..<32 {
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      let child = path.last else { return nil }
+                if CFEqual(child, window) { return path }
+                guard let parent: AXUIElement = AXHelpers.getAttribute(child, kAXParentAttribute as String, runtime: ax),
+                      !path.contains(where: { CFEqual($0, parent) }),
+                      case .success(let children) = AXHelpers.childrenResult(parent, runtime: ax),
+                      children.filter({ CFEqual($0, child) }).count == 1 else { return nil }
+                path.append(parent)
+            }
+            return nil
         }
 
         /// Reuse the same status-preserving direct-child shape at every revealed rail.
@@ -265,10 +304,74 @@ extension AccessibilityChannel {
             return CGRect(origin: point, size: extent)
         }
 
+        private func noEditingAttribute(_ field: AXUIElement, _ attribute: String) -> Bool {
+            let reading = AXHelpers.getAttributeResult(field, attribute, runtime: logic.ax)
+                as Result<AnyObject?, AXHelpers.AXStatusError>
+            switch reading {
+            case .success(nil): return true
+            case .failure(let error) where error.isDefinitiveAbsence: return true
+            default: return false
+            }
+        }
+
+        private func isPassiveLabel(_ field: AXUIElement) -> Bool {
+            guard AXHelpers.getRole(field, runtime: logic.ax) == kAXTextFieldRole as String,
+                  AXHelpers.isAttributeSettable(field, kAXValueAttribute as String, runtime: logic.ax) == false,
+                  case .success(.some(let value)) = AXHelpers.getAttributeResult(
+                    field, kAXValueAttribute as String, runtime: logic.ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
+                  value.doubleValue == 0,
+                  noEditingAttribute(field, kAXInsertionPointLineNumberAttribute as String),
+                  noEditingAttribute(field, kAXSelectedTextRangeAttribute as String),
+                  let owner: AXUIElement = AXHelpers.getAttribute(field, kAXWindowAttribute as String, runtime: logic.ax),
+                  CFEqual(owner, window) else { return false }
+            return true
+        }
+
+        private func passiveLabels(_ target: Disclosure) -> [AXUIElement] {
+            guard case .success(let children) = AXHelpers.childrenResult(target.header, runtime: logic.ax) else { return [] }
+            var labels: [AXUIElement] = []
+            for child in children {
+                guard AXHelpers.getRole(child, runtime: logic.ax) != nil else { return [] }
+                if isPassiveLabel(child) { labels.append(child) }
+            }
+            return labels.count == 1 ? labels : []
+        }
+
+        /// Logic may focus its noneditable numeric-valued header label after
+        /// our completed click. This request-local Help/read exception is not
+        /// keyboard-command permission and cannot admit an editor or new label.
+        func permitsHeldPassiveLabelFocus() -> Bool {
+            guard !releaseUnverified, let completed = completedClickFocus, completed.labels.count == 1,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
+                  let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(currentApp, app),
+                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: logic.ax) as Bool? == true,
+                  let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
+                  let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
+                  CFEqual(main, window), CFEqual(focusedWindow, window),
+                  case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                  doc.utf8.elementsEqual(document.utf8),
+                  case .success(let rows) = AXHelpers.childrenResult(rail, runtime: logic.ax),
+                  rows.filter({ CFEqual($0, completed.target.header) }).count == 1,
+                  same(rows.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders),
+                  let currentSelection = Self.selectedHeaders(rows, ax: logic.ax), same(currentSelection, selected),
+                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  CFEqual(focus, completed.labels[0]), isPassiveLabel(focus),
+                  case .success(let children) = AXHelpers.childrenResult(completed.target.header, runtime: logic.ax),
+                  children.filter({ CFEqual($0, focus) }).count == 1,
+                  AXLogicProElements.heldTrackDisclosureValue(header: completed.target.header,
+                    disclosure: completed.target.disclosure, runtime: logic) != nil,
+                  let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  CFEqual(finalFocus, focus) else { return false }
+            return true
+        }
+
         private func click(target: Disclosure, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             guard await owned(target: target, expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
                   let frame = frame(target),
-                  let pair = mouse.prepareMouseClick(CGPoint(x: frame.midX, y: frame.midY), 1),
+                  let pair = mouse.prepareMouseClick(CGPoint(x: frame.midX, y: frame.midY), 1) else { return false }
+            let labels = passiveLabels(target)
+            guard
                   let hitTest = logic.ax.elementAtPosition,
                   case .success(.some(let hit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(hit, target.disclosure),
                   await owned(target: target, expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
@@ -289,7 +392,24 @@ extension AccessibilityChannel {
             // or another authorization here can strand Down inside Logic's loop.
             guard pair.postUp() else { return false }
             releaseUnverified = false
+            completedClickFocus = (target, labels)
             return true
+        }
+
+        /// Posting the paired events does not mean Logic has processed them.
+        /// Observe only the same held disclosure, with at most three attempts;
+        /// subsequent capture/inverse authorization still requires full custody.
+        private func observeCompletedClick(target: Disclosure, expectedValue: Int,
+                                           stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            for attempt in 0..<3 {
+                guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      let observed = value(target) else { return false }
+                if observed == expectedValue { return true }
+                guard attempt < 2 else { return false }
+                do { try await Task.sleep(for: .milliseconds(25)) }
+                catch { return false }
+            }
+            return false
         }
 
         func expand(stoppingWhen stop: @Sendable () -> Bool) async {
@@ -300,7 +420,7 @@ extension AccessibilityChannel {
                     effects.reason = releaseUnverified ? "stack_mouse_release_unverified" : "stack_expansion_unverified"
                     return
                 }
-                guard value(target) == 1,
+                guard await observeCompletedClick(target: target, expectedValue: 1, stoppingWhen: stop),
                       case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic,
                         observingExposure: forwardExposure),
                       same(headers.filter { row in beforeHeaders.contains { CFEqual($0, row) } }, beforeHeaders) else {
@@ -355,23 +475,63 @@ extension AccessibilityChannel {
                     effects.reason = releaseUnverified ? "stack_mouse_release_unverified" : "stack_restoration_unverified"
                     return effects
                 }
-                guard acceptHeldGestureFocus(entry.target), value(entry.target) == 0,
+                guard await observeCompletedClick(target: entry.target, expectedValue: 0, stoppingWhen: stop),
+                      acceptHeldGestureFocus(entry.target),
                       await owned(target: entry.target, expectedHeaders: entry.beforeHeaders, expectedValue: 0, stoppingWhen: stop) else {
                     effects.reason = "stack_restoration_unverified"; return effects
                 }
                 acquired.removeLast()
             }
-            effects.restoration = CFEqual(observedFocus, originalFocus) ? "restored" : "partially_restored"
-            if effects.restoration != "restored" { effects.reason = "keyboard_focus_not_restored" }
+            let focusRestored: Bool
+            if CFEqual(observedFocus, originalFocus) { focusRestored = true }
+            else { focusRestored = await restoreOriginalWorkspaceFocus(stoppingWhen: stop) }
+            effects.restoration = focusRestored ? "restored" : "partially_restored"
+            if !focusRestored { effects.reason = effects.reason ?? "keyboard_focus_not_restored" }
             return effects
         }
 
+        private func restoreOriginalWorkspaceFocus(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            let target: Disclosure = (header, disclosure)
+            guard !releaseUnverified, acquired.isEmpty, let originalWorkspacePath,
+                  permitsHeldPassiveLabelFocus(),
+                  await owned(target: target, expectedHeaders: originalHeaders, expectedValue: 0, stoppingWhen: stop),
+                  let path = Self.workspacePath(originalFocus, in: window, ax: logic.ax), same(path, originalWorkspacePath),
+                  logic.ax.attributeIsSettable(originalFocus, kAXFocusedAttribute as String) == true,
+                  let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  CFEqual(current, observedFocus), permitsHeldPassiveLabelFocus(), !stop(),
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            // This is the original physical workspace, not a key, coordinate or
+            // a newly discovered focus target. Never overwrite foreign/editor focus.
+            if !effects.attempted.contains("keyboard_focus_restoration") { effects.attempted.append("keyboard_focus_restoration") }
+            guard AXHelpers.setAttribute(originalFocus, kAXFocusedAttribute as String,
+                                         NSNumber(value: true), runtime: logic.ax) else { return false }
+            for attempt in 0..<3 {
+                guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax)
+                else { return false }
+                if CFEqual(focus, originalFocus) {
+                    observedFocus = focus
+                    guard await owned(target: target, expectedHeaders: originalHeaders, expectedValue: 0, stoppingWhen: stop),
+                          let path = Self.workspacePath(originalFocus, in: window, ax: logic.ax), same(path, originalWorkspacePath)
+                    else { effects.reason = effects.reason ?? "stack_navigation_ownership_lost"; return false }
+                    return true
+                }
+                guard CFEqual(focus, observedFocus), attempt < 2 else { return false }
+                do { try await Task.sleep(for: .milliseconds(25)) }
+                catch { return false }
+            }
+            return false
+        }
+
         /// A completed click may focus its held target. Corroborate that limited
-        /// effect before accepting capture or authorizing another click; never write focus.
+        /// effect before accepting capture or authorizing another click.
         private func acceptHeldGestureFocus(_ target: Disclosure) -> Bool {
             guard let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                   CFEqual(focus, observedFocus) || CFEqual(focus, originalFocus)
-                    || CFEqual(focus, target.disclosure) || CFEqual(focus, target.header) else { return false }
+                    || CFEqual(focus, target.disclosure) || CFEqual(focus, target.header)
+                    || (completedClickFocus.map { CFEqual($0.target.header, target.header)
+                        && CFEqual($0.target.disclosure, target.disclosure) } == true
+                        && permitsHeldPassiveLabelFocus()) else { return false }
             if !CFEqual(focus, observedFocus), !effects.changed.contains("keyboard_focus") { effects.changed.append("keyboard_focus") }
             observedFocus = focus
             return true

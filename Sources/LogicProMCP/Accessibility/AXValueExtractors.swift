@@ -326,6 +326,7 @@ enum AXValueExtractors {
         runtime: AXHelpers.Runtime = .production,
         observingStackChildren: (([AXUIElement], AXUIElement?) -> Void)? = nil,
         observingExposure: AXTrackBinding.Exposure? = nil,
+        readingTypeHelp: Bool = true,
         stoppingBeforeHelp stop: () -> Bool
     ) -> TrackState? {
         let extractedName = extractTrackName(from: header, runtime: runtime, observingExposure: observingExposure)
@@ -341,8 +342,18 @@ enum AXValueExtractors {
         // is unread (nil) on the same terms.
         let inputMonitoring = extractTrackButtonState(from: header, prefix: "Input Monitoring", runtime: runtime, observingExposure: observingExposure)
         let selected = extractSelectedState(header, runtime: runtime) ?? false
-        guard let trackType = inferTrackType(from: header, runtime: runtime, observingExposure: observingExposure, stoppingBeforeHelp: stop) else {
-            return nil
+        let trackType: TrackType
+        if readingTypeHelp {
+            guard let inferred = inferTrackType(from: header, runtime: runtime, observingExposure: observingExposure, stoppingBeforeHelp: stop) else {
+                return nil
+            }
+            trackType = inferred
+        } else {
+            // Native AXHelp reads move Logic's focus to the queried control.
+            // Fresh population observation must not perform that UI mutation.
+            // Omitted type evidence is unknown, never inferred from fewer signals.
+            guard !stop() else { return nil }
+            trackType = .unknown
         }
         let stack = extractTrackStackState(from: header, runtime: runtime, observingChildren: observingStackChildren)
 

@@ -327,10 +327,12 @@ actor AccessibilityChannel: Channel {
         fileReader: LogicProjectFileReader.Runtime,
         navigationProject: TargetDescriptor? = nil,
         navigationReferenceIsCurrent: @escaping @Sendable () async -> Bool = { true },
+        readFocusScope: OwnedTrackStackObservationNavigation.ReadFocusScope? = nil,
         stoppingBeforeAXRead stopBeforeAXRead: (@Sendable () -> Bool)? = nil,
         stoppingWhen stop: @escaping @Sendable () -> Bool
     ) async throws -> SessionPopulationObservation.FreshPopulation {
         try SessionPopulationObservation.requireOwnedAcquisition()
+        defer { readFocusScope?.retain(nil) }
         var navigation: OwnedMixerObservationNavigation?
         var stackNavigation: OwnedTrackStackObservationNavigation?
         var originalPresentation: SessionPopulationObservation.FreshPopulation?
@@ -353,6 +355,7 @@ actor AccessibilityChannel: Channel {
                    && candidate.title.utf8.elementsEqual($0.title.utf8)
                    && candidate.document.utf8.elementsEqual($0.document.utf8) }) ?? true {
                 stackNavigation = candidate
+                readFocusScope?.retain(candidate)
                 await candidate.expand(stoppingWhen: stop)
             }
         }
@@ -531,7 +534,8 @@ actor AccessibilityChannel: Channel {
                    observingExposure: exposure) {
                 headers = observed
                 exposure?.observeHeaders(observed)
-                tracks = Self.readTrackStates(from: observed, in: window, runtime: logic, exposure: exposure, stoppingWhen: stop).states
+                tracks = Self.readTrackStates(from: observed, in: window, runtime: logic, exposure: exposure,
+                    readingTypeHelp: false, stoppingWhen: stop).states
             }
             try check()
             var mixer: AXUIElement?
