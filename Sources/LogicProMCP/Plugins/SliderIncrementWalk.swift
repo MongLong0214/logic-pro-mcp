@@ -201,10 +201,19 @@ enum SliderIncrementWalk {
             if next.value == current.value, next.display == current.display {
                 // NEITHER observation moved. That is either a rail or a request smaller than this
                 // control's minimum step, and one unchanged readback cannot tell them apart — so
-                // double the distance and ask again, up to the bounded retry window above. After
-                // that the walk reports no progress, which is what a real rail deserves.
+                // double the distance and ask again, up to the bounded retry window above. An
+                // initial probe blocked at a rail has not established a direction: try its
+                // opposite once, without carrying the large calibration distance across the rail.
                 unchangedWrites += 1
-                guard unchangedWrites < unchangedWriteLimit else {
+                if unchangedWrites >= unchangedWriteLimit {
+                    if isProbe {
+                        direction = direction == .up ? .down : .up
+                        isProbe = false
+                        requestDistance = 1
+                        unchangedWrites = 0
+                        current = next
+                        continue
+                    }
                     return .noProgress(steps: steps, last: next)
                 }
                 requestDistance *= 2

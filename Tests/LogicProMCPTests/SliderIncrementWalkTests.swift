@@ -39,6 +39,49 @@ struct SliderIncrementWalkTests {
         #expect(nudgeCalls == 0)
     }
 
+    @Test func displayTargetBelowAnInitialUpperRailTriesTheOppositeProbe() {
+        // The native failure was 1050 / 20000 Hz -> 625 Hz: eight accepted upward
+        // writes saturated before the walk could observe a direction. The two
+        // intermediate renderings here are synthetic, not a Hz-to-raw mapping.
+        var reading = Reading(value: 1_050, display: "20000 Hz")
+        var requests: [Double] = []
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("625 Hz"),
+            read: { reading },
+            nudge: { requested in
+                requests.append(requested)
+                if requested < reading.value {
+                    reading = reading.value == 1_050
+                        ? Reading(value: 1_049, display: "10000 Hz")
+                        : Reading(value: 1_048, display: "625 Hz")
+                }
+                return true
+            },
+            budget: 16
+        )
+        #expect(outcome == .arrived(steps: 10, final: Reading(value: 1_048, display: "625 Hz")))
+        #expect(requests == [1_051, 1_052, 1_054, 1_058, 1_066, 1_082, 1_114, 1_178, 1_049, 1_048])
+    }
+
+    @Test func oppositeRailProbeStillConsumesTheOriginalBudget() {
+        var reading = Reading(value: 1_050, display: "20000 Hz")
+        var writes = 0
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("625 Hz"),
+            read: { reading },
+            nudge: { requested in
+                writes += 1
+                if requested < reading.value {
+                    reading = Reading(value: 1_049, display: "10000 Hz")
+                }
+                return true
+            },
+            budget: 9
+        )
+        #expect(outcome == .budgetExhausted(steps: 9, last: Reading(value: 1_049, display: "10000 Hz")))
+        #expect(writes == 9)
+    }
+
     @Test func saturationReportsNoProgress() {
         var reads: [Reading?] = [
             Reading(value: 0, display: "20 Hz"),
@@ -313,20 +356,21 @@ struct SliderIncrementWalkTests {
         // walk into a wall. This is the case that proves the fix narrowed the rule instead of
         // deleting it.
         //
-        // EIGHT steps, not one, since the coarse-step walk landed: one unchanged readback can no
+        // SIXTEEN steps, not one, since the coarse-step walk landed: one unchanged readback can no
         // longer tell a rail from a request below the control's minimum step, so the walk doubles
-        // the request 1, 2, 4 … 128 before concluding. The conclusion is unchanged — this is still
-        // `noProgress`, and it is still bounded well inside the budget.
+        // the request 1, 2, 4 … 128 on each side before concluding. The opposite probe matters at
+        // an initial upper rail: one blocked direction cannot establish that both are stuck.
         let stuck = Reading(value: 480, display: "+24.0 dB")
         var requests: [Double] = []
         let outcome = SliderIncrementWalk.walk(
             to: .display("+30.0 dB"),
             read: { stuck },
             nudge: { requested in requests.append(requested); return true },
-            budget: 16
+            budget: 32
         )
-        #expect(outcome == .noProgress(steps: 8, last: stuck))
-        #expect(requests == [481, 482, 484, 488, 496, 512, 544, 608])
+        #expect(outcome == .noProgress(steps: 16, last: stuck))
+        #expect(requests == [481, 482, 484, 488, 496, 512, 544, 608,
+                             479, 478, 476, 472, 464, 448, 416, 352])
     }
 
     @Test func aRailExhaustsASmallerBudgetBeforeItFinishesCalibrating() {
@@ -522,7 +566,7 @@ struct SliderIncrementWalkTests {
         ))
     }
 
-    @Test func displayRailReportsNoProgressInsteadOfBudgetExhaustion() {
+    @Test func displayRailWithoutOppositeProbeBudgetReportsExhaustion() {
         let rail = Reading(value: 480, display: "+24.0 dB")
         var nudgeCalls = 0
 
@@ -533,11 +577,9 @@ struct SliderIncrementWalkTests {
             budget: 8
         )
 
-        // Mutation caught: a probe blocked by a real control rail must not
-        // consume the caller's entire budget. Eight now rather than one — the walk has to rule out
-        // "the request was smaller than this control's step" before it may call a rail a rail —
-        // but the budget is what this test is about and eight is still inside it.
-        #expect(outcome == .noProgress(steps: 8, last: rail))
+        // Eight accepted writes consume this whole budget. A blocked initial probe cannot
+        // establish both directions are stuck, and cannot issue a ninth write to find out.
+        #expect(outcome == .budgetExhausted(steps: 8, last: rail))
         #expect(nudgeCalls == 8)
     }
 
