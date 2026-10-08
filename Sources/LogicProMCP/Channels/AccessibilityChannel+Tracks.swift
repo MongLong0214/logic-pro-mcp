@@ -2462,6 +2462,15 @@ extension AccessibilityChannel {
         func nameField() -> AXUIElement? {
             guard let candidate = AXLogicProElements.trackNameField(in: header, runtime: runtime),
                   AXHelpers.getRole(candidate, runtime: runtime.ax) == kAXTextFieldRole as String else { return nil }
+            // Logic may expose the header name as a noneditable numeric-zero label.
+            // It cannot accept the direct String setter. Ordinary acquisition uses
+            // the existing held-target menu/editor route instead, before any press
+            // on that label; exact adapters retain their existing no-acquisition rule.
+            if acquire,
+               AXHelpers.isAttributeSettable(candidate, kAXValueAttribute as String, runtime: runtime.ax) == false,
+               case .success(.some(let value)) = AXHelpers.getAttributeResult(
+                candidate, kAXValueAttribute as String, runtime: runtime.ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
+               value.doubleValue == 0 { return nil }
             return candidate
         }
         var field = nameField()
@@ -2551,7 +2560,7 @@ extension AccessibilityChannel {
                   initialValue.utf8.elementsEqual(expected.utf8) else {
                 return refusal("Ordinary rename menu did not expose its observed name editor")
             }
-            func editorIsHeld() -> Bool {
+            func editorIsHeld(allowOwnNamePreview: Bool = false) -> Bool {
                 guard runtime.logicProPID() == heldPID, runtime.focusedApplicationPID() == heldPID,
                       processRuntime.logicIsFrontmost(),
                       let app = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, heldApp),
@@ -2559,10 +2568,37 @@ extension AccessibilityChannel {
                         app, kAXFocusedUIElementAttribute, runtime: runtime.ax), CFEqual(focused, editor),
                       let editorWindow: AXUIElement = AXHelpers.getAttribute(editor, kAXWindowAttribute, runtime: runtime.ax),
                       CFEqual(editorWindow, window), targetStillHeld(requiringExclusiveSelection: true),
-                      let current = readHeldName(), current.utf8.elementsEqual(expected.utf8),
+                      let current = readHeldName(),
+                      current.utf8.elementsEqual(expected.utf8)
+                        || (allowOwnNamePreview && current.utf8.elementsEqual(desired.utf8)),
                       let finalFocus: AXUIElement = AXHelpers.getAttribute(
                         app, kAXFocusedUIElementAttribute, runtime: runtime.ax), CFEqual(finalFocus, editor) else { return false }
                 return ExactTrackNameAdapter.operationPermitted()
+            }
+            if AXHelpers.isAttributeSettable(editor, kAXValueAttribute as String, runtime: runtime.ax) == true {
+                guard editorIsHeld(),
+                      let value: String = AXHelpers.getAttribute(editor, kAXValueAttribute as String, runtime: runtime.ax),
+                      value.utf8.elementsEqual(expected.utf8),
+                      case .textEditing = readLogicKeyboardFocus(runtime: runtime), editorIsHeld() else {
+                    return refusal("Ordinary rename lost its held editor before the value setter")
+                }
+                attempted = true
+                // Use the actual String-valued editor, never the passive header label.
+                // No typing fallback follows an attempted setter or lost ownership.
+                guard AXHelpers.setAttribute(editor, kAXValueAttribute as String, desired as CFTypeRef, runtime: runtime.ax),
+                      editorIsHeld(allowOwnNamePreview: true),
+                      let value: String = AXHelpers.getAttribute(editor, kAXValueAttribute as String, runtime: runtime.ax),
+                      value.utf8.elementsEqual(desired.utf8),
+                      case .textEditing = readLogicKeyboardFocus(runtime: runtime),
+                      editorIsHeld(allowOwnNamePreview: true), mouseRuntime.postKeyEvent(0x24),
+                      targetStillHeld(requiringExclusiveSelection: true),
+                      let after = readHeldName(), after.utf8.elementsEqual(desired.utf8) else {
+                    return refusal("Ordinary rename editor value was attempted but its committed readback is unavailable")
+                }
+                return .success(HonestContract.encodeStateA(extras: [
+                    "before": before, "observed": after, "via": "track_menu_ax_set_value", "write_attempted": true,
+                    "track_index": physical?.currentIndex() ?? index,
+                ]))
             }
             let typing = typeRenameName(desired,
                 focus: {
