@@ -246,4 +246,50 @@ struct Issue301ChannelEQControlsCollectionTests {
         #expect(field["read_status"] as? String == "unstable")
         #expect(field["observed_raw"] is NSNull)
     }
+
+    @Test(arguments: ["bypass", "바이패스"])
+    func measuredEditorHeaderReportsHostEnableSeparatelyFromBandEnable(_ description: String) throws {
+        let f = fixture()
+        f.builder.setAttribute(f.builder.element(102), kAXDescriptionAttribute as String, description)
+        let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { true })
+        let enabled = try #require(result["plugin_enabled"] as? [String: Any])
+        let bypass = try #require(result["plugin_bypass"] as? [String: Any])
+        #expect(enabled["read_status"] as? String == "read")
+        let hostEnabled: Bool = try #require(enabled["observed_raw"] as? Bool)
+        let hostBypassed: Bool = try #require(bypass["observed_raw"] as? Bool)
+        #expect(hostEnabled)
+        #expect(!hostBypassed)
+        #expect(bypass["derived_from"] as? String == "host_plugin_enabled")
+        let highCutEnabled: Bool = try #require((try band(result, "High Cut")["enabled"] as? [String: Any])?["observed_raw"] as? Bool)
+        #expect(!highCutEnabled)
+    }
+
+    @Test func absentHeaderIsNotAmbiguousAndDoesNotInventBypassOrBandEnable() throws {
+        let f = fixture()
+        f.builder.setAttribute(f.builder.element(102), kAXDescriptionAttribute as String, "bypass all")
+        let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { true })
+        let enabled = try #require(result["plugin_enabled"] as? [String: Any])
+        let bypass = try #require(result["plugin_bypass"] as? [String: Any])
+        #expect(enabled["read_status"] as? String == "absent")
+        #expect(bypass["read_status"] as? String == "absent")
+        #expect(enabled["observed_raw"] is NSNull)
+        #expect(bypass["observed_raw"] is NSNull)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(complete)
+    }
+
+    @Test func twoRecognizedHeaderControlsCannotChooseFirst() throws {
+        let f = fixture()
+        let other = f.builder.element(6000)
+        f.builder.setRole(other, kAXCheckBoxRole as String)
+        f.builder.setAttribute(other, kAXDescriptionAttribute as String, "바이패스")
+        f.builder.setAttribute(other, kAXValueAttribute as String, 0)
+        f.builder.setChildren(f.window, [f.builder.element(102), other, f.table])
+        let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { true })
+        let enabled = try #require(result["plugin_enabled"] as? [String: Any])
+        #expect(enabled["read_status"] as? String == "ambiguous")
+        #expect(enabled["observed_raw"] is NSNull)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(complete)
+    }
 }

@@ -232,9 +232,13 @@ enum ChannelEQControlsStateReader {
             guard contextIsCurrent(), !Task.isCancelled else { throw ObservationFailure(status: "context_ended") }
             let candidates = try children(window, runtime: runtime).filter {
                 guard try role($0, runtime: runtime) == (kAXCheckBoxRole as String) else { return false }
-                return try attribute($0, kAXDescriptionAttribute as String, runtime: runtime) as? String == "bypass"
+                return AXLocalePolicy.pluginEditorBypassControl.matches(
+                    try attribute($0, kAXDescriptionAttribute as String, runtime: runtime) as? String, mode: .exactStrict
+                )
             }
-            guard candidates.count == 1, let control = candidates.first else { throw ObservationFailure(status: "ambiguous") }
+            guard candidates.count == 1, let control = candidates.first else {
+                throw ObservationFailure(status: candidates.isEmpty ? "absent" : "ambiguous")
+            }
             guard case .success(.some(let enabled)) = AXValueExtractors.extractButtonStateResult(control, runtime: runtime) else {
                 throw ObservationFailure(status: "unreadable")
             }
