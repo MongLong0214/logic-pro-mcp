@@ -233,7 +233,7 @@ enum ChannelEQControlsStateReader {
             let candidates = try children(window, runtime: runtime).filter {
                 guard try role($0, runtime: runtime) == (kAXCheckBoxRole as String) else { return false }
                 return AXLocalePolicy.pluginEditorBypassControl.matches(
-                    try attribute($0, kAXDescriptionAttribute as String, runtime: runtime) as? String, mode: .exactStrict
+                    try attribute($0, kAXDescriptionAttribute as String, runtime: runtime) as? String, mode: .exact
                 )
             }
             guard candidates.count == 1, let control = candidates.first else {

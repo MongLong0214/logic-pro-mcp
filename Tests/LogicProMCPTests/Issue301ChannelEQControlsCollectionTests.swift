@@ -247,7 +247,7 @@ struct Issue301ChannelEQControlsCollectionTests {
         #expect(field["observed_raw"] is NSNull)
     }
 
-    @Test(arguments: ["bypass", "바이패스"])
+    @Test(arguments: ["bypass", "바이패스", " bypass ", " 바이패스 "])
     func measuredEditorHeaderReportsHostEnableSeparatelyFromBandEnable(_ description: String) throws {
         let f = fixture()
         f.builder.setAttribute(f.builder.element(102), kAXDescriptionAttribute as String, description)
