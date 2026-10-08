@@ -1214,7 +1214,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                 wrongDisclosureHit: mouseCase == "wrong_hit", focusSetter: { element, attribute, value in
                     guard let focusRestoration else { Issue.record("no AX setters"); return false }
                     #expect(CFEqual(element, workspace) && attribute == kAXFocusedAttribute as String)
-                    #expect((value as? NSNumber)?.boolValue == true)
+                    do {
+                        let number = try #require(value as? NSNumber)
+                        #expect(number.boolValue)
+                    } catch { return false }
                     fixture.reads.record("workspace_focus_setter")
                     if focusRestoration == "declined" { return false }
                     fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
