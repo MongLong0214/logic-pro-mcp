@@ -58,7 +58,7 @@ struct Issue476TracksReadabilityTests {
         #expect(try #require(doc["source"] as? String) == "ax_live")
         #expect(try #require(doc["readable"] as? Bool))
         #expect(!(try #require(doc["verified_empty"] as? Bool)))
-        #expect(doc["reason"] == nil)
+        #expect(doc["reason"] as? String == "track_population_not_verified")
     }
 
     @Test("a collapsed stack makes a live list incomplete without making its rows unreadable")
@@ -100,8 +100,8 @@ struct Issue476TracksReadabilityTests {
         #expect(collapsedStacks[1]["name"] as? String == "Drum Bus")
     }
 
-    @Test("a live list with no collapsed stack row is complete")
-    func expandedStackLeavesLiveListComplete() async throws {
+    @Test("expanded stack rows alone do not verify the whole project population")
+    func expandedStackDoesNotVerifyProjectPopulation() async throws {
         let cache = StateCache()
         await cache.updateTracks([
             TrackState(
@@ -119,8 +119,27 @@ struct Issue476TracksReadabilityTests {
         let doc = try document(result)
 
         let complete = try #require(doc["complete"] as? Bool)
-        #expect(complete)
-        #expect(doc["reason"] == nil)
+        #expect(!complete)
+        #expect(doc["reason"] as? String == "track_population_not_verified")
+    }
+
+    @Test("32 readable rows cannot rule out an unsaved hidden 33rd track")
+    func visibleRowCountDoesNotVerifyHiddenMembership() async throws {
+        let cache = StateCache()
+        await cache.updateTracks((0..<32).map { index in
+            TrackState(id: index, name: "Audio \(index + 1)", type: .audio)
+        })
+        let result = try await ResourceHandlers.readTracks(
+            cache: cache, uri: "logic://tracks", fileReader: headlessFileReader
+        )
+        let doc = try document(result)
+        let rows = try #require(doc["data"] as? [[String: Any]])
+        #expect(rows.count == 32)
+        #expect(try #require(doc["readable"] as? Bool))
+        let complete = try #require(doc["complete"] as? Bool)
+        #expect(!complete)
+        #expect(doc["reason"] as? String == "track_population_not_verified")
+        #expect(!(try #require(doc["verified_empty"] as? Bool)))
     }
 
     @Test("an incomplete live list is never reported as verified empty")

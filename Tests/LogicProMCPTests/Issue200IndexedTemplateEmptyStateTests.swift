@@ -103,6 +103,23 @@ struct Issue200IndexedTemplateEmptyStateTests {
         #expect(collapsedStacks?[0]["name"] as? String == "Absolute Zero")
     }
 
+    @Test("a missing visible index does not rule out a hidden project track")
+    func hiddenTrackCannotBeExcludedByVisibleIndexRange() async throws {
+        let cache = StateCache()
+        await cache.updateTracks((0..<32).map { index in
+            TrackState(id: index, name: "Audio \(index + 1)", type: .audio)
+        })
+        let result = try await ResourceHandlers.read(
+            uri: "logic://tracks/32", cache: cache, router: ChannelRouter()
+        )
+        let doc = try #require(obj(result))
+        #expect(doc["error"] as? String == "index_out_of_range")
+        #expect(doc["available_indices"] as? [Int] == Array(0..<32))
+        #expect(doc["reason"] as? String == "track_population_not_verified")
+        let hint = try #require(doc["hint"] as? String)
+        #expect(hint.contains("inventory is incomplete"))
+    }
+
     @Test("index_out_of_range is a terminal, classifiable error code")
     func indexOutOfRangeTerminal() {
         #expect(HonestContract.FailureError.indexOutOfRange.rawValue == "index_out_of_range")
