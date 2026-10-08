@@ -653,6 +653,9 @@ enum SemanticOracleTable {
         .projectGetRegions,
         // Same shape as projectGetRegions: two success branches, and a flat list can only pin one.
         .audioRecommendEQ,
+        // The catalog's checkbox/slider distinction and conditional display status require
+        // the custom response validator below, not a single numeric field constraint.
+        .pluginsGetParamVerified,
     ]
 
     static var customOracles: [OperationOracle] { all.filter { $0.strength == .custom } }

@@ -386,7 +386,7 @@ extension OperationRegistry {
                                              sample: .int(0)))
             }), required: [["index", "track", "track_index"]]),
             "plugins.get_param_verified": .init(params: [
-                "target_ref": targetRef, "project_ref": projectRef,
+                "target_ref": .enforced(.string, .string("ins_lpm_contract_955")), "project_ref": projectRef,
                 "param": .enforced(.string, .string("threshold")),
                 "unit": .enforced(.string, .string("normalized")),
                 "plugin": .enforced(.string, .string("Compressor")),

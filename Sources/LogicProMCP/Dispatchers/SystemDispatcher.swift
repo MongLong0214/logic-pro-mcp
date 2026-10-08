@@ -2136,6 +2136,8 @@ struct SystemDispatcher: OperationTraceDispatching {
             return """
                 logic_plugins commands:
                   get_inventory     -> { track: Int } — Read a drift-safe insert chain
+                  get_param_verified -> { target_ref: String (occupied ins_ reference), param: String,
+                                          unit?: String } — Read one qualified parameter without audio mutation
                   set_param_verified -> { track: Int, insert: Int, plugin: String,
                                           param: String, value: Float, unit: String,
                                           mode: "duplicate_applyback",
@@ -2201,7 +2203,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   logic_project    — Project lifecycle (open, save, bounce...)
                   logic_audio      — Read-only audio artifact analysis
                   logic_system     — Diagnostics + help
-                  logic_plugins    — Verified plugin apply-back (inventory, set_param_verified, set_eq_band_verified, insert_verified)
+                  logic_plugins    — Verified plugin reads and apply-back (get_inventory, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified)
 
                 Resources (reads — zero tool cost):
                   logic://system/health         — System health

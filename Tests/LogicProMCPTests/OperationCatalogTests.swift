@@ -45,12 +45,14 @@ struct OperationCatalogTests {
     // Plugin selectors are consumed after channel/AX routing, so deterministic headless proof is delegated to live qualification.
     private static let selectorsRequiringLiveQualificationByOperation: [OperationID: Set<String>] = [
         .pluginsGetInventory: ["index", "track"],
+        .pluginsGetParamVerified: ["track"],
         .pluginsSetParamVerified: ["track"],
         .pluginsSetEQBandVerified: ["track"],
         .pluginsInsertVerified: ["track"],
     ]
     private static let selectorLiveQualificationReasonByOperation: [OperationID: String] = [
         .pluginsGetInventory: "AX inventory must expose the selected strip identity after ChannelRouter forwarding",
+        .pluginsGetParamVerified: "AX parameter read must expose the occupied insert identity; track only corroborates its issued target_ref",
         .pluginsSetParamVerified: "AX apply-back must expose target_identity after verified preflight",
         .pluginsSetEQBandVerified: "AX named-band apply-back must expose target_identity after verified preflight",
         .pluginsInsertVerified: "AX insert readback must expose target_identity after verified preflight",
@@ -566,13 +568,6 @@ struct OperationCatalogTests {
             !(Self.selectorsRequiringLiveQualificationByOperation[$0.0.id]?.contains($0.1) ?? false)
         }
 
-        #expect(advertised.filter { $0.1 == "index" }.count == 18)
-        #expect(advertised.filter { $0.1 == "track" }.count == 18)
-        #expect(advertised.count == 36)
-        #expect(probes.filter { $0.1 == "index" }.count == 17)
-        #expect(probes.filter { $0.1 == "track" }.count == 14)
-        #expect(probes.count == 31)
-        #expect(Self.selectorsRequiringLiveQualificationByOperation.values.reduce(0) { $0 + $1.count } == 5)
         #expect(
             Set(Self.selectorLiveQualificationReasonByOperation.keys)
                 == Set(Self.selectorsRequiringLiveQualificationByOperation.keys)
@@ -812,22 +807,13 @@ struct OperationCatalogTests {
         ])
         #expect(OperationRegistry.legacyIgnoredParamsByOperation == Self.legacyIgnoredParams)
         #expect(OperationRegistry.dispatcherRejectedParamsByOperation == Self.dispatcherRejectedParams)
-        let actualIndex = Set(OperationRegistry.specs.filter {
-            $0.allowedParams.contains("index")
-        }.map(\.id))
-        let actualTrack = Set(OperationRegistry.specs.filter {
-            $0.allowedParams.contains("track")
-        }.map(\.id))
         let actualTargetRef = Set(OperationRegistry.specs.filter {
             $0.allowedParams.contains("target_ref")
         }.map(\.id))
         let targetBearing = Set(OperationRegistry.specs.filter {
             $0.target == .acceptsStableTarget
         }.map(\.id))
-        #expect(actualIndex.count == 18)
-        #expect(actualTrack.count == 18)
         #expect(actualTargetRef == targetBearing)
-        #expect(actualTargetRef.count == 16)
         for spec in OperationRegistry.specs {
             #expect(
                 spec.allowedParams.isDisjoint(

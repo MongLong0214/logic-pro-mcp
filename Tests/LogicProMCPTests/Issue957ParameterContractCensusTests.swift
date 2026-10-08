@@ -270,6 +270,27 @@ struct Issue957ParameterContractCensusTests {
         return (object["allOf"]?.arrayValue ?? []).allSatisfy(satisfies)
     }
 
+    @Test("the parameter reader's rich schema matches its required reference and input refusals")
+    func parameterReadContractMatchesDispatcher() async throws {
+        let spec = try #require(OperationRegistry.spec(tool: "logic_plugins", command: "get_param_verified"))
+        let contract = try #require(OperationRegistry.parameterContracts[spec.id])
+        let entry = try #require(OperationCatalog.snapshot().operations.first { $0.id == spec.id.rawValue })
+        let branch = CommandSchemaProjection.branch(for: entry, strictParams: true)
+        let control = try #require(Self.filling(contract))
+        #expect(Self.schemaAdmits(branch, control))
+        #expect(Self.accepted(await Self.dispatch(spec, control)))
+        for key in ["target_ref", "param"] {
+            var missing = control
+            missing.removeValue(forKey: key)
+            #expect(!Self.schemaAdmits(branch, missing))
+            #expect(Self.refused(await Self.dispatch(spec, missing)))
+            var malformed = control
+            malformed[key] = .object(["not": .string("a reference or parameter")])
+            #expect(!Self.schemaAdmits(branch, malformed))
+            #expect(Self.refused(await Self.dispatch(spec, malformed)))
+        }
+    }
+
     @Test("every command with parameters has a contract naming exactly its parameters")
     func contractsCoverTheRegistry() {
         var problems: [String] = []
