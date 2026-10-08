@@ -94,7 +94,8 @@ struct Issue301ChannelEQControlsCollectionTests {
     @Test func eightBandsRetainRawDisplayAndSeparateEnableFromBypass() throws {
         let f = fixture()
         let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { true })
-        #expect(result["complete"] as? Bool == true)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(complete)
         #expect((result["bands"] as? [[String: Any]])?.count == 8)
         let shelf = try band(result, "Low Shelf")
         let frequency = try #require(shelf["frequency"] as? [String: Any])
@@ -103,12 +104,15 @@ struct Issue301ChannelEQControlsCollectionTests {
         #expect(frequency["raw_unit"] as? String == "raw_ax_value")
         let highCut = try band(result, "High Cut")
         let enabled = try #require(highCut["enabled"] as? [String: Any])
-        #expect(enabled["observed_raw"] as? Bool == false)
+        let highCutEnabled: Bool = try #require(enabled["observed_raw"] as? Bool)
+        #expect(!highCutEnabled)
         let slope = try #require(highCut["slope"] as? [String: Any])
         #expect(slope["observed_raw"] as? String == "24 dB/Oct")
         #expect((highCut["gain"] as? [String: Any])?["read_status"] as? String == "not_applicable")
-        #expect((result["plugin_enabled"] as? [String: Any])?["observed_raw"] as? Bool == true)
-        #expect((result["plugin_bypass"] as? [String: Any])?["observed_raw"] as? Bool == false)
+        let pluginEnabled: Bool = try #require((result["plugin_enabled"] as? [String: Any])?["observed_raw"] as? Bool)
+        #expect(pluginEnabled)
+        let pluginBypassed: Bool = try #require((result["plugin_bypass"] as? [String: Any])?["observed_raw"] as? Bool)
+        #expect(!pluginBypassed)
     }
 
     @Test func duplicatedNamedRowsCannotBecomeCompleteByChoosingFirst() throws {
@@ -123,7 +127,8 @@ struct Issue301ChannelEQControlsCollectionTests {
         f.builder.setChildren(f.table, rows)
         f.builder.setAttribute(f.table, kAXRowsAttribute as String, rows)
         let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { true })
-        #expect(result["complete"] as? Bool == false)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(!complete)
         let peak = try band(result, "Peak 1")
         let field = try #require(peak["frequency"] as? [String: Any])
         #expect(field["read_status"] as? String == "ambiguous")
@@ -134,18 +139,21 @@ struct Issue301ChannelEQControlsCollectionTests {
         let f = fixture()
         f.builder.setAttribute(try #require(f.inline["Low Shelf Frequency"]), kAXValueAttribute as String, 241)
         let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { true })
-        #expect(result["complete"] as? Bool == false)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(!complete)
         let shelf = try band(result, "Low Shelf")
         let field = try #require(shelf["frequency"] as? [String: Any])
         #expect(field["read_status"] as? String == "unstable")
         #expect(field["observed_raw"] is NSNull)
     }
 
-    @Test func lostCustodyCannotYieldCompleteValues() {
+    @Test func lostCustodyCannotYieldCompleteValues() throws {
         let f = fixture()
         let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { false })
-        #expect(result["complete"] as? Bool == false)
-        #expect((result["partial_reasons"] as? [String])?.contains("context_ended") == true)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(!complete)
+        let reasons = try #require(result["partial_reasons"] as? [String])
+        #expect(reasons.contains("context_ended"))
     }
 
     @Test func missingRequiredHostDisplayKeepsRawButCannotClaimComplete() throws {
@@ -153,7 +161,8 @@ struct Issue301ChannelEQControlsCollectionTests {
         f.builder.removeAttribute(try #require(f.inline["Low Shelf Frequency"]), kAXValueDescriptionAttribute as String)
         let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { true })
         let field = try #require(try band(result, "Low Shelf")["frequency"] as? [String: Any])
-        #expect(result["complete"] as? Bool == false)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(!complete)
         #expect(field["read_status"] as? String == "display_absent")
         #expect(field["observed_raw"] as? Double == 240)
         #expect(field["observed_display"] is NSNull)
@@ -165,7 +174,8 @@ struct Issue301ChannelEQControlsCollectionTests {
         f.builder.setAttribute(try #require(f.inline["Low Shelf Frequency"]), kAXValueDescriptionAttribute as String, "   ")
         let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { true })
         let field = try #require(try band(result, "Low Shelf")["frequency"] as? [String: Any])
-        #expect(result["complete"] as? Bool == false)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(!complete)
         #expect(field["read_status"] as? String == "display_malformed")
         #expect(field["observed_raw"] as? Double == 240)
         #expect(field["observed_display"] as? String == "   ")
@@ -177,12 +187,13 @@ struct Issue301ChannelEQControlsCollectionTests {
         f.builder.setAttribute(try #require(f.controls["Low Shelf Frequency"]), kAXValueAttribute as String, true)
         let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: f.runtime, contextIsCurrent: { true })
         let field = try #require(try band(result, "Low Shelf")["frequency"] as? [String: Any])
-        #expect(result["complete"] as? Bool == false)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(!complete)
         #expect(field["read_status"] as? String == "malformed")
         #expect(field["observed_raw"] is NSNull)
     }
 
-    @Test func unreadableRowsCannotUseReadableChildrenToInventCompleteness() {
+    @Test func unreadableRowsCannotUseReadableChildrenToInventCompleteness() throws {
         let f = fixture()
         let builder = f.builder
         let runtime = builder.makeAXRuntime(
@@ -197,8 +208,11 @@ struct Issue301ChannelEQControlsCollectionTests {
             performActionHandler: { _, _ in Issue.record("No control actions during observation"); return false }
         )
         let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: runtime, contextIsCurrent: { true })
-        #expect(result["complete"] as? Bool == false)
-        #expect((result["partial_reasons"] as? [String])?.allSatisfy { $0.hasSuffix(":unreadable") } == true)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(!complete)
+        let reasons = try #require(result["partial_reasons"] as? [String])
+        #expect(!reasons.isEmpty)
+        #expect(reasons.allSatisfy { $0.hasSuffix(":unreadable") })
     }
 
     @Test func replacedInlineControlWithSameValuesCannotPassBookends() throws {
@@ -227,7 +241,8 @@ struct Issue301ChannelEQControlsCollectionTests {
         )
         let result = ChannelEQControlsStateReader.collect(in: f.window, runtime: runtime, contextIsCurrent: { true })
         let field = try #require(try band(result, "Low Shelf")["frequency"] as? [String: Any])
-        #expect(result["complete"] as? Bool == false)
+        let complete: Bool = try #require(result["complete"] as? Bool)
+        #expect(!complete)
         #expect(field["read_status"] as? String == "unstable")
         #expect(field["observed_raw"] is NSNull)
     }

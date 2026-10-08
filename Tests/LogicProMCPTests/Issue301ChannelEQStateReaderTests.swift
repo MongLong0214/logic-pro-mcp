@@ -31,9 +31,11 @@ struct Issue301ChannelEQStateReaderTests {
     @Test func stateReaderOracleRequiresEveryBandAndHonestRawDisplayScope() throws {
         let oracle = try #require(SemanticOracleTable.byOperationID[.pluginsGetChannelEQStateVerified])
         let fixture = try #require(SemanticOracleFixtures.byOperationID[.pluginsGetChannelEQStateVerified])
-        #expect(oracle.evaluate(responseData: fixture.responseData, readbackData: fixture.readbackData) == true)
+        let accepted: Bool = try #require(oracle.evaluate(responseData: fixture.responseData, readbackData: fixture.readbackData) as Bool?)
+        #expect(accepted)
         for mutant in fixture.customMutants {
-            #expect(oracle.evaluate(responseData: Data(mutant.response.utf8), readbackData: fixture.readbackData) == false)
+            let acceptedMutant: Bool = try #require(oracle.evaluate(responseData: Data(mutant.response.utf8), readbackData: fixture.readbackData) as Bool?)
+            #expect(!acceptedMutant)
         }
     }
 
