@@ -3955,6 +3955,76 @@ private func parameterReadParams(_ param: String = "threshold") -> [String: Stri
      "expected_slot_read_status": "ok", "expected_plugin_identity": "logic.stock.effect.compressor"]
 }
 
+@Test func testIssue301StateReaderUsesOwnedEditorAndReportsMissingBandsWithoutWriting() async throws {
+    // The real acquisition path, deliberately incomplete Controls data. A
+    // single observed enable must not masquerade as a complete eight-band EQ.
+    let fixture = LiveFixture(
+        thresholdDescription: "Low Shelf Frequency", pluginSlotName: "Channel EQ", beforeValue: 240,
+        controlsViewRowLabel: "Low Cut On/Off", controlsCheckboxBefore: true,
+        controlsViewInitiallySelected: true, viewSettleDelay: 0
+    )
+    fixture.builder.setAttribute(fixture.builder.element(1001), kAXDocumentAttribute as String,
+                                 URL(fileURLWithPath: expectedPath).absoluteString)
+    let channel = AccessibilityChannel(runtime: .axBacked(
+        isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true },
+        logicRuntime: parameterReadRuntime(fixture), canPostEvents: { false }
+    ))
+    let result = await channel.execute(operation: "plugin.get_channel_eq_state_verified", params: [
+        "track": "0", "insert": "6", "plugin": "Channel EQ",
+        "project_expected_path": expectedPath, "expected_track_name": trackName,
+        "expected_slot_read_status": "ok", "expected_plugin_identity": "logic.stock.effect.channel_eq",
+    ])
+    let object = try #require(sharedJSONObject(result.message), "Actual AX operation must return its honest envelope: \(result.message)")
+    #expect(object["state"] as? String == "B")
+    #expect(object["complete"] as? Bool == false)
+    #expect(object["write_attempted"] as? Bool == false)
+    let bands = try #require(object["bands"] as? [[String: Any]])
+    #expect(bands.count == 8)
+    let lowCut = try #require(bands.first)
+    #expect((lowCut["enabled"] as? [String: Any])?["observed_raw"] as? Bool == true)
+    #expect((lowCut["frequency"] as? [String: Any])?["read_status"] as? String == "absent")
+    #expect(fixture.currentPluginViewTitle == "컨트롤")
+    #expect(object["plugin_view_restore_observed"] as? Bool == true)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+    #expect(fixture.pluginCloseControlPressCount.value == 0)
+    #expect(fixture.currentSliderValue == 240)
+}
+
+@Test func testIssue301SlotLossAtCleanupInvalidatesSamplesButKeepsCleanupReceipt() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: "Low Shelf Frequency", pluginSlotName: "Channel EQ", beforeValue: 240,
+        pluginWindowPresent: false, openWindowOnSlotPress: true,
+        controlsViewRowLabel: "Low Cut On/Off", controlsCheckboxBefore: true,
+        controlsViewInitiallySelected: true, viewSettleDelay: 0
+    )
+    fixture.builder.setAttribute(fixture.builder.element(1001), kAXDocumentAttribute as String,
+                                 URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { _, attribute in
+        // The project remains the same; the occupied slot changes only after
+        // owned editor cleanup. A project-only final bookend misses this.
+        if attribute == (kAXDocumentAttribute as String), fixture.pluginCloseControlPressCount.value > 0 {
+            fixture.builder.setAttribute(fixture.builder.element(1306), kAXDescriptionAttribute as String, "Compressor")
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetChannelEQStateVerified(params: [
+        "track": "0", "insert": "6", "plugin": "Channel EQ",
+        "project_expected_path": expectedPath, "expected_track_name": trackName,
+        "expected_slot_read_status": "ok", "expected_plugin_identity": "logic.stock.effect.channel_eq",
+    ], runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == "stale_target_reference")
+    #expect(object["bands"] == nil)
+    #expect(object["editor_close_observed"] as? Bool == true)
+    #expect(object["plugin_view_restore_observed"] as? Bool == true)
+    #expect(object["write_attempted"] as? Bool == false)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
 @Test func testIssue955ReadThresholdUsesObservedValueWithoutAudioMutation() async throws {
     let fixture = LiveFixture(beforeValue: 51)
     fixture.builder.setAttribute(fixture.builder.element(1001), kAXDocumentAttribute as String,

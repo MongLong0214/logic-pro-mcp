@@ -130,7 +130,57 @@ enum SemanticOracleFixtures {
         ])
     }()
 
+    // Independently constructed protocol fixture; not native qualification evidence.
+    private static let channelEQStateRead: SemanticOracleFixture = {
+        func field(_ raw: Any, _ unit: String, _ display: Any = NSNull()) -> [String: Any] {
+            ["read_status": "read", "observed_raw": raw, "raw_unit": unit,
+             "observed_display": display, "display_read_status": display is NSNull ? "absent" : "read"]
+        }
+        let notApplicable: [String: Any] = ["read_status": "not_applicable", "observed_raw": NSNull(),
+            "raw_unit": NSNull(), "observed_display": NSNull(), "display_read_status": "not_applicable"]
+        let names = ["Low Cut", "Low Shelf", "Peak 1", "Peak 2", "Peak 3", "Peak 4", "High Shelf", "High Cut"]
+        let roles = ["highPass", "lowShelf", "parametric1", "parametric2", "parametric3", "parametric4", "highShelf", "lowPass"]
+        let bands: [[String: Any]] = names.enumerated().map { index, name in
+            let cut = index == 0 || index == 7
+            return ["band": index + 1, "name": name, "filter_role": roles[index],
+                    "frequency": field(240.0, "raw_ax_value", "100 Hz"),
+                    "q": field(40.0, "raw_ax_value", "1.00"), "enabled": field(index != 7, "boolean"),
+                    "gain": cut ? notApplicable : field(240.0, "raw_ax_value", "0.0 dB"),
+                    "slope": cut ? field("24 dB/Oct", "host_choice_text", "24 dB/Oct") : notApplicable]
+        }
+        let extras: [String: Any] = [
+            "operation": "logic_plugins.get_channel_eq_state_verified", "bands": bands,
+            "complete": true, "partial_reasons": [String](), "snapshot_atomic": false,
+            "observation_scope": "current_insert_eight_band_raw_and_host_display",
+            "target_ref": "ins_00000000-0000-0000-0000-000000000301", "target_fingerprint": "test_eq_slot",
+            "target_identity": ["track_index": 0, "insert": 0, "plugin_id": "logic.stock.effect.channel_eq"],
+            "verify_source": "ax_plugin_window", "write_attempted": false,
+            "plugin_enabled": field(true, "boolean"),
+            "plugin_bypass": field(false, "boolean").merging(["derived_from": "host_plugin_enabled"]) { _, new in new },
+        ]
+        func response(_ changes: [String: Any] = [:]) -> String {
+            HonestContract.encodeV2StateA(extras: extras.merging(changes) { _, new in new })
+        }
+        var missingDisplay = bands
+        missingDisplay[1]["frequency"] = field(240.0, "raw_ax_value")
+        var booleanRaw = bands
+        booleanRaw[2]["frequency"] = field(true, "raw_ax_value", "100 Hz")
+        return SemanticOracleFixture(response: response(), readback: "{}", customMutants: [
+            .init(.malformed, "{}"),
+            .init(.wellFormedButWrong, response(["bands": Array(bands.dropLast())])),
+            .init(.wellFormedButWrong, response(["bands": missingDisplay])),
+            .init(.wellFormedButWrong, response(["bands": booleanRaw])),
+            .init(.wellFormedButWrong, response(["complete": false])),
+            .init(.wellFormedButWrong, response(["write_attempted": true])),
+            .init(.wellFormedButWrong, response(["snapshot_atomic": true])),
+            .init(.wellFormedButWrong, response(["plugin_bypass": field(true, "boolean")])),
+            .init(.wellFormedButWrong, response(["target_identity": ["track_index": 0, "insert": 0,
+                "plugin_id": "logic.stock.effect.compressor"]])),
+        ])
+    }()
+
     static let byOperationID: [OperationID: SemanticOracleFixture] = [
+        .pluginsGetChannelEQStateVerified: channelEQStateRead,
         .pluginsGetParamVerified: parameterRead,
         .audioCompareSpectra: spectrumComparison,
         .systemPermissions: SemanticOracleFixture(

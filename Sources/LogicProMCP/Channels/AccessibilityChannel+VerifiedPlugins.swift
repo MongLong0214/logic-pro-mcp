@@ -1570,13 +1570,81 @@ extension AccessibilityChannel {
     /// UI acquisition and its owned view/editor cleanup are shared with writers.
     private enum VerifiedParameterAccess {
         case read(unit: String, contextIsCurrent: () -> Bool, openerOverride: PluginWindowOpener?)
+        case readEQState(contextIsCurrent: () -> Bool, openerOverride: PluginWindowOpener?)
         case write(requested: Double, walkTarget: SliderIncrementWalk.Target?, displayUnit: String, budget: Int)
 
-        var isRead: Bool { if case .read = self { return true }; return false }
-        var readOpenerOverride: PluginWindowOpener? {
-            if case let .read(_, _, opener) = self { return opener }
-            return nil
+        var isRead: Bool { readContextIsCurrent != nil }
+        var isEQStateRead: Bool { if case .readEQState = self { return true }; return false }
+        var readContextIsCurrent: (() -> Bool)? {
+            switch self {
+            case let .read(_, context, _), let .readEQState(context, _): return context
+            case .write: return nil
+            }
         }
+        var readOpenerOverride: PluginWindowOpener? {
+            switch self {
+            case let .read(_, _, opener), let .readEQState(_, opener): return opener
+            case .write: return nil
+            }
+        }
+    }
+
+    /// Internal reads share the caller's existing UI ownership; the public
+    /// dispatcher takes the same VerifiedOpGate as scalar readers and writers.
+    /// No ownership token, setter, or implicit insertion is exposed here.
+    static func defaultGetChannelEQStateVerified(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production,
+        pluginWindowOpener: PluginWindowOpener? = nil
+    ) async -> ChannelResult {
+        let operation = "logic_plugins.get_channel_eq_state_verified"
+        let pluginID = "logic.stock.effect.channel_eq"
+        guard params["value"] == nil, params["mode"] == nil, params["confirmation"] == nil,
+              let trackRaw = params["track"], let track = Int(trackRaw), track >= 0,
+              let insertRaw = params["insert"], let insert = Int(insertRaw), insert >= 0,
+              let alias = params["plugin"], VerifiedPluginCatalog.canonicalPluginID(from: alias) == pluginID,
+              let expectedPath = params["project_expected_path"], !expectedPath.isEmpty,
+              params["expected_track_name"] != nil, params["expected_slot_read_status"] == "ok",
+              params["expected_plugin_identity"] == pluginID else {
+            return .error(invalidParamsStateC(operation, "state reads require a resolved occupied Channel EQ insert and project binding, never write inputs"))
+        }
+        let modal = AXLogicProElements.dialogPresenceReason(runtime: runtime)
+        guard !modal.isBlocked else {
+            return .error(HonestContract.encodeV2StateC(error: .readbackUnavailable,
+                extras: ["operation": operation, "dialog_presence_reason": modal.rawValue,
+                         "refusal_names_an_actual_dialog": modal.namesAnActualDialog, "write_attempted": false]))
+        }
+        guard case .found(let projectWindow) = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime),
+              case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(projectWindow, runtime: runtime),
+              let url = URL(string: document), url.isFileURL,
+              AppleScriptChannel.projectPathsMatch(expectedPath, url.path) else {
+            return .error(HonestContract.encodeV2StateC(error: .projectIdentityMismatch,
+                extras: ["operation": operation, "write_attempted": false]))
+        }
+        let contextIsCurrent: () -> Bool = {
+            guard !Task.isCancelled, !AXLogicProElements.dialogPresent(runtime: runtime),
+                  case .found(let current) = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime),
+                  CFEqual(current, projectWindow),
+                  case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(current, runtime: runtime),
+                  currentDocument.utf8.elementsEqual(document.utf8) else { return false }
+            return true
+        }
+        let popupCheck: PluginPopupMenuCleaner = { runtime in
+            guard let count = logicOwnedPopupMenuWindowCount(runtime: runtime) else { return .popupCountUnavailable }
+            return count == 0 ? .noPopupObserved : .couldNotDismiss(initialPopupCount: count, remainingPopupCount: count)
+        }
+        let result = await performVerifiedParameterAccess(
+            operation: operation, referenceParams: params, track: track, insert: insert,
+            pluginID: pluginID, paramKey: "low_shelf_frequency", paramAlias: "eight_band_state",
+            access: .readEQState(contextIsCurrent: contextIsCurrent, openerOverride: pluginWindowOpener),
+            writeMethod: "ax_slider_axvalue", runtime: runtime,
+            entryLookup: VerifiedPluginCatalog.productionEntryLookup,
+            pluginWindowOpener: pluginWindowOpener ?? livePluginWindowOpener, pluginPopupMenuCleaner: popupCheck
+        )
+        guard contextIsCurrent() else {
+            return parameterReadContextFailure(result, error: .projectIdentityMismatch, operation: operation)
+        }
+        return result
     }
 
     static func defaultGetParamVerified(
@@ -1895,7 +1963,7 @@ extension AccessibilityChannel {
         var readContextEnded = false
         var acquisitionActionAttempted = false
         func acquisitionAllowed() -> Bool {
-            guard case let .read(_, contextIsCurrent, _) = access else { return true }
+            guard let contextIsCurrent = access.readContextIsCurrent else { return true }
             guard !readContextEnded, contextIsCurrent(),
                   targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
                     originalSlot: slots[insert].element, runtime: runtime) else {
@@ -1910,7 +1978,7 @@ extension AccessibilityChannel {
             return true
         }
         func editorCloseAllowed(_ window: AXUIElement) -> Bool {
-            guard case let .read(_, contextIsCurrent, _) = access else { return true }
+            guard let contextIsCurrent = access.readContextIsCurrent else { return true }
             guard !readContextEnded, contextIsCurrent(),
                   targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
                     originalSlot: slots[insert].element, runtime: runtime),
@@ -2411,7 +2479,7 @@ extension AccessibilityChannel {
                 safeToRetry: false
             ))
         }
-        let requiredView: ControlsViewBooleanParameterWriter.PluginWindowView = controlsViewCheckbox
+        let requiredView: ControlsViewBooleanParameterWriter.PluginWindowView = (controlsViewCheckbox || access.isEQStateRead)
             ? .controls
             : .editor
         // Logic can replace the editor's AX window/switcher during a View
@@ -2432,7 +2500,7 @@ extension AccessibilityChannel {
         }
         let viewSession: ControlsViewBooleanParameterWriter.ViewSession
         func viewChangesAllowed() -> Bool {
-            guard case let .read(_, contextIsCurrent, _) = access else { return true }
+            guard let contextIsCurrent = access.readContextIsCurrent else { return true }
             guard !readContextEnded, contextIsCurrent(),
                   targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
                     originalSlot: slots[insert].element, runtime: runtime),
@@ -2478,6 +2546,29 @@ extension AccessibilityChannel {
         }
         restorePluginViewOnExit = { viewSession.restore(allowingChanges: viewChangesAllowed) }
         let resultAfterViewPreparation: ChannelResult = {
+        if access.isEQStateRead, let contextIsCurrent = access.readContextIsCurrent {
+            let instanceIsCurrent: () -> Bool = {
+                contextIsCurrent() && targetPluginIdentityIsStable(
+                    target: target, insert: insert, pluginID: pluginID,
+                    originalSlot: slots[insert].element, runtime: runtime
+                ) && controlsViewAcquiredPluginWindowFailureStateC(
+                    acquiredWindow: window, operation: operation, identity: identity,
+                    pluginID: pluginID, trackName: trackName, runtime: runtime
+                ) == nil
+            }
+            var extras = ChannelEQControlsStateReader.collect(
+                in: window, runtime: runtime.ax, contextIsCurrent: instanceIsCurrent
+            )
+            extras["operation"] = operation
+            extras["target_identity"] = identity
+            extras["verify_source"] = "ax_plugin_window"
+            extras["write_attempted"] = false
+            appendPluginViewRestoration(to: &extras)
+            appendOwnedEditorCleanup(to: &extras)
+            return .success(extras["complete"] as? Bool == true
+                ? HonestContract.encodeV2StateA(extras: extras)
+                : HonestContract.encodeV2StateB(reason: .readbackUnavailable, extras: extras))
+        }
         func unavailableRead(_ status: String, error: AXHelpers.AXStatusError? = nil) -> ChannelResult {
             var extras: [String: Any] = ["operation": operation, "param": paramAlias,
                 "parameter_read_status": status, "write_attempted": false]
@@ -2999,6 +3090,16 @@ extension AccessibilityChannel {
         let finished = finishPluginViewSessionResult(resultAfterAcquisition)
         if access.isRead, readContextEnded {
             return parameterReadContextFailure(finished, error: .windowIdentityUnresolved, operation: operation)
+        }
+        if access.isEQStateRead, let contextIsCurrent = access.readContextIsCurrent,
+           (!contextIsCurrent() || !targetPluginIdentityIsStable(
+                target: target, insert: insert, pluginID: pluginID,
+                originalSlot: slots[insert].element, runtime: runtime
+           )) {
+            // Cleanup can yield after collection. Revalidate the occupied
+            // instance, not just the project document, without requiring an
+            // operation-owned editor to remain open after its successful close.
+            return parameterReadContextFailure(finished, error: .staleTargetReference, operation: operation)
         }
         return finished
     }

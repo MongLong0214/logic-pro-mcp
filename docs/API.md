@@ -215,6 +215,20 @@ The supported read subset is the catalogued Channel EQ native-editor sliders and
 
 The observation scope is one parameter of the **current referenced physical insert**, not a historical AU-object identity, an atomic whole-plugin snapshot, or all-parameter completeness. Project, slot, editor and control identity are checked around collection. Observed raw-value drift during display collection refuses with `parameter_read_status: unstable`; matching bookends cannot detect every intervening change. This audio-read-only operation shares the existing verified-operation serializer because editor acquisition can open windows, change focus or temporarily switch views. It does not select a track or write an audio parameter. It restores its observed entry view while ownership remains valid, closes only an editor it created, and reports unavailable restoration instead of acting through lost ownership. A confirmed view restoration is not a general focus-restoration guarantee. Ordinary inventory remains ungated. New-reader live qualification and the remaining snapshot/batch/application scope are tracked in #955.
 
+`get_channel_eq_state_verified` reads the eight bands of the current referenced Channel EQ insert in one owned Controls-view acquisition:
+
+```json
+{"command":"get_channel_eq_state_verified","params":{"target_ref":"ins_…"}}
+```
+
+It requires an occupied Channel EQ insert reference from current inventory. Optional `project_ref`, `track`, `insert`, plugin aliases and `project_expected_path` only corroborate that binding. Unlike the scalar reader, this command accepts an optional matching path, but no `param`, `unit`, `value`, mutation mode or confirmation. It never inserts an EQ, selects a preset, changes an audio parameter, or saves a project.
+
+The declared scope is `current_insert_eight_band_raw_and_host_display`: eight ordered `bands` with frequency, gain-or-slope, Q and individual enable. Numeric observations retain `raw_ax_value` and the host's verbatim display, without inferred Hz/dB/Q conversions. Cut slopes retain the observed popup choice as `host_choice_text`; inapplicable gain/slope fields are explicit nulls with `not_applicable`. Band enable is Boolean and distinct from optional `plugin_enabled`/`plugin_bypass`; the latter is the inverse of the observed host enable checkbox, not a replacement for missing band enables.
+
+Each field reports `read_status`, `observed_raw`, `raw_unit`, `observed_display` and `display_read_status`. Missing, malformed, unreadable, ambiguous or observed-unstable required data returns State B with `complete:false` and `partial_reasons`, never fabricated zeros. Missing or blank required numeric displays also prevent completeness, while the known raw value is retained. Unsupported/non-applicable fields cannot make a partial reading complete. Wrong or expired project/track/occupied-slot/editor bindings refuse with State C; samples are removed if custody ends, with cleanup evidence retained.
+
+Two complete collections compare values and held controls; `snapshot_atomic:false` is deliberate. Matching bookends cannot detect every intervening external edit. Reading shares the verified-operation serializer with scalar reads and writes. Editor opening, temporary view changes and their restoration outcomes are reported separately from data completeness; a successful reading does not promise pristine focus or viewport restoration. Existing editors are not closed, and only an operation-owned editor may be closed. This reader does not expand scalar write support or implement full-plan application/reset/rollback (#955).
+
 Important constraints:
 
 - `insert_verified` requires a confirmation gate named `duplicate_applyback` when the operation can mutate an existing session.
