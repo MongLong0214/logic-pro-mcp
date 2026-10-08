@@ -265,7 +265,11 @@ actor StatePoller {
                 Self.backgroundTickYields(to: focus())
                     && !readFocusScope.permits()
             }
-            let guardian = AXHelpers.HelpReadGuard(allowHelpReads: false, stop: { stop() || editingStopsRead() })
+            // Track-only acquisition omits focus-moving Help. Mixer input/send
+            // identities still require their guarded Help witnesses; suppressing
+            // them turns existing routing observations into unreadable data.
+            let guardian = AXHelpers.HelpReadGuard(allowHelpReads: request.needsStrips,
+                                                  stop: { stop() || editingStopsRead() })
             population = try await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
                 try await axChannel.readFreshSessionPopulation(
                     request: request, fileReader: runtime.projectFileReader,
