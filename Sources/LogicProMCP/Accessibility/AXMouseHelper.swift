@@ -72,8 +72,16 @@ enum AXMouseHelper {
     /// Process-wide because all `postFlaggedKeyEvent` calls use the same per-process marker path.
     private static let chordMarkerNesting = ChordMarkerNesting()
 
+    /// Both halves are prepared before custody is finally checked. Once Down
+    /// posts, its paired Up completes that same click without an AX read or await.
+    struct PreparedMouseClick: @unchecked Sendable {
+        let postDown: () -> Bool
+        let postUp: () -> Bool
+    }
+
     struct Runtime: @unchecked Sendable {
         let postMouseEvent: @Sendable (CGEventType, CGPoint, Int64) -> Bool
+        let prepareMouseClick: @Sendable (CGPoint, Int64) -> PreparedMouseClick?
         let postKeyEvent: @Sendable (CGKeyCode) -> Bool
         let postUnicodeScalar: @Sendable (UniChar) -> Bool
         let sleepMicros: @Sendable (useconds_t) -> Void
@@ -89,9 +97,14 @@ enum AXMouseHelper {
             postKeyEvent: @escaping @Sendable (CGKeyCode) -> Bool,
             postUnicodeScalar: @escaping @Sendable (UniChar) -> Bool,
             sleepMicros: @escaping @Sendable (useconds_t) -> Void,
-            postFlaggedKeyEvent: @escaping @Sendable (CGKeyCode, CGEventFlags) -> Bool = { _, _ in false }
+            postFlaggedKeyEvent: @escaping @Sendable (CGKeyCode, CGEventFlags) -> Bool = { _, _ in false },
+            prepareMouseClick: (@Sendable (CGPoint, Int64) -> PreparedMouseClick?)? = nil
         ) {
             self.postMouseEvent = postMouseEvent
+            self.prepareMouseClick = prepareMouseClick ?? { point, count in
+                .init(postDown: { postMouseEvent(.leftMouseDown, point, count) },
+                      postUp: { postMouseEvent(.leftMouseUp, point, count) })
+            }
             self.postKeyEvent = postKeyEvent
             self.postUnicodeScalar = postUnicodeScalar
             self.sleepMicros = sleepMicros
@@ -202,6 +215,17 @@ enum AXMouseHelper {
                         )
                     }
                 )
+            },
+            prepareMouseClick: { point, clickCount in
+                let source = CGEventSource(stateID: .combinedSessionState)
+                guard let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown,
+                    mouseCursorPosition: point, mouseButton: .left),
+                      let up = CGEvent(mouseEventSource: source, mouseType: .leftMouseUp,
+                    mouseCursorPosition: point, mouseButton: .left) else { return nil }
+                down.setIntegerValueField(.mouseEventClickState, value: clickCount)
+                up.setIntegerValueField(.mouseEventClickState, value: clickCount)
+                return .init(postDown: { down.post(tap: .cghidEventTap); return true },
+                             postUp: { up.post(tap: .cghidEventTap); return true })
             }
         )
     }

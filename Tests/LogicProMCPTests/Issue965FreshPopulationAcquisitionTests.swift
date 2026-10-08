@@ -668,9 +668,68 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
     }
 
-    @Test(arguments: ["down_failed", "held_focus", "held_focus_returned", "wrong_hit"])
+    @Test(arguments: ["down_failed", "held_focus", "held_focus_returned", "wrong_hit", "prepare_failed"])
     func registeredStackPairsOnlyOwnedMouseDownAndUp(mouseCase: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, mouseCase: mouseCase)
+    }
+
+    @Test func registeredStackPreservesExpansionFailureWhenPostedPairHasNoObservedEffect() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, mouseCase: "no_effect")
+    }
+
+    @Test func registeredStackCompletesPostedDownBeforeObservingUnrelatedTextFocus() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, mouseCase: "unrelated_text_focus")
+    }
+
+    @Test func finalPreDownStopDoesNotReportNavigationThatNeverPosted() async throws {
+        let f = Fixture()
+        let disclosure = f.builder.element(965_700)
+        f.builder.setRole(disclosure, kAXDisclosureTriangleRole as String)
+        f.builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
+        f.builder.setFrame(disclosure, x: 10, y: 20, width: 12, height: 12)
+        f.builder.setChildren(f.header, [disclosure])
+        f.builder.setAttribute(f.app, kAXWindowsAttribute as String, [f.window])
+        f.builder.setAttribute(f.app, kAXFocusedWindowAttribute as String, f.window)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/late-stop.logicx")
+        let bar = f.builder.element(965_701)
+        f.builder.setRole(bar, kAXGroupRole as String)
+        f.builder.setAttribute(bar, kAXDescriptionAttribute as String, AXLocalePolicy.controlBarGroupLabel.canonical)
+        let play = f.builder.element(965_702), record = f.builder.element(965_703)
+        for (control, labels) in [(play, AXLocalePolicy.transportPlayControl), (record, AXLocalePolicy.transportRecordControl)] {
+            f.builder.setRole(control, kAXCheckBoxRole as String)
+            f.builder.setAttribute(control, kAXDescriptionAttribute as String, labels.canonical)
+            f.builder.setAttribute(control, kAXValueAttribute as String, 0)
+        }
+        f.builder.setChildren(bar, [play, record])
+        f.builder.setChildren(f.window, [f.rail, bar])
+        let logic = AXLogicProElements.Runtime(logicProPID: { 4242 },
+            ax: f.builder.makeAXRuntime(appElement: f.app,
+                setAttributeHandler: { _, _, _ in Issue.record("no AX setters"); return false },
+                performActionHandler: { _, _ in Issue.record("no AX actions"); return false },
+                elementAtPosition: { _, _ in .success(disclosure) }),
+            executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") },
+            onScreenWindowList: { [] }, postPopupMenuEscape: { Issue.record("no Escape") }, focusedApplicationPID: { 4242 })
+        let mouse = AXMouseHelper.Runtime(postMouseEvent: { _, _, _ in f.events.record("post"); return true },
+            postKeyEvent: { _ in false }, postUnicodeScalar: { _ in false }, sleepMicros: { _ in })
+        let checks = Reads()
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let effects = try await OperationTraceContext.$current.withValue(context) {
+            let candidate = AccessibilityChannel.OwnedTrackStackObservationNavigation(
+                window: f.window, logic: logic, mouse: mouse, expectedProject: nil,
+                requiresProjectReference: false, referenceIsCurrent: { true })
+            let navigation = try #require(candidate)
+            await navigation.expand(stoppingWhen: { checks.record("stop"); return checks.count == 6 })
+            return await navigation.restore(stoppingWhen: { false })
+        }
+        #expect(checks.count == 6, "refuse only at the last pre-Down permission check, after full preflight")
+        #expect(f.events.recorded.isEmpty)
+        #expect(!effects.navigationPerformed && effects.attempted.isEmpty)
+        #expect(effects.restoration == "not_applicable")
     }
 
     @Test(arguments: ["expansion", "restoration"])
@@ -684,7 +743,7 @@ struct Issue965FreshPopulationAcquisitionTests {
     }
 
     @Test(arguments: ["expansion", "restoration"])
-    func registeredNestedStackNeverRestoresPastATrueDownWithUnreadFocus(downFocusRead: String) async throws {
+    func registeredNestedStackNeverRestoresPastACompletedPairWithUnreadFocus(downFocusRead: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, nested: true, downFocusRead: downFocusRead)
     }
 
@@ -972,6 +1031,9 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture.builder.setAttribute(replacement, kAXTitleAttribute as String, "Repeated grandchild")
         fixture.builder.setAttribute(replacement, kAXSelectedAttribute as String, false)
         fixture.builder.setChildren(replacement, [])
+        let preparation: (@Sendable (CGPoint, Int64) -> AXMouseHelper.PreparedMouseClick?)?
+        if mouseCase == "prepare_failed" { preparation = { _, _ in nil } }
+        else { preparation = nil }
         let observationMouse = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
             let isInner = nested && point == CGPoint(x: 26, y: 36)
             guard (type == .leftMouseDown || type == .leftMouseUp),
@@ -1001,6 +1063,12 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
             if type == .leftMouseDown {
                 if mouseCase == "down_failed" { return false }
+                if mouseCase == "unrelated_text_focus" {
+                    fixture.builder.setRole(replacement, kAXTextFieldRole as String)
+                    fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, replacement)
+                    fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, 1)
+                    fixture.builder.setChildren(fixture.rail, headers)
+                }
                 if let downFocusRead, isInner, eventCount == (downFocusRead == "expansion" ? 3 : 5) {
                     fixture.reads.record("true_inner_down")
                 }
@@ -1009,6 +1077,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                 }
             }
             if type == .leftMouseUp {
+                if mouseCase == "no_effect" || mouseCase == "unrelated_text_focus" { return true }
                 if mouseCase == "held_focus_returned" {
                     fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.rail)
                 }
@@ -1038,7 +1107,8 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
             return true
         }, postKeyEvent: { _ in Issue.record("fixture forbids keys"); return false },
-           postUnicodeScalar: { _ in Issue.record("fixture forbids typing"); return false }, sleepMicros: { _ in })
+           postUnicodeScalar: { _ in Issue.record("fixture forbids typing"); return false }, sleepMicros: { _ in },
+           prepareMouseClick: preparation)
         let cache = StateCache()
         let registry = TargetRegistry()
         let gate = LogicMutationGate()
@@ -1074,6 +1144,9 @@ struct Issue965FreshPopulationAcquisitionTests {
             poller: StatePoller(axChannel: fixture.channel(disclosure: disclosure,
                 additionalDisclosure: nested ? inner : nil, observationMouse: observationMouse,
                 wrongDisclosureHit: mouseCase == "wrong_hit", observingAttribute: { element, attribute in
+                    if mouseCase == "unrelated_text_focus", fixture.events.count == 1 {
+                        fixture.reads.record("ax_read_during_held_down")
+                    }
                     if knownOuterReopen, fixture.events.count == 2, CFEqual(element, headers[0]),
                        attribute == kAXHelpAttribute as String { fixture.reads.record("outer_row_help_before_stack_read") }
                     if knownOuterReplacement, fixture.events.count == 2, CFEqual(element, headers[0]),
@@ -1159,7 +1232,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                     }
                     guard let downFocusRead, CFEqual(element, fixture.app),
                           attribute == kAXFocusedUIElementAttribute as String,
-                          fixture.events.count == (downFocusRead == "expansion" ? 3 : 5),
+                          fixture.events.count == (downFocusRead == "expansion" ? 4 : 6),
                           !fixture.reads.recorded.contains("focus_read_missing_after_true_down") else { return nil }
                     fixture.reads.record("focus_read_missing_after_true_down")
                     return .success(nil)
@@ -1201,7 +1274,12 @@ struct Issue965FreshPopulationAcquisitionTests {
                         fixture.reads.record("closed_rail_actually_read")
                     }
                 }), cache: cache,
-                runtime: .init(hasVisibleWindow: { true }, projectFileReader: fileReader, keyboardFocus: { .notTextEditing })),
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: fileReader, keyboardFocus: {
+                    if mouseCase == "unrelated_text_focus", fixture.events.count > 0 {
+                        return .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false)
+                    }
+                    return .notTextEditing
+                })),
             dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
             liveTrackNames: { [:] }, projectFileReader: fileReader)
         let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
@@ -1298,13 +1376,13 @@ struct Issue965FreshPopulationAcquisitionTests {
         if let downFocusRead {
             #expect(fixture.reads.recorded.filter { $0 == "true_inner_down" }.count == 1)
             #expect(fixture.reads.recorded.filter { $0 == "focus_read_missing_after_true_down" }.count == 1)
-            let expected = ["disclosure_down", "disclosure_up", "inner_down"]
-                + (downFocusRead == "restoration" ? ["inner_up", "inner_down"] : [])
+            let expected = ["disclosure_down", "disclosure_up", "inner_down", "inner_up"]
+                + (downFocusRead == "restoration" ? ["inner_down", "inner_up"] : [])
             #expect(fixture.events.recorded == expected,
-                    "no inverse or additional gesture is owned while a TRUE-posted Down is unreleased")
-            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == (downFocusRead == "expansion" ? 42 : 44))
+                    "paired Up completes the held click, but unread focus forbids any later gesture")
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == (downFocusRead == "expansion" ? 44 : 42))
             #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
-            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == (downFocusRead == "expansion" ? 0 : 1))
+            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == (downFocusRead == "expansion" ? 1 : 0))
             let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                 runtime: fixture.builder.makeAXRuntime())
             #expect(CFEqual(try #require(focus), fixture.rail), "subsequent focus reads return the original healthy owner")
@@ -1312,7 +1390,7 @@ struct Issue965FreshPopulationAcquisitionTests {
             let effects = try #require(body["ui_effects"] as? [String: Any])
             #expect(effects["restoration"] as? String == "not_restored")
             let current = await cache.getTracks()
-            #expect(current.isEmpty, "a pending mouse release cannot certify current rows")
+            #expect(current.isEmpty, "unread post-pair focus cannot certify current rows")
             #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
             #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
             #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
@@ -1397,8 +1475,28 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(gate.currentOperation() == nil)
             return
         }
+        if mouseCase == "unrelated_text_focus" {
+            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up"],
+                    "a posted Down must receive its preconstructed paired Up before AX focus reads")
+            #expect(!fixture.reads.recorded.contains("ax_read_during_held_down"))
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 42)
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(body["state"] as? String == "C" && body["snapshot_id"] == nil)
+            #expect(effects["navigation_performed"] as? Bool == true)
+            #expect(effects["restoration"] as? String == "not_restored")
+            #expect(effects["reason"] as? String != "stack_mouse_release_unverified")
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            let current = await cache.getTracks()
+            #expect(current.isEmpty, "unrelated focus must still refuse capture and inverse navigation")
+            return
+        }
         if let mouseCase {
-            let expectedEvents = mouseCase == "wrong_hit" ? [] : mouseCase == "down_failed" ? ["disclosure_down"]
+            let expectedEvents = mouseCase == "wrong_hit" || mouseCase == "prepare_failed" ? [] : mouseCase == "down_failed" ? ["disclosure_down"]
+                : mouseCase == "no_effect" ? ["disclosure_down", "disclosure_up"]
                 : ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"]
             #expect(fixture.events.recorded == expectedEvents)
             #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 19)
@@ -1413,7 +1511,16 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(gate.currentOperation() == nil)
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             let effects = try #require(body["ui_effects"] as? [String: Any])
-            if mouseCase == "held_focus" {
+            if mouseCase == "no_effect" {
+                #expect(effects["reason"] as? String == "stack_expansion_unverified",
+                        "cleanup must preserve the observed forward failure, not invent ownership loss")
+                #expect(effects["restoration"] as? String == "not_restored")
+                #expect(effects["navigation_performed"] as? Bool == true)
+                #expect(body["state"] as? String == "C")
+                #expect(body["tracks"] == nil && body["snapshot_id"] == nil)
+                let current = await cache.getTracks()
+                #expect(current.isEmpty, "an unqualified expansion cannot certify a current population")
+            } else if mouseCase == "held_focus" {
                 #expect(effects["restoration"] as? String == "partially_restored")
                 #expect(effects["reason"] as? String == "keyboard_focus_not_restored")
                 let changed = try #require(effects["changed"] as? [String])
