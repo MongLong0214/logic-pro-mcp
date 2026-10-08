@@ -12,8 +12,8 @@ and the rule that the two renderings never disagree about the outcome.
 THE FLAGS. Before this the option parser was positional -- `--text` had to be argv[1], `--changed`
 argv[3], and the whole `--changed` clause was skipped unless there were exactly five arguments.
 `test_the_file_list_survives_a_flag_before_it` is the witness: with one more flag in the line the
-old parser dropped the file list and let a change that edits Logic-facing paths opt out of citing
-Logic. That is the defect, not the tidiness.
+old parser dropped the file list and bypassed changed-source checks. The current witness supplies
+an empty list, which must be refused rather than silently treated as an issue body.
 """
 
 import json
@@ -28,8 +28,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHECKER = os.path.join(REPO, "Scripts", "check-canon-citations.py")
 NO_FACT = "states no fact about Logic"
 
-#: Any path under one of these is a claim about Logic by its contents, so it may not opt out.
-#: Read from the ledger rather than written here: a second copy of that list is a second authority.
+#: A classified path for testing changed-source scope, not proof of a native claim in the body.
 LOGIC_FACING_SAMPLE = "docs/locale/ui-labels.json"
 
 
@@ -128,11 +127,12 @@ class WhatTheStructuredResultSays(unittest.TestCase):
                 self.assertEqual(status, 0)
                 self.assertEqual(result["category"], "satisfied")
 
-    def test_a_logic_facing_change_may_not_declare_its_way_out(self):
-        status, result = self.diagnose(f"This change {NO_FACT}.\n", [LOGIC_FACING_SAMPLE])
+    def test_a_quoted_apple_value_cannot_use_a_no_fact_declaration(self):
+        status, result = self.diagnose(
+            f'This change {NO_FACT}. Logic shows "Audio Units".\n', [LOGIC_FACING_SAMPLE])
         self.assertEqual(status, 1)
         self.assertEqual([entry["code"] for entry in result["diagnostics"]],
-                         ["logic_facing_opt_out"])
+                         ["declaration_quotes_corpus"])
 
     def test_an_empty_file_list_fails_closed_rather_than_reopening_the_opt_out(self):
         status, result = self.diagnose(f"This change {NO_FACT}.\n", [])
@@ -370,18 +370,18 @@ class HowItReadsItsOwnCommandLine(unittest.TestCase):
     """A flag that is dropped instead of refused is a check running in a weaker mode."""
 
     def test_the_file_list_survives_a_flag_before_it(self):
-        """MEASURED against the previous revision of this file, which failed it.
+        """A preceding format flag must not drop the changed-file list.
 
         `--text <body> --format json --changed <list>` is seven arguments. The old parser asked
         for exactly five with `--changed` at index three, found neither, and ran with NO file
-        list -- so the body's declaration was accepted although the change edits a Logic-facing
-        path. Run against `git show HEAD~1:Scripts/check-canon-citations.py` it exits 0 here.
+        list. An empty changed-file list must not become the no-list issue-body mode, in which
+        this declaration would pass.
         """
-        fixture = BodyFixture(self, f"This change {NO_FACT}.\n", [LOGIC_FACING_SAMPLE])
+        fixture = BodyFixture(self, f"This change {NO_FACT}.\n", [])
         status, stdout, _ = run(["--text", fixture.body,
                                  "--format", "json",
                                  "--changed", fixture.changed])
-        self.assertEqual(codes(stdout), ["logic_facing_opt_out"])
+        self.assertEqual(codes(stdout), ["empty_changed_list"])
         self.assertEqual(status, 1)
 
     def test_the_order_of_the_flags_does_not_change_the_answer(self):

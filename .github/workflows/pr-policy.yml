@@ -122,9 +122,8 @@ jobs:
         run: python3 Scripts/check-canon-citations.py --changed pr-changed.txt
 
       - name: The pull request body cites Logic, or says it states no fact about Logic
-        # Whether this change may opt out is derived from what it TOUCHES, not from what its
-        # description says about itself. Without the file list the opt-out is one sentence anybody
-        # can type, and review walked through it three ways.
+        # The complete file list binds named behavioural evidence to changed sources. A visible
+        # no-fact declaration is checked against quoted Apple values, not directory membership.
         #
         # The required-command check recognizes this invocation across line continuations;
         # deleting the body check must still fail the offline CI checker.
@@ -142,8 +141,8 @@ jobs:
           echo "::notice::section 'Citing Logic's own data', and docs/canon/README.md."
           echo "::notice::If this change states no fact about Logic, write the opt-out sentence"
           echo "::notice::docs/canon/README.md gives, in visible prose, with the reason. It is"
-          echo "::notice::refused for a change that edits a Logic-facing path (docs/canon/"
-          echo "::notice::LOGIC-FACING.json lists those prefixes), whatever the body says."
+          echo "::notice::refused if the body quotes an Apple value or hides the declaration."
+          echo "::notice::Named behavioural records must still bind to changed sources."
           echo "::notice::Editing the description re-runs THIS workflow only; no compile or test"
           echo "::notice::job is restarted, and no code verdict already on this commit changes."
           echo "::notice::It does not block the merge either -- it did until #960, because the"

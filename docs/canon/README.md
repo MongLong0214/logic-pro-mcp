@@ -60,8 +60,9 @@ form below is what a pull request is gated on.
   quotes and list items as GitHub does, and where it is unsure it hides: everything after a `<pre>`
   is hidden, even one quoted in backticks, and so is everything after a comment an HTML block
   leaves open. The target of an inline link and the inside of an HTML tag are read.
-* A change that touches a Logic-facing path cannot use the opt-out, whatever its description says.
-  The prefixes are in `LOGIC-FACING.json` and the check derives this from the files, not the words.
+* Directory membership alone is not a native observation. A protocol-only change may truthfully
+  use the visible no-fact declaration, including on a Logic-facing path. Quoted Apple values still
+  require citations; the prefixes in `LOGIC-FACING.json` still scope source bindings.
 * Resting on Logic's BEHAVIOUR rather than a string it ships: name, in visible prose, the
   `docs/observations/<name>.json` record that holds the measurement. The places the opt-out is not
   read are not read here either, so a record named only as a link definition's target does not
@@ -406,9 +407,8 @@ types for you is a sentence nobody meant.
 
 It is refused in two cases, both derived rather than declared:
 
-- the change edits a **Logic-facing path** (`Sources/LogicProMCP/{Accessibility,HostParameters,Channels}/`,
-  `docs/{observations,locale,canon}/`, `Scripts/livekit/`) — what a change says about itself does
-  not decide whether it states a fact about Logic; what it touches does;
+- the body quotes a value the pinned Apple corpus holds — a no-fact declaration cannot excuse
+  that quote, regardless of which paths the change edits;
 - the sentence appears only where a reader is not shown it as prose: a code block, an HTML
   comment, a footnote, a link definition or a `<pre>`. Text a reader does not see, or sees as an
   example, cannot carry a promise, and code blocks and comments were both used against this check
@@ -416,7 +416,10 @@ It is refused in two cases, both derived rather than declared:
 
 A Logic-facing change that has nothing to cite because its evidence is behaviour does not need the
 opt-out: it names the `canon_not_applicable` record it adds, under the conditions given in *If you
-are opening an issue or a pull request*.
+are opening an issue or a pull request*. A named record is checked before the declaration, so
+adding a no-fact sentence cannot excuse a refused record. A body that makes no native claim does
+not need a fabricated observation to satisfy its directory classification. Native acceptance
+still requires real evidence; this body check does not establish it.
 
 ## The bindings — "was it actually used?"
 
@@ -440,7 +443,7 @@ of trust is a file in the tree.
 | adversary | what this stops |
 |---|---|
 | an honest author who errs | nearly everything: a misquoted value, an unpinned reference, a malformed one, a schema-2 record, an edited index, a truncated absence set, a literal Logic does not ship |
-| an author routing around the rule | some of it. The opt-out is derived from the diff, the waiver lists are compared against the merge base, and the classification is committed — but a determined author has more room than an honest one |
+| an author routing around the rule | some of it. Quoted values and declaration visibility are checked, named behavioural records bind to changed sources, and waiver lists are compared against the merge base — but a determined author has more room than an honest one |
 | a committer acting in bad faith | **out of scope, by decision.** `MANIFEST.json` digests the index and the absence sets and is itself a tracked file, so write access is enough to forge all three consistently — review 2026-09-15 did it in three edits. Signing the artefacts would close that for a leaked credential, and it was built and then removed as over-engineering for a repository with one maintainer. The assumption is written here rather than defended. |
 | a fork pull request | **no more than any other branch, and this row used to claim otherwise.** `ci.yml` triggers on `pull_request` and none of its checkouts pins a `ref:`, so the guards that run are the PULL REQUEST HEAD's own copies — a fork rewrites them exactly as a branch does. Measured 2026-09-19 by reading the workflow. What a fork cannot do is push to `main`; that is a different protection and it is the `non_fast_forward` and `deletion` rules, not this axis |
 

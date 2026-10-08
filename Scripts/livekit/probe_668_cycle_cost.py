@@ -38,6 +38,8 @@ WHAT WOULD MAKE THIS VACUOUS, AND WHAT STOPS IT
 3. Reporting a median over censored samples. A call that hits its deadline is a lower bound, not a
    duration; two of them subtract to about nothing. Ceiling hits are counted and reported
    separately, and the verdict says so rather than averaging them in.
+4. Timing an error or a no-op. Warm-up and every measured call must confirm a successful
+   refresh by the actual AX poller with cache advancement; otherwise this refuses a FITS verdict.
 """
 import json
 import os
@@ -111,8 +113,14 @@ class Server:
             "name": "logic_system",
             "arguments": {"command": "refresh_cache", "params": {}}}, budget)
         elapsed = time.monotonic() - t0
-        body = ((msg or {}).get("result") or {}).get("structuredContent") or {}
-        return elapsed, body.get("refreshed")
+        result = msg.get("result") if isinstance(msg, dict) else None
+        body = result.get("structuredContent") if isinstance(result, dict) else None
+        advanced = (isinstance(msg, dict) and "error" not in msg
+                    and isinstance(result, dict) and result.get("isError", False) is False
+                    and isinstance(body, dict) and body.get("refreshed") is True
+                    and body.get("operation") == "system.refresh_cache"
+                    and body.get("source") == "ax_fallback_poller")
+        return elapsed, advanced
 
     def resource(self, uri, budget=60):
         msg = self._call("resources/read", {"uri": uri}, budget)
@@ -132,7 +140,11 @@ def main():
     s = Server()
     try:
         # --- precondition: is this project actually readable, and how big is it? --------------
-        s.refresh()                       # one cycle so the poller has read at least once
+        elapsed, advanced = s.refresh()    # one cycle so the poller has read at least once
+        if not advanced:
+            print(f"REFUSED: warm-up refresh ({elapsed:.2f}s) did not confirm cache advancement; "
+                  "a failed or empty cycle is not a latency sample.")
+            return 2
         tracks = s.resource("logic://tracks")
         readable = tracks.get("readable")
         rows = tracks.get("data")
@@ -148,7 +160,11 @@ def main():
         solo, solo_ceiling = [], 0
         for i in range(5):
             time.sleep(4)                 # longer than the 3s poll interval, so the loop is idle
-            dt, _ = s.refresh()
+            dt, advanced = s.refresh()
+            if not advanced:
+                print(f"REFUSED: solo {i + 1} ({dt:.2f}s) did not confirm cache advancement; "
+                      "no FITS verdict can be drawn from this run.")
+                return 2
             solo.append(dt)
             if dt >= CEILING_S:
                 solo_ceiling += 1
@@ -171,6 +187,12 @@ def main():
         for t in threads:
             t.join()
         wall = time.monotonic() - t0
+        for i, result in enumerate(results):
+            if result is None or not result[1]:
+                elapsed = f"{result[0]:.2f}s" if result is not None else "no result"
+                print(f"REFUSED: concurrent caller {i + 1} ({elapsed}) did not confirm cache advancement; "
+                      "no FITS verdict can be drawn from this run.")
+                return 2
         contended = [r[0] for r in results if r]
         contended_ceiling = sum(1 for d in contended if d >= CEILING_S)
 
