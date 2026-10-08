@@ -22,8 +22,8 @@ struct QualificationFrameDeadlineTests {
         try queue.append(frame)
         // Receipt preceded this deadline, but consumption follows it. Scheduling
         // delay must not turn an on-time response into a timeout.
-        let deadline = DispatchTime.now()
-        let response = try queue.response(id: 1, phase: "handshake", deadline: deadline)
+        let response = try queue.response(
+            id: 1, phase: "handshake", deadline: DispatchTime.now())
         #expect(response == frame)
     }
 
