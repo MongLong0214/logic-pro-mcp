@@ -63,6 +63,187 @@ struct SpectrumComparisonTests {
         }
     }
 
+    @Test(arguments: [0.5, 1.0, 2.0])
+    func explicitShapeComparisonSeparatesUniformBandOffsetWithoutChangingArtifacts(gain: Double) throws {
+        try withDirectory { directory in
+            let before = try writeTone(directory, "shape-before", amplitude: 0.2, highAmplitude: 0.1)
+            let after = try writeTone(directory, "shape-after", amplitude: 0.2 * gain, highAmplitude: 0.1 * gain)
+            let beforeBytes = try Data(contentsOf: before)
+            let afterBytes = try Data(contentsOf: after)
+            let spec = try #require(OperationRegistry.spec(tool: "logic_audio", command: "compare_spectra"))
+            #expect(spec.allowedParams.contains("comparison_mode"))
+            let result = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string(before.path), "after_path": .string(after.path),
+                "comparison_mode": .string("spectral_shape")
+            ])
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let shape = try #require(body["shapeComparison"] as? [String: Any])
+            #expect(shape["method"] as? String == "median_shared_uncensored_band_delta.v1")
+            let offset = try #require(shape["levelOffsetDb"] as? Double)
+            #expect(abs(offset - 20 * log10(gain)) < 0.02)
+            let rawBands = try #require(body["bands"] as? [[String: Any]])
+            let eligible = rawBands.compactMap { $0["deltaDb"] as? Double }
+            #expect(shape["referenceBandCount"] as? Int == eligible.count)
+            let bands = try #require(shape["bands"] as? [[String: Any]])
+            #expect(bands.count == rawBands.count)
+            for (raw, normalized) in zip(rawBands, bands) {
+                #expect(normalized["centerHz"] as? Double == raw["centerHz"] as? Double)
+                if let delta = raw["deltaDb"] as? Double {
+                    let residual = try #require(normalized["residualDb"] as? Double)
+                    #expect(abs(residual) < 0.02)
+                    #expect(abs(residual - (delta - offset)) < 1e-9)
+                } else {
+                    #expect(normalized["residualDb"] == nil)
+                    #expect(normalized["unavailableReason"] as? String == raw["unavailableReason"] as? String)
+                }
+            }
+            let absolute = try dispatchedComparison(before, after)
+            #expect(eligible == absolute.bands.compactMap(\.deltaDb))
+            let unchanged = try #require(sharedJSONObject(String(decoding: JSONEncoder().encode(absolute), as: UTF8.self)))
+            #expect(!unchanged.keys.contains("shapeComparison"))
+            #expect(try Data(contentsOf: before) == beforeBytes)
+            #expect(try Data(contentsOf: after) == afterBytes)
+        }
+    }
+
+    @Test func shapeComparisonCannotInventAnOffsetFromSilence() throws {
+        try withDirectory { directory in
+            let silence = try writeTone(directory, "shape-silence", amplitude: 0)
+            let result = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string(silence.path), "after_path": .string(silence.path),
+                "comparison_mode": .string("spectral_shape")
+            ])
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let shape = try #require(body["shapeComparison"] as? [String: Any])
+            #expect(shape["levelOffsetDb"] == nil)
+            #expect(shape["referenceBandCount"] as? Int == 0)
+            let shapeComplete = try #require(shape["complete"] as? Bool)
+            let limitations = try #require(shape["limitations"] as? [String])
+            let rawComplete = try #require(body["complete"] as? Bool)
+            #expect(!shapeComplete)
+            #expect(limitations.contains("no_shared_uncensored_bands"))
+            #expect(!rawComplete)
+            let rawBands = try #require(body["bands"] as? [[String: Any]])
+            let shapeBands = try #require(shape["bands"] as? [[String: Any]])
+            #expect(!shapeBands.isEmpty)
+            #expect(shapeBands.count == rawBands.count)
+            for (raw, band) in zip(rawBands, shapeBands) {
+                #expect(band["residualDb"] == nil)
+                #expect(band["unavailableReason"] as? String == raw["unavailableReason"] as? String)
+            }
+        }
+    }
+
+    @Test func malformedComparisonModesRefuseBeforeAccessingAnArtifact() throws {
+        var accesses = 0
+        let runtime = AudioAnalyzer.Runtime(
+            fileExists: { _, _ in accesses += 1; return false },
+            attributesOfItem: { _ in accesses += 1; return [:] },
+            resolveSymlinks: { path in accesses += 1; return path }
+        )
+        let invalid: [Value] = [.null, .int(1), .bool(true), .object([:]), .array([]),
+                                .string(""), .string(" spectral_shape"), .string("SPECTRAL_SHAPE"),
+                                .string("loudness")]
+        for mode in invalid {
+            let result = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string("/tmp/lpm-shape-invalid-before.wav"),
+                "after_path": .string("/tmp/lpm-shape-invalid-after.wav"),
+                "comparison_mode": mode
+            ], runtime: runtime)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let isError = try #require(result.isError)
+            #expect(isError)
+            #expect(body["error"] as? String == "invalid_params")
+            let writeAttempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!writeAttempted)
+        }
+        #expect(accesses == 0)
+    }
+
+    @Test(arguments: [3, 4])
+    func shapeUsesTheMedianOfOnlySharedUncensoredBands(eligibleCount: Int) throws {
+        let deltas: [Double] = eligibleCount == 3 ? [2, 3, 25] : [2, 3, 4, 25]
+        func analysis(after: Bool, includeUnavailable: Bool = true) -> SpectralAnalysisResult {
+            var bands = deltas.enumerated().map { index, delta in
+                SpectralBand(centerHz: 100 * pow(2, Double(index)), energyDb: -40 + (after ? delta : 0))
+            }
+            // These large changes must neither influence the median nor become residuals.
+            if includeUnavailable {
+                bands.append(SpectralBand(centerHz: 3_200, energyDb: after ? -20 : -80))
+                bands.append(SpectralBand(centerHz: 6_400, energyDb: after ? -10 : -40, measured: after))
+            }
+            return SpectralAnalysisResult(
+                analysisRef: "median-fixture", bands: bands, resonances: [], classification: .unknown,
+                levelConfidence: 0, complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+        let result = try SpectralComparisonResult(before: analysis(after: false), after: analysis(after: true),
+                                                  mode: .spectralShape)
+        let shape = try #require(result.shapeComparison)
+        let expectedOffset = eligibleCount == 3 ? 3.0 : 3.5
+        #expect(shape.levelOffsetDb == expectedOffset)
+        #expect(shape.referenceBandCount == eligibleCount)
+        #expect(shape.bands.compactMap(\.residualDb) == deltas.map { $0 - expectedOffset })
+        #expect(shape.bands[eligibleCount].unavailableReason == "at_analysis_floor")
+        #expect(shape.bands[eligibleCount + 1].unavailableReason == "unmeasured_band")
+        #expect(!shape.complete)
+        #expect(!result.complete)
+        #expect(shape.limitations.contains("band_offset_not_perceived_loudness"))
+        #expect(try JSONDecoder().decode(SpectralComparisonResult.self, from: JSONEncoder().encode(result)) == result)
+        let full = try SpectralComparisonResult(
+            before: analysis(after: false, includeUnavailable: false),
+            after: analysis(after: true, includeUnavailable: false), mode: .spectralShape
+        )
+        let fullShape = try #require(full.shapeComparison)
+        #expect(full.complete)
+        #expect(fullShape.complete)
+        #expect(fullShape.levelOffsetDb == expectedOffset)
+        #expect(fullShape.referenceBandCount == eligibleCount)
+        #expect(fullShape.bands.compactMap(\.residualDb) == deltas.map { $0 - expectedOffset })
+    }
+
+    @Test func shapedArtifactComparisonRetainsTiltRatherThanCallingItGain() throws {
+        try withDirectory { directory in
+            let before = try writeTone(directory, "shape-balanced", amplitude: 0.2, highAmplitude: 0.2)
+            let after = try writeTone(directory, "shape-tilted", amplitude: 0.4, highAmplitude: 0.1)
+            let result = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string(before.path), "after_path": .string(after.path),
+                "comparison_mode": .string("spectral_shape")
+            ])
+            let comparison = try JSONDecoder().decode(SpectralComparisonResult.self, from: Data(sharedToolText(result).utf8))
+            let shape = try #require(comparison.shapeComparison)
+            let low = try #require(shape.bands.min { abs($0.centerHz - 1_000) < abs($1.centerHz - 1_000) })
+            let high = try #require(shape.bands.min { abs($0.centerHz - 5_000) < abs($1.centerHz - 5_000) })
+            let contrast = try #require(low.residualDb) - #require(high.residualDb)
+            #expect(abs(contrast - 40 * log10(2.0)) < 0.4)
+            #expect(comparison.limitations.contains("no_musical_quality_or_applied_eq_claim"))
+            #expect(shape.limitations.contains("no_signal_alignment_or_audio_normalization"))
+        }
+    }
+
+    @Test func explicitAbsoluteModePreservesTheDefaultResponseAndItsLegacyDecode() throws {
+        try withDirectory { directory in
+            let path = try writeTone(directory, "absolute", amplitude: 0.2)
+            let implicit = try dispatchedComparison(path, path)
+            let explicit = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string(path.path), "after_path": .string(path.path),
+                "comparison_mode": .string("absolute")
+            ])
+            let bytes = Data(sharedToolText(explicit).utf8)
+            #expect(try JSONDecoder().decode(SpectralComparisonResult.self, from: bytes) == implicit)
+            let body = try #require(sharedJSONObject(String(decoding: bytes, as: UTF8.self)))
+            #expect(Set(body.keys) == ["before", "after", "bands", "complete", "limitations"])
+            #expect(implicit.shapeComparison == nil)
+            let spec = try #require(OperationRegistry.spec(tool: "logic_audio", command: "compare_spectra"))
+            let rule = try #require(OperationRegistry.parameterContracts[spec.id]?.params["comparison_mode"])
+            #expect(rule.kind == .string)
+            #expect(rule.allowed == ["absolute", "spectral_shape"])
+        }
+    }
+
     @Test func silenceIsCensoredAndStereoEnergyDoesNotCancel() throws {
         try withDirectory { directory in
             let silence = try writeTone(directory, "silence", amplitude: 0)
@@ -292,14 +473,17 @@ struct SpectrumComparisonTests {
     }
 
     private func expectRefusal(_ before: URL, _ after: URL, params: [String: Value] = [:], code: String) throws {
-        var inputs: [String: Value] = ["before_path": .string(before.path), "after_path": .string(after.path)]
-        inputs.merge(params, uniquingKeysWith: { _, new in new })
-        let result = AudioDispatcher.handle(command: "compare_spectra", params: inputs)
-        let body = try #require(sharedJSONObject(sharedToolText(result)))
-        let isError = try #require(result.isError)
-        #expect(isError)
-        #expect(body["analysis_error"] as? String == code)
-        let writes = try #require(body["write_attempted"] as? Bool)
-        #expect(!writes)
+        for mode: String? in [nil, "spectral_shape"] {
+            var inputs: [String: Value] = ["before_path": .string(before.path), "after_path": .string(after.path)]
+            if let mode { inputs["comparison_mode"] = .string(mode) }
+            inputs.merge(params, uniquingKeysWith: { _, new in new })
+            let result = AudioDispatcher.handle(command: "compare_spectra", params: inputs)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let isError = try #require(result.isError)
+            #expect(isError)
+            #expect(body["analysis_error"] as? String == code)
+            let writeAttempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!writeAttempted)
+        }
     }
 }
