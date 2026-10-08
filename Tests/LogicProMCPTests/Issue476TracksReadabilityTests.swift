@@ -126,6 +126,36 @@ struct Issue476TracksReadabilityTests {
         }
     }
 
+    @Test("concurrent AX population updates cannot date previously sampled cold rows")
+    func concurrentFeedbackAndAXReadsKeepRowProvenanceTogether() async throws {
+        let cache = StateCache()
+        await cache.updateTrack(at: 7) { $0.isSoloed = true }
+        let writer = Task {
+            for _ in 0..<500 {
+                await cache.clearProjectState()
+                await cache.updateTrack(at: 7) { $0.isSoloed = true }
+                await Task.yield()
+                await cache.updateTracks([TrackState(id: 0, name: "Observed", type: .audio)])
+                await Task.yield()
+            }
+        }
+        var mismatchedColdReads = 0
+        for _ in 0..<500 {
+            let doc = try document(await ResourceHandlers.readTracks(
+                cache: cache, uri: "logic://tracks", fileReader: headlessFileReader
+            ))
+            let rows = try #require(doc["data"] as? [[String: Any]])
+            if rows.count == 8 {
+                let readable = try #require(doc["readable"] as? Bool)
+                if doc["source"] as? String != "cache" || readable || !(doc["fetched_at"] is NSNull) {
+                    mismatchedColdReads += 1
+                }
+            }
+        }
+        await writer.value
+        #expect(mismatchedColdReads == 0)
+    }
+
     @Test("a live read of a real project is readable and not a verified empty")
     func liveReadIsAnObservation() async throws {
         let cache = StateCache()

@@ -155,9 +155,12 @@ extension ResourceHandlers {
         } else {
             targetSnapshot = nil
         }
-        let liveTracks = TrackReferenceIssuance.liveInventory(await cache.getTracks())
-        let cacheFetchedAt = await cache.getTracksFetchedAt()
-        let axOccluded = await cache.getAXOccluded()
+        // Rows and their observation time must come from the same actor turn: a later AX
+        // commit must not certify scalar-only rows already sampled by this resource.
+        let cacheState = await cache.auditSnapshot()
+        let liveTracks = TrackReferenceIssuance.liveInventory(cacheState.tracks)
+        let cacheFetchedAt = cacheState.tracksFetchedAt
+        let axOccluded = cacheState.axOccluded
 
         var tracksOut: [TrackState] = []
         var source: String
