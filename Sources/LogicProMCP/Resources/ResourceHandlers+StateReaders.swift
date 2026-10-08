@@ -218,18 +218,24 @@ extension ResourceHandlers {
         // file-count tiers synthesise placeholder names from a count.
         let observedLive = source == "ax_live"
         let collapsedStacks = collapsedTrackStacks(in: tracksOut)
-        // A collapsed stack makes AX expose its header but not the child rows. The observed rows
-        // remain readable, but they cannot represent a complete track inventory.
-        let complete = observedLive && collapsedStacks.isEmpty
+        // This legacy cache holds exposed rows, not a request-owned project population witness.
+        // No collapsed stack does not rule out hidden tracks: the same live project measured
+        // 32 exposed rows with an unsaved hidden 33rd track. Preserve row readability and refs,
+        // but never turn the absence of a known omission into proof of complete membership.
+        let complete = false
         var extras: [String: Any] = [
             "source": source,
             "readable": observedLive,
             "complete": complete,
             "verified_empty": observedLive && complete && tracksOut.isEmpty,
         ]
-        if observedLive && !complete {
-            extras["reason"] = "collapsed_track_stack"
-            extras["collapsed_stacks"] = collapsedStacks
+        if observedLive {
+            if !collapsedStacks.isEmpty {
+                extras["reason"] = "collapsed_track_stack"
+                extras["collapsed_stacks"] = collapsedStacks
+            } else {
+                extras["reason"] = "track_population_not_verified"
+            }
         } else if !observedLive {
             extras["reason"] = tracksOut.isEmpty
                 ? "no_live_track_read_yet"
@@ -262,9 +268,9 @@ extension ResourceHandlers {
     /// `trackIndex`, NOT array position, so a strip set can be non-contiguous,
     /// e.g. {0, 2, 4}). The hint therefore never asserts a contiguous `0..<N`
     /// range (which would mislead a client past a gap); it points at the parent
-    /// collection and the body carries `available_indices` as the machine truth. A collapsed
-    /// track stack makes that observed track rail incomplete, and is labelled explicitly rather
-    /// than letting its visible row count stand in for project inventory.
+    /// collection and the body carries `available_indices` as the machine truth. The cached
+    /// track rail has no whole-project membership witness; a known collapsed stack is labelled
+    /// explicitly, but its absence cannot turn the visible row count into project inventory.
     static func indexOutOfRangeResult(
         uri: String,
         requestedIndex: Int,
@@ -306,9 +312,8 @@ extension ResourceHandlers {
         // Tracks are positionally indexed (`getTrack(at:)` uses `tracks.indices`),
         // so the valid set is 0..<count.
         let collapsedStacks = collapsedTrackStacks(in: tracks)
-        let inventoryComplete = collapsedStacks.isEmpty
-        var extras: [String: Any] = [:]
-        if !inventoryComplete {
+        var extras: [String: Any] = ["reason": "track_population_not_verified"]
+        if !collapsedStacks.isEmpty {
             extras["reason"] = "collapsed_track_stack"
             extras["collapsed_stacks"] = collapsedStacks
         }
@@ -317,7 +322,7 @@ extension ResourceHandlers {
             requestedIndex: index,
             availableIndices: Array(0..<tracks.count),
             collection: "track",
-            inventoryComplete: inventoryComplete,
+            inventoryComplete: false,
             extras: extras
         )
     }
