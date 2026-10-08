@@ -1478,6 +1478,14 @@ extension ProjectSessionAudit {
         case nil, .unclassified?:
             return .unobserved(.outputUnclassified, edgeObserved: false)
         case .noOutput?:
+            // A label cannot certify absence when the same source has contradictory edges
+            // or its graph identity is ambiguous, even if an unrelated domain is partial.
+            guard graph.nodes.filter({ $0.id == source.id }).count == 1 else {
+                return .unobserved(.sourceNodeAmbiguous, edgeObserved: false)
+            }
+            guard !graph.edges.contains(where: { $0.kind == .mainOutput && $0.source == source.id }) else {
+                return .unobserved(.outputEdgeAmbiguous, edgeObserved: true)
+            }
             return classified(.noOutput)
         case .physicalOutput?:
             return classified(.physicalOutput)
