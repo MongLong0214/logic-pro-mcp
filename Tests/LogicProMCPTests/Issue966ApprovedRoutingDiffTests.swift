@@ -957,6 +957,57 @@ struct Issue966ApprovedRoutingDiffTests {
         #expect(body["new_object_inventory"]?.arrayValue == [])
     }
 
+    @Test(arguments: [false, true])
+    func noOutputClassificationCannotHideObservedOutputEdges(duplicate: Bool) throws {
+        var assignments = edges()
+        if duplicate {
+            assignments.append(edge(.mainOutput, "source_opaque", "destination_opaque"))
+        }
+        let candidate = graph(nodes: nodes(output: .noOutput), edges: assignments)
+        #expect(candidate.isConsistent)
+        let body = try plan(candidate, noOutput: true)
+        let findings = try #require(body["findings"]?.arrayValue)
+        let finding = try #require(findings.first?.objectValue)
+        #expect(finding["status"]?.stringValue == "unverified")
+        let reasons = try #require(finding["reasons"]?.arrayValue)
+        #expect(reasons.contains(.string("output_edge_ambiguous")))
+        #expect(body["unchanged_tasks"]?.arrayValue == [])
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+        let steps = try #require(body["steps"]?.arrayValue)
+        #expect(steps.count == 1)
+        #expect(body["preview"] == body["steps"])
+        let step = try #require(steps.first?.objectValue)
+        #expect(step["target_ref"]?.stringValue == source.rawValue)
+        let delta = try #require(step["proposed_routing_diff"]?.objectValue)
+        #expect(delta["status"]?.stringValue == "unverified")
+        #expect(delta["output_changes"] == nil)
+    }
+
+    @Test func noOutputClassificationRequiresUniqueSourceIdentity() throws {
+        let partial = RoutingDomainCoverage(state: .partial, reasons: ["unrelated send scope unread"])
+        let coverage = RoutingCoverage(population: complete, stripTrackAssociation: complete,
+            mainOutput: complete, physicalOutput: complete, busToAuxInput: complete, sends: partial)
+        let candidates = nodes(output: .noOutput) + [RoutingNode(id: "source_opaque", kind: .physicalStrip,
+            displayName: "Same", busNumber: nil, targetRef: nil)]
+        let assignments = edges().filter { $0.kind != .mainOutput || $0.source != "source_opaque" }
+        let candidate = graph(nodes: candidates, edges: assignments, coverage: coverage)
+        #expect(candidate.isConsistent)
+        let body = try plan(candidate, noOutput: true)
+        let finding = try #require(body["findings"]?.arrayValue?.first?.objectValue)
+        #expect(finding["status"]?.stringValue == "unverified")
+        let reasons = try #require(finding["reasons"]?.arrayValue)
+        #expect(reasons.contains(.string("source_node_ambiguous")))
+        #expect(body["unchanged_tasks"]?.arrayValue == [])
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+        let steps = try #require(body["steps"]?.arrayValue)
+        #expect(steps.count == 1)
+        let delta = try proposal(body)
+        #expect(delta["status"]?.stringValue == "unverified")
+        #expect(delta["output_changes"] == nil)
+    }
+
     @Test func noOutputRemovalPreservesUnrelatedOutputSendAndReceiverFanout() throws {
         let before = graph()
         let delta = try proposal(plan(before, noOutput: true))
