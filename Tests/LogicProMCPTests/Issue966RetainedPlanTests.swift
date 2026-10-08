@@ -149,6 +149,39 @@ struct Issue966RetainedPlanTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func matchingCachedNamesDoNotInventNativeGoalVerification(includeProjectReference: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let (cache, registry, snapshot, reference) = try await fixture()
+                let inspection = try #require(await cache.retainedInspection(id: snapshot))
+                let row = try #require(inspection.capture.tracks.first)
+                #expect(row.physicalBinding == nil)
+                #expect(inspection.capture.freshPopulation == nil)
+                var approved = try #require(policy(reference: reference).objectValue)
+                if includeProjectReference {
+                    guard case .issued(let project)? = inspection.capture.projectIssuance else {
+                        Issue.record("fixture must issue its observed project reference"); return
+                    }
+                    approved["project_ref"] = .string(project.rawValue)
+                }
+                let result = await plan(["snapshot_id": .string(snapshot), "policy": .object(approved),
+                    "names": .array([.object(["target": .string("track"), "name": .string("Original")])])
+                ], cache: cache, registry: registry)
+                let body = try #require(sharedJSONObject(sharedToolText(result)))
+                // A sampled identical name remains truthful; missing native custody is not a
+                // reason to invent a rename or discard that observation.
+                #expect(body["unchanged_tasks"] as? [String] == ["name_track"])
+                let steps = try #require(body["steps"] as? [Any])
+                #expect(steps.isEmpty)
+                let executable = try #require(body["executable"] as? Bool)
+                #expect(!executable)
+                let reasons = try #require(body["reasons"] as? [String])
+                #expect(!reasons.isEmpty)
+            }
+        }
+    }
+
     @Test func canonicalLookupRefusesDigestTamperingAndAnotherCache() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (cache, registry, snapshot, _) = try await fixture()

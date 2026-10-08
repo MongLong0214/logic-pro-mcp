@@ -465,6 +465,12 @@ extension ProjectSessionAudit {
                     "conditional_inverse_visibility", "menu_cleanup"].map(Value.string))
             ]))
         }
+        // Sampled compliance is not a provider. The retained adapter owns its finite scope
+        // and required captured footprint; execution repeats freshness/registry/AX checks.
+        if reasons.isEmpty, !ApprovedSessionRepair.canVerifyCapturedGoals(policy: policy, policyValue: policyValue,
+            names: names, source: capture, request: request) {
+            reasons.insert("retained_goal_verification_unavailable")
+        }
         // Preview is this canonical step array; no independently generated preview can drift.
         var body: [String: Value] = [
             "schema": .string(sessionRepairPlanSchema), "read_only": .bool(true),

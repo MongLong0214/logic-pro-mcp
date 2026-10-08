@@ -361,6 +361,66 @@ struct Issue971ApprovedMixerSagaTests {
     }
 
     @Test
+    func endedNameExposureBlocksPlanningWithoutNewHostReads() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                _ = f.installNameHeaders(["Bass"])
+                let report = try await f.call("inspect_session", params: ["domains": .array([.string("tracks")])])
+                let snapshot = try #require(report["snapshot_id"] as? String)
+                let inspection = try #require(await f.cache.retainedInspection(id: snapshot))
+                let original = inspection.capture
+                var rows = original.tracks
+                let binding = try #require(rows.first?.physicalBinding)
+                let reference = try #require(original.issued?.byRow.first ?? nil)
+                guard case .issued(let project)? = original.projectIssuance else {
+                    Issue.record("fixture must issue its project reference"); return
+                }
+                // A process-local scope is controlled here, not a claim that a native disclosure
+                // was acquired. Its terminal fact can be read without probing AX during planning.
+                let scope = AXTrackBinding.Exposure(header: binding.header,
+                    disclosure: f.view.builder.element(971_990), runtime: binding.runtime)
+                rows[0].physicalBinding = .init(window: binding.window, header: binding.header,
+                    document: binding.document, runtime: binding.runtime, exposure: scope)
+                let captured = SessionPopulationObservation.Capture(before: original.before, after: original.after,
+                    projectEpoch: original.projectEpoch, project: original.project, tracks: rows,
+                    tracksFetchedAt: original.tracksFetchedAt, channelStrips: original.channelStrips,
+                    mixerFetchedAt: original.mixerFetchedAt, fileTrackCount: original.fileTrackCount,
+                    projectFileNotBound: original.projectFileNotBound, requestedProjectMatches: original.requestedProjectMatches,
+                    referencesEnabled: original.referencesEnabled, targetSnapshot: original.targetSnapshot,
+                    issued: original.issued, projectIssuance: original.projectIssuance,
+                    beganAt: original.beganAt, endedAt: original.endedAt, captureID: original.captureID,
+                    freshPopulation: original.freshPopulation, mixerReferences: original.mixerReferences)
+                let raw: [String: Value] = ["schema": .string(ProjectSessionAudit.intentPolicySchema),
+                    "project_ref": .string(project.rawValue), "targets": .array([.object([
+                        "handle": .string("bass"), "track_ref": .string(reference.rawValue)])])]
+                guard case .accepted(let policy) = ProjectSessionAudit.parseIntentPolicy(raw) else {
+                    Issue.record("valid fixture policy rejected"); return
+                }
+                let names = [ProjectSessionAudit.ApprovedName(target: "bass", name: "Bass")]
+                f.view.attributeReadObserver = { _, _ in Issue.record("planning must not read the host") }
+                func build() throws -> [String: Value] {
+                    let plan = try ProjectSessionAudit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw),
+                        names: names, capture: captured, request: inspection.request, snapshotCurrent: true)
+                    return try #require(JSONDecoder().decode(Value.self, from: Data(plan.json.utf8)).objectValue)
+                }
+                let before = try build()
+                let available = try #require(before["executable"]?.boolValue as Bool?)
+                #expect(available)
+                scope.end()
+                let after = try build()
+                let endedAvailable = try #require(after["executable"]?.boolValue as Bool?)
+                #expect(!endedAvailable)
+                #expect(after["unchanged_tasks"] == before["unchanged_tasks"])
+                #expect(after["approved_names"] == before["approved_names"])
+                #expect(after["steps"] == before["steps"])
+                #expect(after["digest"] != before["digest"])
+                #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test
     func namesOnlyOracleRejectsCorruptionInEveryObservedGoal() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             try await FeatureFlags.withAdr004MutationSagaForTests(true) {
@@ -1056,6 +1116,12 @@ struct Issue971ApprovedMixerSagaTests {
                 if kind == "changed_name" {
                     let reasons = try #require(plan["reasons"] as? [String])
                     #expect(reasons.contains("naming_preservation_adapter_unavailable"))
+                }
+                if ["empty", "unaccounted_target", "role"].contains(kind) {
+                    let executable = try #require(plan["executable"] as? Bool)
+                    #expect(!executable, "the retained adapter cannot verify this whole approved scope")
+                    let reasons = try #require(plan["reasons"] as? [String])
+                    #expect(!reasons.isEmpty)
                 }
                 let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "unsupported-names"))
                 #expect(outcome["state"] as? String == "C")

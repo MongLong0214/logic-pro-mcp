@@ -21,6 +21,8 @@ enum AXTrackBinding {
             controls = [(header, disclosure)]
         }
         func end() { lock.withLock { ended = true } }
+        /// A sampled terminal fact, not a fresh AX ownership check.
+        var hasEnded: Bool { lock.withLock { ended } }
         var hasObservedLoss: Bool { lock.withLock { observedLoss } }
         private func lose() { lock.withLock { ended = true; observedLoss = true } }
 
