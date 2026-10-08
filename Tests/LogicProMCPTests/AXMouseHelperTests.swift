@@ -59,6 +59,30 @@ private final class AXMouseHelperRecorder: @unchecked Sendable {
     #expect(recorder.sleeps == [20_000])
 }
 
+@Test func axMouseHelperPreparedClickDoesNotPostDuringPreparationOrSleepBetweenHalves() throws {
+    let recorder = AXMouseHelperRecorder()
+    let point = CGPoint(x: 56, y: 78)
+    let prepared = try #require(recorder.runtime().prepareMouseClick(point, 1))
+    #expect(recorder.mouseEvents.isEmpty)
+    #expect(prepared.postDown())
+    #expect(prepared.postUp())
+    #expect(recorder.mouseEvents.map(\.type) == [.leftMouseDown, .leftMouseUp])
+    #expect(recorder.mouseEvents.allSatisfy { $0.point == point && $0.clickCount == 1 })
+    #expect(recorder.sleeps.isEmpty)
+}
+
+@Test func axMouseHelperPreparedClickRetainsSeparateDownAndUpFailures() throws {
+    let recorder = AXMouseHelperRecorder()
+    let runtime = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
+        recorder.mouseEvents.append((type, point, clicks))
+        return type == .leftMouseDown
+    }, postKeyEvent: { _ in false }, postUnicodeScalar: { _ in false }, sleepMicros: { _ in })
+    let prepared = try #require(runtime.prepareMouseClick(CGPoint(x: 3, y: 4), 1))
+    #expect(prepared.postDown())
+    #expect(!prepared.postUp())
+    #expect(recorder.mouseEvents.map(\.type) == [.leftMouseDown, .leftMouseUp])
+}
+
 @Test func axMouseHelperNumericTypingSkipsUnsupportedCharactersAndPostsReturnEscape() {
     let recorder = AXMouseHelperRecorder()
     let runtime = recorder.runtime()
