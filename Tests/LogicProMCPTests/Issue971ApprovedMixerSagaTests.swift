@@ -216,8 +216,13 @@ struct Issue971ApprovedMixerSagaTests {
         }
 
         func namesPlan(_ names: [String], approvedNames: [String]? = nil,
-                       policyExtras: [String: Value] = [:]) async throws -> [String: Any] {
-            let report = try await call("inspect_session", params: ["domains": .array([.string("tracks")])])
+                       policyExtras: [String: Value] = [:], includeMixerObservation: Bool = true) async throws -> [String: Any] {
+            // A composed Mixer goal needs the existing guarded Mixer observation,
+            // not an absence inferred from a tracks-only, Help-free snapshot.
+            let hasMixerGoal = policyExtras["presentation"]?.objectValue?["mixer_visible"]?.boolValue != nil
+            let domains: [Value] = hasMixerGoal && includeMixerObservation
+                ? [.string("tracks"), .string("strips")] : [.string("tracks")]
+            let report = try await call("inspect_session", params: ["domains": .array(domains)])
             let snapshot = try #require(report["snapshot_id"] as? String)
             let rows = try #require((report["tracks"] as? [String: Any])?["rows"] as? [[String: Any]])
             #expect(rows.count == names.count)
@@ -688,6 +693,25 @@ struct Issue971ApprovedMixerSagaTests {
                     Issue.record("the deadline must remain the journal winner"); return
                 }
                 #expect(sharedJSONObject(stored.body)?["error"] as? String == outcome["error"] as? String)
+            }
+        }
+    }
+
+    @Test
+    func composedMixerGoalCannotInventAbsenceFromTracksOnlySnapshot() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "Lead"]
+                _ = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])],
+                    includeMixerObservation: false)
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(!executable)
+        let reasons = try #require(plan["reasons"] as? [String])
+        #expect(reasons.contains("mixer_visibility_unobserved"))
+                #expect(f.view.events.isEmpty)
             }
         }
     }
