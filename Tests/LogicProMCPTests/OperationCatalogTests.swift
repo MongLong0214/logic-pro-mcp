@@ -46,6 +46,7 @@ struct OperationCatalogTests {
     private static let selectorsRequiringLiveQualificationByOperation: [OperationID: Set<String>] = [
         .pluginsGetInventory: ["index", "track"],
         .pluginsGetParamVerified: ["track"],
+        .pluginsGetChannelEQStateVerified: ["track"],
         .pluginsSetParamVerified: ["track"],
         .pluginsSetEQBandVerified: ["track"],
         .pluginsInsertVerified: ["track"],
@@ -53,6 +54,7 @@ struct OperationCatalogTests {
     private static let selectorLiveQualificationReasonByOperation: [OperationID: String] = [
         .pluginsGetInventory: "AX inventory must expose the selected strip identity after ChannelRouter forwarding",
         .pluginsGetParamVerified: "AX parameter read must expose the occupied insert identity; track only corroborates its issued target_ref",
+        .pluginsGetChannelEQStateVerified: "AX whole-EQ read must expose the occupied Channel EQ insert identity; track only corroborates its issued target_ref",
         .pluginsSetParamVerified: "AX apply-back must expose target_identity after verified preflight",
         .pluginsSetEQBandVerified: "AX named-band apply-back must expose target_identity after verified preflight",
         .pluginsInsertVerified: "AX insert readback must expose target_identity after verified preflight",
@@ -164,6 +166,7 @@ struct OperationCatalogTests {
         .systemSetupControlSurface: ["consent"],
         .pluginsGetInventory: ["track_index"],
         .pluginsGetParamVerified: ["insert", "param", "plugin", "plugin_id", "plugin_name", "unit"],
+        .pluginsGetChannelEQStateVerified: ["insert", "plugin", "plugin_id", "plugin_name", "project_expected_path"],
         .pluginsSetParamVerified: [
             "insert", "mode", "param", "plugin", "plugin_id", "plugin_name",
             "project_expected_path", "unit", "value",
