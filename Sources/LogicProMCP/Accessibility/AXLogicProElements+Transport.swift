@@ -30,8 +30,10 @@ extension AXLogicProElements {
             case .failure: throw AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
             }
         }
+        // Completeness covers the whole window, including deeper Arrange/Mixer
+        // siblings. Use its viewport census bound; an unvisited subtree still refuses.
         guard case .success(let groups) = AXHelpers.censusDescendantResult(
-            of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime.ax,
+            of: window, role: kAXGroupRole, maxDepth: 32, runtime: runtime.ax,
             requiresCompleteTraversal: true, permittingRead: permits,
             observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
             observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }) else {
