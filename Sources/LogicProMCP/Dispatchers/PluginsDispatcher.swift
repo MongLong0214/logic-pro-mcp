@@ -30,7 +30,7 @@ final class VerifiedOpGate: @unchecked Sendable {
 
 /// `logic_plugins` — verified plugin apply-back surface (R16 Plane 1).
 ///
-/// Commands: get_inventory, set_param_verified, set_eq_band_verified,
+/// Commands: get_inventory, get_param_verified, get_channel_eq_state_verified, set_param_verified, set_eq_band_verified,
 /// insert_verified. The dispatcher
 /// validates/normalizes input then routes through `ChannelRouter` to the
 /// AX-only verified operations (`plugin.*`). Verified ops never fall back
@@ -43,7 +43,8 @@ struct PluginsDispatcher: OperationTraceDispatching {
     static let tool = commandTool(
         name: "logic_plugins",
         description: "get_param_verified reads one current occupied insert parameter without audio mutation. Inputs: target_ref (ins_...) and param; optional unit, project_ref, track, insert and plugin aliases only corroborate the observed binding. No value, mode, confirmation or caller-supplied project path. Raw units: threshold normalized 0..100 percentage, Channel EQ raw_ax_value, limiter_on/auto_release boolean. observed_display is verbatim, not an inferred conversion. Reads can acquire an editor and temporarily change views; data and UI cleanup outcomes are reported separately. " +
-            "Verified plugin apply-back for Logic Pro (logic_plugins.*). Commands: get_inventory, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified. Unlike legacy logic_mixer.set_plugin_param (Scripter, unverified State B), this surface identifies the target track/insert/plugin/param via AX, writes, and reads back — State A only when the observed value matches within tolerance. get_inventory -> { track: Int (required, >= 0) } returns a drift-safe insert chain (physical slot index, read_status ok|empty|unreadable, complete). set_param_verified -> { track: Int, insert: Int, plugin: canonical logic.stock.* id or alias, param: key (e.g. gain_db), value: Float, unit: String, mode: \"duplicate_applyback\", project_expected_path: String (required) }. set_eq_band_verified -> { track: Int, insert: Int, band: String (e.g. Peak 1), parameter: String (e.g. Frequency), value: Float, unit: raw_ax_value|Hz|dB|Q, mode: \"duplicate_applyback\", project_expected_path: String (required) }. Engineering-unit Channel EQ requests are checked against Logic's AXValueDescription; no Hz-to-raw mapping is used. insert_verified -> { track: Int, insert: Int, plugin: Gain|Channel EQ|Compressor, mode: \"duplicate_applyback\", project_expected_path: String (required), expected_name: String }. PRD-007 index binding: insert_verified is `corroborated` — a bare `track` index is REFUSED with index_binding_corroboration_required; supply expected_name (the track name you expect at that index, corroborated against the live header and required to be unique across the surface) or a target_ref instead; expected_name + target_ref together is invalid_params; every binding failure is pre-write with write_attempted:false and takes no verified-op gate. mode confirmed_live is not supported in Release 1 (State C unsupported_mode). ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_param_verified, set_eq_band_verified, and insert_verified ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic_plugins.get_inventory (ins_…); plugin-insert refs resolve track and physical insert, and explicit track/insert values must agree when supplied or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use explicit selectors.",
+            "get_channel_eq_state_verified reads the current referenced Channel EQ insert's eight bands in one owned Controls-view acquisition. Required target_ref; optional project_ref, track, insert, plugin aliases and project_expected_path only corroborate that binding. No param, unit, value, mode or confirmation. Returns frequency/gain/Q raw_ax_value with actual host displays, Cut slope host_choice_text, separate Boolean band enable and plugin bypass observations. Missing/unstable required data is partial, never an invented zero or complete state. Stable bookends are not an atomic snapshot; editor/view acquisition and cleanup are reported separately. " +
+            "Verified plugin apply-back for Logic Pro (logic_plugins.*). Commands: get_inventory, get_param_verified, get_channel_eq_state_verified, set_param_verified, set_eq_band_verified, insert_verified. Unlike legacy logic_mixer.set_plugin_param (Scripter, unverified State B), this surface identifies the target track/insert/plugin/param via AX, writes, and reads back — State A only when the observed value matches within tolerance. get_inventory -> { track: Int (required, >= 0) } returns a drift-safe insert chain (physical slot index, read_status ok|empty|unreadable, complete). set_param_verified -> { track: Int, insert: Int, plugin: canonical logic.stock.* id or alias, param: key (e.g. gain_db), value: Float, unit: String, mode: \"duplicate_applyback\", project_expected_path: String (required) }. set_eq_band_verified -> { track: Int, insert: Int, band: String (e.g. Peak 1), parameter: String (e.g. Frequency), value: Float, unit: raw_ax_value|Hz|dB|Q, mode: \"duplicate_applyback\", project_expected_path: String (required) }. Engineering-unit Channel EQ requests are checked against Logic's AXValueDescription; no Hz-to-raw mapping is used. insert_verified -> { track: Int, insert: Int, plugin: Gain|Channel EQ|Compressor, mode: \"duplicate_applyback\", project_expected_path: String (required), expected_name: String }. PRD-007 index binding: insert_verified is `corroborated` — a bare `track` index is REFUSED with index_binding_corroboration_required; supply expected_name (the track name you expect at that index, corroborated against the live header and required to be unique across the surface) or a target_ref instead; expected_name + target_ref together is invalid_params; every binding failure is pre-write with write_attempted:false and takes no verified-op gate. mode confirmed_live is not supported in Release 1 (State C unsupported_mode). ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_param_verified, set_eq_band_verified, and insert_verified ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic_plugins.get_inventory (ins_…); plugin-insert refs resolve track and physical insert, and explicit track/insert values must agree when supplied or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use explicit selectors.",
         commandDescription: "Verified plugin command to execute"
     )
 
@@ -87,13 +88,14 @@ struct PluginsDispatcher: OperationTraceDispatching {
         }
 
         switch command {
-        case "get_param_verified":
+        case "get_param_verified", "get_channel_eq_state_verified":
             // Reads need the same editor/view custody as writes, but never arm a write boundary.
-            let operation = "logic_plugins.get_param_verified"
+            let wholeEQState = command == "get_channel_eq_state_verified"
+            let operation = "logic_plugins.\(command)"
             let allowed = OperationRegistry.spec(tool: "logic_plugins", command: command)?.allowedParams ?? []
             guard params.keys.allSatisfy({ allowed.contains($0) || $0 == "command" }),
                   nonEmptyString(params, "target_ref") != nil,
-                  let param = nonEmptyString(params, "param"),
+                  wholeEQState || nonEmptyString(params, "param") != nil,
                   ["track", "insert"].allSatisfy({
                       switch params[$0] {
                       case nil: return true
@@ -102,12 +104,12 @@ struct PluginsDispatcher: OperationTraceDispatching {
                       default: return false
                       }
                   }),
-                  ["unit", "plugin", "plugin_id", "plugin_name"].allSatisfy({
+                  ["unit", "plugin", "plugin_id", "plugin_name", "project_expected_path"].allSatisfy({
                       params[$0] == nil || nonEmptyString(params, $0) != nil
                   }) else {
-                return toolInvalidParamsResult("get_param_verified requires an occupied insert target_ref and named param; it accepts no value, mode or caller-supplied project path")
+                return toolInvalidParamsResult("\(command) requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted")
             }
-            return await runVerified(operation: "plugin.get_param_verified", gate: verifiedGate) {
+            return await runVerified(operation: "plugin.\(command)", gate: verifiedGate) {
                 switch await TargetRefResolver.resolveMutationIndex(
                     params, targetRegistry: targetRegistry, cache: cache, operation: operation,
                     indexKeys: ["track"],
@@ -122,10 +124,21 @@ struct PluginsDispatcher: OperationTraceDispatching {
                           let plugin = TargetRefResolver.pluginInsertIdentity(from: binding), !plugin.isEmpty else {
                         return TargetRefResolver.staleTargetReferenceResult(params["target_ref"]?.stringValue, operation: operation)
                     }
+                    if wholeEQState, plugin != "logic.stock.effect.channel_eq" {
+                        return TargetRefResolver.staleTargetReferenceResult(params["target_ref"]?.stringValue, operation: operation)
+                    }
+                    if let expectedPath = nonEmptyString(params, "project_expected_path"),
+                       !AppleScriptChannel.projectPathsMatch(expectedPath, projectPath) {
+                        return toolTextResult(.error(HonestContract.encodeV2StateC(
+                            error: .projectIdentityMismatch,
+                            extras: ["operation": operation, "write_attempted": false]
+                        )))
+                    }
                     var readParams = [
-                        "track": String(resolved.index), "param": param, "plugin": plugin,
+                        "track": String(resolved.index), "plugin": plugin,
                         "project_expected_path": projectPath, "expected_track_name": binding.descriptor.trackName,
                     ]
+                    if let param = nonEmptyString(params, "param") { readParams["param"] = param }
                     if let unit = nonEmptyString(params, "unit") { readParams["unit"] = unit }
                     for key in ["plugin", "plugin_id", "plugin_name"] {
                         if let requested = nonEmptyString(params, key),
@@ -136,7 +149,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
                     if let failure = applyPluginInsertBinding(resolved, params: params, writeParams: &readParams, operation: operation) {
                         return failure
                     }
-                    let result = await router.route(operation: "plugin.get_param_verified", params: readParams)
+                    let result = await router.route(operation: "plugin.\(command)", params: readParams)
                     guard !Task.isCancelled, await targetRegistry.resolve(binding.reference) != nil,
                           await targetRegistry.currentProjectIdentity == project else {
                         return toolTextResult(AccessibilityChannel.parameterReadContextFailure(

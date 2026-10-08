@@ -525,6 +525,7 @@ enum SemanticOracleTable {
         systemSagaStatus,
         pluginsGetInventory,
         pluginsGetParamVerified,
+        pluginsGetChannelEQStateVerified,
         projectIsRunning,
         projectGetRegions,
         projectExportPlan,
@@ -656,6 +657,9 @@ enum SemanticOracleTable {
         // The catalog's checkbox/slider distinction and conditional display status require
         // the custom response validator below, not a single numeric field constraint.
         .pluginsGetParamVerified,
+        // Eight ordered bands have conditional numeric/choice/Boolean fields and
+        // separate plugin enable/bypass semantics; flat constraints cannot express these.
+        .pluginsGetChannelEQStateVerified,
     ]
 
     static var customOracles: [OperationOracle] { all.filter { $0.strength == .custom } }
@@ -909,6 +913,77 @@ enum SemanticOracleTable {
         case "absent", "unreadable", "malformed": return display is NSNull
         default: return false
         }
+    }
+
+    // Protocol validation only. Independent native/UI qualification is separate;
+    // matching response fields alone cannot prove the physical hosted instance.
+    static let pluginsGetChannelEQStateVerified = OperationOracle(
+        custom: .pluginsGetChannelEQStateVerified,
+        reason: "Eight ordered bands require raw numeric fields with actual host displays, Cut slope choices, Boolean band enables and explicit non-applicable fields. Plugin bypass is separate and conditional. This validates the declared non-atomic response contract, not independent native qualification."
+    ) { responseData, _ in
+        func boolean(_ value: Any?, _ expected: Bool) -> Bool {
+            guard let value, JSONInspector.isBoolean(value) else { return false }
+            return value as? Bool == expected
+        }
+        guard let object = JSONInspector.parse(responseData) as? [String: Any],
+              object["hc_schema"].flatMap(JSONInspector.number) == 2,
+              object["state"] as? String == "A", boolean(object["success"], true),
+              boolean(object["verified"], true), boolean(object["write_attempted"], false),
+              boolean(object["complete"], true), boolean(object["snapshot_atomic"], false),
+              object["operation"] as? String == "logic_plugins.get_channel_eq_state_verified",
+              object["observation_scope"] as? String == "current_insert_eight_band_raw_and_host_display",
+              object["verify_source"] as? String == "ax_plugin_window",
+              let reasons = object["partial_reasons"] as? [String], reasons.isEmpty,
+              let reference = object["target_ref"] as? String, reference.hasPrefix("ins_"), reference.count > 4,
+              let fingerprint = object["target_fingerprint"] as? String, !fingerprint.isEmpty,
+              let identity = object["target_identity"] as? [String: Any],
+              identity["plugin_id"] as? String == "logic.stock.effect.channel_eq",
+              let track = identity["track_index"].flatMap(JSONInspector.number), track >= 0, track.rounded() == track,
+              let insert = identity["insert"].flatMap(JSONInspector.number), insert >= 0, insert.rounded() == insert,
+              let bands = object["bands"] as? [[String: Any]], bands.count == 8 else { return false }
+        func field(_ value: Any?, kind: String) -> Bool {
+            guard let field = value as? [String: Any] else { return false }
+            if kind == "not_applicable" {
+                return field["read_status"] as? String == kind && field["observed_raw"] is NSNull
+                    && field["raw_unit"] is NSNull && field["observed_display"] is NSNull
+                    && field["display_read_status"] as? String == kind
+            }
+            guard field["read_status"] as? String == "read", field["raw_unit"] as? String == kind,
+                  let raw = field["observed_raw"], let display = field["observed_display"] else { return false }
+            if kind == "boolean" {
+                return JSONInspector.isBoolean(raw) && display is NSNull
+                    && field["display_read_status"] as? String == "absent"
+            }
+            guard let text = display as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  field["display_read_status"] as? String == "read" else { return false }
+            if kind == "host_choice_text" { return raw as? String == text }
+            return JSONInspector.number(of: raw)?.isFinite == true
+        }
+        let names = ["Low Cut", "Low Shelf", "Peak 1", "Peak 2", "Peak 3", "Peak 4", "High Shelf", "High Cut"]
+        let roles = ["highPass", "lowShelf", "parametric1", "parametric2", "parametric3", "parametric4", "highShelf", "lowPass"]
+        for (index, band) in bands.enumerated() {
+            let cut = index == 0 || index == 7
+            guard band["band"].flatMap(JSONInspector.number) == Double(index + 1),
+                  band["name"] as? String == names[index], band["filter_role"] as? String == roles[index],
+                  field(band["frequency"], kind: "raw_ax_value"), field(band["q"], kind: "raw_ax_value"),
+                  field(band["enabled"], kind: "boolean"),
+                  field(band["gain"], kind: cut ? "not_applicable" : "raw_ax_value"),
+                  field(band["slope"], kind: cut ? "host_choice_text" : "not_applicable") else { return false }
+        }
+        guard let enabled = object["plugin_enabled"] as? [String: Any],
+              let bypass = object["plugin_bypass"] as? [String: Any] else { return false }
+        if enabled["read_status"] as? String == "read" {
+            guard field(enabled, kind: "boolean"), field(bypass, kind: "boolean"),
+                  let value = enabled["observed_raw"] as? Bool, let inverse = bypass["observed_raw"] as? Bool,
+                  inverse != value, bypass["derived_from"] as? String == "host_plugin_enabled" else { return false }
+        } else {
+            let unavailable = ["absent", "ambiguous", "unreadable", "malformed", "unstable", "context_ended", "unknown"]
+            guard let status = enabled["read_status"] as? String, unavailable.contains(status),
+                  bypass["read_status"] as? String == status,
+                  [enabled, bypass].allSatisfy({ $0["observed_raw"] is NSNull && $0["raw_unit"] is NSNull
+                      && $0["observed_display"] is NSNull && $0["display_read_status"] as? String == status }) else { return false }
+        }
+        return true
     }
 
     // MARK: - project

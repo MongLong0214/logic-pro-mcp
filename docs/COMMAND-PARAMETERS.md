@@ -84,6 +84,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 
 | Command | Parameters | Required | Unknown parameters | Mutability | Confirmation | Target | Verification | Retry | Availability |
 |---|---|---|---|---|---|---|---|---|---|
+| `get_channel_eq_state_verified` | `insert`: integer, `plugin`: string, `plugin_id`: string, `plugin_name`: string, `project_expected_path`: string, `project_ref`, `target_ref`: string, `track`: integer | `target_ref` | closed | read_only | none | accepts_stable_target | readback_required | never_automatic | default_install |
 | `get_inventory` | `index`, `track`, `track_index` | `index` or `track` or `track_index` | closed | read_only | none | none | none | never_automatic | default_install |
 | `get_param_verified` | `insert`: integer, `param`: string, `plugin`: string, `plugin_id`: string, `plugin_name`: string, `project_ref`, `target_ref`: string, `track`: integer, `unit`: string | `target_ref`; `param` | closed | read_only | none | accepts_stable_target | readback_required | never_automatic | default_install |
 | `insert_verified` | `expected_name`, `insert`, `mode`, `plugin`, `plugin_id`, `plugin_name`, `project_expected_path`, `project_ref`, `slot`, `target_ref`, `track` | `track` or `target_ref`; `insert` or `slot` or `target_ref`; `plugin` or `plugin_id` or `plugin_name`; `expected_name` or `target_ref`; `mode`; `project_expected_path` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |

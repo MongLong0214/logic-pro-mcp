@@ -372,6 +372,7 @@ struct OperationRegistryTests {
         ("logic_system", "system.setup_control_surface", "setup_control_surface", .mutating, .long, .readbackRequired),
         ("logic_plugins", "plugins.get_inventory", "get_inventory", .readOnly, .short, .none),
         ("logic_plugins", "plugins.get_param_verified", "get_param_verified", .readOnly, .medium, .readbackRequired),
+        ("logic_plugins", "plugins.get_channel_eq_state_verified", "get_channel_eq_state_verified", .readOnly, .medium, .readbackRequired),
         ("logic_plugins", "plugins.set_param_verified", "set_param_verified", .mutating, .medium, .readbackRequired),
         ("logic_plugins", "plugins.set_eq_band_verified", "set_eq_band_verified", .mutating, .medium, .readbackRequired),
         ("logic_plugins", "plugins.insert_verified", "insert_verified", .mutating, .medium, .readbackRequired),
@@ -413,7 +414,7 @@ struct OperationRegistryTests {
             #expect(spec.mutability == entry.mutability)
             #expect(spec.confirmation == (id == .systemClearTraces ? .l2 : .none))
             #expect(spec.target == (
-                id == .pluginsGetParamVerified || id == .pluginsSetParamVerified
+                id == .pluginsGetParamVerified || id == .pluginsGetChannelEQStateVerified || id == .pluginsSetParamVerified
                     || id == .pluginsSetEQBandVerified || id == .pluginsInsertVerified
                     ? .acceptsStableTarget
                     : .none
