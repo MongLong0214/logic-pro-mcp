@@ -157,6 +157,23 @@ struct Issue291SendSlotReadTests {
         ])
     }
 
+    @Test("a malformed successor help is unreadable, not an empty send")
+    func malformedSuccessorHelpIsUnreadableAndKeepsItsOrdinal() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = layoutItem(builder, id: 31_050)
+        let knob = sendKnob(builder, id: 31_052)
+        builder.setAttribute(knob, kAXHelpAttribute as String, 42)
+        builder.setChildren(strip, [
+            sendButton(builder, id: 31_051), knob, sendButton(builder, id: 31_053),
+        ])
+        let read = try #require(AXLogicProElements.sendSlotObservations(in: strip, runtime: builder.makeAXRuntime()))
+        #expect(read == [
+            SendSlotObservation(ordinal: 0, state: .unreadable),
+            SendSlotObservation(ordinal: 1, state: .observedEmpty),
+        ])
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
     /// The knob has to FOLLOW its button. A slider before the first send button is somebody
     /// else's control, and a strip carries several sliders that are not send knobs.
     ///
