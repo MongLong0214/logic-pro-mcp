@@ -82,12 +82,113 @@ extension AccessibilityChannel {
         final class ReadFocusScope: @unchecked Sendable {
             private let lock = NSLock()
             private var navigation: OwnedTrackStackObservationNavigation?
+            private var passiveMixer: PassiveMixerReadFocus?
             func retain(_ navigation: OwnedTrackStackObservationNavigation?) {
-                lock.withLock { self.navigation = navigation }
+                lock.withLock { self.navigation = navigation; passiveMixer = nil }
+            }
+            func retainPassiveMixer(in window: AXUIElement, logic: AXLogicProElements.Runtime) {
+                let candidate = PassiveMixerReadFocus(window: window, logic: logic)
+                lock.withLock { passiveMixer = candidate }
             }
             func permits() -> Bool {
-                let held = lock.withLock { navigation }
-                return held?.permitsHeldPassiveLabelFocus() == true
+                let held = lock.withLock { (navigation, passiveMixer) }
+                return held.0?.permitsHeldPassiveLabelFocus() == true || held.1?.permits() == true
+            }
+
+            /// A passive strip exposes a zero insertion sentinel on Logic 12.3.
+            /// This custody is installed only for a no-navigation, tracks-only read.
+            /// It never grants Help, keyboard, navigation or write permission.
+            private struct PassiveMixerReadFocus {
+                let logic: AXLogicProElements.Runtime
+                let pid: pid_t
+                let app: AXUIElement
+                let window: AXUIElement
+                let title: String
+                let document: String
+                let focus: AXUIElement
+                let binding: AXLogicProElements.MixerAreaBinding
+
+                init?(window: AXUIElement, logic: AXLogicProElements.Runtime) {
+                    guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                          let pid = logic.logicProPID(),
+                          let app = AXLogicProElements.appRoot(runtime: logic),
+                          let title = AXHelpers.getTitle(window, runtime: logic.ax),
+                          case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                          let url = URL(string: document), url.isFileURL,
+                          url.host == nil || url.host == "" || url.host == "localhost",
+                          let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                          let mixer: AXUIElement = AXHelpers.getAttribute(focus, kAXParentAttribute as String, runtime: logic.ax),
+                          AXHelpers.getRole(mixer, runtime: logic.ax) == kAXLayoutAreaRole as String,
+                          AXLocalePolicy.mixerNamedElement.containsNormalized(AXHelpers.getDescription(mixer, runtime: logic.ax)),
+                          let outer: AXUIElement = AXHelpers.getAttribute(mixer, kAXParentAttribute as String, runtime: logic.ax),
+                          AXHelpers.getRole(outer, runtime: logic.ax) == kAXGroupRole as String,
+                          AXLocalePolicy.mixerNamedElement.containsNormalized(AXHelpers.getDescription(outer, runtime: logic.ax))
+                    else { return nil }
+                    // Do not rediscover Mixer via its Help-reading candidate census:
+                    // no-navigation inspection must not query any focus-moving Help.
+                    var reversePath = [mixer]
+                    while !CFEqual(reversePath.last!, window) {
+                        guard reversePath.count < 12,
+                              let parent: AXUIElement = AXHelpers.getAttribute(reversePath.last!, kAXParentAttribute as String, runtime: logic.ax),
+                              !reversePath.contains(where: { CFEqual($0, parent) }) else { return nil }
+                        reversePath.append(parent)
+                    }
+                    let binding = AXLogicProElements.MixerAreaBinding(mixer: mixer, owners: [], path: reversePath.reversed())
+                    self.logic = logic; self.pid = pid; self.app = app; self.window = window
+                    self.title = title; self.document = document; self.focus = focus; self.binding = binding
+                    guard permits() else { return nil }
+                }
+
+                private func zeroNumber(_ attribute: String) -> Bool {
+                    guard case .success(.some(let value)) = AXHelpers.getAttributeResult(focus, attribute,
+                        runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
+                        CFGetTypeID(value) == CFNumberGetTypeID(), let number = value as? NSNumber else { return false }
+                    return number.doubleValue == 0
+                }
+
+                private func noValue(_ attribute: String) -> Bool {
+                    guard case .failure(let error) = AXHelpers.getAttributeResult(focus, attribute,
+                        runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError> else { return false }
+                    return error == .init(raw: AXError.noValue.rawValue)
+                }
+
+                func permits() -> Bool {
+                    guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                          logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
+                          let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(app, currentApp),
+                          AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: logic.ax) as Bool? == true,
+                          let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
+                          let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
+                          CFEqual(main, window), CFEqual(focusedWindow, window),
+                          AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
+                          case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                          doc.utf8.elementsEqual(document.utf8),
+                          let currentFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                          CFEqual(currentFocus, focus),
+                          AXHelpers.getRole(focus, runtime: logic.ax) == kAXLayoutItemRole as String,
+                          AXHelpers.isAttributeSettable(focus, kAXValueAttribute as String, runtime: logic.ax) == false,
+                          noValue(kAXValueAttribute as String), noValue(kAXSelectedTextAttribute as String),
+                          zeroNumber(kAXNumberOfCharactersAttribute as String), zeroNumber(kAXInsertionPointLineNumberAttribute as String),
+                          AXHelpers.getRole(binding.mixer, runtime: logic.ax) == kAXLayoutAreaRole as String,
+                          AXLocalePolicy.mixerNamedElement.containsNormalized(AXHelpers.getDescription(binding.mixer, runtime: logic.ax)),
+                          let first = binding.path.first, CFEqual(first, window),
+                          let last = binding.path.last, CFEqual(last, binding.mixer) else { return false }
+                    for (parent, child) in zip(binding.path, binding.path.dropFirst()) {
+                        guard case .success(let children) = AXHelpers.childrenResult(parent, runtime: logic.ax),
+                              children.filter({ CFEqual($0, child) }).count == 1,
+                              let observedParent: AXUIElement = AXHelpers.getAttribute(child, kAXParentAttribute as String, runtime: logic.ax),
+                              CFEqual(parent, observedParent) else { return false }
+                    }
+                    guard let strips = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: binding.mixer, runtime: logic.ax),
+                          strips.strips.filter({ CFEqual($0, focus) }).count == 1,
+                          let parent: AXUIElement = AXHelpers.getAttribute(focus, kAXParentAttribute as String, runtime: logic.ax),
+                          CFEqual(parent, binding.mixer),
+                          let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                          CFEqual(finalFocus, focus),
+                          case .success(.some(let finalDoc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                          finalDoc.utf8.elementsEqual(document.utf8) else { return false }
+                    return true
+                }
             }
         }
         let logic: AXLogicProElements.Runtime
