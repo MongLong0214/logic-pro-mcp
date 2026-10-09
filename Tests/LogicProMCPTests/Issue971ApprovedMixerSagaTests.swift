@@ -112,6 +112,7 @@ struct Issue971ApprovedMixerSagaTests {
              fileReader: (@Sendable (Issue969MixerVisibilitySetterTests.Fixture) -> LogicProjectFileReader.Runtime)? = nil) throws {
             self.cache = cache; self.journal = journal
             view = .init(showing: showing)
+            view.builder.setAttributeSettable(view.rail, kAXFocusedAttribute as String, true)
             bundle = FileManager.default.temporaryDirectory
                 .appendingPathComponent("ApprovedMixer-\(UUID().uuidString).logicx", isDirectory: true)
             try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
@@ -1499,12 +1500,17 @@ struct Issue971ApprovedMixerSagaTests {
         }
     }
 
-    @Test(arguments: ["ko-KR", "en-US"])
+    @Test(arguments: ["ko-KR", "en-US", "ja-JP"])
     func capturedMenuLocaleDistinguishesMeasuredSortFromAnUnsupportedLanguage(locale: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             try await FeatureFlags.withAdr004MutationSagaForTests(true) {
                 let fixture = try Fixture(showing: false)
-                let titles = locale == "ko-KR" ? ["파일", "편집", "트랙"] : ["File", "Edit", "Track"]
+                let titlesByLocale = [
+                    "ko-KR": ["파일", "편집", "트랙"],
+                    "en-US": ["File", "Edit", "Track"],
+                    "ja-JP": ["ファイル", "編集", "トラック"],
+                ]
+                let titles = try #require(titlesByLocale[locale])
                 let menus = titles.enumerated().map { index, title in
                     let menu = fixture.view.builder.element(971_200 + index)
                     fixture.view.builder.setRole(menu, kAXMenuBarItemRole as String)
@@ -1525,7 +1531,7 @@ struct Issue971ApprovedMixerSagaTests {
                         "criterion": .string("track_name"), "expected_order": .array(input.order.reversed().map(Value.string)),
                         "inverse_criterion": .string("creation_date")])]))])
                 let blocked = try #require(((plan["steps"] as? [[String: Any]])?.first)?["blocked_reasons"] as? [String])
-                let localeBlockedAsExpected = blocked.contains("sort_locale_measurement_unavailable") == (locale != "ko-KR")
+                let localeBlockedAsExpected = blocked.contains("sort_locale_measurement_unavailable") == (locale == "ja-JP")
                 #expect(localeBlockedAsExpected)
                 #expect(blocked.contains("track_population_incomplete"))
                 #expect(blocked.contains("sort_coupled_footprint_unavailable"))

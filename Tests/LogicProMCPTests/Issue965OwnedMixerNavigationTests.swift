@@ -28,6 +28,7 @@ struct Issue965OwnedMixerNavigationTests {
         var cancelLeavesMenuOpen = false
         var showFails = false
         var unreadLabelElement: AXUIElement?
+        var menuReturnFocus: AXUIElement?
 
         init() {
             app = builder.element(965_950)
@@ -48,6 +49,7 @@ struct Issue965OwnedMixerNavigationTests {
             builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
             builder.setRole(rail, kAXListRole as String)
             builder.setAttribute(rail, kAXIdentifierAttribute as String, "Track Headers")
+            builder.setAttributeSettable(rail, kAXFocusedAttribute as String, true)
             builder.setChildren(rail, [])
             builder.setChildren(window, [rail])
             builder.setRole(menuBar, kAXMenuBarRole as String)
@@ -98,7 +100,7 @@ struct Issue965OwnedMixerNavigationTests {
                         }
                         if !cancelLeavesMenuOpen {
                             builder.setAttribute(view, kAXSelectedAttribute as String, false)
-                            builder.setAttribute(app, kAXFocusedUIElementAttribute as String, rail)
+                            builder.setAttribute(app, kAXFocusedUIElementAttribute as String, menuReturnFocus ?? rail)
                         }
                         return true
                     }
@@ -198,6 +200,170 @@ struct Issue965OwnedMixerNavigationTests {
         #expect(effects["restoration"] as? String == "restored")
         #expect(fixture.pressed == ["open_view", "show_mixer", "open_view", "hide_mixer"])
         #expect(!fixture.showing)
+    }
+
+    private func inspectVisibilityFixture(_ fixture: Issue969MixerVisibilitySetterTests.Fixture) async throws -> [String: Any] {
+        let cache = StateCache()
+        let gate = LogicMutationGate()
+        let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: TargetRegistry(),
+            poller: StatePoller(axChannel: fixture.channel(), cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable,
+                               keyboardFocus: { .notTextEditing })),
+            dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+            liveTrackNames: { [:] }, projectFileReader: .unavailable)
+        let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+        let params: [String: Value] = ["domains": .array([.string("strips")]), "allow_ui_navigation": .bool(true)]
+        let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+            commandParams: params, mutationGate: gate) { await handler(dependencies, params) }
+        return try #require(sharedJSONObject(sharedToolText(result)))
+    }
+
+    @Test("temporary inspection refuses an unrestorable captured focus before opening the Mixer")
+    func temporaryRevealRequiresRestorableFocusBeforeNavigation() async throws {
+        let fixture = Issue969MixerVisibilitySetterTests.Fixture(showing: false)
+        fixture.builder.setAttributeSettable(fixture.rail, kAXFocusedAttribute as String, false)
+        fixture.afterVisibilityChange = {
+            fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.mixer)
+        }
+        let body = try await inspectVisibilityFixture(fixture)
+        #expect(!fixture.showing, "unsupported original focus must not leave an acquired Mixer exposed")
+        #expect(fixture.events.isEmpty, "do not open a menu or actuate the Mixer before proving focus restoration is supported")
+        let effects = try #require(body["ui_effects"] as? [String: Any])
+        let navigationPerformed = try #require(effects["navigation_performed"] as? Bool)
+        #expect(!navigationPerformed)
+        let focused = try #require(fixture.builder.attributeValue(fixture.app, kAXFocusedUIElementAttribute as String))
+        #expect(CFEqual(focused as AnyObject, fixture.rail))
+    }
+
+    @Test("temporary inspection rechecks focus restorability after opening its menu")
+    func temporaryRevealRequiresRestorableFocusBeforeMixerLeaf() async throws {
+        let fixture = Fixture()
+        fixture.builder.setAttributeSettable(fixture.rail, kAXFocusedAttribute as String, true)
+        fixture.afterOpen = {
+            fixture.builder.setAttributeSettable(fixture.rail, kAXFocusedAttribute as String, false)
+        }
+        let body = try await inspect(fixture, navigation: true)
+        #expect(!fixture.showing)
+        #expect(fixture.pressed == ["open_view", "cancel_view"])
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+    }
+
+    @Test("an actionable focus is not a qualified restoration target even when AXFocused is advertised settable",
+          arguments: [false, true])
+    func temporaryRevealRejectsActionableFocus(beforeLeaf: Bool) async throws {
+        let fixture = Fixture()
+        let focusedButton = fixture.builder.element(965_994)
+        fixture.builder.setRole(focusedButton, beforeLeaf ? kAXGroupRole as String : kAXButtonRole as String)
+        fixture.builder.setAttribute(focusedButton, kAXDescriptionAttribute as String, "New Track with Duplicate Settings")
+        fixture.builder.setAttributeSettable(focusedButton, kAXFocusedAttribute as String, true)
+        fixture.builder.setChildren(focusedButton, [])
+        fixture.extraWindowChildren = [focusedButton]
+        fixture.builder.setChildren(fixture.window, [fixture.rail, focusedButton])
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, focusedButton)
+        fixture.menuReturnFocus = focusedButton
+        if beforeLeaf {
+            fixture.afterOpen = { fixture.builder.setRole(focusedButton, kAXButtonRole as String) }
+        }
+        fixture.afterShow = { fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.mixer) }
+        _ = try await inspect(fixture, navigation: true)
+        #expect(!fixture.showing)
+        #expect(fixture.pressed == (beforeLeaf ? ["open_view", "cancel_view"] : []))
+        let focused = try #require(fixture.builder.attributeValue(fixture.app, kAXFocusedUIElementAttribute as String))
+        #expect(CFEqual(focused as AnyObject, focusedButton))
+    }
+
+    @Test("temporary Mixer reading restores its exact live workspace after the reveal moves focus",
+          arguments: [false, true])
+    func temporaryRevealRestoresCapturedWorkspaceFocus(parentContainer: Bool) async throws {
+        let fixture = Issue969MixerVisibilitySetterTests.Fixture(showing: false)
+        let movedFocus: AXUIElement
+        if parentContainer {
+            let container = fixture.builder.element(965_991)
+            fixture.builder.setRole(container, kAXGroupRole as String)
+            fixture.builder.setRole(fixture.mixer, "AXLayoutArea")
+            let strip = fixture.builder.element(965_992)
+            fixture.builder.setRole(strip, kAXLayoutItemRole as String)
+            fixture.builder.setChildren(strip, [])
+            fixture.builder.setChildren(fixture.mixer, [strip])
+            fixture.builder.setChildren(container, [fixture.mixer])
+            fixture.mixerContainer = container
+            movedFocus = container
+        } else { movedFocus = fixture.mixer }
+        fixture.permitsCapturedFocusRestore = true
+        fixture.builder.setAttributeSettable(fixture.rail, kAXFocusedAttribute as String, true)
+        fixture.afterVisibilityChange = {
+            fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                fixture.showing ? movedFocus : fixture.rail)
+        }
+        let body = try await inspectVisibilityFixture(fixture)
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        #expect(fixture.events == ["open_view", "show_mixer", "restore_captured_focus", "open_view", "hide_mixer"])
+        #expect(!fixture.showing)
+        let focus = try #require(fixture.builder.attributeValue(fixture.app, kAXFocusedUIElementAttribute as String))
+        #expect(CFEqual(focus as AnyObject, fixture.rail))
+        #expect((body["strips"] as? [String: Any])?["coverage"] as? String != "complete",
+                "exact view restoration does not qualify the requested population")
+    }
+
+    @Test("temporary reading does not focus or hide after lost custody or an unverified focus setter",
+          arguments: ["unsupported", "false_ack", "no_readback", "retired", "foreign", "window", "document", "pid", "app", "menu_open", "parent_mismatch", "after_restore_focus", "after_restore_document", "after_path_pid", "after_path_app"])
+    func temporaryRevealRefusesUnownedFocusRestoration(fault: String) async throws {
+        let fixture = Issue969MixerVisibilitySetterTests.Fixture(showing: false)
+        fixture.permitsCapturedFocusRestore = true
+        fixture.builder.setAttributeSettable(fixture.rail, kAXFocusedAttribute as String, true)
+        fixture.focusRestoreAcknowledged = fault != "false_ack"
+        fixture.focusRestoreChangesFocus = fault != "no_readback"
+        fixture.leafLeavesMenuOpen = fault == "menu_open"
+        let foreign = fixture.builder.element(965_993)
+        fixture.builder.setRole(foreign, kAXGroupRole as String)
+        fixture.builder.setChildren(foreign, [])
+        fixture.builder.setAttribute(foreign, kAXMainWindowAttribute as String, fixture.window)
+        fixture.builder.setAttribute(foreign, kAXFocusedWindowAttribute as String, fixture.window)
+        fixture.builder.setAttribute(foreign, kAXFocusedUIElementAttribute as String, fixture.mixer)
+        fixture.builder.setAttribute(foreign, kAXFrontmostAttribute as String, true)
+        fixture.builder.setAttribute(foreign, kAXMenuBarAttribute as String, fixture.menuBar)
+        fixture.afterVisibilityChange = {
+            fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.mixer)
+            switch fault {
+            case "unsupported": fixture.builder.setAttributeSettable(fixture.rail, kAXFocusedAttribute as String, false)
+            case "retired": fixture.builder.setChildren(fixture.window, [fixture.mixer])
+            case "foreign":
+                fixture.builder.setChildren(fixture.window, [fixture.rail, fixture.mixer, foreign])
+                fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, foreign)
+            case "window": fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, foreign)
+            case "document": fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+            case "pid": fixture.logicPID = 4243
+            case "app": fixture.currentApp = foreign
+            case "parent_mismatch": fixture.builder.setAttribute(fixture.rail, kAXParentAttribute as String, foreign)
+            default: break
+            }
+        }
+        fixture.afterFocusRestore = {
+            switch fault {
+            case "after_restore_focus": fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, foreign)
+            case "after_restore_document": fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+            default: break
+            }
+        }
+        if fault == "after_path_pid" || fault == "after_path_app" {
+            fixture.attributeReadObserver = { element, attribute in
+                guard fixture.events.contains("restore_captured_focus"), CFEqual(element, fixture.rail),
+                      attribute == kAXParentAttribute as String else { return }
+                fixture.attributeReadObserver = nil
+                if fault == "after_path_pid" { fixture.logicPID = 4243 }
+                else {
+                    fixture.builder.setAttribute(foreign, kAXFocusedUIElementAttribute as String, fixture.rail)
+                    fixture.currentApp = foreign
+                }
+            }
+        }
+        let body = try await inspectVisibilityFixture(fixture)
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "not_restored")
+        #expect(!fixture.events.contains("hide_mixer"))
+        #expect(fixture.showing)
+        let setterExpected = ["false_ack", "no_readback", "after_restore_focus", "after_restore_document", "after_path_pid", "after_path_app"].contains(fault)
+        let setterMatches = fixture.events.contains("restore_captured_focus") == setterExpected
+        #expect(setterMatches)
     }
 
     @Test(arguments: [false, true])

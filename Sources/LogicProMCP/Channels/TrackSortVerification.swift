@@ -26,16 +26,19 @@ enum TrackSortCriterion: String, CaseIterable, Sendable, Hashable {
         }
     }
 
-    /// The #448 menu measurement is Korean-only. Logic's partially localized
-    /// menu bar is not a translation oracle: an English or unknown UI locale is
-    /// a missing measurement, even if a human could guess a plausible label.
+    /// Accept only measured leaf titles for the observed UI locale. English
+    /// measurements are distinct from derived label aliases: those aliases
+    /// locate a node, but its exact title must still identify the pressed leaf.
     func measuredLabel(for localeIdentifier: String?) -> String? {
         // `logicUILocaleIdentifier` publishes BCP-47 (`ko-KR`), while the
         // original #448 fixture used the underscore spelling (`ko_KR`). Both
         // identify the one measured Korean UI; accepting this formatting
         // difference does not infer a label for another locale.
-        guard localeIdentifier == "ko_KR" || localeIdentifier == "ko-KR" else { return nil }
-        return label.canonical
+        switch localeIdentifier {
+        case "ko_KR", "ko-KR": return label.canonical
+        case "en_US", "en-US": return AXLocalePolicy.measuredEnglishTrackSortLabels[self]
+        default: return nil
+        }
     }
 
     /// Maps the title read from the menu leaf itself back to its stable API

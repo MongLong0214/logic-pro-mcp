@@ -334,24 +334,57 @@ struct Issue448TrackSortVerifiedTests {
         #expect(allResolved)
     }
 
+    @Test("every observed English sort leaf resolves to the exact measured criterion",
+          arguments: TrackSortCriterion.allCases, ["en_US", "en-US"])
+    func everyEnglishCriterionResolvesMeasuredLabel(criterion: TrackSortCriterion, locale: String) {
+        let expected: [TrackSortCriterion: String] = [
+            .midiChannel: "MIDI Channel",
+            .audioChannel: "Audio Channel",
+            .outputChannel: "Output Channel",
+            .instrumentName: "Instrument Name",
+            .trackName: "Track Name",
+            .used: "Used, Unused",
+            .creationDate: "Creation Date",
+        ]
+        let label = expected[criterion]!
+        #expect(criterion.measuredLabel(for: locale) == label)
+        #expect(TrackSortCriterion.measuredCriterion(forObservedMenuItemLabel: label,
+            localeIdentifier: locale) == criterion)
+        #expect(criterion.label.matches(label))
+    }
+
+    @Test("English measurement does not authorize translated, plural or malformed leaf titles",
+          arguments: ["MIDI Channels", "Instrument Names", "Track Names", "Track Name ", "track name", "트랙 이름"])
+    func englishMeasurementRejectsUnobservedLeafTitles(label: String) {
+        let observed = TrackSortCriterion.measuredCriterion(forObservedMenuItemLabel: label,
+            localeIdentifier: "en-US")
+        #expect(observed == nil)
+    }
+
+    @Test("unmeasured locale identifiers remain unsupported",
+          arguments: ["en", "en-GB", "ja-JP", "fr-FR", "unknown"])
+    func unrelatedLocalesRemainUnmeasured(locale: String) {
+        #expect(TrackSortCriterion.trackName.measuredLabel(for: locale) == nil)
+    }
+
     @Test("an unmeasured locale names the missing sort-menu measurement")
     func unmeasuredLocaleRefuses() {
-        let policyRefusesEnglish = TrackSortCriterion.trackName.measuredLabel(for: "en_US") == nil
+        let policyRefusesJapanese = TrackSortCriterion.trackName.measuredLabel(for: "ja-JP") == nil
         let outcome = TrackSortVerifier.execute(
             criterion: .trackName,
             expectedOrder: ["trk_bass", "trk_kick"],
             before: { .read(["trk_kick", "trk_bass"]) },
-            actuate: { .unmeasuredLocale("en_US") },
+            actuate: { .unmeasuredLocale("ja-JP") },
             after: { .read(["trk_bass", "trk_kick"]) }
         )
 
         let refusedForMissingMeasurement: Bool
         if case .refused(.unmeasuredLocale(let locale)) = outcome {
-            refusedForMissingMeasurement = locale == "en_US"
+            refusedForMissingMeasurement = locale == "ja-JP"
         } else {
             refusedForMissingMeasurement = false
         }
-        let bothLocaleGuardsHeld = policyRefusesEnglish && refusedForMissingMeasurement
+        let bothLocaleGuardsHeld = policyRefusesJapanese && refusedForMissingMeasurement
         #expect(bothLocaleGuardsHeld)
     }
 
