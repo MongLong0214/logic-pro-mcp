@@ -32,6 +32,12 @@ enum SessionPopulationObservation {
         var restoredTracks: [TrackState]? = nil
         /// The live held view control, not a claim about saved/live population equivalence.
         var hiddenTracksShown: Bool? = nil
+        /// Request-local physical witnesses from explicit selection and verified restoration.
+        /// Never decoded or reconstructed from a wire reference, name or ordinal.
+        var selectionAssociations: [AccessibilityChannel.HeldSelectionAssociation.Pair] = []
+        /// A new full reading after verified selection restoration. This is not
+        /// permission to accept changes during that reading or across projects.
+        var associationReadbackBoundary: StateCache.CaptureBoundary? = nil
     }
 
     struct PresentationObservation: Encodable, Equatable, Sendable {
@@ -200,6 +206,7 @@ enum SessionPopulationObservation {
         case mixerFiltersUnread = "mixer_filters_unread"
         case mixerPresentationFiltered = "mixer_presentation_filtered"
         case noObservedAssociationEvidence = "no_observed_association_evidence"
+        case associationPopulationNotObserved = "association_population_not_observed"
         case parentDepthNotObserved = "parent_depth_not_observed"
         case routingGraphPartial = "routing_graph_partial"
         case routingGraphUnavailable = "routing_graph_unavailable"
@@ -813,6 +820,17 @@ enum SessionPopulationObservation {
     struct DomainSection: Encodable, Sendable {
         let coverage: Coverage
         let reasons: [Reason]
+        var rows: [AssociationRow]? = nil
+    }
+
+    struct AssociationRow: Encodable, Sendable {
+        let trackIndex: Int
+        let trackRef: String
+        let mixerStripRef: String
+        let source = "held_exclusive_selection_focus"
+        enum CodingKeys: String, CodingKey {
+            case trackIndex = "track_index", trackRef = "track_ref", mixerStripRef = "mixer_strip_ref", source
+        }
     }
 
     /// The routing domain (#291): existing coverage under `graph` stays wire-compatible;
@@ -1079,7 +1097,31 @@ enum SessionPopulationObservation {
             return DomainSection(coverage: .unavailable, reasons: [reason])
         }
         // An ordinal or name join between a strip and a track is not evidence of association.
-        let associations = deferred(.noObservedAssociationEvidence)
+        var associations = deferred(.noObservedAssociationEvidence)
+        if movementReason == nil, request.allowUINavigation, request.domains.contains(.associations),
+           let pairs = capture.freshPopulation?.selectionAssociations, !pairs.isEmpty {
+            var rows: [AssociationRow] = []
+            var heldTracks: [AXTrackBinding.Binding] = []
+            var heldStrips: [AXMixerStripBinding.Binding] = []
+            var qualified = true
+            for pair in pairs {
+                let trackMatches = live.indices.filter { live[$0].physicalBinding?.matches(pair.track) == true }
+                let stripMatches = capture.channelStrips.indices.filter { capture.channelStrips[$0].physicalBinding?.matches(pair.strip) == true }
+                guard trackMatches.count == 1, stripMatches.count == 1,
+                      let trackRow = trackMatches.first, let stripRow = stripMatches.first,
+                      !heldTracks.contains(where: { $0.matches(pair.track) }),
+                      !heldStrips.contains(where: { $0.matches(pair.strip) }),
+                      let trackRef = allRows[trackRow].trackRef,
+                      let stripRef = capture.mixerReference(at: stripRow)?.rawValue else { qualified = false; break }
+                heldTracks.append(pair.track); heldStrips.append(pair.strip)
+                if request.scope == .wholeProject || live[trackRow].isSelected == true {
+                    rows.append(.init(trackIndex: live[trackRow].id, trackRef: trackRef, mixerStripRef: stripRef))
+                }
+            }
+            if qualified, !rows.isEmpty {
+                associations = .init(coverage: .partial, reasons: [.associationPopulationNotObserved], rows: rows)
+            }
+        }
         let hierarchy = deferred(.parentDepthNotObserved)
         let routing = request.domains.contains(.routing) ? routingSection(capture: capture, moved: moved) : nil
         let color = request.domains.contains(.color) ? deferred(.colorDeferredToIssue970) : nil

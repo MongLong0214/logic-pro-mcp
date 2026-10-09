@@ -83,16 +83,21 @@ extension AccessibilityChannel {
             private let lock = NSLock()
             private var navigation: OwnedTrackStackObservationNavigation?
             private var passiveMixer: PassiveMixerReadFocus?
+            private var association: HeldSelectionAssociation?
             func retain(_ navigation: OwnedTrackStackObservationNavigation?) {
-                lock.withLock { self.navigation = navigation; passiveMixer = nil }
+                lock.withLock { self.navigation = navigation; passiveMixer = nil; association = nil }
+            }
+            func retainAssociation(_ observation: HeldSelectionAssociation) {
+                lock.withLock { association = observation }
             }
             func retainPassiveMixer(in window: AXUIElement, logic: AXLogicProElements.Runtime) {
                 let candidate = PassiveMixerReadFocus(window: window, logic: logic)
                 lock.withLock { passiveMixer = candidate }
             }
             func permits() -> Bool {
-                let held = lock.withLock { (navigation, passiveMixer) }
+                let held = lock.withLock { (navigation, passiveMixer, association) }
                 return held.0?.permitsHeldPassiveLabelFocus() == true || held.1?.permits() == true
+                    || held.2?.permitsRead() == true
             }
 
             /// A passive strip exposes a zero insertion sentinel on Logic 12.3.
