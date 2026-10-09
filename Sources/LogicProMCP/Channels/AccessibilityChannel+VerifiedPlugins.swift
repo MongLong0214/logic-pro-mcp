@@ -819,7 +819,8 @@ extension AccessibilityChannel {
         /// Showing the owned Mixer can focus its physical container. Both temporary
         /// inspection and final visibility reuse the same exact retained workspace
         /// proof; an ACK or the target's AXFocused value alone is not restoration.
-        private func restoreCapturedFocusAfterReveal(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+        private func restoreCapturedFocusAfterReveal(afterHide: Bool = false,
+                                                     stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             let pid = acquiredPID
             let app = acquiredApp
             guard effects.attempted.contains("mixer_visibility"), !focusRestoreAttempted,
@@ -831,10 +832,7 @@ extension AccessibilityChannel {
                   let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
                   !CFEqual(current, focus), !CFEqual(current, window),
                   AXHelpers.getRole(current, runtime: runtime.ax) == kAXGroupRole as String,
-                  case .found(let mixer) = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime, requiresCompleteAbsence: true),
-                  revealedMixer.map({ CFEqual($0, mixer) }) ?? true,
-                  let mixerPath = Self.retainedPath(mixer, in: window, runtime: runtime.ax),
-                  CFEqual(current, mixer) || (mixerPath.count > 1 && CFEqual(mixerPath[1], current)),
+                  isOwnedVisibilityFocus(current, afterHide: afterHide),
                   let focusPath, let currentPath = Self.retainedPath(focus, in: window, runtime: runtime.ax),
                   currentPath.count == focusPath.count, zip(currentPath, focusPath).allSatisfy({ CFEqual($0, $1) }),
                   AXHelpers.isAttributeSettable(focus, kAXFocusedAttribute as String, runtime: runtime.ax) == true,
@@ -860,6 +858,24 @@ extension AccessibilityChannel {
                   await stillOwned(stoppingWhen: stop), sameFocus(), !stop(),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             return true
+        }
+
+        private func isOwnedVisibilityFocus(_ current: AXUIElement, afterHide: Bool) -> Bool {
+            let lookup = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime, requiresCompleteAbsence: true)
+            if afterHide {
+                // A native Hide moves focus to a previously retained workspace ancestor.
+                // Neither a newly discovered Tracks label nor a retired Mixer is authority.
+                guard revealedMixer != nil, case .notFound = lookup, capturedFocusCanBeRestored(),
+                      let focusPath,
+                      focusPath.dropFirst().dropLast().filter({ CFEqual($0, current) }).count == 1
+                else { return false }
+                return true
+            }
+            guard case .found(let mixer) = lookup,
+                  revealedMixer.map({ CFEqual($0, mixer) }) ?? true,
+                  let mixerPath = Self.retainedPath(mixer, in: window, runtime: runtime.ax)
+            else { return false }
+            return CFEqual(current, mixer) || (mixerPath.count > 1 && CFEqual(mixerPath[1], current))
         }
 
         /// Leave the caller's approved Mixer state in place. Only the menu acquired here is
@@ -966,12 +982,11 @@ extension AccessibilityChannel {
             }
             func ownedAfterReveal() async -> Bool {
                 if await owned() { return true }
-                // Showing the owned Mixer can move focus to its physical container.
-                // Only restore a still-live, exact captured workspace; never accept
-                // changed focus as success or try to focus a retired hidden Mixer.
-                guard desired, before == false, runtime.logicProPID() == pid,
+                // Show may focus its physical Mixer container; Hide may focus a held
+                // workspace ancestor. Both require restoring the exact live workspace.
+                guard before != desired, runtime.logicProPID() == pid,
                       let currentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, currentApp),
-                      await restoreCapturedFocusAfterReveal(stoppingWhen: stop), await owned() else { return false }
+                      await restoreCapturedFocusAfterReveal(afterHide: !desired, stoppingWhen: stop), await owned() else { return false }
                 return true
             }
             let end = min(OperationTraceContext.current?.deadline ?? ContinuousClock.now.advanced(by: .milliseconds(mixerRevealPollTimeoutMs)),
