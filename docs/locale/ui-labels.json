@@ -7695,16 +7695,16 @@
    "rationale": "Per-track Hide checkbox description observed in English Logic 12.3. Values read from Apple's Hide Track row in all ten locales (Spanish and Portuguese share a value). A zero value is only a visibility witness, not track identity or all-language native qualification.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "trackInputMonitoringButton": {
