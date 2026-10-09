@@ -336,6 +336,7 @@ extension AXLogicProElements {
             depth: 0,
             ancestorIsInspector: false,
             ancestorIsMixer: false,
+            parentRequiresNonStripRole: false,
             ancestors: [],
             owners: [],
             remainingNodes: &remainingNodes,
@@ -355,6 +356,7 @@ extension AXLogicProElements {
         depth: Int,
         ancestorIsInspector: Bool,
         ancestorIsMixer: Bool,
+        parentRequiresNonStripRole: Bool,
         ancestors: [AXUIElement],
         owners: [AXUIElement],
         remainingNodes: inout Int,
@@ -374,7 +376,9 @@ extension AXLogicProElements {
         }
         remainingNodes -= 1
 
-        func metadata(_ attribute: String) throws -> String? {
+        var sawUnreadCandidateText = false
+        func metadata(_ attribute: String, allowUnreadContext: Bool = false,
+                      deferCandidateTextFailure: Bool = false) throws -> String? {
             try check()
             if requiresCompleteAbsence {
                 let read: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
@@ -387,7 +391,10 @@ extension AXLogicProElements {
                     if attribute == kAXRoleAttribute as String { sawIncompleteAbsence = true }
                     return nil
                 case .failure(let error):
-                    if !error.isDefinitiveAbsence || attribute == kAXRoleAttribute as String { sawIncompleteAbsence = true }
+                    if !allowUnreadContext && (!error.isDefinitiveAbsence || attribute == kAXRoleAttribute as String) {
+                        if deferCandidateTextFailure { sawUnreadCandidateText = true }
+                        else { sawIncompleteAbsence = true }
+                    }
                     return nil
                 }
             }
@@ -395,10 +402,18 @@ extension AXLogicProElements {
         }
         let role = try metadata(kAXRoleAttribute)
         observingExposure?.observeRole(element: element, role: role)
+        if parentRequiresNonStripRole, role == (kAXLayoutItemRole as String) {
+            sawIncompleteAbsence = true
+        }
         let identifier = try metadata(kAXIdentifierAttribute)
-        let description = try metadata(kAXDescriptionAttribute)
-        let title = try metadata(kAXTitleAttribute)
-        let help = try metadata(kAXHelpAttribute)
+        let description = try metadata(kAXDescriptionAttribute, deferCandidateTextFailure: role != nil)
+        let title = try metadata(kAXTitleAttribute, deferCandidateTextFailure: role != nil)
+        // Help only excludes Inspector context; it cannot identify a Mixer. If it
+        // is unavailable, conservatively census every descendant instead: that
+        // enlarges the search rather than hiding a possible Mixer. Role, possible
+        // candidate identity, children and traversal bounds remain strict.
+        let help = try metadata(kAXHelpAttribute,
+            allowUnreadContext: role != nil)
         let text = [identifier, description, title, help].compactMap { $0 }.joined(separator: " ").lowercased()
         let isInspector = ancestorIsInspector
             || AXLocalePolicy.mixerInspectorContext.containsAny(in: text)
@@ -420,6 +435,14 @@ extension AXLogicProElements {
             return false
         }
         observingExposure?.observeChildren(element: element, children: children)
+
+        // Unread description/title cannot identify a candidate on other roles. An
+        // eligible container can match only with a legacy Mixer ID or direct strip
+        // children. Use the existing child census's deciding roles, not an earlier
+        // probe that can conflict with that census. Unknown roles/children/bounds
+        // still make absence incomplete; always visit all descendants.
+        let requiresNonStripChildren = sawUnreadCandidateText && !isInspector && isMixerContainerRole(role)
+        if requiresNonStripChildren, legacyRole != nil { sawIncompleteAbsence = true }
 
         if isMixerContainer {
             var stripCount = 0
@@ -452,6 +475,7 @@ extension AXLogicProElements {
                 depth: depth + 1,
                 ancestorIsInspector: isInspector,
                 ancestorIsMixer: !isInspector && (ancestorIsMixer || isMixerContainer),
+                parentRequiresNonStripRole: requiresNonStripChildren,
                 ancestors: ancestors + [element],
                 owners: isMixerContainer ? owners + [element] : owners,
                 remainingNodes: &remainingNodes,
