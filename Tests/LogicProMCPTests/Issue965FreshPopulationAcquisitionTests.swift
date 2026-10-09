@@ -3214,6 +3214,61 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect(await cache.retainedSessionReport(id: "cancelled-report") == nil)
     }
 
+    @Test(arguments: ["cancelled", "deadline", "ownershipLost", "pollerStopped", "textEditing", "other"], [false, true])
+    func acquisitionFailureHintDoesNotInventATimeout(causeName: String, wrapped: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let cache = StateCache()
+            await cache.updateProject(ProjectInfo(name: "Session", filePath: "/tmp/Session.logicx"))
+            let result = await ProjectDispatcher.handle(
+                command: "inspect_session", params: [:], router: ChannelRouter(), cache: cache,
+                dialogPresent: { false }, cleanupAuditFileReader: .unavailable,
+                acquireSessionPopulation: { _ in
+                    let cause: Error
+                    switch causeName {
+                    case "cancelled": cause = SessionPopulationObservation.AcquisitionError.cancelled
+                    case "deadline": cause = SessionPopulationObservation.AcquisitionError.deadline
+                    case "ownershipLost": cause = SessionPopulationObservation.AcquisitionError.ownershipLost
+                    case "pollerStopped": cause = SessionPopulationObservation.AcquisitionError.pollerStopped
+                    case "textEditing": cause = SessionPopulationObservation.AcquisitionError.textEditing
+                    default: cause = NSError(domain: "AcquisitionTest", code: 1)
+                    }
+                    if wrapped {
+                        var effects = SessionPopulationObservation.UIEffects()
+                        effects.navigationPerformed = true
+                        effects.attempted = ["stack_disclosure"]
+                        effects.restoration = "not_restored"
+                        effects.reason = "stack_expansion_unverified"
+                        throw SessionPopulationObservation.NavigationAcquisitionError(cause: cause, effects: effects)
+                    }
+                    throw cause
+                }
+            )
+            let isError: Bool = try #require(result.isError as Bool?)
+            #expect(isError)
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let hint = try #require(body["hint"] as? String)
+            let expectedError = causeName == "cancelled" ? "cancelled"
+                : causeName == "deadline" ? "operation_timeout" : "readback_unavailable"
+            #expect(body["error"] as? String == expectedError)
+            #expect(body["state"] as? String == "C" && body["snapshot_id"] == nil)
+            let writeAttempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!writeAttempted)
+            #expect(hint.contains("no replacement report was published"))
+            if causeName == "deadline" { #expect(hint.contains("deadline")) }
+            else {
+                #expect(!hint.contains("deadline"), "a non-deadline refusal must not be diagnosed as a timeout")
+                if causeName == "cancelled" { #expect(hint.contains("cancelled")) }
+            }
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            let navigationPerformed = try #require(effects["navigation_performed"] as? Bool)
+            if wrapped { #expect(navigationPerformed) }
+            else { #expect(!navigationPerformed) }
+            #expect(effects["attempted"] as? [String] == (wrapped ? ["stack_disclosure"] : []))
+            #expect(effects["changed"] as? [String] == [])
+            #expect(effects["restoration"] as? String == (wrapped ? "not_restored" : "not_applicable"))
+        }
+    }
+
     @Test(arguments: [false, true])
     func finalPublicationPreservesTheActualRefusalReason(deadlineExpired: Bool) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(false) {
