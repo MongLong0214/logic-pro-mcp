@@ -252,7 +252,7 @@ actor StatePoller {
             (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
         }
         try SessionPopulationObservation.requireOwnedAcquisition()
-        let before = await cache.captureBoundary(watching: SessionPopulationObservation.watchedSections)
+        let before = await cache.captureBoundary(watching: request.acquisitionSections)
         let navigationProject: TargetDescriptor?
         if request.allowUINavigation, let reference = request.projectRef, let targetRegistry {
             navigationProject = await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor
@@ -291,7 +291,8 @@ actor StatePoller {
         }
         do {
             try SessionPopulationObservation.requireOwnedAcquisition()
-            guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: before, stoppingWhen: stop) else {
+            guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: before,
+                request: request, stoppingWhen: stop) else {
                 try SessionPopulationObservation.requireOwnedAcquisition()
                 throw SessionPopulationObservation.AcquisitionError.ownershipLost
             }

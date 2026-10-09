@@ -221,6 +221,12 @@ enum SessionPopulationObservation {
         var needsTracks: Bool { domains.contains { [.tracks, .hierarchy, .associations].contains($0) } }
         var needsStrips: Bool { domains.contains { [.strips, .routing, .associations].contains($0) } }
 
+        /// An MCU Mixer echo cannot invalidate an acquisition that reads no strips.
+        /// Retained captures and repair baselines still watch all sections after acceptance.
+        var acquisitionSections: [CacheSectionID] {
+            needsTracks && !needsStrips ? [.tracks, .project] : SessionPopulationObservation.watchedSections
+        }
+
         init(
             scope: Scope = .wholeProject,
             domains: [Domain] = Request.defaultDomains,

@@ -2230,6 +2230,100 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
     }
 
+    @Test(arguments: ["unrequested_mixer", "requested_mixer", "tracks", "project", "occlusion", "epoch"])
+    func registeredTrackOnlyAcquisitionScopesCacheMovement(fault: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let fixture = Fixture()
+            let bundle = FileManager.default.temporaryDirectory
+                .appendingPathComponent("lpm965-domain-boundary-\(UUID().uuidString).logicx")
+            try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
+            defer { try? FileManager.default.removeItem(at: bundle) }
+            fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, bundle.absoluteString)
+            let cache = StateCache()
+            let project = ProjectInfo(name: "Session", filePath: bundle.path)
+            await cache.updateProject(project)
+            await cache.updateTracks([TrackState(id: 0, name: "Old cached track", type: .audio)])
+            await cache.updateChannelStrips([ChannelStripState(trackIndex: 0, name: "Unrequested strip", volume: 0.25)])
+            let beforeMixer = await cache.currentVersion(for: .mixer)
+            let metadataReads = Reads()
+            let metadata = try PropertyListSerialization.data(fromPropertyList: ["NumberOfTracks": 1],
+                format: .xml, options: 0)
+            let fileReader = LogicProjectFileReader.Runtime(currentDocumentPath: { nil }, now: Date.init,
+                readPlistData: { _ in metadata }, mtime: { _ in
+                    metadataReads.record("mtime")
+                    return Date(timeIntervalSince1970: metadataReads.count == 1 ? 0 : 1)
+                }, sleep: { _ in
+                    // Actual production metadata retry is an awaited point inside acquisition.
+                    // This models an MCU cache echo, not a separate AX reader or a timed race.
+                    switch fault {
+                    case "unrequested_mixer", "requested_mixer": await cache.updateFader(strip: 0, volume: 0.75)
+                    case "tracks": await cache.updateTracks([TrackState(id: 0, name: "Concurrent edit", type: .audio)])
+                    case "project": await cache.updateProject(project)
+                    case "occlusion": await cache.updateAXOccluded(true); await cache.updateAXOccluded(false)
+                    case "epoch": await cache.updateDocumentState(false); await cache.updateDocumentState(true)
+                    default: Issue.record("unknown boundary fixture")
+                    }
+                })
+            let gate = LogicMutationGate()
+            let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache,
+                targetRegistry: TargetRegistry(),
+                poller: StatePoller(axChannel: fixture.channel(), cache: cache,
+                    runtime: .init(hasVisibleWindow: { true }, projectFileReader: fileReader)),
+                dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+                liveTrackNames: { [:] }, projectFileReader: fileReader)
+            let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+            let domains = fault == "requested_mixer" ? ["tracks", "strips"] : ["tracks"]
+            let params: [String: Value] = ["domains": .array(domains.map(Value.string))]
+            let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+                commandParams: params, mutationGate: gate) { await handler(dependencies, params) }
+            let isError = result.isError ?? false
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(metadataReads.count >= 4, "the actual metadata retry must have executed the cache change")
+            if fault == "unrequested_mixer" {
+                #expect(!isError, "an unrequested MCU Mixer echo must not discard a stable Track reading")
+                let tracks = try #require(body["tracks"] as? [String: Any])
+                let rows = try #require(tracks["rows"] as? [[String: Any]])
+                #expect(rows.compactMap { $0["name"] as? String } == [" Fresh track "])
+                #expect(tracks["coverage"] as? String == "partial", "local acceptance does not invent a global end")
+                #expect(await cache.getChannelStrips().first?.volume == 0.75, "do not overwrite unrequested Mixer data")
+                #expect(await cache.currentVersion(for: .mixer) != beforeMixer)
+                let id = try #require(body["snapshot_id"] as? String)
+                let retained = try #require(await cache.retainedInspection(id: id))
+                #expect(retained.capture.after.versions[.mixer] == (await cache.currentVersion(for: .mixer)),
+                        "the accepted capture must retain the full current Mixer boundary")
+                #expect(await cache.inspectionIsCurrent(retained.capture))
+                let historical = await cache.retainedSessionReport(id: id)
+                await cache.updateFader(strip: 0, volume: 0.8)
+                #expect(!(await cache.inspectionIsCurrent(retained.capture)),
+                        "later Mixer movement still invalidates a current repair baseline")
+                #expect(await cache.retainedSessionReport(id: id) == historical,
+                        "a retained historical capture remains immutable, not refreshed")
+            } else {
+                #expect(isError)
+                #expect(body["error"] as? String == "readback_unavailable")
+                #expect(body["snapshot_id"] == nil, "requested or project-wide movement must not publish authority")
+            }
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+            #expect(fixture.events.recorded.isEmpty)
+        }
+    }
+
+    @Test func trackOnlyAcceptanceCannotOverwriteUnrequestedStripValues() async throws {
+        let cache = StateCache()
+        let project = ProjectInfo(name: "Session")
+        await cache.updateProject(project)
+        await cache.updateChannelStrips([ChannelStripState(trackIndex: 0, volume: 0.25)])
+        let before = await cache.captureBoundary(watching: [.tracks, .project])
+        await cache.updateFader(strip: 0, volume: 0.75)
+        let now = Date()
+        let accepted = await cache.acceptFreshPopulation(
+            .init(project: project, tracks: [], strips: [ChannelStripState(trackIndex: 0, volume: 0.25)],
+                  fileTrackCount: nil, beganAt: now, endedAt: now, stable: true),
+            ifCurrent: before, request: .init(domains: [.tracks]), stoppingWhen: { false })
+        #expect(accepted == nil, "a narrowed request must not smuggle a strip overwrite past the full boundary")
+        #expect(await cache.getChannelStrips().first?.volume == 0.75)
+    }
+
     @Test func registeredInspectionDoesNotRepublishTheOldCache() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let fixture = Fixture()

@@ -386,9 +386,15 @@ actor StateCache {
     func acceptFreshPopulation(
         _ population: SessionPopulationObservation.FreshPopulation,
         ifCurrent before: CaptureBoundary,
+        request: SessionPopulationObservation.Request? = nil,
         stoppingWhen stop: @Sendable () -> Bool
     ) -> SessionPopulationObservation.AcceptedPopulation? {
-        guard !stop(), captureBoundary(watching: SessionPopulationObservation.watchedSections) == before else { return nil }
+        // Narrowing cannot authorize writing any unrequested strip values, even if
+        // a future producer accidentally supplies them with a tracks-only request.
+        let sections = population.strips == nil
+            ? request?.acquisitionSections ?? SessionPopulationObservation.watchedSections
+            : SessionPopulationObservation.watchedSections
+        guard !stop(), captureBoundary(watching: sections) == before else { return nil }
         if population.stable, let info = population.project {
             updateProject(info)
             updateDocumentState(true)
