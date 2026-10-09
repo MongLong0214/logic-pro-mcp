@@ -102,7 +102,7 @@
     "index/niblabels.tsv": "251168083f649fd298772378849247cf221a639aec6401e20978049c1cef2748",
     "index/niblabels.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nibstrings.tsv": "943fc3a8b9c53806bd0d3c6786ceb6c01a19b13ba0bf9138256a8da82195eaaa",
-    "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
+    "index/nibstrings.values.tsv": "cf1f988a040b63f449db8cedb11a192b7a6b2e2c199e823859462e7cf7a4294a",
     "index/plugin_names.tsv": "f6d22385cbe42b4e2736a1dbb2637ad10ee67b8bce79578969a473ccc3b6ec93",
     "index/plugin_names.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/pluginsettings.tsv": "827154b12becb1b89cf36a9cd5bc43c1d8ca952a370fea6b9dcafde2ac1a6eb9",
@@ -113,8 +113,8 @@
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "ledger/casefold.tsv": "f8590160e6249184a9940ab67b3ca77fff6c8dcc38c138052e25337f5e599e8c",
-    "ledger/presence.tsv": "49d8827c9e326cc4a96dd1b7290b67b1470cfec8a6510d088122c8ac77fce151"
+    "ledger/casefold.tsv": "78c2687d54d1e61cc4e4ee71551566ac7d131143f14affaa3b6718ceee298ed1",
+    "ledger/presence.tsv": "8be6f10278c54afe4a88d0685798e1b0c25f04bda9f564fd2790f5d80647db56"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
@@ -135,7 +135,7 @@
       "zh_TW": 33
     },
     "nibstrings": {
-      "en": 103
+      "en": 105
     },
     "quickhelp": {
       "de": 56,
@@ -178,7 +178,7 @@
       "zh_TW": 42
     },
     "nibstrings": {
-      "en": 94
+      "en": 95
     },
     "quickhelp": {
       "de": 54,
@@ -200,7 +200,7 @@
       "fr": 193,
       "it": 203,
       "ja": 210,
-      "ko": 212,
+      "ko": 213,
       "pt": 211,
       "zh_CN": 202,
       "zh_TW": 185
@@ -535,7 +535,7 @@
         "en": 6.60541e-07
       },
       "cited_rows": 57,
-      "cited_values": 3,
+      "cited_values": 4,
       "corpus_digest": "63b6fe3a97a427b7e3ef93b0c0b049c2d647e8919781a03187df4e36bc10aee5",
       "english_equal_rows_in_translated_units": {},
       "entries": 6270,

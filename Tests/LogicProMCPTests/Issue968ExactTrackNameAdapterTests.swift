@@ -909,6 +909,83 @@ struct Issue968ExactTrackNameAdapterTests {
         }
     }
 
+    @Test(arguments: ["healthy", "unselected", "multi", "gate_before_menu", "gate_after_editor", "ack_only", "foreign_focus", "newer_edit"])
+    func exactAdapterMenuAcquiresOnlyItsAlreadySelectedHeldPassiveEditor(caseName: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (other, otherField) = f.appendTrack(name: "B", selected: caseName == "multi" || caseName == "unselected")
+            f.builder.setAttribute(f.header, kAXSelectedAttribute as String, caseName != "unselected")
+            f.passiveHeaderNameLabel = true
+            f.builder.setAttribute(f.field, kAXValueAttribute as String, NSNumber(value: 0))
+            f.builder.setAttributeSettable(f.field, kAXValueAttribute as String, false)
+            let bar = f.builder.element(968_230), trackMenu = f.builder.element(968_231)
+            let menu = f.builder.element(968_232), rename = f.builder.element(968_233)
+            let editor = f.builder.element(968_234)
+            f.renameMenuItem = rename
+            f.menuFocusedEditor = editor
+            f.builder.setAttribute(f.app, kAXMenuBarAttribute as String, bar)
+            for (element, role) in [(bar, kAXMenuBarRole), (trackMenu, kAXMenuBarItemRole),
+                                   (menu, kAXMenuRole), (rename, kAXMenuItemRole), (editor, kAXTextFieldRole)] {
+                f.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+            }
+            f.builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+            f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
+            f.builder.setAttribute(editor, kAXWindowAttribute as String, f.window)
+            f.builder.setAttribute(editor, kAXValueAttribute as String, "A")
+            f.builder.setAttributeSettable(editor, kAXValueAttribute as String, true)
+            f.builder.setChildren(bar, [trackMenu])
+            f.builder.setChildren(trackMenu, [menu])
+            f.builder.setChildren(menu, [rename])
+            f.onRenameMenuRead = {
+                f.builder.setAttribute(editor, kAXValueAttribute as String,
+                    AXHelpers.getDescription(f.field, runtime: f.runtime.ax) ?? "unread")
+                if caseName == "gate_before_menu" { f.boundaryOwnership = false }
+            }
+            f.menuEditorSetterAcknowledgesOnly = caseName == "ack_only"
+            f.onMenuEditorValueSet = {
+                if caseName == "gate_after_editor" { f.boundaryOwnership = false }
+                if caseName == "foreign_focus" { f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, otherField) }
+            }
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let context = OperationTraceContext(ownsGate: { f.boundaryOwnership })
+            let receipt = await OperationTraceContext.$current.withValue(context) {
+                await f.apply(project: project, target: target, before: "A", after: "C, exact")
+            }
+            let body = try #require(sharedJSONObject(sharedToolText(receipt.result)))
+            if ["healthy", "newer_edit"].contains(caseName) {
+                #expect(receipt.status == .applied)
+                let proof = try #require(receipt.inverse)
+                #expect(f.events == ["rename_menu"])
+                #expect(f.writes == ["C, exact"])
+                if caseName == "newer_edit" { f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "newer") }
+                let inverse = await f.inverse(proof)
+                #expect(inverse.status == (caseName == "healthy" ? .applied : .rejectedBeforeWrite))
+                #expect(f.writes == (caseName == "healthy" ? ["C, exact", "A"] : ["C, exact"]))
+                #expect(f.events == (caseName == "healthy" ? ["rename_menu", "rename_menu"] : ["rename_menu"]))
+            } else if ["unselected", "multi", "gate_before_menu"].contains(caseName) {
+                #expect(receipt.status == .rejectedBeforeWrite)
+                #expect(body["state"] as? String == "C")
+                let attempted = try #require(body["write_attempted"] as? Bool)
+                #expect(!attempted)
+                #expect(f.events.isEmpty)
+                #expect(f.menuEditorValueWrites.isEmpty)
+            } else {
+                #expect(receipt.status == .attemptedUnverified)
+                #expect(body["state"] as? String == "B")
+                #expect(receipt.inverse == nil)
+                #expect(f.events == ["rename_menu"])
+                #expect(f.menuEditorValueWrites == ["C, exact"])
+                #expect(f.writes.isEmpty)
+                #expect(!f.postedReturn)
+            }
+            #expect(f.selectionWrites.isEmpty)
+            #expect(f.actedNameFields.isEmpty)
+            #expect(AXHelpers.getDescription(otherField, runtime: f.runtime.ax) == "B")
+            let otherSelected = try #require(AXValueExtractors.extractSelectedState(other, runtime: f.runtime.ax) as Bool?)
+            if caseName == "unselected" || caseName == "multi" { #expect(otherSelected) } else { #expect(!otherSelected) }
+        }
+    }
+
     @Test(arguments: [false, true], ["typing", "axvalue", "ack_only", "foreign_focus", "foreign_role"])
     func ordinaryMenuRenameRetainsItsExistingFocusedEditorTypingCapability(passiveHeaderLabel: Bool, editorRoute: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
