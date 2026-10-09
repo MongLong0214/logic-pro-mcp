@@ -723,8 +723,36 @@ struct Issue966PlannerProbeWitnessTests {
         // The seam: the seed's exchange is on the wire, and the probe sent the handle it returned.
         let seed = result.wireFrames.filter { $0.operationID == "session_inspection_seed" }
         #expect(seed.map(\.direction) == [.request, .response])
-        let seedResponse = try #require(seed.last)
-        let seededID = try #require(Self.responseText(seedResponse)["snapshot_id"] as? String)
+        let retry = result.wireFrames.filter { $0.operationID == "session_inspection_seed_retry" }
+        if !retry.isEmpty {
+            #expect(retry.map(\.direction) == [.request, .response])
+            let firstResponse = try #require(seed.last)
+            let refused = try Self.responseText(firstResponse)
+            #expect(refused["state"] as? String == "C")
+            #expect(refused["error"] as? String == "readback_unavailable")
+            let attemptedWrite = try #require(refused["write_attempted"] as? Bool)
+            let navigated = try #require(refused["navigation_performed"] as? Bool)
+            #expect(!attemptedWrite)
+            #expect(!navigated)
+            let firstResult = try #require(Self.frameJSON(firstResponse)["result"] as? [String: Any])
+            let firstIsError = try #require(firstResult["isError"] as? Bool)
+            #expect(firstIsError)
+        }
+        let seedResponse = try #require(retry.last ?? seed.last)
+        let seedBody = try Self.responseText(seedResponse)
+        let seededID = try #require(seedBody["snapshot_id"] as? String, "Actual native seed response: \(seedBody)")
+        for frame in seed + retry where frame.direction == .request {
+            let params = try #require(Self.frameJSON(frame)["params"] as? [String: Any])
+            let arguments = try #require(params["arguments"] as? [String: Any])
+            #expect(arguments["command"] as? String == "inspect_session")
+            let seedParams = try #require(arguments["params"] as? [String: Any])
+            #expect(seedParams.isEmpty)
+        }
+        let effects = try #require(seedBody["ui_effects"] as? [String: Any])
+        #expect(effects["attempted"] as? [String] == [])
+        #expect(effects["changed"] as? [String] == [])
+        let seedNavigated = try #require(effects["navigation_performed"] as? Bool)
+        #expect(!seedNavigated)
         let probe = result.wireFrames.filter {
             $0.operationID == "operation_probe.\(spec.id.rawValue)" && $0.direction == .request
         }
@@ -734,6 +762,13 @@ struct Issue966PlannerProbeWitnessTests {
         let arguments = try #require(params["arguments"] as? [String: Any])
         let sent = try #require(arguments["params"] as? [String: Any])
         #expect(sent["snapshot_id"] as? String == seededID)
+        let seedRequestIDs = try (seed + retry).filter { $0.direction == .request }.map {
+            try #require(Self.frameJSON($0)["id"] as? Int)
+        }
+        let plannerRequestID = try #require(Self.frameJSON(request)["id"] as? Int)
+        #expect(Set(seedRequestIDs).count == seedRequestIDs.count)
+        #expect(!seedRequestIDs.contains(plannerRequestID))
+        print("Native planner qualification: seed_exchanges=\(seedRequestIDs.count), retained_handle_bound=true, ui_changes=0, disposition=\(operation.liveGateDisposition.rawValue)")
 
         switch operation.liveGateDisposition {
         case .passed:
