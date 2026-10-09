@@ -2192,19 +2192,162 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect(gate.currentOperation() == nil)
     }
 
+    private func passiveMixerFocusFixture(fault: String? = nil) -> (Fixture, AXUIElement) {
+        let fixture = Fixture()
+        let outer = fixture.builder.element(965_980)
+        let mixer = fixture.builder.element(965_981)
+        let focus = fixture.builder.element(965_982)
+        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String,
+                                     "file:///tmp/965-passive-mixer-focus.logicx/")
+        fixture.builder.setRole(outer, kAXGroupRole as String)
+        fixture.builder.setAttribute(outer, kAXDescriptionAttribute as String, "Mixer")
+        fixture.builder.setRole(mixer, kAXLayoutAreaRole as String)
+        fixture.builder.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+        fixture.builder.setRole(focus, kAXLayoutItemRole as String)
+        fixture.builder.setAttribute(focus, kAXDescriptionAttribute as String, "An observed strip")
+        fixture.builder.setAttribute(focus, kAXNumberOfCharactersAttribute as String, 0)
+        fixture.builder.setAttribute(focus, kAXInsertionPointLineNumberAttribute as String, 0)
+        fixture.builder.setChildren(focus, [])
+        fixture.builder.setChildren(mixer, [focus])
+        fixture.builder.setChildren(outer, [mixer])
+        fixture.builder.setChildren(fixture.window, [fixture.rail, outer])
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, focus)
+        fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, true)
+        fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
+        fixture.builder.setAttributeSettable(focus, kAXValueAttribute as String, false)
+        switch fault {
+        case "editor_role": fixture.builder.setRole(focus, kAXTextFieldRole as String)
+        case "other_role": fixture.builder.setRole(focus, kAXGroupRole as String)
+        case "characters": fixture.builder.setAttribute(focus, kAXNumberOfCharactersAttribute as String, 1)
+        case "insertion_line": fixture.builder.setAttribute(focus, kAXInsertionPointLineNumberAttribute as String, 1)
+        case "boolean_line": fixture.builder.setAttribute(focus, kAXInsertionPointLineNumberAttribute as String, false)
+        case "string_line": fixture.builder.setAttribute(focus, kAXInsertionPointLineNumberAttribute as String, "0")
+        case "boolean_characters": fixture.builder.setAttribute(focus, kAXNumberOfCharactersAttribute as String, false)
+        case "settable_value": fixture.builder.setAttributeSettable(focus, kAXValueAttribute as String, true)
+        case "not_frontmost": fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, false)
+        case "foreign_window": fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String,
+                                                             fixture.builder.element(965_983))
+        case "wrong_parent": fixture.builder.setAttribute(focus, kAXParentAttribute as String, fixture.rail)
+        case "foreign_focus": fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                                                            fixture.builder.element(965_983))
+        case "detached": fixture.builder.setChildren(mixer, [])
+        case "duplicate": fixture.builder.setChildren(mixer, [focus, focus])
+        case "unbound_document": fixture.builder.removeAttribute(fixture.window, kAXDocumentAttribute as String)
+        default: break
+        }
+        return (fixture, focus)
+    }
+
+    private func passiveMixerAttributeRead(_ focus: AXUIElement, fault: String? = nil)
+        -> @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>? {
+        { element, attribute in
+            guard CFEqual(element, focus) else { return nil }
+            if attribute == kAXValueAttribute as String || attribute == kAXSelectedTextAttribute as String {
+                if fault == "text_value", attribute == kAXValueAttribute as String { return .success("editing" as NSString) }
+                if fault == "selected_text", attribute == kAXSelectedTextAttribute as String { return .success("" as NSString) }
+                if fault == "unread_value", attribute == kAXValueAttribute as String {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+    }
+
+    @Test("a noneditable physical Mixer strip's zero insertion sentinel does not block a no-navigation track read")
+    func registeredTrackOnlyReadAdmitsHeldPassiveMixerFocus() async throws {
+        let (fixture, focus) = passiveMixerFocusFixture()
+        let result = try await inspect(fixture: fixture, domains: ["tracks"],
+            keyboardFocus: { .textEditing(role: kAXLayoutItemRole as String, byInsertionPoint: true) },
+            readingAttribute: passiveMixerAttributeRead(focus))
+        let error = result.isError ?? false
+        #expect(!error)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let rows = try #require((body["tracks"] as? [String: Any])?["rows"] as? [[String: Any]])
+        #expect(rows.compactMap { $0["name"] as? String } == [" Fresh track "])
+        #expect(fixture.reads.helpCount == 0)
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test("a passive Mixer read exception cannot admit an editor, unread capability or wrong physical owner",
+          arguments: ["editor_role", "other_role", "characters", "insertion_line", "settable_value",
+                      "foreign_focus", "detached", "duplicate", "unbound_document", "text_value",
+                      "selected_text", "unread_value", "boolean_line", "string_line", "boolean_characters",
+                      "not_frontmost", "foreign_window", "wrong_parent"])
+    func registeredPassiveMixerReadRejectsChangedCapability(fault: String) async throws {
+        let (fixture, focus) = passiveMixerFocusFixture(fault: fault)
+        let result = try await inspect(fixture: fixture, domains: ["tracks"],
+            keyboardFocus: { .textEditing(role: kAXLayoutItemRole as String, byInsertionPoint: true) },
+            readingAttribute: passiveMixerAttributeRead(focus, fault: fault))
+        let error = result.isError ?? false
+        #expect(error)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(body["state"] as? String == "C")
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test("the passive Mixer exception never authorizes Mixer Help or navigation", arguments: [false, true])
+    func registeredPassiveMixerReadStillRefusesRequestedStrips(navigation: Bool) async throws {
+        let (fixture, focus) = passiveMixerFocusFixture()
+        let result = try await inspect(fixture: fixture, domains: navigation ? ["tracks"] : ["tracks", "strips"],
+            navigation: navigation,
+            keyboardFocus: { .textEditing(role: kAXLayoutItemRole as String, byInsertionPoint: true) },
+            readingAttribute: passiveMixerAttributeRead(focus))
+        let error = result.isError ?? false
+        #expect(error)
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test("a passive Mixer read loses permission when its acquired focus or project changes",
+          arguments: ["focus", "document", "editable"])
+    func registeredPassiveMixerReadRejectsLostCustody(fault: String) async throws {
+        let (fixture, focus) = passiveMixerFocusFixture()
+        let checks = Reads()
+        let nativeRead = passiveMixerAttributeRead(focus)
+        let result = try await inspect(fixture: fixture, domains: ["tracks"],
+            keyboardFocus: { .textEditing(role: kAXLayoutItemRole as String, byInsertionPoint: true) },
+            readingAttribute: { element, attribute in
+                if CFEqual(element, focus), attribute == kAXSelectedTextAttribute as String {
+                    checks.record(attribute)
+                    if checks.count == 2 {
+                        if fault == "focus" {
+                            fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.header)
+                        } else if fault == "document" {
+                            fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/other.logicx/")
+                        } else {
+                            fixture.builder.setAttributeSettable(focus, kAXValueAttribute as String, true)
+                        }
+                    }
+                }
+                return nativeRead(element, attribute)
+            })
+        let error = result.isError ?? false
+        #expect(error)
+        #expect(checks.count >= 2)
+        #expect(fixture.reads.helpCount == 0)
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
     private func inspect(
         fixture: Fixture, unreadableRail: Bool = false, cancelBeforeRead: Bool = false,
         hasVisibleWindow: Bool = true,
         domains: [String] = ["tracks", "strips"],
+        navigation: Bool = false,
         stopBeforeRead: Bool? = nil,
-        keyboardFocus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus = { .notTextEditing }
+        keyboardFocus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus = { .notTextEditing },
+        readingAttribute: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil
     ) async throws -> CallTool.Result {
         let cache = StateCache()
         await cache.updateProject(ProjectInfo(name: "Session"))
         await cache.updateTracks([TrackState(id: 0, name: "Old cached track", type: .audio)])
         await cache.updateChannelStrips([ChannelStripState(trackIndex: 0, name: "Old cached strip")])
         let gate = LogicMutationGate()
-        let poller = StatePoller(axChannel: fixture.channel(unreadableRail: unreadableRail), cache: cache,
+        let poller = StatePoller(axChannel: fixture.channel(unreadableRail: unreadableRail,
+                                                         readingAttribute: readingAttribute), cache: cache,
                                  runtime: .init(hasVisibleWindow: { hasVisibleWindow }, projectFileReader: .unavailable,
                                                 keyboardFocus: keyboardFocus))
         if let awaitStop = stopBeforeRead {
@@ -2220,7 +2363,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         let handler = try #require(OperationHandlerRegistry.handler(
             tool: "logic_project", command: "inspect_session"
         ))
-        let params: [String: Value] = ["domains": .array(domains.map(Value.string))]
+        let params: [String: Value] = ["domains": .array(domains.map(Value.string)), "allow_ui_navigation": .bool(navigation)]
         return await LogicProServer.runWithDeadline(
             tool: "logic_project", command: "inspect_session", commandParams: params,
             mutationGate: gate
