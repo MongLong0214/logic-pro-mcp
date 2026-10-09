@@ -327,6 +327,7 @@ actor AccessibilityChannel: Channel {
         fileReader: LogicProjectFileReader.Runtime,
         navigationProject: TargetDescriptor? = nil,
         navigationReferenceIsCurrent: @escaping @Sendable () async -> Bool = { true },
+        associationReadbackBoundary: @escaping @Sendable () async -> StateCache.CaptureBoundary? = { nil },
         readFocusScope: OwnedTrackStackObservationNavigation.ReadFocusScope? = nil,
         stoppingBeforeAXRead stopBeforeAXRead: (@Sendable () -> Bool)? = nil,
         stoppingWhen stop: @escaping @Sendable () -> Bool
@@ -336,6 +337,14 @@ actor AccessibilityChannel: Channel {
         var navigation: OwnedMixerObservationNavigation?
         var stackNavigation: OwnedTrackStackObservationNavigation?
         var originalPresentation: SessionPopulationObservation.FreshPopulation?
+        var association: HeldSelectionAssociation?
+        if request.allowUINavigation, request.domains.contains(.associations),
+           case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime),
+           let candidate = HeldSelectionAssociation(window: window, logic: runtime.logicRuntime,
+                expectedProject: navigationProject, requiresProjectReference: request.projectRef != nil) {
+            association = candidate
+            readFocusScope?.retainAssociation(candidate)
+        }
         if !request.allowUINavigation, request.needsTracks, !request.needsStrips,
            case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime) {
             readFocusScope?.retainPassiveMixer(in: window, logic: runtime.logicRuntime)
@@ -379,9 +388,46 @@ actor AccessibilityChannel: Channel {
                 exposure: stackNavigation?.effects.navigationPerformed == true ? stackNavigation?.exposure : nil,
                 stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop
             )
+            if let association, stackNavigation?.effects.navigationPerformed != true,
+               navigation?.effects.navigationPerformed != true, population.stable {
+                population.selectionAssociations = await association.observe(
+                    referenceIsCurrent: navigationReferenceIsCurrent, stoppingWhen: stop)
+                population.uiEffects = association.effects
+                if association.effects.reason != nil { population.stable = false }
+                if association.effects.navigationPerformed {
+                    let boundary = association.effects.restoration == "restored" && association.effects.reason == nil
+                        ? await associationReadbackBoundary() : nil
+                    let current = try? await readExposedSessionPopulation(request: request, fileReader: fileReader,
+                        stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop)
+                    func sameValues<T: Encodable>(_ lhs: T?, _ rhs: T?) -> Bool {
+                        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                        guard let a = try? encoder.encode(lhs), let b = try? encoder.encode(rhs) else { return false }
+                        return a == b
+                    }
+                    if current?.stable != true || !sameValues(population.project, current?.project)
+                        || !sameValues(population.tracks, current?.tracks) || !sameValues(population.strips, current?.strips) {
+                        population.selectionAssociations = []
+                        population.stable = false
+                        population.uiEffects.reason = "association_population_moved"
+                    } else if population.stable, association.permitsRead(), await navigationReferenceIsCurrent(), !stop(),
+                              var restoredPopulation = current {
+                        // Return the new native rows, not the earlier observation
+                        // accepted against a later cache boundary. All physical
+                        // owners must still be the original held objects.
+                        restoredPopulation.selectionAssociations = population.selectionAssociations
+                        restoredPopulation.uiEffects = population.uiEffects
+                        restoredPopulation.associationReadbackBoundary = boundary
+                        population = restoredPopulation
+                    } else {
+                        population.selectionAssociations = []
+                        population.stable = false
+                        population.uiEffects.reason = population.uiEffects.reason ?? "association_population_moved"
+                    }
+                }
+            }
             let stackEffects = await stackNavigation?.restore(stoppingWhen: stop) ?? .init()
             if let navigation {
-                population.uiEffects = await navigation.restore(stoppingWhen: stop)
+                population.uiEffects = mergedEffects(population.uiEffects, await navigation.restore(stoppingWhen: stop))
                 if population.uiEffects.navigationPerformed && population.uiEffects.restoration != "restored" {
                     population.stable = false
                 }
@@ -424,9 +470,10 @@ actor AccessibilityChannel: Channel {
             try SessionPopulationObservation.requireOwnedAcquisition()
             return population
         } catch {
+            Log.info("Population acquisition failed: \(error)", subsystem: "ax")
             let stack = await stackNavigation?.restore(stoppingWhen: stop) ?? .init()
             let mixer = await navigation?.restore(stoppingWhen: stop) ?? .init()
-            let effects = mergedEffects(stack, mixer)
+            let effects = mergedEffects(association?.effects ?? .init(), mergedEffects(stack, mixer))
             throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: effects)
         }
     }

@@ -279,6 +279,7 @@ actor StatePoller {
                         guard let navigationProject, let targetRegistry else { return false }
                         return await targetRegistry.resolveCurrentProject(TargetReference(rawValue: reference))?.descriptor == navigationProject
                     },
+                    associationReadbackBoundary: { await self.cache.captureBoundary(watching: request.acquisitionSections) },
                     readFocusScope: readFocusScope,
                     stoppingBeforeAXRead: { stop() || guardian.stopped },
                     stoppingWhen: { stop() || guardian.stopped || editingStopsRead() }
@@ -291,7 +292,17 @@ actor StatePoller {
         }
         do {
             try SessionPopulationObservation.requireOwnedAcquisition()
-            guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: before,
+            let acceptanceBoundary = population.associationReadbackBoundary ?? before
+            // Selection feedback may precede a completely new post-restoration
+            // observation. It cannot erase a project/occlusion transition, nor
+            // relax the unchanged-section boundary of that new reading.
+            guard acceptanceBoundary.versions[.project] == before.versions[.project],
+                  acceptanceBoundary.occlusionRevision == before.occlusionRevision,
+                  acceptanceBoundary.hasDocument == before.hasDocument,
+                  acceptanceBoundary.axOccluded == before.axOccluded else {
+                throw SessionPopulationObservation.AcquisitionError.ownershipLost
+            }
+            guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: acceptanceBoundary,
                 request: request, stoppingWhen: stop) else {
                 try SessionPopulationObservation.requireOwnedAcquisition()
                 throw SessionPopulationObservation.AcquisitionError.ownershipLost
