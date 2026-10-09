@@ -47,6 +47,7 @@ struct Issue969MixerVisibilitySetterTests {
         var focusRestoreAcknowledged = true
         var focusRestoreChangesFocus = true
         var mixerContainer: AXUIElement?
+        var railContainer: AXUIElement?
         var afterFocusRestore: (@Sendable () -> Void)?
         var postShowMenuReads = 0
 
@@ -88,7 +89,7 @@ struct Issue969MixerVisibilitySetterTests {
         }
 
         func updateVisibility() {
-            builder.setChildren(window, extraWindowChildren + (showing ? [rail, mixerContainer ?? mixer] : [rail]))
+            builder.setChildren(window, extraWindowChildren + (showing ? [railContainer ?? rail, mixerContainer ?? mixer] : [railContainer ?? rail]))
             builder.setAttribute(toggle, kAXTitleAttribute as String, showing ? "Hide Mixer" : "Show Mixer")
         }
 
