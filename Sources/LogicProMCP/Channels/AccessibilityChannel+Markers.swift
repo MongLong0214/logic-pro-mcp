@@ -74,6 +74,38 @@ extension AccessibilityChannel {
         func contains(_ elements: [AXUIElement], _ target: AXUIElement) -> Bool {
             elements.contains { CFEqual($0, target) }
         }
+        // Opening Marker List can scroll the original arrange window to the
+        // playhead. Retain physical controls, not replacement controls or ordinals.
+        typealias Scroll = (control: AXUIElement, value: Double)
+        func scrollValues(_ window: AXUIElement) throws -> [Scroll] {
+            observation = "scroll_inventory"
+            let census = try AXHelpers.censusDescendantResult(
+                of: window, role: kAXScrollBarRole as String, maxDepth: 32,
+                runtime: runtime.ax, requiresCompleteTraversal: true,
+                permittingRead: { !blocked() }
+            ).get()
+            guard census.matches.count <= 32 else { throw AXHelpers.AXStatusError.malformedAttribute }
+            var values: [Scroll] = []
+            for control in census.matches {
+                guard !values.contains(where: { CFEqual($0.control, control) }),
+                      CFEqual(try element(control, kAXWindowAttribute as String), window) else {
+                    throw AXHelpers.AXStatusError.malformedAttribute
+                }
+                let rawValue = try raw(control, kAXValueAttribute as String)
+                guard CFGetTypeID(rawValue) != CFBooleanGetTypeID(), let value = rawValue as? NSNumber,
+                      value.doubleValue.isFinite, (0...1).contains(value.doubleValue) else {
+                    throw AXHelpers.AXStatusError.malformedAttribute
+                }
+                values.append((control, value.doubleValue))
+            }
+            return values
+        }
+        func sameScrollControls(_ a: [Scroll], _ b: [Scroll]) -> Bool {
+            a.count == b.count && zip(a, b).allSatisfy { CFEqual($0.control, $1.control) }
+        }
+        func sameScrollValues(_ a: [Scroll], _ b: [Scroll]) -> Bool {
+            sameScrollControls(a, b) && zip(a, b).allSatisfy { $0.value == $1.value }
+        }
         func lists(_ windows: [AXUIElement], document: String) throws -> [AXUIElement] {
             try windows.filter { window in
                 let title = try text(window, kAXTitleAttribute as String)
@@ -118,6 +150,7 @@ extension AccessibilityChannel {
                   CFEqual(try element(focusedElement, kAXWindowAttribute as String), focusedWindow) else {
                 return failure(hint: "Original project and focused UI could not be bound.")
             }
+            let originalScroll = try scrollValues(main)
             let existing = try lists(before, document: document)
             guard existing.count <= 1 else {
                 return failure(hint: "More than one Marker List matches the project.")
@@ -136,7 +169,9 @@ extension AccessibilityChannel {
                       try text(main, kAXDocumentAttribute as String) == document,
                       try text(focusedWindow, kAXDocumentAttribute as String) == document,
                       try text(list, kAXDocumentAttribute as String) == document,
-                      CFEqual(try element(focusedElement, kAXWindowAttribute as String), focusedWindow) else {
+                      CFEqual(try element(focusedElement, kAXWindowAttribute as String), focusedWindow),
+                      sameScrollValues(try scrollValues(main), originalScroll),
+                      !blocked(), runtime.logicProPID() == originalPID else {
                     return failure(hint: "The already-open Marker List changed during inventory read.")
                 }
                 extras["ui_restored"] = true
@@ -247,6 +282,32 @@ extension AccessibilityChannel {
                   CFEqual(try element(app, kAXFocusedWindowAttribute as String), focusedWindow),
                   CFEqual(try element(app, kAXFocusedUIElementAttribute as String), focusedElement) else {
                 return failure(hint: "Original main window and focus were not observed restored.")
+            }
+            for original in originalScroll {
+                let current = try scrollValues(main)
+                guard sameScrollControls(current, originalScroll), try restorationOwned() else {
+                    return failure(hint: "Original scroll controls are no longer owned; no replacement was changed.")
+                }
+                guard let observed = current.first(where: { CFEqual($0.control, original.control) }) else {
+                    return failure(hint: "Original scroll control could not be read.")
+                }
+                if observed.value == original.value { continue }
+                guard AXHelpers.isAttributeSettable(original.control, kAXValueAttribute as String,
+                                                    runtime: runtime.ax) == true,
+                      sameScrollControls(try scrollValues(main), originalScroll), try restorationOwned() else {
+                    return failure(hint: "Original scroll value cannot be safely restored.")
+                }
+                _ = AXHelpers.setAttribute(original.control, kAXValueAttribute as String,
+                                           NSNumber(value: original.value), runtime: runtime.ax)
+                guard try restorationOwned() else {
+                    return failure(hint: "Capture lost ownership during scroll restoration.")
+                }
+            }
+            guard sameScrollValues(try scrollValues(main), originalScroll), try restorationOwned(),
+                  CFEqual(try element(app, kAXMainWindowAttribute as String), main),
+                  CFEqual(try element(app, kAXFocusedWindowAttribute as String), focusedWindow),
+                  CFEqual(try element(app, kAXFocusedUIElementAttribute as String), focusedElement) else {
+                return failure(hint: "Original scroll positions and focus were not observed restored.")
             }
             extras["ui_restored"] = true
             guard opened.isSuccess else {
