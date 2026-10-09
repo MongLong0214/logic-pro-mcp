@@ -545,6 +545,16 @@ enum SemanticOracleFixtures {
                 .init(.wellFormedButWrong, "{\"bands\":[5000]}"),
             ]
         ),
+        .mixerGetOutputVerified: SemanticOracleFixture(
+            response: """
+                {"state":"A","success":true,"verified":true,"operation":"mixer.get_output_verified",\
+                "write_attempted":false,"snapshot_atomic":false,"verify_source":"ax_output_menu_checkmark",\
+                "menu_custody_at_read":true,"source_custody_after_cleanup":true,\
+                "output_checkmark_reads_observed":2,"output_checkmark_reads_agree":true,\
+                "current_output":{"kind":"stereo_output"}}
+                """,
+            readback: "{}"
+        ),
         .midiListPorts: SemanticOracleFixture(
             response: """
                 {"sources":["IAC Driver Bus 1","Logic Pro Virtual In"],\

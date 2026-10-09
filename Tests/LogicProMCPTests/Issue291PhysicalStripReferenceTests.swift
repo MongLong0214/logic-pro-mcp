@@ -35,6 +35,9 @@ struct Issue291PhysicalStripReferenceTests {
         var attributeReadResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)?
         var childrenReadResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)?
         var onChildrenResultRead: (@Sendable (AXUIElement) -> Void)?
+        var onActionNamesRead: (@Sendable (AXUIElement) -> Void)?
+        var outputPressFailure: AXHelpers.AXStatusError?
+        var outputPressOpensMenu = true
         private(set) var mutations: [(AXUIElement, String)] = []
 
         init(aux: Bool = false, duplicateNames: Bool = false, secondAux: Bool = false) throws {
@@ -155,6 +158,7 @@ struct Issue291PhysicalStripReferenceTests {
             }
             if action == kAXPressAction as String {
                 if outputs.contains(where: { CFEqual($0, element) }) {
+                    if !outputPressOpensMenu { return false }
                     openedSlot = element; b.setChildren(mixer, currentStrips + [root]); return true
                 }
                 if CFEqual(element, pair), let slot = openedSlot {
@@ -194,6 +198,7 @@ struct Issue291PhysicalStripReferenceTests {
                 onChildrenResultRead?(element)
                 return childrenReadResult?(element)
             },
+            actionNamesHandler: { [self] element in onActionNamesRead?(element); return nil },
             setAttributeHandler: { [self] element, attribute, raw in
                 mutations.append((element, attribute))
                 guard attribute == kAXValueAttribute as String, let old = value(element), let requested = raw as? NSNumber else {
@@ -203,8 +208,13 @@ struct Issue291PhysicalStripReferenceTests {
                 b.setAttribute(element, attribute, old + (target > old ? 1 : (target < old ? -1 : 0)))
                 return true
             }, performActionHandler: { [self] in action($0, $1) },
-            performActionResultHandler: { [self] in
-                action($0, $1) ? .success(()) : .failure(.init(raw: AXError.failure.rawValue))
+            performActionResultHandler: { [self] element, requestedAction in
+                if requestedAction == kAXPressAction as String, outputs.contains(where: { CFEqual($0, element) }),
+                   let failure = outputPressFailure {
+                    _ = action(element, requestedAction)
+                    return .failure(failure)
+                }
+                return action(element, requestedAction) ? .success(()) : .failure(.init(raw: AXError.failure.rawValue))
             }, executeAppleScript: { _ in Issue.record("AX AppleScript forbidden"); return .error("forbidden") })
             return AXLogicProElements.Runtime(
                 logicProPID: { [self] in pid }, ax: ax,

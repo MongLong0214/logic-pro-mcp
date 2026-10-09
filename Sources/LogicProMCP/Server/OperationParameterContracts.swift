@@ -225,6 +225,9 @@ extension OperationRegistry {
                 "destination": .enforced(.object, .object(["kind": "bus", "number": .int(1)])),
                 "expected_current": .enforced(.object, .object(["kind": "bus", "number": .int(2)])),
             ], required: [indexGroup, ["destination"]]),
+            "mixer.get_output_verified": .init(params: [
+                "target_ref": .enforced(.string, .string("mix_lpm_contract_291")), "project_ref": projectRef,
+            ], required: [["target_ref"]]),
 
             // logic_navigate
             "navigate.goto_bar": .init(params: ["bar": index(9)], required: [["bar"]]),

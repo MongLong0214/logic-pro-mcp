@@ -118,6 +118,7 @@ extension ChannelRouter {
         "mixer.set_pan":              [.accessibility],
         // #291 R2: the output popup and the slot it is read back from are AX only.
         "mixer.set_output_verified":  [.accessibility],
+        "mixer.get_output_verified":  [.accessibility],
         // #575: `mixer.set_output_volume`, `mixer.get_bus_routing` and `automation.get_parameter`
         // were removed from this table. Each had no caller AND no implementation — the channel they
         // named answers `Unsupported AX operation` / `Unknown MCU operation` for them, so a caller

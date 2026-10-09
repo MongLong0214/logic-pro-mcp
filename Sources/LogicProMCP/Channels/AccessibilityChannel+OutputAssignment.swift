@@ -428,6 +428,60 @@ extension AccessibilityChannel {
         }
     }
 
+    /// Reads the host's checked current-output echo and its matching checked routing leaf.
+    /// AXSelected is menu focus, not the checkmark. Root panner marks are not routing choices;
+    /// root/submenu aliases must agree, and each routing submenu is read completely.
+    /// This is an observation only: callers must separately prove popup/source custody.
+    static func currentOutputMenuAssignment(
+        in root: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> OutputAssignment? {
+        func mark(_ item: AXUIElement) -> String? {
+            let result: Result<AnyObject?, AXHelpers.AXStatusError> =
+                AXHelpers.getAttributeResult(item, "AXMenuItemMarkChar", runtime: runtime)
+            switch result {
+            case .success(nil): return ""
+            case .success(.some(let value)): return value as? String
+            case .failure(let error) where error.raw == -25212: return ""
+            case .failure: return nil
+            }
+        }
+        func destination(_ title: String) -> OutputAssignment? {
+            if let bus = OutputAssignment.busNumber(ofMenuItemTitle: title) { return .bus(bus) }
+            return OutputAssignment.observed(slotLabel: title)
+        }
+        guard let roots = titledMenuItems(of: root, runtime: runtime) else { return nil }
+        var echo: [OutputAssignment] = []
+        for item in roots where !item.hasSubmenu {
+            guard let assignment = destination(item.title) else { continue }
+            guard let checked = mark(item.element), checked == "" || checked == "✓" else { return nil }
+            if checked == "✓" { echo.append(assignment) }
+        }
+        guard echo.count == 1, let current = echo.first else { return nil }
+        var checkedLeaves: [OutputAssignment] = []
+        for labels in [AXLocalePolicy.outputPopupOutputSubmenuTitle, AXLocalePolicy.outputPopupBusSubmenuTitle] {
+            let lookup = submenu(titled: labels, among: roots, runtime: runtime)
+            switch lookup {
+            case .missing: continue
+            case .repeated: return nil
+            case .found(let title, let menu):
+                guard let leaves = leafItems(under: menu, path: [title], depth: 0, runtime: runtime) else { return nil }
+                for item in leaves {
+                    guard let checked = mark(item.element), checked == "" || checked == "✓" else { return nil }
+                    if checked == "✓" {
+                        guard let assignment = destination(item.title) else { return nil }
+                        // Bus numbers only have authority under Bus, never a panner/Output branch.
+                        let isBusParent = AXLocalePolicy.outputPopupBusSubmenuTitle.matches(title, mode: .exact)
+                        if case .bus = assignment { guard isBusParent else { return nil } }
+                        else { guard !isBusParent else { return nil } }
+                        checkedLeaves.append(assignment)
+                    }
+                }
+            }
+        }
+        if current == .noOutput { return checkedLeaves.isEmpty ? current : nil }
+        return checkedLeaves.count == 1 && checkedLeaves.first == current ? current : nil
+    }
+
     private struct TitledMenuItem {
         let element: AXUIElement
         let title: String
@@ -531,7 +585,7 @@ extension AccessibilityChannel {
             guard let below = menuChildren(of: child, runtime: runtime) else { return nil }
             var submenus: [AXUIElement] = []
             for element in below {
-                guard case let .success(role) = menuString(element, kAXRoleAttribute as String, runtime: runtime) else {
+                guard case let .success(role) = menuString(element, kAXRoleAttribute as String, runtime: runtime), let role else {
                     return nil
                 }
                 if role == (kAXMenuRole as String) { submenus.append(element) }

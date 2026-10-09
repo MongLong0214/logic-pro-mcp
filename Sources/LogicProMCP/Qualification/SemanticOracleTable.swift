@@ -537,6 +537,7 @@ enum SemanticOracleTable {
         audioAnalyzeSpectrum,
         audioRecommendEQ,
         audioCompareSpectra,
+        mixerGetOutputVerified,
         midiListPorts,
         tracksListLibrary,
         tracksScanLibrary,
@@ -1281,6 +1282,31 @@ enum SemanticOracleTable {
         // A recommendation that also claims it could not recommend is contradicting itself.
         return response["reason"] == nil || response["reason"] is NSNull
     }
+
+    // This pins getOutputVerified's response receipt only. The two menu marks are
+    // same-host samples; Mixer resource labels are not independent typed-route evidence.
+    static let mixerGetOutputVerified = OperationOracle(
+        .mixerGetOutputVerified,
+        strength: .shapeAndDomain,
+        constraints: [
+            .valueEquals(key: "state", expected: .string("A")),
+            .valueEquals(key: "success", expected: .bool(true)),
+            .valueEquals(key: "verified", expected: .bool(true)),
+            .valueEquals(key: "operation", expected: .string("mixer.get_output_verified")),
+            .valueEquals(key: "write_attempted", expected: .bool(false)),
+            .valueEquals(key: "snapshot_atomic", expected: .bool(false)),
+            .valueEquals(key: "verify_source", expected: .string("ax_output_menu_checkmark")),
+            .valueEquals(key: "menu_custody_at_read", expected: .bool(true)),
+            .valueEquals(key: "source_custody_after_cleanup", expected: .bool(true)),
+            .valueEquals(key: "output_checkmark_reads_observed", expected: .number(2)),
+            .valueEquals(key: "output_checkmark_reads_agree", expected: .bool(true)),
+            .enumMember(key: "current_output.kind", allowed: ["bus", "physical", "stereo_output", "no_output"]),
+        ],
+        independentReadbackDeferral: QualificationDeferral(
+            code: .semanticValidatorUnavailable,
+            detail: "Two owned output-menu checkmarks are same-host observations; Mixer resource labels do not provide independent typed checked-route readback"
+        )
+    )
 
     // MARK: - midi
 
